@@ -1,0 +1,148 @@
+.omakase-player {
+  display: block;
+
+  .d-none {
+    display: none;
+  }
+
+  .d-block {
+    display: block;
+  }
+
+  .float-start {
+    float: left !important;
+  }
+
+  .float-end {
+    float: right !important;
+  }
+
+  .omakase-player-wrapper {
+    display: block;
+    position: relative;
+    width: 700px;
+
+    .omakase-video {
+      display: block;
+      width: 100%;
+      opacity: 100%;
+    }
+
+    .omakase-video-controls {
+
+      .omakase-overlay-buttons {
+
+        .omakase-video-overlay-button {
+          background-repeat: no-repeat;
+          width: 128px;
+          height: 128px;
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: 0;
+          bottom: 0;
+          margin: auto;
+          background-size: contain;
+          background-position: center;
+        }
+
+        .omakase-button-play {
+          background-image: url(/images/play.svg);
+        }
+
+        .omakase-button-pause {
+          background-image: url(/images/pause.svg);
+        }
+
+        .omakase-button-replay {
+          background-image: url(/images/replay.svg);
+        }
+
+        .omakase-button-loading {
+          background-image: url(/images/loading.svg);
+          animation: loading 3s linear infinite;
+          @keyframes loading {
+            0% {
+              transform: rotate(0);
+            }
+            100% {
+              transform: rotate(360deg);
+            }
+          }
+        }
+
+        .omakase-button-error {
+          background-image: url(/images/error.svg);
+        }
+
+      }
+    }
+
+    .omakase-help {
+      font-family: Arial;
+      font-size: 13px;
+      position: absolute;
+      right: 20px;
+      top: 20px;
+
+      .omakase-help-dropdown {
+        position: absolute;
+        right: 0;
+        top: 0;
+
+        .omakase-help-button {
+          background-color: transparent;
+          background-image: url(/images/help.svg);
+          background-repeat: no-repeat;
+          background-size: contain;
+          background-position: center;
+          border: 0;
+          padding: 0;
+
+          width: 30px;
+          height: 30px;
+          margin: 0 0 5px;
+        }
+
+        .omakase-help-menu {
+          z-index: 100;
+          position: absolute;
+          right: 0;
+          width: 400px;
+
+          .omakase-help-group-title {
+            background: rgba(2, 171, 141, 1);
+            display: block;
+            padding: 5px 10px 5px 10px;
+            color: #ffffff;
+            font-weight: bold;
+            text-align: left;
+          }
+
+          .omakase-help-group {
+            overflow-y: scroll;
+            display: block;
+            height: 200px;
+            background: rgba(2, 171, 141, 0.2);
+
+            .omakase-help-item {
+              display: list-item;
+              padding: 5px 10px 5px 10px;
+              color: #ffffff;
+              //text-align: left;
+
+              span {
+                //text-align: left;
+              }
+
+              &:hover {
+                background-color: #a93232;
+              }
+            }
+          }
+        }
+      }
+    }
+
+  }
+}
