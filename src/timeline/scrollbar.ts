@@ -166,6 +166,26 @@ export class Scrollbar extends BaseComponent<ScrollbarConfig, ScrollbarStyle, Ko
             this.clickScrollTo(this.group.getRelativePointerPosition().x);
         })
 
+        this.group.on('touchend', (event) => {
+            this.clickScrollTo(this.group.getRelativePointerPosition().x);
+        })
+
+        this.handleBar.on('touchmove', (event) => {
+            let newPosition = this.handleBar.getPosition();
+            let newX = this.getConstrainedHandleBarX(newPosition.x);
+            this.handleBar.setAttrs({
+                x: newX,
+                y: 0
+            })
+            this.syncLeftRightHandles();
+
+            if (this.handleBar.getRelativePointerPosition().x >= 0 && this.handleBar.getRelativePointerPosition().x <= this.handleBar.width()) {
+                this.onScroll$.next({
+                    scrollPercent: this.getScrollHandlePercent()
+                })
+            }
+        })
+
         this.handleBar.on('dragstart dragmove dragend', (event) => {
             let newPosition = this.handleBar.getPosition();
             let newX = this.getConstrainedHandleBarX(newPosition.x);

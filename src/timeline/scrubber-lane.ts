@@ -177,6 +177,14 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
             })
         })
 
+        this.timecodedEventCatcher.on('touchend', (event) => {
+
+            this.onClick$.next({
+                evt: new MouseEvent("click"),
+                position: this.timecodedGroup.getRelativePointerPosition()
+            })
+        })
+
         this.videoController.onVideoLoading$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
             this.clearContent();
         })

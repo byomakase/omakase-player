@@ -123,6 +123,21 @@ export class Thumbnail extends BaseComponent<ThumbnailConfig, ThumbnailStyle, Ko
                 thumbnail: this
             })
         })
+
+        this.group.on('touchstart', (event) => {
+            this.onMouseOver$.next({
+                thumbnail: this
+            })
+        })
+
+        this.group.on('touchend', (event) => {
+            this.onClick$.next({
+                thumbnail: this
+            })
+            this.onMouseOut$.next({
+                thumbnail: this
+            })
+        })
     }
 
     destroy() {

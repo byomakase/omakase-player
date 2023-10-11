@@ -547,6 +547,31 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
             this.mouseWheelEnabled = false;
         });
 
+        this.timecodedBaseGroup.on('touchstart', () => {
+            let x = this.timecodedGroup.getRelativePointerPosition().x;
+            this.playheadHoverMove(x);
+            this.playheadHover.toggleVisible(this.videoController.isVideoLoaded());
+            if (this.thumbnailVttFile) {
+                let time = this.timelinePositionToTime(x);
+                let thumbnailVttCue = this.thumbnailVttFile.findCue(time);
+                this.showThumbnailHover(thumbnailVttCue);
+            }
+        });
+
+        this.timecodedGroup.on('touchcancel', () => {
+            this.playheadHover.toggleVisible(false);
+            if (this.thumbnailVttFile) {
+                this.hideThumbnailHover();
+            }
+        });
+
+        this.canvasNode.on('touchend', () => {
+            this.playheadHover.toggleVisible(false);
+            if (this.thumbnailVttFile) {
+                this.hideThumbnailHover();
+            }
+        });
+
         this.scrubberLane.onClick$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
             if (!this.videoController.isVideoLoaded()) {
                 return;

@@ -116,6 +116,10 @@ export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConf
             this.onClick$.next({})
         })
 
+        this.group.on('touchend', (event) => {
+            this.onClick$.next({})
+        })
+
         this.group.on('mouseenter', (event) => {
             this.onMouseEnter$.next({})
         })
