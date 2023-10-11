@@ -15,7 +15,18 @@
  */
 
 import Decimal from "decimal.js";
-import {AudioEvent, VideoBufferingEvent, VideoEndedEvent, VideoErrorEvent, VideoLoadedEvent, VideoLoadingEvent, VideoPlayEvent, VideoSeekedEvent, VideoSeekingEvent, VideoTimeChangeEvent} from "../types/events";
+import {
+    AudioEvent,
+    VideoBufferingEvent,
+    VideoEndedEvent,
+    VideoErrorEvent,
+    VideoLoadedEvent,
+    VideoLoadingEvent,
+    VideoPlayEvent,
+    VideoSeekedEvent,
+    VideoSeekingEvent,
+    VideoTimeChangeEvent
+} from "../types/events";
 import {BehaviorSubject, catchError, delay, first, fromEvent, interval, map, Observable, of, Subject, take, takeUntil, throwError} from "rxjs";
 import {FrameUtil} from "../util/frame-util";
 import {completeSubjects, nextCompleteVoidSubject, nextCompleteVoidSubjects, unsubscribeSubjects} from "../util/observable-util";
@@ -1074,5 +1085,21 @@ export abstract class VideoController implements VideoApi, Destroyable {
         this.domController = null;
         this._isVideoLoaded = false;
         this.playbackStateMachine = null;
+    }
+
+    addSafeZone(options: { topPercent: number, bottomPercent: number, leftPercent: number, rightPercent: number; htmlClass?: string }): string {
+        return this.domController.addSafeZone(options);
+    }
+
+    addSafeZoneWithAspectRatio(options: {aspectRatioText: string, scalePercent?: number, htmlClass?: string}): string {
+        return this.domController.addSafeZoneWithAspectRatio(options);
+    }
+
+    removeSafeZone(id: string) {
+        this.domController.removeSafeZone(id);
+    }
+
+    clearSafeZones() {
+        this.domController.clearSafeZones();
     }
 }

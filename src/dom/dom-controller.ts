@@ -21,6 +21,7 @@ import {fromEvent, Subject, takeUntil} from "rxjs";
 import {Timeline} from "../timeline/timeline";
 import {Destroyable} from "../types";
 import {nextCompleteVoidSubject, nextCompleteVoidSubjects} from "../util/observable-util";
+import {z} from "zod";
 
 const omakaseClasses = {
     player: 'omakase-player',
@@ -36,6 +37,8 @@ const omakaseClasses = {
     help: 'omakase-help',
     helpMenu: 'omakase-help-menu',
     errorMessage: 'omakase-error-message',
+    safeZoneWrapper: 'omakase-video-safe-zone-wrapper',
+    safeZone: 'omakase-video-safe-zone',
 }
 
 export class DomController implements Destroyable {
@@ -63,6 +66,8 @@ export class DomController implements Destroyable {
 
     private divErrorMessage: HTMLElement;
 
+    private divSafeZoneWrapper: HTMLElement;
+
     private _timeline: Timeline;
 
     constructor(playerHTMLElementId: string) {
@@ -87,6 +92,9 @@ export class DomController implements Destroyable {
     </div>
     
     <div class="${omakaseClasses.videoControls}">
+        <div class="${omakaseClasses.safeZoneWrapper}">
+            
+        </div>
         <div class="omakase-overlay-buttons">
             <div class="${omakaseClasses.buttonPlay} omakase-video-overlay-button d-none"></div>
             <div class="${omakaseClasses.buttonPause} omakase-video-overlay-button d-none"></div>
@@ -112,6 +120,7 @@ export class DomController implements Destroyable {
         this.divHelp = this.getPlayerElement<HTMLElement>(omakaseClasses.help);
         this.divHelpMenu = this.getPlayerElement<HTMLElement>(omakaseClasses.helpMenu);
         this.divErrorMessage = this.getPlayerElement<HTMLElement>(omakaseClasses.errorMessage);
+        this.divSafeZoneWrapper = this.getPlayerElement<HTMLElement>(omakaseClasses.safeZoneWrapper);
     }
 
     private getElementById<T>(elementId: string): T {
@@ -184,6 +193,67 @@ export class DomController implements Destroyable {
             }
         } catch (e) {
             console.trace(e);
+        }
+    }
+
+    clearSafeZones() {
+        this.divSafeZoneWrapper.innerHTML = '';
+    }
+
+    addSafeZone(options: {
+        topPercent: number,
+        bottomPercent: number,
+        leftPercent: number,
+        rightPercent: number;
+        htmlClass?: string
+    }): string {
+        let id = `omakase-video-safe-zone-${this.divSafeZoneWrapper.children.length + 1}`;
+
+        let htmlElement: HTMLElement = document.createElement('div');
+        htmlElement.id = id;
+        htmlElement.className = `${omakaseClasses.safeZone}${options.htmlClass ? ` ${options.htmlClass}` : ``}`;
+        htmlElement.style.top = `${options.topPercent}%`;
+        htmlElement.style.bottom = `${options.bottomPercent}%`;
+        htmlElement.style.left = `${options.leftPercent}%`;
+        htmlElement.style.right = `${options.rightPercent}%`;
+        this.divSafeZoneWrapper.append(htmlElement);
+
+        return id;
+    }
+
+    addSafeZoneWithAspectRatio(options: {
+        aspectRatioText: string,
+        scalePercent?: number,
+        htmlClass?: string
+    }) {
+        let ratioSplitted = options.aspectRatioText.split('/');
+        let aspectRatio = z.coerce.number().parse(ratioSplitted[0]) / z.coerce.number().parse(ratioSplitted[1]);
+
+        let width = this.divSafeZoneWrapper.clientWidth;
+        let height = this.divSafeZoneWrapper.clientHeight;
+
+        let scalePercent = options.scalePercent ? options.scalePercent : 100;
+        let safeZoneWidth: number;
+        let safeZoneHeight: number;
+
+        if (aspectRatio >= 1) {
+            safeZoneWidth = width * (scalePercent / 100);
+            safeZoneHeight = (height / aspectRatio) * (scalePercent / 100);
+        } else {
+            safeZoneWidth = height * aspectRatio * (scalePercent / 100);
+            safeZoneHeight = height * (scalePercent / 100);
+        }
+
+        let yPercent = (((height - safeZoneHeight) / 2) / height) * 100;
+        let xPercent = (((width - safeZoneWidth) / 2) / width) * 100;
+
+        return this.addSafeZone({topPercent: yPercent, bottomPercent: yPercent, leftPercent: xPercent, rightPercent: xPercent, htmlClass: options.htmlClass});
+    }
+
+    removeSafeZone(id: string) {
+        let element = this.getElementById<HTMLElement>(id);
+        if (element) {
+            element.remove();
         }
     }
 
@@ -307,7 +377,7 @@ export class DomController implements Destroyable {
         return this._videoElement;
     }
 
-    destroy () {
+    destroy() {
         nextCompleteVoidSubjects(this.videoEventBreaker$);
 
         if (this.divPlayer) {

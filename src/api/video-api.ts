@@ -257,4 +257,28 @@ export interface VideoApi extends Api {
      */
     getHelpMenuGroups(): HelpMenuGroup[];
 
+    /**
+     * Adds safe zone area. Returns DOM <div> id.
+     * @param options
+     */
+    addSafeZone(options: { topPercent: number, bottomPercent: number, leftPercent: number, rightPercent: number, htmlClass?: string }): string;
+
+    /**
+     * Adds safe zone calculated from provided aspect ratio expression
+     * @param options
+     */
+    addSafeZoneWithAspectRatio(options: {aspectRatioText: string, scalePercent?: number, htmlClass?: string}): string;
+
+    /**
+     * Removes safe zone area by DOM <div> id
+     *
+     * @param id
+     */
+    removeSafeZone(id: string);
+
+    /**
+     * Clears all added safe zones
+     */
+    clearSafeZones();
+
 }
