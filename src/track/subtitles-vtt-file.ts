@@ -22,24 +22,24 @@ import {AxiosRequestConfig} from "axios";
 
 export class SubtitlesVttFile extends BaseOmakaseVttFile<SubtitlesVttCue> {
 
-  protected constructor(url: string, axiosConfig?: AxiosRequestConfig) {
-    super(url, axiosConfig);
-  }
-
-  static create(url: string, axiosConfig?: AxiosRequestConfig): Observable<SubtitlesVttFile> {
-    let instance = new SubtitlesVttFile(url, axiosConfig);
-    return instance.fetch().pipe(map(result => {
-      return instance;
-    }))
-  }
-
-  protected mapCue(vttCueParsed: VttCueParsed): SubtitlesVttCue {
-    return {
-      id: vttCueParsed.identifier,
-      startTime: new Decimal(vttCueParsed.start).toDecimalPlaces(3).toNumber(),
-      endTime: new Decimal(vttCueParsed.end).toDecimalPlaces(3).toNumber(),
-      text: vttCueParsed.text
+    protected constructor(url: string, axiosConfig?: AxiosRequestConfig) {
+        super(url, axiosConfig);
     }
-  }
+
+    static create(url: string, axiosConfig?: AxiosRequestConfig): Observable<SubtitlesVttFile> {
+        let instance = new SubtitlesVttFile(url, axiosConfig);
+        return instance.fetch().pipe(map(result => {
+            return instance;
+        }))
+    }
+
+    protected mapCue(vttCueParsed: VttCueParsed): SubtitlesVttCue {
+        return {
+            id: vttCueParsed.identifier,
+            startTime: new Decimal(vttCueParsed.start).toDecimalPlaces(3).toNumber(),
+            endTime: new Decimal(vttCueParsed.end).toDecimalPlaces(3).toNumber(),
+            text: vttCueParsed.text
+        }
+    }
 
 }

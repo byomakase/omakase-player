@@ -18,7 +18,7 @@ import {BaseOmakaseTrack} from "./track";
 import {SubtitlesVttCue, SubtitlesVttTrackConfig} from "../types";
 
 export class SubtitlesVttTrack extends BaseOmakaseTrack<SubtitlesVttCue> {
-  constructor(config: SubtitlesVttTrackConfig) {
-    super({...config, kind: 'subtitles'});
-  }
+    constructor(config: SubtitlesVttTrackConfig) {
+        super({...config, kind: 'subtitles'});
+    }
 }

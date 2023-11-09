@@ -19,44 +19,44 @@ import {map, Observable} from "rxjs";
 
 export class ImageUtil {
 
-  static createKonvaImage(url: string): Observable<Konva.Image> {
-    return new Observable<Konva.Image>(o$ => {
-      Konva.Image.fromURL(url, (image) => {
-        o$.next(image);
-        o$.complete();
-      }, (error) => {
-        console.error(error)
-        o$.error(error);
-      });
-    })
-  }
+    static createKonvaImage(url: string): Observable<Konva.Image> {
+        return new Observable<Konva.Image>(o$ => {
+            Konva.Image.fromURL(url, (image) => {
+                o$.next(image);
+                o$.complete();
+            }, (error) => {
+                console.error(error)
+                o$.error(error);
+            });
+        })
+    }
 
-  static createKonvaImageSizedByWidth(url: string, width: number): Observable<Konva.Image> {
-    return ImageUtil.createKonvaImage(url).pipe(map(image => {
-      image.setAttrs({
-        width: width,
-        height: ImageUtil.calculateProportionalHeight(width, image)
-      })
-      return image;
-    }))
-  }
+    static createKonvaImageSizedByWidth(url: string, width: number): Observable<Konva.Image> {
+        return ImageUtil.createKonvaImage(url).pipe(map(image => {
+            image.setAttrs({
+                width: width,
+                height: ImageUtil.calculateProportionalHeight(width, image)
+            })
+            return image;
+        }))
+    }
 
-  static createKonvaImageSizedByHeight(url: string, height: number): Observable<Konva.Image> {
-    return ImageUtil.createKonvaImage(url).pipe(map(image => {
-      image.setAttrs({
-        width: ImageUtil.calculateProportionalWidth(height, image),
-        height: height
-      })
-      return image;
-    }))
-  }
+    static createKonvaImageSizedByHeight(url: string, height: number): Observable<Konva.Image> {
+        return ImageUtil.createKonvaImage(url).pipe(map(image => {
+            image.setAttrs({
+                width: ImageUtil.calculateProportionalWidth(height, image),
+                height: height
+            })
+            return image;
+        }))
+    }
 
-  public static calculateProportionalHeight(width: number, image: Konva.Image): number {
-    return (width * image.getAttrs().image.naturalHeight) / image.getAttrs().image.naturalWidth;
-  }
+    public static calculateProportionalHeight(width: number, image: Konva.Image): number {
+        return (width * image.getAttrs().image.naturalHeight) / image.getAttrs().image.naturalWidth;
+    }
 
-  public static calculateProportionalWidth(height: number, image: Konva.Image): number {
-    return (height * image.getAttrs().image.naturalWidth) / image.getAttrs().image.naturalHeight;
-  }
+    public static calculateProportionalWidth(height: number, image: Konva.Image): number {
+        return (height * image.getAttrs().image.naturalWidth) / image.getAttrs().image.naturalHeight;
+    }
 
 }

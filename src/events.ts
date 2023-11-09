@@ -15,7 +15,7 @@
  */
 
 export type OmakaseEventMap<T> = {
-  [K in keyof T]: T[K];
+    [K in keyof T]: T[K];
 };
 
 export type OmakaseEventKey<T extends OmakaseEventMap<any>> = keyof T;
@@ -24,17 +24,17 @@ export type OmakaseEventListener<T> = (event: T) => void;
 
 export interface OmakaseEventEmitter<T extends OmakaseEventMap<any>> {
 
-  on<K extends OmakaseEventKey<T>>(eventKey: K, handler: OmakaseEventListener<T[K]>): void;
+    on<K extends OmakaseEventKey<T>>(eventKey: K, handler: OmakaseEventListener<T[K]>): void;
 
-  off<K extends OmakaseEventKey<T>>(eventKey: K, handler: OmakaseEventListener<T[K]>): void;
+    off<K extends OmakaseEventKey<T>>(eventKey: K, handler: OmakaseEventListener<T[K]>): void;
 
-  emit<K extends OmakaseEventKey<T>>(eventKey: K, event: T[K]): void;
+    emit<K extends OmakaseEventKey<T>>(eventKey: K, event: T[K]): void;
 
-  once<K extends OmakaseEventKey<T>>(eventKey: K, handler: OmakaseEventListener<T[K]>): void;
+    once<K extends OmakaseEventKey<T>>(eventKey: K, handler: OmakaseEventListener<T[K]>): void;
 
-  listeners<K extends OmakaseEventKey<T>>(eventKey: K): OmakaseEventListener<T[K]>[];
+    listeners<K extends OmakaseEventKey<T>>(eventKey: K): OmakaseEventListener<T[K]>[];
 
-  listenerCount<K extends OmakaseEventKey<T>>(eventKey: K): void;
+    listenerCount<K extends OmakaseEventKey<T>>(eventKey: K): void;
 
-  removeAllListeners<K extends OmakaseEventKey<T>>(eventKey?: K): void;
+    removeAllListeners<K extends OmakaseEventKey<T>>(eventKey?: K): void;
 }

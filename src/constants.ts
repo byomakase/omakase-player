@@ -17,20 +17,20 @@
 import {Dimension, Position} from "./common/measurement";
 
 export class Constants {
-  public static POSITION_TOP_LEFT: Position = {
-    x: 0,
-    y: 0
-  }
+    public static POSITION_TOP_LEFT: Position = {
+        x: 0,
+        y: 0
+    }
 
-  public static DIMENSION_ZERO: Dimension = {
-    width: 0,
-    height: 0
-  }
+    public static DIMENSION_ZERO: Dimension = {
+        width: 0,
+        height: 0
+    }
 
-  public static GOLDEN_RATIO = 1.61
+    public static GOLDEN_RATIO = 1.61
 
-  public static TIMELINE_ZOOM_EASED_DURATION_MS = 800
-  public static TIMELINE_SCROLL_EASED_DURATION_MS = 200
+    public static TIMELINE_ZOOM_EASED_DURATION_MS = 800
+    public static TIMELINE_SCROLL_EASED_DURATION_MS = 200
 
-  public static MIME_TYPE_VND_APPLE_MPEGURL = 'application/vnd.apple.mpegurl';
+    public static MIME_TYPE_VND_APPLE_MPEGURL = 'application/vnd.apple.mpegurl';
 }

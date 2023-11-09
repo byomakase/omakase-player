@@ -23,42 +23,42 @@ import {AxiosRequestConfig} from "axios";
 
 export class AudioVttFile extends BaseOmakaseVttFile<AudioVttCue> {
 
-  protected constructor(url: string, axiosConfig?: AxiosRequestConfig) {
-    super(url, axiosConfig);
-  }
-
-  static create(url: string, axiosConfig?: AxiosRequestConfig): Observable<AudioVttFile> {
-    let instance = new AudioVttFile(url, axiosConfig);
-    return instance.fetch().pipe(map(result => {
-      return instance;
-    }))
-  }
-
-  protected mapCue(vttCueParsed: VttCueParsed): AudioVttCue {
-    let splitted = vttCueParsed.text.split(',');
-
-    let minSample = z.coerce.number()
-      .min(-1)
-      .max(0)
-      .catch(0)
-      .parse(splitted[0]);
-
-    let maxSample = z.coerce.number()
-      .min(0)
-      .max(1)
-      .catch(0)
-      .parse(splitted[1]);
-
-    let cue = {
-      id: vttCueParsed.identifier,
-      startTime: new Decimal(vttCueParsed.start).toDecimalPlaces(3).toNumber(),
-      endTime: new Decimal(vttCueParsed.end).toDecimalPlaces(3).toNumber(),
-      text: vttCueParsed.text,
-      minSample: minSample,
-      maxSample: maxSample
+    protected constructor(url: string, axiosConfig?: AxiosRequestConfig) {
+        super(url, axiosConfig);
     }
 
-    return cue;
-  }
+    static create(url: string, axiosConfig?: AxiosRequestConfig): Observable<AudioVttFile> {
+        let instance = new AudioVttFile(url, axiosConfig);
+        return instance.fetch().pipe(map(result => {
+            return instance;
+        }))
+    }
+
+    protected mapCue(vttCueParsed: VttCueParsed): AudioVttCue {
+        let splitted = vttCueParsed.text.split(',');
+
+        let minSample = z.coerce.number()
+            .min(-1)
+            .max(0)
+            .catch(0)
+            .parse(splitted[0]);
+
+        let maxSample = z.coerce.number()
+            .min(0)
+            .max(1)
+            .catch(0)
+            .parse(splitted[1]);
+
+        let cue = {
+            id: vttCueParsed.identifier,
+            startTime: new Decimal(vttCueParsed.start).toDecimalPlaces(3).toNumber(),
+            endTime: new Decimal(vttCueParsed.end).toDecimalPlaces(3).toNumber(),
+            text: vttCueParsed.text,
+            minSample: minSample,
+            maxSample: maxSample
+        }
+
+        return cue;
+    }
 
 }

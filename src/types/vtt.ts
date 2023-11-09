@@ -17,20 +17,20 @@
 import {OmakaseTextTrackCue, OmakaseTrackConfig} from "./track";
 
 export interface OmakaseVttFile<T extends OmakaseVttCue> {
-  getCues(): T[];
+    getCues(): T[];
 
-  findCue(time: number): T;
+    findCue(time: number): T;
 
-  findCues(startTime: number, endTime: number): T[]
+    findCues(startTime: number, endTime: number): T[]
 }
 
 export interface OmakaseVttCue extends OmakaseTextTrackCue {
-  text: string;
-  vttCue?: VTTCue;
+    text: string;
+    vttCue?: VTTCue;
 }
 
 export interface ThumbnailVttCue extends OmakaseVttCue {
-  url: string;
+    url: string;
 }
 
 export interface SubtitlesVttCue extends OmakaseVttCue {
@@ -38,11 +38,11 @@ export interface SubtitlesVttCue extends OmakaseVttCue {
 }
 
 export interface AudioVttCue extends OmakaseVttCue {
-  minSample: number;
-  maxSample: number;
+    minSample: number;
+    maxSample: number;
 }
 
 export interface SubtitlesVttTrackConfig extends OmakaseTrackConfig {
-  label: string;
-  language: string;
+    label: string;
+    language: string;
 }

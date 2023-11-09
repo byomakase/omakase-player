@@ -15,5 +15,5 @@
  */
 
 export function isNullOrUndefined(value: any) {
-  return value === null || value === void 0;
+    return value === null || value === void 0;
 }

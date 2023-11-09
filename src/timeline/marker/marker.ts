@@ -29,158 +29,158 @@ export type MarkerRenderType = 'lane' | 'spanning'
 export type MarkerSymbolType = 'square' | 'triangle' | 'circle';
 
 export interface MarkerStyle {
-  color: string;
-  renderType: MarkerRenderType;
-  symbolType: MarkerSymbolType;
+    color: string;
+    renderType: MarkerRenderType;
+    symbolType: MarkerSymbolType;
 }
 
 export const MARKER_STYLE_DEFAULT: MarkerStyle = {
-  color: 'rgba(255,73,145)',
-  renderType: 'lane',
-  symbolType: 'square'
+    color: 'rgba(255,73,145)',
+    renderType: 'lane',
+    symbolType: 'square'
 }
 
 export interface MarkerConfig<T extends TimeObservation, S extends MarkerStyle> extends ComponentConfig<S> {
-  id: string;
-  observation: T;
-  description?: string;
-  editable?: boolean;
+    id: string;
+    observation: T;
+    description?: string;
+    editable?: boolean;
 }
 
 export interface Marker<T extends TimeObservation, C extends MarkerConfig<T, S>, S extends MarkerStyle, E extends MarkerChangeEvent> extends Component<C, S, Konva.Group>, HasMarkerLane, OnMeasurementsChange {
-  onChange$: Subject<E>;
-  onClick$: Subject<MarkerEvent>;
-  onMouseEnter$: Subject<MarkerEvent>;
-  onMouseLeave$: Subject<MarkerEvent>;
+    onChange$: Subject<E>;
+    onClick$: Subject<MarkerEvent>;
+    onMouseEnter$: Subject<MarkerEvent>;
+    onMouseLeave$: Subject<MarkerEvent>;
 
-  get style(): S;
+    get style(): S;
 
-  setStyle(value: Partial<S>);
+    setStyle(value: Partial<S>);
 
-  getId(): string;
+    getId(): string;
 
-  getDescription(): string;
+    getDescription(): string;
 
-  getTimeObservation(): T;
+    getTimeObservation(): T;
 
-  setTimeObservation(timeObservation: T): void;
+    setTimeObservation(timeObservation: T): void;
 
-  setEditable(editable: boolean);
+    setEditable(editable: boolean);
 
-  setTimeline(timeline: Timeline);
+    setTimeline(timeline: Timeline);
 }
 
 export type GenericMarker = Marker<TimeObservation, MarkerConfig<TimeObservation, MarkerStyle>, MarkerStyle, MarkerChangeEvent>;
 
 export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConfig<T, S>, S extends MarkerStyle, E extends MarkerChangeEvent> extends BaseComponent<C, S, Konva.Group> implements Marker<T, C, S, E> {
-  protected id: string;
-  protected observation: T;
-  protected description: string;
-  protected editable: boolean;
+    protected id: string;
+    protected observation: T;
+    protected description: string;
+    protected editable: boolean;
 
-  // region konva
-  protected group: Konva.Group;
-  // endregion
+    // region konva
+    protected group: Konva.Group;
+    // endregion
 
-  protected markerLane: MarkerLane;
-  protected timeline: Timeline;
+    protected markerLane: MarkerLane;
+    protected timeline: Timeline;
 
-  public readonly onChange$: Subject<E> = new Subject<E>();
-  public readonly onClick$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
-  public readonly onMouseEnter$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
-  public readonly onMouseLeave$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
+    public readonly onChange$: Subject<E> = new Subject<E>();
+    public readonly onClick$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
+    public readonly onMouseEnter$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
+    public readonly onMouseLeave$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
 
-  protected constructor(config: C) {
-    super(config);
-    this.id = Validators.id()(this.config.id);
-    this.description = Validators.description()(this.config.description);
-    this.editable = Validators.boolean()(this.config.editable);
-    this.observation = this.config.observation;
-  }
+    protected constructor(config: C) {
+        super(config);
+        this.id = Validators.id()(this.config.id);
+        this.description = Validators.description()(this.config.description);
+        this.editable = Validators.boolean()(this.config.editable);
+        this.observation = this.config.observation;
+    }
 
-  protected createCanvasNode(): Konva.Group {
-    this.group = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
-      ...this.timeline.getTimecodedGroupDimension()
-    });
+    protected createCanvasNode(): Konva.Group {
+        this.group = new Konva.Group({
+            ...Constants.POSITION_TOP_LEFT,
+            ...this.timeline.getTimecodedGroupDimension()
+        });
 
-    return this.group;
-  }
+        return this.group;
+    }
 
-  protected afterCanvasNodeInit() {
-    this.timeline.onZoom$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-      this.onMeasurementsChange();
-    })
+    protected afterCanvasNodeInit() {
+        this.timeline.onZoom$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+            this.onMeasurementsChange();
+        })
 
-    this.group.on('click', (event) => {
-      this.onClick$.next({})
-    })
+        this.group.on('click', (event) => {
+            this.onClick$.next({})
+        })
 
         this.group.on('touchend', (event) => {
             this.onClick$.next({})
         })
 
-    this.group.on('mouseenter', (event) => {
-      this.onMouseEnter$.next({})
-    })
+        this.group.on('mouseenter', (event) => {
+            this.onMouseEnter$.next({})
+        })
 
-    this.group.on('mouseleave', (event) => {
-      this.onMouseLeave$.next({})
-    })
-  }
-
-  onMeasurementsChange() {
-    this.group.setAttrs({
-      ...this.timeline.getTimecodedGroupDimension()
-    })
-  }
-
-  destroy() {
-    super.destroy();
-
-    let subjects = [this.onChange$, this.onClick$, this.onMouseEnter$, this.onMouseLeave$];
-    completeSubjects(...subjects);
-    unsubscribeSubjects(...subjects)
-  }
-
-  abstract onChange();
-
-  setTimeline(timeline: Timeline) {
-    this.timeline = timeline;
-  }
-
-  setMarkerLane(markerLane: MarkerLane) {
-    this.markerLane = markerLane;
-  }
-
-  getId(): string {
-    return this.id;
-  }
-
-  getDescription(): string {
-    return this.description;
-  }
-
-  getTimeObservation(): T {
-    return this.observation;
-  }
-
-  setTimeObservation(timeObservation: T) {
-    if (this.editable) {
-      this.observation = timeObservation;
-      this.onChange();
+        this.group.on('mouseleave', (event) => {
+            this.onMouseLeave$.next({})
+        })
     }
-  }
 
-  setEditable(editable: boolean) {
-    this.editable = editable;
-  }
+    onMeasurementsChange() {
+        this.group.setAttrs({
+            ...this.timeline.getTimecodedGroupDimension()
+        })
+    }
 
-  get style(): S {
-    return this.styleAdapter.style;
-  }
+    destroy() {
+        super.destroy();
 
-  setStyle(value: Partial<S>) {
-    this.styleAdapter.style = value;
-  }
+        let subjects = [this.onChange$, this.onClick$, this.onMouseEnter$, this.onMouseLeave$];
+        completeSubjects(...subjects);
+        unsubscribeSubjects(...subjects)
+    }
+
+    abstract onChange();
+
+    setTimeline(timeline: Timeline) {
+        this.timeline = timeline;
+    }
+
+    setMarkerLane(markerLane: MarkerLane) {
+        this.markerLane = markerLane;
+    }
+
+    getId(): string {
+        return this.id;
+    }
+
+    getDescription(): string {
+        return this.description;
+    }
+
+    getTimeObservation(): T {
+        return this.observation;
+    }
+
+    setTimeObservation(timeObservation: T) {
+        if (this.editable) {
+            this.observation = timeObservation;
+            this.onChange();
+        }
+    }
+
+    setEditable(editable: boolean) {
+        this.editable = editable;
+    }
+
+    get style(): S {
+        return this.styleAdapter.style;
+    }
+
+    setStyle(value: Partial<S>) {
+        this.styleAdapter.style = value;
+    }
 }

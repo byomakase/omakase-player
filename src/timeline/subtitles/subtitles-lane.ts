@@ -26,183 +26,183 @@ import {SubtitlesLaneItem} from "./subtitles-lane-item";
 import {ComponentConfigStyleComposed} from "../../common/component";
 
 export interface SubtitlesLaneStyle extends TimelineLaneStyle {
-  paddingTop: number;
-  paddingBottom: number;
-  subtitlesLaneItemOpacity: number;
-  subtitlesLaneItemFill: string;
+    paddingTop: number;
+    paddingBottom: number;
+    subtitlesLaneItemOpacity: number;
+    subtitlesLaneItemFill: string;
 }
 
 const styleDefault: SubtitlesLaneStyle = {
-  ...TIMELINE_LANE_STYLE_DEFAULT,
-  height: 40,
-  paddingTop: 0,
-  paddingBottom: 0,
-  subtitlesLaneItemOpacity: 0.9,
-  subtitlesLaneItemFill: 'rgba(255,73,145)'
+    ...TIMELINE_LANE_STYLE_DEFAULT,
+    height: 40,
+    paddingTop: 0,
+    paddingBottom: 0,
+    subtitlesLaneItemOpacity: 0.9,
+    subtitlesLaneItemFill: 'rgba(255,73,145)'
 }
 
 export interface SubtitlesLaneConfig extends TimelaneLaneConfig<SubtitlesLaneStyle> {
-  subtitlesVttUrl: string;
+    subtitlesVttUrl: string;
 }
 
 export class SubtitlesLane extends BaseTimelineLane<SubtitlesLaneConfig, SubtitlesLaneStyle> {
-  // region config
-  private _subtitlesVttUrl: string;
-  // endregion
+    // region config
+    private _subtitlesVttUrl: string;
+    // endregion
 
-  // region components
-  protected readonly subtitlesLaneItemsMap: Map<number, SubtitlesLaneItem> = new Map<number, SubtitlesLaneItem>();
-  // endregion
+    // region components
+    protected readonly subtitlesLaneItemsMap: Map<number, SubtitlesLaneItem> = new Map<number, SubtitlesLaneItem>();
+    // endregion
 
-  // region konva
-  protected timecodedGroup: Konva.Group;
-  protected timecodedEventCatcher: Konva.Rect;
-  protected subtitlesLaneItemsGroup: Konva.Group;
-  // endregion
+    // region konva
+    protected timecodedGroup: Konva.Group;
+    protected timecodedEventCatcher: Konva.Rect;
+    protected subtitlesLaneItemsGroup: Konva.Group;
+    // endregion
 
-  private subtitlesVttFile: SubtitlesVttFile;
+    private subtitlesVttFile: SubtitlesVttFile;
 
-  readonly onSettleLayout$: Subject<void> = new Subject<void>();
+    readonly onSettleLayout$: Subject<void> = new Subject<void>();
 
-  constructor(config: ComponentConfigStyleComposed<SubtitlesLaneConfig>) {
-    super({
-      ...config,
-      style: {
-        ...styleDefault,
-        ...config.style
-      }
-    });
+    constructor(config: ComponentConfigStyleComposed<SubtitlesLaneConfig>) {
+        super({
+            ...config,
+            style: {
+                ...styleDefault,
+                ...config.style
+            }
+        });
 
-    this._subtitlesVttUrl = this.config.subtitlesVttUrl;
-  }
-
-  protected createCanvasNode(): Konva.Group {
-    super.createCanvasNode();
-
-    this.timecodedGroup = new Konva.Group({
-      ...this.timelinePosition,
-      width: this.timeline.getTimecodedGroupDimension().width,
-      height: this.bodyGroup.height()
-    });
-
-    this.timecodedEventCatcher = ShapeUtil.createEventCatcher({
-      width: this.timecodedGroup.width(),
-      height: this.timecodedGroup.height()
-    });
-
-    this.subtitlesLaneItemsGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
-      y: this.style.paddingTop,
-      width: this.timecodedGroup.width(),
-      height: this.timecodedGroup.height() - (this.style.paddingTop + this.style.paddingBottom)
-    });
-
-    this.timecodedGroup.add(this.timecodedEventCatcher);
-    this.timecodedGroup.add(this.subtitlesLaneItemsGroup);
-
-    this.timeline.addToTimecodedSubtitlesGroup(this.timecodedGroup);
-
-    return this.bodyGroup;
-  }
-
-  protected settleLayout() {
-    super.settleLayout();
-
-    this.timecodedGroup.setAttrs({
-      ...this.timelinePosition,
-    })
-
-    let horizontalMeasurement = this.timeline.getTimecodedGroupHorizontalMeasurement();
-    [this.timecodedGroup, this.timecodedEventCatcher, this.subtitlesLaneItemsGroup].forEach(node => {
-      node.width(horizontalMeasurement.width)
-    })
-
-    this.onSettleLayout$.next();
-  }
-
-  protected afterCanvasNodeInit() {
-    super.afterCanvasNodeInit();
-
-    this.fetchAndCreateSubtitles();
-  }
-
-  clearContent() {
-    this.subtitlesVttFile = void 0;
-    this.clearItems();
-  }
-
-  private clearItems() {
-    this.subtitlesLaneItemsMap.forEach(p => p.destroy())
-    this.subtitlesLaneItemsMap.clear()
-    this.subtitlesLaneItemsGroup.destroyChildren();
-  }
-
-  private createEntities() {
-    if (!this.isVttLoaded()) {
-      return;
+        this._subtitlesVttUrl = this.config.subtitlesVttUrl;
     }
 
-    this.clearItems();
+    protected createCanvasNode(): Konva.Group {
+        super.createCanvasNode();
 
-    let cues = this.subtitlesVttFile.getCues();
+        this.timecodedGroup = new Konva.Group({
+            ...this.timelinePosition,
+            width: this.timeline.getTimecodedGroupDimension().width,
+            height: this.bodyGroup.height()
+        });
 
-    cues.forEach(cue => {
-      let horizontalMeasurement = this.resolveItemHorizontalMeasurement(cue);
+        this.timecodedEventCatcher = ShapeUtil.createEventCatcher({
+            width: this.timecodedGroup.width(),
+            height: this.timecodedGroup.height()
+        });
 
-      let subtitlesLaneItem = new SubtitlesLaneItem({
-        ...horizontalMeasurement,
-        textTrackCue: cue,
-        style: {
-          height: this.subtitlesLaneItemsGroup.height(),
-          fill: this.style.subtitlesLaneItemFill,
-          opacity: this.style.subtitlesLaneItemOpacity
+        this.subtitlesLaneItemsGroup = new Konva.Group({
+            ...Constants.POSITION_TOP_LEFT,
+            y: this.style.paddingTop,
+            width: this.timecodedGroup.width(),
+            height: this.timecodedGroup.height() - (this.style.paddingTop + this.style.paddingBottom)
+        });
+
+        this.timecodedGroup.add(this.timecodedEventCatcher);
+        this.timecodedGroup.add(this.subtitlesLaneItemsGroup);
+
+        this.timeline.addToTimecodedSubtitlesGroup(this.timecodedGroup);
+
+        return this.bodyGroup;
+    }
+
+    protected settleLayout() {
+        super.settleLayout();
+
+        this.timecodedGroup.setAttrs({
+            ...this.timelinePosition,
+        })
+
+        let horizontalMeasurement = this.timeline.getTimecodedGroupHorizontalMeasurement();
+        [this.timecodedGroup, this.timecodedEventCatcher, this.subtitlesLaneItemsGroup].forEach(node => {
+            node.width(horizontalMeasurement.width)
+        })
+
+        this.onSettleLayout$.next();
+    }
+
+    protected afterCanvasNodeInit() {
+        super.afterCanvasNodeInit();
+
+        this.fetchAndCreateSubtitles();
+    }
+
+    clearContent() {
+        this.subtitlesVttFile = void 0;
+        this.clearItems();
+    }
+
+    private clearItems() {
+        this.subtitlesLaneItemsMap.forEach(p => p.destroy())
+        this.subtitlesLaneItemsMap.clear()
+        this.subtitlesLaneItemsGroup.destroyChildren();
+    }
+
+    private createEntities() {
+        if (!this.isVttLoaded()) {
+            return;
         }
-      }, this);
-      this.subtitlesLaneItemsMap.set(cue.startTime, subtitlesLaneItem);
-      this.subtitlesLaneItemsGroup.add(subtitlesLaneItem.initCanvasNode());
-    })
-  }
 
-  resolveItemHorizontalMeasurement(textTrackCue: OmakaseTextTrackCue): HorizontalMeasurement {
-    let startTimeX = this.timeline.constrainTimelinePosition(this.timeline.timeToTimelinePosition(textTrackCue.startTime));
-    let endTimeX = this.timeline.constrainTimelinePosition(this.timeline.timeToTimelinePosition(textTrackCue.endTime));
-    return {
-      x: startTimeX,
-      width: endTimeX - startTimeX
-      // width: new Decimal(endTimeX - startTimeX).ceil().toNumber()
+        this.clearItems();
+
+        let cues = this.subtitlesVttFile.getCues();
+
+        cues.forEach(cue => {
+            let horizontalMeasurement = this.resolveItemHorizontalMeasurement(cue);
+
+            let subtitlesLaneItem = new SubtitlesLaneItem({
+                ...horizontalMeasurement,
+                textTrackCue: cue,
+                style: {
+                    height: this.subtitlesLaneItemsGroup.height(),
+                    fill: this.style.subtitlesLaneItemFill,
+                    opacity: this.style.subtitlesLaneItemOpacity
+                }
+            }, this);
+            this.subtitlesLaneItemsMap.set(cue.startTime, subtitlesLaneItem);
+            this.subtitlesLaneItemsGroup.add(subtitlesLaneItem.initCanvasNode());
+        })
     }
-  }
 
-  private fetchAndCreateSubtitles() {
-    this.fetchSubtitlesVttFile(this._subtitlesVttUrl).pipe(take(1)).subscribe((subtitlesVttFile) => {
-      this.subtitlesVttFile = subtitlesVttFile;
-      this.createEntities();
-    })
-  }
-
-  private fetchSubtitlesVttFile(url: string): Observable<SubtitlesVttFile> {
-    if (url) {
-      return SubtitlesVttFile.create(url).pipe(map(subtitlesVttFile => {
-        return subtitlesVttFile;
-      }), catchError((err, caught) => {
-        return of(void 0);
-      }))
-    } else {
-      return of(void 0);
+    resolveItemHorizontalMeasurement(textTrackCue: OmakaseTextTrackCue): HorizontalMeasurement {
+        let startTimeX = this.timeline.constrainTimelinePosition(this.timeline.timeToTimelinePosition(textTrackCue.startTime));
+        let endTimeX = this.timeline.constrainTimelinePosition(this.timeline.timeToTimelinePosition(textTrackCue.endTime));
+        return {
+            x: startTimeX,
+            width: endTimeX - startTimeX
+            // width: new Decimal(endTimeX - startTimeX).ceil().toNumber()
+        }
     }
-  }
 
-  isVttLoaded(): boolean {
-    return !!this.subtitlesVttFile;
-  }
+    private fetchAndCreateSubtitles() {
+        this.fetchSubtitlesVttFile(this._subtitlesVttUrl).pipe(take(1)).subscribe((subtitlesVttFile) => {
+            this.subtitlesVttFile = subtitlesVttFile;
+            this.createEntities();
+        })
+    }
 
-  get subtitlesVttUrl(): string {
-    return this._subtitlesVttUrl;
-  }
+    private fetchSubtitlesVttFile(url: string): Observable<SubtitlesVttFile> {
+        if (url) {
+            return SubtitlesVttFile.create(url).pipe(map(subtitlesVttFile => {
+                return subtitlesVttFile;
+            }), catchError((err, caught) => {
+                return of(void 0);
+            }))
+        } else {
+            return of(void 0);
+        }
+    }
 
-  set subtitlesVttUrl(value: string) {
-    this._subtitlesVttUrl = value;
-    this.clearContent();
-    this.fetchAndCreateSubtitles();
-  }
+    isVttLoaded(): boolean {
+        return !!this.subtitlesVttFile;
+    }
+
+    get subtitlesVttUrl(): string {
+        return this._subtitlesVttUrl;
+    }
+
+    set subtitlesVttUrl(value: string) {
+        this._subtitlesVttUrl = value;
+        this.clearContent();
+        this.fetchAndCreateSubtitles();
+    }
 }

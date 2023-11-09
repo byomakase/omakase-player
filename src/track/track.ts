@@ -17,23 +17,23 @@
 import {OmakaseTextTrack, OmakaseTextTrackCue, OmakaseTrackConfig} from "../types";
 
 export abstract class BaseOmakaseTrack<T extends OmakaseTextTrackCue> implements OmakaseTextTrack<T> {
-  id: string;
-  src: string;
-  default: boolean;
-  label: string;
-  language: string;
-  kind: string;
-  cues: T[];
-  hidden: boolean = true;
-  element: HTMLTrackElement;
+    id: string;
+    src: string;
+    default: boolean;
+    label: string;
+    language: string;
+    kind: string;
+    cues: T[];
+    hidden: boolean = true;
+    element: HTMLTrackElement;
 
-  protected constructor(config: OmakaseTrackConfig) {
-    this.id = config.id;
-    this.src = config.src;
-    this.default = config.default;
-    this.label = config.label;
-    this.language = config.language;
-    this.kind = config.kind;
-    this.cues = [];
-  }
+    protected constructor(config: OmakaseTrackConfig) {
+        this.id = config.id;
+        this.src = config.src;
+        this.default = config.default;
+        this.label = config.label;
+        this.language = config.language;
+        this.kind = config.kind;
+        this.cues = [];
+    }
 }

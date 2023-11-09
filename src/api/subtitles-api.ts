@@ -20,73 +20,73 @@ import {OmakaseTextTrack, OmakaseTextTrackCue, SubtitlesEvent, SubtitlesVttTrack
 import {SubtitlesVttTrack} from "../track/subtitles-vtt-track";
 
 export interface SubtitlesApi extends Api {
-  /***
-   * Fires on subtitles create
-   */
-  onCreate$: Observable<SubtitlesEvent>;
+    /***
+     * Fires on subtitles create
+     */
+    onCreate$: Observable<SubtitlesEvent>;
 
-  /***
-   * Fires on subtitles remove
-   */
-  onRemove$: Observable<SubtitlesEvent>;
+    /***
+     * Fires on subtitles remove
+     */
+    onRemove$: Observable<SubtitlesEvent>;
 
-  /***
-   * Fires on subtitles show
-   */
-  onShow$: Observable<SubtitlesEvent>;
+    /***
+     * Fires on subtitles show
+     */
+    onShow$: Observable<SubtitlesEvent>;
 
-  /***
-   * Fires on subtitles hide
-   */
-  onHide$: Observable<SubtitlesEvent>;
+    /***
+     * Fires on subtitles hide
+     */
+    onHide$: Observable<SubtitlesEvent>;
 
-  /***
-   * Creates new Subtitles VTT track
-   * @param config SubtitlesVttTrack configuration
-   */
-  createVttTrack(config: SubtitlesVttTrackConfig): Observable<SubtitlesVttTrack>;
+    /***
+     * Creates new Subtitles VTT track
+     * @param config SubtitlesVttTrack configuration
+     */
+    createVttTrack(config: SubtitlesVttTrackConfig): Observable<SubtitlesVttTrack>;
 
-  /***
-   * Returns all VTT tracks
-   */
-  getTracks(): OmakaseTextTrack<OmakaseTextTrackCue>[];
+    /***
+     * Returns all VTT tracks
+     */
+    getTracks(): OmakaseTextTrack<OmakaseTextTrackCue>[];
 
-  /***
-   * Removes VTT track by ID
-   * @param id VTT track ID
-   */
-  removeTrack(id: string);
+    /***
+     * Removes VTT track by ID
+     * @param id VTT track ID
+     */
+    removeTrack(id: string);
 
-  /***
-   * Removes all VTT tracks
-   */
-  removeAllTracks();
+    /***
+     * Removes all VTT tracks
+     */
+    removeAllTracks();
 
-  /***
-   * Returns current active VTT track
-   */
-  getCurrentTrack(): OmakaseTextTrack<OmakaseTextTrackCue> | undefined;
+    /***
+     * Returns current active VTT track
+     */
+    getCurrentTrack(): OmakaseTextTrack<OmakaseTextTrackCue> | undefined;
 
-  /***
-   * Shows active VTT track
-   */
-  showTrack();
+    /***
+     * Shows active VTT track
+     */
+    showTrack();
 
-  /***
-   * Shows VTT track by ID
-   * @param id VTT track ID
-   */
-  showTrack(id: string);
+    /***
+     * Shows VTT track by ID
+     * @param id VTT track ID
+     */
+    showTrack(id: string);
 
-  /***
-   * Hides active VTT track
-   */
-  hideTrack();
+    /***
+     * Hides active VTT track
+     */
+    hideTrack();
 
-  /***
-   * Hides VTT track by ID
-   * @param id VTT track ID
-   */
-  hideTrack(id: string);
+    /***
+     * Hides VTT track by ID
+     * @param id VTT track ID
+     */
+    hideTrack(id: string);
 
 }

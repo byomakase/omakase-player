@@ -25,19 +25,19 @@ import {takeUntil} from "rxjs";
 import {VideoControllerApi} from "../video/video-controller-api";
 
 export interface PlayheadStyle {
-  visible: boolean;
-  fill: string;
-  lineWidth: number;
-  symbolHeight: number;
-  scrubberHeight: number;
-  backgroundFill: string;
-  backgroundOpacity: number;
+    visible: boolean;
+    fill: string;
+    lineWidth: number;
+    symbolHeight: number;
+    scrubberHeight: number;
+    backgroundFill: string;
+    backgroundOpacity: number;
 
-  playProgressFill: string;
-  playProgressOpacity: number;
+    playProgressFill: string;
+    playProgressOpacity: number;
 
-  bufferedFill: string;
-  bufferedOpacity: number;
+    bufferedFill: string;
+    bufferedOpacity: number;
 }
 
 export interface PlayheadConfig extends ComponentConfig<PlayheadStyle> {
@@ -45,227 +45,227 @@ export interface PlayheadConfig extends ComponentConfig<PlayheadStyle> {
 }
 
 const configDefault: PlayheadConfig = {
-  style: {
-    visible: true,
-    fill: '#f43530',
-    lineWidth: 2,
-    symbolHeight: 15,
-    scrubberHeight: 15,
-    backgroundFill: '#ffffff',
-    backgroundOpacity: 0,
+    style: {
+        visible: true,
+        fill: '#f43530',
+        lineWidth: 2,
+        symbolHeight: 15,
+        scrubberHeight: 15,
+        backgroundFill: '#ffffff',
+        backgroundOpacity: 0,
 
-    playProgressFill: '#008cbc',
-    playProgressOpacity: 0.5,
+        playProgressFill: '#008cbc',
+        playProgressOpacity: 0.5,
 
-    bufferedFill: '#a2a2a2',
-    bufferedOpacity: 1,
-  }
+        bufferedFill: '#a2a2a2',
+        bufferedOpacity: 1,
+    }
 }
 
 export class Playhead extends BaseComponent<PlayheadConfig, PlayheadStyle, Konva.Group> implements OnMeasurementsChange {
-  // region config
+    // region config
 
-  // endregion
+    // endregion
 
-  protected timeline: Timeline;
-  protected videoController: VideoControllerApi;
+    protected timeline: Timeline;
+    protected videoController: VideoControllerApi;
 
-  // region konva
-  protected group: Konva.Group;
-  protected background: Konva.Rect;
+    // region konva
+    protected group: Konva.Group;
+    protected background: Konva.Rect;
 
-  protected playProgressBackground: Konva.Rect;
+    protected playProgressBackground: Konva.Rect;
 
-  protected playheadGroup: Konva.Group;
-  protected playheadLine: Konva.Line;
-  protected playheadSymbol: Konva.Line;
+    protected playheadGroup: Konva.Group;
+    protected playheadLine: Konva.Line;
+    protected playheadSymbol: Konva.Line;
 
-  protected bufferedGroup: Konva.Group;
+    protected bufferedGroup: Konva.Group;
 
-  // endregion
+    // endregion
 
-  constructor(config: Partial<ComponentConfigStyleComposed<PlayheadConfig>>, timeline: Timeline, videoController: VideoControllerApi) {
-    super(composeConfigAndDefault(config, configDefault));
+    constructor(config: Partial<ComponentConfigStyleComposed<PlayheadConfig>>, timeline: Timeline, videoController: VideoControllerApi) {
+        super(composeConfigAndDefault(config, configDefault));
 
-    this.timeline = timeline;
-    this.videoController = videoController;
-  }
+        this.timeline = timeline;
+        this.videoController = videoController;
+    }
 
-  protected createCanvasNode(): Konva.Group {
-    this.group = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
-      listening: false
-    });
+    protected createCanvasNode(): Konva.Group {
+        this.group = new Konva.Group({
+            ...Constants.POSITION_TOP_LEFT,
+            listening: false
+        });
 
-    this.background = new Konva.Rect({
-      ...Constants.POSITION_TOP_LEFT,
-      height: this.style.scrubberHeight,
-      fill: this.style.backgroundFill,
-      opacity: this.style.backgroundOpacity,
-      listening: false
-    });
+        this.background = new Konva.Rect({
+            ...Constants.POSITION_TOP_LEFT,
+            height: this.style.scrubberHeight,
+            fill: this.style.backgroundFill,
+            opacity: this.style.backgroundOpacity,
+            listening: false
+        });
 
-    this.playProgressBackground = new Konva.Rect({
-      ...Constants.POSITION_TOP_LEFT,
-      height: this.style.scrubberHeight,
-      fill: this.style.playProgressFill,
-      opacity: this.style.playProgressOpacity,
-      listening: false
-    })
+        this.playProgressBackground = new Konva.Rect({
+            ...Constants.POSITION_TOP_LEFT,
+            height: this.style.scrubberHeight,
+            fill: this.style.playProgressFill,
+            opacity: this.style.playProgressOpacity,
+            listening: false
+        })
 
-    this.playheadGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
-      visible: this.style.visible,
-      listening: false
-    });
+        this.playheadGroup = new Konva.Group({
+            ...Constants.POSITION_TOP_LEFT,
+            visible: this.style.visible,
+            listening: false
+        });
 
-    this.playheadLine = new Konva.Line({
-      points: [0, 0, 0, 0],
-      stroke: this.style.fill,
-      strokeWidth: this.style.lineWidth,
-      listening: false
-    })
+        this.playheadLine = new Konva.Line({
+            points: [0, 0, 0, 0],
+            stroke: this.style.fill,
+            strokeWidth: this.style.lineWidth,
+            listening: false
+        })
 
-    this.playheadSymbol = ShapeUtil.createTriangle({
-      ...Constants.POSITION_TOP_LEFT,
-      height: this.style.symbolHeight,
-      color: this.style.fill
-    });
+        this.playheadSymbol = ShapeUtil.createTriangle({
+            ...Constants.POSITION_TOP_LEFT,
+            height: this.style.symbolHeight,
+            color: this.style.fill
+        });
 
-    this.bufferedGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
-      listening: false
-    });
+        this.bufferedGroup = new Konva.Group({
+            ...Constants.POSITION_TOP_LEFT,
+            listening: false
+        });
 
-    this.group.add(this.background);
-    this.group.add(this.bufferedGroup);
-    this.group.add(this.playProgressBackground);
+        this.group.add(this.background);
+        this.group.add(this.bufferedGroup);
+        this.group.add(this.playProgressBackground);
 
-    this.playheadGroup.add(this.playheadLine)
-    this.playheadGroup.add(this.playheadSymbol)
+        this.playheadGroup.add(this.playheadLine)
+        this.playheadGroup.add(this.playheadSymbol)
 
-    this.group.add(this.playheadGroup);
+        this.group.add(this.playheadGroup);
 
 
-    return this.group;
-  }
+        return this.group;
+    }
 
-  protected afterCanvasNodeInit() {
-    this.settleLayout();
+    protected afterCanvasNodeInit() {
+        this.settleLayout();
 
-    // react on timeline zoom
-    this.timeline.onZoom$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-      this.settleLayout();
-    })
+        // react on timeline zoom
+        this.timeline.onZoom$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+            this.settleLayout();
+        })
 
-    this.videoController.onVideoLoading$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-      this.group.visible(false);
-    })
+        this.videoController.onVideoLoading$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+            this.group.visible(false);
+        })
 
-    this.videoController.onVideoLoaded$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-      this.group.visible(true);
-      this.doPlayProgress()
-      this.doBufferingProgress()
-    })
+        this.videoController.onVideoLoaded$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+            this.group.visible(true);
+            this.doPlayProgress()
+            this.doBufferingProgress()
+        })
 
-    this.videoController.onVideoTimeChange$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-      this.doPlayProgress()
-    })
+        this.videoController.onVideoTimeChange$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+            this.doPlayProgress()
+        })
 
-    this.videoController.onSeeking$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-      this.doPlayProgress()
-      this.doBufferingProgress()
-    })
+        this.videoController.onSeeking$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+            this.doPlayProgress()
+            this.doBufferingProgress()
+        })
 
-    this.videoController.onBuffering$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-      this.doBufferingProgress()
-    })
-  }
+        this.videoController.onBuffering$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+            this.doBufferingProgress()
+        })
+    }
 
-  onMeasurementsChange() {
-    this.settleLayout();
-  }
+    onMeasurementsChange() {
+        this.settleLayout();
+    }
 
-  getPlayheadPosition(): number {
-    return this.playheadGroup.x();
-  }
+    getPlayheadPosition(): number {
+        return this.playheadGroup.x();
+    }
 
-  protected settleLayout() {
-    let timecodedGroupDimension = this.timeline.getTimecodedGroupDimension();
+    protected settleLayout() {
+        let timecodedGroupDimension = this.timeline.getTimecodedGroupDimension();
 
-    [this.group, this.bufferedGroup, this.playheadGroup].forEach(node => {
-      node.setAttrs({
-        ...timecodedGroupDimension
-      })
-    });
+        [this.group, this.bufferedGroup, this.playheadGroup].forEach(node => {
+            node.setAttrs({
+                ...timecodedGroupDimension
+            })
+        });
 
-    [this.background].forEach(node => {
-      node.setAttrs({
-        width: timecodedGroupDimension.width
-      })
-    })
+        [this.background].forEach(node => {
+            node.setAttrs({
+                width: timecodedGroupDimension.width
+            })
+        })
 
-    this.playheadLine.setAttrs({
-      points: [0, 0, 0, timecodedGroupDimension.height]
-    })
+        this.playheadLine.setAttrs({
+            points: [0, 0, 0, timecodedGroupDimension.height]
+        })
 
-    this.doPlayProgress()
-    this.doBufferingProgress()
-  }
+        this.doPlayProgress()
+        this.doBufferingProgress()
+    }
 
-  private doPlayProgress() {
-    let x = this.timeline.timeToTimelinePosition(this.videoController.getCurrentTime());
+    private doPlayProgress() {
+        let x = this.timeline.timeToTimelinePosition(this.videoController.getCurrentTime());
 
-    this.playProgressBackground.width(x);
-    this.playheadGroup.x(x);
-  }
+        this.playProgressBackground.width(x);
+        this.playheadGroup.x(x);
+    }
 
-  private doBufferingProgress() {
-    let bufferedTimespans = this.videoController.getBufferedTimespans()
+    private doBufferingProgress() {
+        let bufferedTimespans = this.videoController.getBufferedTimespans()
 
-    if (bufferedTimespans && bufferedTimespans.length > 0) {
-      if (this.bufferedGroup.hasChildren()) {
-        let numOfBuffers = bufferedTimespans.length;
-        let previousNumOfBuffers = this.bufferedGroup.getChildren().length;
+        if (bufferedTimespans && bufferedTimespans.length > 0) {
+            if (this.bufferedGroup.hasChildren()) {
+                let numOfBuffers = bufferedTimespans.length;
+                let previousNumOfBuffers = this.bufferedGroup.getChildren().length;
 
-        if (numOfBuffers === previousNumOfBuffers) {
-          // move and resize buffers
-          this.bufferedGroup.getChildren().forEach((bufferedRect, i) => {
-            let bufferedTimespan = bufferedTimespans[i];
+                if (numOfBuffers === previousNumOfBuffers) {
+                    // move and resize buffers
+                    this.bufferedGroup.getChildren().forEach((bufferedRect, i) => {
+                        let bufferedTimespan = bufferedTimespans[i];
+                        let startX = this.timeline.timeToTimelinePosition(bufferedTimespan.start);
+                        let endX = this.timeline.timeToTimelinePosition(bufferedTimespan.end);
+                        bufferedRect.setAttrs({
+                            x: startX,
+                            width: endX - startX
+                        })
+                    })
+                } else {
+                    // remove old and recreate
+                    this.bufferedGroup.getChildren().forEach(child => child.destroy());
+                    this.createBuffers(bufferedTimespans);
+                }
+            } else {
+                this.createBuffers(bufferedTimespans);
+            }
+        }
+    }
+
+    private createBuffers(bufferedTimespans: BufferedTimespan[]) {
+        bufferedTimespans.forEach(bufferedTimespan => {
             let startX = this.timeline.timeToTimelinePosition(bufferedTimespan.start);
             let endX = this.timeline.timeToTimelinePosition(bufferedTimespan.end);
-            bufferedRect.setAttrs({
-              x: startX,
-              width: endX - startX
+
+            let bufferedRect = new Konva.Rect({
+                x: startX,
+                y: 0,
+                width: endX - startX,
+                height: this.style.scrubberHeight,
+                fill: this.style.bufferedFill,
+                opacity: this.style.bufferedOpacity,
+                listening: false
             })
-          })
-        } else {
-          // remove old and recreate
-          this.bufferedGroup.getChildren().forEach(child => child.destroy());
-          this.createBuffers(bufferedTimespans);
-        }
-      } else {
-        this.createBuffers(bufferedTimespans);
-      }
+            this.bufferedGroup.add(bufferedRect)
+        })
     }
-  }
-
-  private createBuffers(bufferedTimespans: BufferedTimespan[]) {
-    bufferedTimespans.forEach(bufferedTimespan => {
-      let startX = this.timeline.timeToTimelinePosition(bufferedTimespan.start);
-      let endX = this.timeline.timeToTimelinePosition(bufferedTimespan.end);
-
-      let bufferedRect = new Konva.Rect({
-        x: startX,
-        y: 0,
-        width: endX - startX,
-        height: this.style.scrubberHeight,
-        fill: this.style.bufferedFill,
-        opacity: this.style.bufferedOpacity,
-        listening: false
-      })
-      this.bufferedGroup.add(bufferedRect)
-    })
-  }
 
 }

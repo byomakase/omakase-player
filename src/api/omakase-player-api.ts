@@ -29,67 +29,67 @@ import {ComponentConfigStyleComposed} from "../common/component";
 
 export interface OmakasePlayerApi extends Api, OmakaseEventEmitter<OmakasePlayerEventMap> {
 
-  /***
-   * Loads new video
-   * @param videoSourceUrl Video manifest URL
-   * @param videoFrameRate Video frame rate
-   */
-  loadVideo(videoSourceUrl: string, videoFrameRate: number): Observable<Video>;
+    /***
+     * Loads new video
+     * @param videoSourceUrl Video manifest URL
+     * @param videoFrameRate Video frame rate
+     */
+    loadVideo(videoSourceUrl: string, videoFrameRate: number): Observable<Video>;
 
-  /***
-   * Loads new video
-   *
-   * @param videoSourceUrl Video manifest URL
-   * @param videoFrameRate Video frame rate
-   * @param duration Video duration
-   */
-  loadVideo(videoSourceUrl: string, videoFrameRate: number, duration: number): Observable<Video>;
+    /***
+     * Loads new video
+     *
+     * @param videoSourceUrl Video manifest URL
+     * @param videoFrameRate Video frame rate
+     * @param duration Video duration
+     */
+    loadVideo(videoSourceUrl: string, videoFrameRate: number, duration: number): Observable<Video>;
 
-  /***
-   * Creates Timeline
-   * @param config Timeline configuration
-   */
-  createTimeline(config: Partial<ComponentConfigStyleComposed<TimelineConfig>>): Observable<Timeline>;
+    /***
+     * Creates Timeline
+     * @param config Timeline configuration
+     */
+    createTimeline(config: Partial<ComponentConfigStyleComposed<TimelineConfig>>): Observable<Timeline>;
 
-  /***
-   * Returns OmakasePlayerStyle
-   */
-  get style(): OmakasePlayerStyle;
+    /***
+     * Returns OmakasePlayerStyle
+     */
+    get style(): OmakasePlayerStyle;
 
-  /***
-   * Sets OmakasePlayerStyle
-   * @param value
-   */
-  set style(value: Partial<OmakasePlayerStyle>)
+    /***
+     * Sets OmakasePlayerStyle
+     * @param value
+     */
+    set style(value: Partial<OmakasePlayerStyle>)
 
-  /***
-   * Returns Timeline API
-   */
-  get timeline(): TimelineApi;
+    /***
+     * Returns Timeline API
+     */
+    get timeline(): TimelineApi;
 
-  /***
-   * Returns Video API
-   */
-  get video(): VideoApi;
+    /***
+     * Returns Video API
+     */
+    get video(): VideoApi;
 
-  /***
-   * Returns Audio API
-   */
-  get audio(): AudioApi;
+    /***
+     * Returns Audio API
+     */
+    get audio(): AudioApi;
 
 
-  /***
-   * Returns Subtitles API
-   */
-  get subtitles(): SubtitlesApi;
+    /***
+     * Returns Subtitles API
+     */
+    get subtitles(): SubtitlesApi;
 
-  /***
-   * Returns Omakase Player events enumeration
-   */
-  get EVENTS(): OmakasePlayerEventsType;
+    /***
+     * Returns Omakase Player events enumeration
+     */
+    get EVENTS(): OmakasePlayerEventsType;
 
-  /***
-   * Destroys OmakasePlayer instance and frees up memory
-   */
-  destroy(): void;
+    /***
+     * Destroys OmakasePlayer instance and frees up memory
+     */
+    destroy(): void;
 }

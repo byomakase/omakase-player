@@ -22,59 +22,59 @@ import {Subject} from "rxjs";
 import {MarkerFocusEvent} from "../types";
 
 export interface MarkerLaneApi extends Api {
-  /***
-   *  Fires on marker focus
-   */
-  onMarkerFocus$: Subject<MarkerFocusEvent>;
+    /***
+     *  Fires on marker focus
+     */
+    onMarkerFocus$: Subject<MarkerFocusEvent>;
 
-  /***
-   * Creates new MomentMarker instance and adds it to MarkerLane
-   * @param config MomentMarker configuration
-   */
-  createMomentMarker(config: MomentMarkerConfig): MomentMarker;
+    /***
+     * Creates new MomentMarker instance and adds it to MarkerLane
+     * @param config MomentMarker configuration
+     */
+    createMomentMarker(config: MomentMarkerConfig): MomentMarker;
 
-  /***
-   * Creates new PeriodMarker instance and adds it to MarkerLane
-   * @param config PeriodMarkern configuration
-   */
-  createPeriodMarker(config: PeriodMarkerConfig): PeriodMarker;
+    /***
+     * Creates new PeriodMarker instance and adds it to MarkerLane
+     * @param config PeriodMarkern configuration
+     */
+    createPeriodMarker(config: PeriodMarkerConfig): PeriodMarker;
 
-  /***
-   * Adds Marker to MarkerLane
-   * @param marker Marker instance
-   */
-  addMarker(marker: GenericMarker): GenericMarker;
+    /***
+     * Adds Marker to MarkerLane
+     * @param marker Marker instance
+     */
+    addMarker(marker: GenericMarker): GenericMarker;
 
-  /***
-   * Returns Marker by ID
-   * @param id Marker ID
-   */
-  getMarker(id: string): GenericMarker;
+    /***
+     * Returns Marker by ID
+     * @param id Marker ID
+     */
+    getMarker(id: string): GenericMarker;
 
-  /***
-   * Returns all Marker's
-   */
-  getMarkers(): GenericMarker[];
+    /***
+     * Returns all Marker's
+     */
+    getMarkers(): GenericMarker[];
 
-  /***
-   * Removes Marker by ID
-   * @param id Marker ID
-   */
-  removeMarker(id: string): void;
+    /***
+     * Removes Marker by ID
+     * @param id Marker ID
+     */
+    removeMarker(id: string): void;
 
-  /***
-   * Removes all Marker's
-   */
-  removeAllMarkers(): void;
+    /***
+     * Removes all Marker's
+     */
+    removeAllMarkers(): void;
 
-  /***
-   * Focuses Marker by ID
-   * @param id Marker ID
-   */
-  focusMarker(id: string): void;
+    /***
+     * Focuses Marker by ID
+     * @param id Marker ID
+     */
+    focusMarker(id: string): void;
 
-  /***
-   * Returns Marker in focus
-   */
-  getMarkerInFocus(): GenericMarker;
+    /***
+     * Returns Marker in focus
+     */
+    getMarkerInFocus(): GenericMarker;
 }
