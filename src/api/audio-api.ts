@@ -19,24 +19,24 @@ import {Observable} from "rxjs";
 import {AudioEvent} from "../types";
 
 export interface AudioApi extends Api {
-    /***
-     *  Fires on audio track switched
-     */
-    onAudioSwitched$: Observable<AudioEvent>;
+  /***
+   *  Fires on audio track switched
+   */
+  onAudioSwitched$: Observable<AudioEvent>;
 
-    /***
-     * Returns available audio tracks
-     */
-    getAudioTracks(): any[];
+  /***
+   * Returns available audio tracks
+   */
+  getAudioTracks(): any[];
 
-    /***
-     * Returns current active audio tracks
-     */
-    getCurrentAudioTrack(): any;
+  /***
+   * Returns current active audio tracks
+   */
+  getCurrentAudioTrack(): any;
 
-    /***
-     * Sets active audio track
-     * @param audioTrackId Audio track ID
-     */
-    setAudioTrack(audioTrackId: number);
+  /***
+   * Sets active audio track
+   * @param audioTrackId Audio track ID
+   */
+  setAudioTrack(audioTrackId: number);
 }

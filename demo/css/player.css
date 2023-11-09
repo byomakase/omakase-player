@@ -5,6 +5,7 @@
 body {
     min-width: 1385px;
 }
+
 .video {
     width: 800px;
     height: 450px;
@@ -54,7 +55,8 @@ body {
     padding-left: 100px;
 }
 
-.markers {}
+.markers {
+}
 
 .marker-image {
     float: left;
@@ -67,6 +69,7 @@ body {
     font-size: 10pt;
     cursor: pointer;
 }
+
 .markers-title {
     background-color: #235067;
     color: white;
@@ -91,12 +94,13 @@ body {
 }
 
 .inner-stats {
-   /* border: 1px solid darkgrey;
-    border-radius: 5px;
-    background-color: rgba(248, 250, 251, 0.766);*/
+    /* border: 1px solid darkgrey;
+     border-radius: 5px;
+     background-color: rgba(248, 250, 251, 0.766);*/
     padding-left: 30px;
     right: 30px;
 }
+
 .controls {
     background-color: #235067;
     width: 610px;
@@ -112,7 +116,7 @@ body {
 .icon {
     padding: 10px;
     line-height: 32px;
-    cursor: pointer; 
+    cursor: pointer;
 }
 
 .toggle {

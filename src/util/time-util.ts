@@ -18,22 +18,22 @@ import Decimal from "decimal.js";
 import {FrameUtil} from "./frame-util";
 
 export class TimeUtil {
-    public static readonly VIDEO_ZERO_TIMESTAMP = `${TimeUtil.padZero(0)}:${TimeUtil.padZero(0)}:${TimeUtil.padZero(0)}:${TimeUtil.padZero(0)}`;
+  public static readonly VIDEO_ZERO_TIMESTAMP = `${TimeUtil.padZero(0)}:${TimeUtil.padZero(0)}:${TimeUtil.padZero(0)}:${TimeUtil.padZero(0)}`;
 
-    static formatVideoTimestamp(time: number, frameRateDecimal: Decimal) {
-        if (time <= 0) {
-            return TimeUtil.VIDEO_ZERO_TIMESTAMP;
-        }
-
-        const hours = Math.floor(time / 3600);
-        const minutes = Math.floor((time % 3600) / 60);
-        const seconds = Math.floor(time % 60);
-
-        let frameInSecond = new Decimal(FrameUtil.timeToFrame(time, frameRateDecimal)).mod(frameRateDecimal).toNumber();
-        return `${TimeUtil.padZero(hours)}:${TimeUtil.padZero(minutes)}:${TimeUtil.padZero(seconds)}:${TimeUtil.padZero(frameInSecond)}`;
+  static formatVideoTimestamp(time: number, frameRateDecimal: Decimal) {
+    if (time <= 0) {
+      return TimeUtil.VIDEO_ZERO_TIMESTAMP;
     }
 
-    private static padZero(num, length = 2) {
-        return num.toString().padStart(length, "0");
-    }
+    const hours = Math.floor(time / 3600);
+    const minutes = Math.floor((time % 3600) / 60);
+    const seconds = Math.floor(time % 60);
+
+    let frameInSecond = new Decimal(FrameUtil.timeToFrame(time, frameRateDecimal)).mod(frameRateDecimal).toNumber();
+    return `${TimeUtil.padZero(hours)}:${TimeUtil.padZero(minutes)}:${TimeUtil.padZero(seconds)}:${TimeUtil.padZero(frameInSecond)}`;
+  }
+
+  private static padZero(num, length = 2) {
+    return num.toString().padStart(length, "0");
+  }
 }

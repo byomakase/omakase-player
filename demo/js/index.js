@@ -76,7 +76,7 @@ window.addEventListener('load', () => {
             backgroundFill: '#EDEFEE',
             leftBackgroundFill: '#E4E5E5'
         }
-        
+
         //Creating Marker Lane
         let inAndOutMarkersLane = new omakase.MarkerLane({
             id: "marker_lane_inout_1", description: "In and out markers",

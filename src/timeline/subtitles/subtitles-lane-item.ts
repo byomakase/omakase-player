@@ -23,170 +23,170 @@ import {SubtitlesLane} from "./subtitles-lane";
 import {takeUntil} from "rxjs";
 
 export interface SubtitlesLaneItemStyle {
-    height: number;
-    fill: string;
-    opacity: number;
-    visible: boolean;
+  height: number;
+  fill: string;
+  opacity: number;
+  visible: boolean;
 }
 
 export interface SubtitlesLaneItemConfig extends ComponentConfig<SubtitlesLaneItemStyle> {
-    textTrackCue: OmakaseTextTrackCue;
-    x: number;
-    width: number;
-    listening?: boolean;
+  textTrackCue: OmakaseTextTrackCue;
+  x: number;
+  width: number;
+  listening?: boolean;
 }
 
 const configDefault: Partial<SubtitlesLaneItemConfig> = {
-    listening: true,
-    style: {
-        height: 20,
-        fill: 'rgba(255,73,145)',
-        opacity: 1,
-        visible: true,
-    }
+  listening: true,
+  style: {
+    height: 20,
+    fill: 'rgba(255,73,145)',
+    opacity: 1,
+    visible: true,
+  }
 }
 
 export class SubtitlesLaneItem extends BaseComponent<SubtitlesLaneItemConfig, SubtitlesLaneItemStyle, Konva.Group> implements OnMeasurementsChange, HasRectMeasurement, Comparable<SubtitlesLaneItem> {
-    private x: number;
-    private width: number;
-    private listening: boolean;
+  private x: number;
+  private width: number;
+  private listening: boolean;
 
-    // region konva
-    private group: Konva.Group;
-    private backgroundRect: Konva.Rect;
-    // endregion
+  // region konva
+  private group: Konva.Group;
+  private backgroundRect: Konva.Rect;
+  // endregion
 
-    private textTrackCue: OmakaseTextTrackCue;
+  private textTrackCue: OmakaseTextTrackCue;
 
-    private subtitlesLane: SubtitlesLane;
+  private subtitlesLane: SubtitlesLane;
 
-    constructor(config: ComponentConfigStyleComposed<SubtitlesLaneItemConfig>, subtitlesLane: SubtitlesLane) {
-        super({
-            ...configDefault,
-            ...config,
-            style: {
-                ...configDefault.style,
-                ...config.style,
-            },
-        });
+  constructor(config: ComponentConfigStyleComposed<SubtitlesLaneItemConfig>, subtitlesLane: SubtitlesLane) {
+    super({
+      ...configDefault,
+      ...config,
+      style: {
+        ...configDefault.style,
+        ...config.style,
+      },
+    });
 
-        this.textTrackCue = this.config.textTrackCue;
-        this.x = this.config.x;
-        this.width = this.config.width;
-        this.listening = this.config.listening;
+    this.textTrackCue = this.config.textTrackCue;
+    this.x = this.config.x;
+    this.width = this.config.width;
+    this.listening = this.config.listening;
 
-        this.subtitlesLane = subtitlesLane;
+    this.subtitlesLane = subtitlesLane;
 
-        this.subtitlesLane.onSettleLayout$.pipe(takeUntil(this.onDestroy$)).subscribe(() => {
-            let currentMeasurement = this.subtitlesLane.resolveItemHorizontalMeasurement(this.getTextTrackCue());
-            this.setHorizontalMeasurement(currentMeasurement)
-        })
+    this.subtitlesLane.onSettleLayout$.pipe(takeUntil(this.onDestroy$)).subscribe(() => {
+      let currentMeasurement = this.subtitlesLane.resolveItemHorizontalMeasurement(this.getTextTrackCue());
+      this.setHorizontalMeasurement(currentMeasurement)
+    })
+  }
+
+  protected createCanvasNode(): Konva.Group {
+    this.group = new Konva.Group({
+      x: this.x,
+      y: 0,
+      width: this.width,
+      height: this.style.height,
+      visible: this.style.visible,
+      listening: this.listening
+    });
+
+    this.backgroundRect = new Konva.Rect({
+      x: 0,
+      y: 0,
+      width: this.group.width(),
+      height: this.group.height(),
+      fill: this.style.fill,
+      opacity: this.style.opacity,
+      perfectDrawEnabled: false,
+      shadowForStrokeEnabled: false,
+      hitStrokeWidth: 0
+    })
+
+    this.group.add(this.backgroundRect)
+
+    return this.group;
+  }
+
+  onMeasurementsChange() {
+    this.backgroundRect.size(this.group.getSize());
+  }
+
+  setPosition(position: WithOptionalPartial<Position, 'y'>) {
+    this.x = position.x;
+    if (this.isInitialized()) {
+      this.group.position({
+        x: this.x,
+        y: 0
+      })
     }
+  }
 
-    protected createCanvasNode(): Konva.Group {
-        this.group = new Konva.Group({
-            x: this.x,
-            y: 0,
-            width: this.width,
-            height: this.style.height,
-            visible: this.style.visible,
-            listening: this.listening
-        });
+  getPosition(): Position {
+    return this.group.getPosition();
+  }
 
-        this.backgroundRect = new Konva.Rect({
-            x: 0,
-            y: 0,
-            width: this.group.width(),
-            height: this.group.height(),
-            fill: this.style.fill,
-            opacity: this.style.opacity,
-            perfectDrawEnabled: false,
-            shadowForStrokeEnabled: false,
-            hitStrokeWidth: 0
-        })
+  getDimension(): Dimension {
+    return this.group.getSize();
+  }
 
-        this.group.add(this.backgroundRect)
+  getRect(): RectMeasurement {
+    return {
+      ...this.getPosition(),
+      ...this.getDimension()
+    };
+  }
 
-        return this.group;
+  getHorizontalMeasurement(): HorizontalMeasurement {
+    return {
+      x: this.x,
+      width: this.width
     }
+  }
 
-    onMeasurementsChange() {
-        this.backgroundRect.size(this.group.getSize());
+  setHorizontalMeasurement(horizontalMeasurement: HorizontalMeasurement) {
+    this.x = horizontalMeasurement.x;
+    this.width = horizontalMeasurement.width;
+
+    if (this.isInitialized()) {
+      this.group.setAttrs({
+        x: this.x,
+        width: this.width
+      })
     }
+    this.onMeasurementsChange();
+  }
 
-    setPosition(position: WithOptionalPartial<Position, 'y'>) {
-        this.x = position.x;
-        if (this.isInitialized()) {
-            this.group.position({
-                x: this.x,
-                y: 0
-            })
-        }
+  setVisible(visible: boolean) {
+    this.style = {
+      visible: visible
+    };
+    if (this.isInitialized()) {
+      this.group.visible(visible);
     }
+  }
 
-    getPosition(): Position {
-        return this.group.getPosition();
-    }
+  getTextTrackCue(): OmakaseTextTrackCue {
+    return this.textTrackCue;
+  }
 
-    getDimension(): Dimension {
-        return this.group.getSize();
-    }
+  setTextTrackCue(textTrackCue: OmakaseTextTrackCue) {
+    this.textTrackCue = textTrackCue;
+  }
 
-    getRect(): RectMeasurement {
-        return {
-            ...this.getPosition(),
-            ...this.getDimension()
-        };
-    }
+  compareTo(o: SubtitlesLaneItem): number {
+    return this.textTrackCue && o ? (
+      this.getTextTrackCue().id === o.getTextTrackCue().id
+      && this.getTextTrackCue().startTime === o.getTextTrackCue().startTime
+      && this.getTextTrackCue().endTime === o.getTextTrackCue().endTime
+    ) ? 0 : -1 : -1;
+  }
 
-    getHorizontalMeasurement(): HorizontalMeasurement {
-        return {
-            x: this.x,
-            width: this.width
-        }
-    }
-
-    setHorizontalMeasurement(horizontalMeasurement: HorizontalMeasurement) {
-        this.x = horizontalMeasurement.x;
-        this.width = horizontalMeasurement.width;
-
-        if (this.isInitialized()) {
-            this.group.setAttrs({
-                x: this.x,
-                width: this.width
-            })
-        }
-        this.onMeasurementsChange();
-    }
-
-    setVisible(visible: boolean) {
-        this.style = {
-            visible: visible
-        };
-        if (this.isInitialized()) {
-            this.group.visible(visible);
-        }
-    }
-
-    getTextTrackCue(): OmakaseTextTrackCue {
-        return this.textTrackCue;
-    }
-
-    setTextTrackCue(textTrackCue: OmakaseTextTrackCue) {
-        this.textTrackCue = textTrackCue;
-    }
-
-    compareTo(o: SubtitlesLaneItem): number {
-        return this.textTrackCue && o ? (
-            this.getTextTrackCue().id === o.getTextTrackCue().id
-            && this.getTextTrackCue().startTime === o.getTextTrackCue().startTime
-            && this.getTextTrackCue().endTime === o.getTextTrackCue().endTime
-        ) ? 0 : -1 : -1;
-    }
-
-    destroy() {
-        this.textTrackCue = void 0;
-        this.subtitlesLane = void 0;
-        super.destroy();
-    }
+  destroy() {
+    this.textTrackCue = void 0;
+    this.subtitlesLane = void 0;
+    super.destroy();
+  }
 }

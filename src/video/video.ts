@@ -17,67 +17,61 @@
 import Decimal from "decimal.js";
 
 export class Video {
-    private readonly _element: HTMLVideoElement;
-    private readonly _sourceUrl: string;
-    private readonly _frameRate: number;
-    private readonly _duration: number;
-    private readonly _totalFrames: number;
+  private readonly _sourceUrl: string;
+  private readonly _frameRate: number;
+  private readonly _duration: number;
+  private readonly _totalFrames: number;
 
-    /***
-     * Frame duration in seconds
-     * @private
-     */
-    private readonly _frameDuration: number
+  /***
+   * Frame duration in seconds
+   * @private
+   */
+  private readonly _frameDuration: number
 
-    /**
-     * Corrected duration field may be updated once when:
-     *  * video element changes video duration
-     *  * video ends on bare start of the last frame, which might not exist in that moment
-     *  * last hls segment ends of different time than it was initially calculated
-     *
-     * @private correctedDuration
-     */
-    private _correctedDuration: number;
+  /**
+   * Corrected duration field may be updated once when:
+   *  * video element changes video duration
+   *  * video ends on bare start of the last frame, which might not exist in that moment
+   *  * last hls segment ends of different time than it was initially calculated
+   *
+   * @private correctedDuration
+   */
+  private _correctedDuration: number;
 
-    constructor(element: HTMLVideoElement, sourceUrl: string, frameRate: number, duration: number) {
-        this._element = element;
-        this._sourceUrl = sourceUrl;
-        this._frameRate = frameRate;
-        this._duration = duration;
-        this._totalFrames = new Decimal(this._duration).mul(this._frameRate).ceil().toNumber();
-        this._frameDuration = new Decimal(1).div(this._frameRate).toNumber();
-    }
+  constructor(sourceUrl: string, frameRate: number, duration: number) {
+    this._sourceUrl = sourceUrl;
+    this._frameRate = frameRate;
+    this._duration = duration;
+    this._totalFrames = new Decimal(this._duration).mul(this._frameRate).ceil().toNumber();
+    this._frameDuration = new Decimal(1).div(this._frameRate).toNumber();
+  }
 
-    get element(): HTMLVideoElement {
-        return this._element;
-    }
+  get sourceUrl(): string {
+    return this._sourceUrl;
+  }
 
-    get sourceUrl(): string {
-        return this._sourceUrl;
-    }
+  get frameRate(): number {
+    return this._frameRate;
+  }
 
-    get frameRate(): number {
-        return this._frameRate;
-    }
+  get duration(): number {
+    return this._duration;
+  }
 
-    get duration(): number {
-        return this._duration;
-    }
+  get totalFrames() {
+    return this._totalFrames;
+  }
 
-    get totalFrames() {
-        return this._totalFrames;
-    }
+  get frameDuration(): number {
+    return this._frameDuration;
+  }
 
-    get frameDuration(): number {
-        return this._frameDuration;
-    }
+  get correctedDuration() {
+    return this._correctedDuration;
+  }
 
-    get correctedDuration () {
-        return this._correctedDuration;
-    }
-
-    setCorrectedDuration (value: number) {
-        console.debug(`%cVideo duration correction: initialDuration:${this.duration} > updatedDuration:${value} `, 'color: magenta');
-        this._correctedDuration = value;
-    }
+  setCorrectedDuration(value: number) {
+    console.debug(`%cVideo duration correction: initialDuration:${this.duration} > updatedDuration:${value} `, 'color: magenta');
+    this._correctedDuration = value;
+  }
 }

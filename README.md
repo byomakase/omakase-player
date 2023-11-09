@@ -11,6 +11,7 @@ Omakase player requires hls.js library. Include hls.js library with Omakase Play
 ```
 
 Include Omakase Player js library
+
 ```
 <script src="dist/omakase-player.umd.js"></script>
 ```
@@ -249,4 +250,5 @@ npm run prod
 Production artefacts that need to be published to NPM are created in `/dist` folder
 
 ## Known limitations
- - Firefox browser is not supported as it doesn't support ```requestVideoFrameCallback``` function
+
+- Firefox browser is not supported as it doesn't support ```requestVideoFrameCallback``` function

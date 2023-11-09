@@ -20,65 +20,65 @@ import {Constants} from "../constants";
 import {ColorUtil} from "./color-util";
 
 export class ShapeUtil {
-    static createGoldenRatioWedge(config: {
-        x: number,
-        y: number,
-        height: number,
-        color: string
-    }): Konva.Line {
-        let b = new Decimal(config.height).div(Constants.GOLDEN_RATIO + 1).toDecimalPlaces(2).toNumber();
-        let a = config.height - b;
-        let halfWidth = a / 2;
-        return new Konva.Line({
-            points: [
-                config.x - halfWidth, config.y,
-                config.x + halfWidth, config.y,
-                config.x + halfWidth, config.y + a,
-                config.x, config.y + a + b,
-                config.x - halfWidth, config.y + a,
-            ],
-            fill: config.color,
-            stroke: config.color,
-            closed: true,
-            listening: false
-        })
-    }
+  static createGoldenRatioWedge(config: {
+    x: number,
+    y: number,
+    height: number,
+    color: string
+  }): Konva.Line {
+    let b = new Decimal(config.height).div(Constants.GOLDEN_RATIO + 1).toDecimalPlaces(2).toNumber();
+    let a = config.height - b;
+    let halfWidth = a / 2;
+    return new Konva.Line({
+      points: [
+        config.x - halfWidth, config.y,
+        config.x + halfWidth, config.y,
+        config.x + halfWidth, config.y + a,
+        config.x, config.y + a + b,
+        config.x - halfWidth, config.y + a,
+      ],
+      fill: config.color,
+      stroke: config.color,
+      closed: true,
+      listening: false
+    })
+  }
 
-    static createTriangle(config: {
-        x: number,
-        y: number,
-        height: number,
-        color: string
-    }): Konva.Line {
-        let halfWidth = config.height / 2;
-        return new Konva.Line({
-            points: [
-                config.x - halfWidth, config.y,
-                config.x + halfWidth, config.y,
-                config.x, config.y + config.height,
-            ],
-            fill: config.color,
-            closed: true,
-            listening: false
-        })
-    }
+  static createTriangle(config: {
+    x: number,
+    y: number,
+    height: number,
+    color: string
+  }): Konva.Line {
+    let halfWidth = config.height / 2;
+    return new Konva.Line({
+      points: [
+        config.x - halfWidth, config.y,
+        config.x + halfWidth, config.y,
+        config.x, config.y + config.height,
+      ],
+      fill: config.color,
+      closed: true,
+      listening: false
+    })
+  }
 
-    static createEventCatcher(config: Konva.RectConfig = {}) {
-        return new Konva.Rect({
-            ...Constants.POSITION_TOP_LEFT,
-            opacity: 0,
-            listening: true,
-            ...config,
-        });
-    }
+  static createEventCatcher(config: Konva.RectConfig = {}) {
+    return new Konva.Rect({
+      ...Constants.POSITION_TOP_LEFT,
+      opacity: 0,
+      listening: true,
+      ...config,
+    });
+  }
 
-    static createDebugRect() {
-        return new Konva.Rect({
-            ...Constants.POSITION_TOP_LEFT,
-            width: 100,
-            height: 100,
-            fill: ColorUtil.randomHexColor(),
-            opacity: 1,
-        });
-    }
+  static createDebugRect() {
+    return new Konva.Rect({
+      ...Constants.POSITION_TOP_LEFT,
+      width: 100,
+      height: 100,
+      fill: ColorUtil.randomHexColor(),
+      opacity: 1,
+    });
+  }
 }

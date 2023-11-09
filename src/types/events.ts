@@ -23,58 +23,58 @@ import {OmakaseTextTrack, OmakaseTextTrackCue} from "./track";
 import {GenericMarker} from "../timeline/marker/marker";
 
 export const OmakasePlayerEvents: OmakasePlayerEventsType = {
-    OMAKASE_SUBTITLES_HIDE: "omakaseSubtitlesHide",
-    OMAKASE_TIMELINE_ZOOM: "omakaseTimelineZoom",
-    OMAKASE_VIDEO_LOADED: "omakaseVideoLoaded",
-    OMAKASE_VIDEO_PAUSE: "omakaseVideoPause",
-    OMAKASE_VIDEO_PLAY: "omakaseVideoPlay",
-    OMAKASE_VIDEO_SEEKED: "omakaseVideoSeeked",
-    OMAKASE_VIDEO_SEEKING: "omakaseVideoSeeking",
-    OMAKASE_VIDEO_BUFFERING: "omakaseVideoBuffering",
-    OMAKASE_VIDEO_ENDED: "omakaseVideoEnded",
-    OMAKASE_VIDEO_TIME_CHANGE: "omakaseVideoTimeChange",
-    OMAKASE_VIDEO_AUDIO_SWITCHED: "omakaseVideoAudioSwitched",
-    OMAKASE_AUDIO_SWITCHED: "omakaseAudioSwitched",
-    OMAKASE_SUBTITLES_CREATE: "omakaseSubtitlesCreate",
-    OMAKASE_SUBTITLES_REMOVE: "omakaseSubtitlesRemove",
-    OMAKASE_SUBTITLES_SHOW: "omakaseSubtitlesShow",
-    OMAKASE_TIMELINE_SCROLL: "omakaseTimelineScroll"
+  OMAKASE_SUBTITLES_HIDE: "omakaseSubtitlesHide",
+  OMAKASE_TIMELINE_ZOOM: "omakaseTimelineZoom",
+  OMAKASE_VIDEO_LOADED: "omakaseVideoLoaded",
+  OMAKASE_VIDEO_PAUSE: "omakaseVideoPause",
+  OMAKASE_VIDEO_PLAY: "omakaseVideoPlay",
+  OMAKASE_VIDEO_SEEKED: "omakaseVideoSeeked",
+  OMAKASE_VIDEO_SEEKING: "omakaseVideoSeeking",
+  OMAKASE_VIDEO_BUFFERING: "omakaseVideoBuffering",
+  OMAKASE_VIDEO_ENDED: "omakaseVideoEnded",
+  OMAKASE_VIDEO_TIME_CHANGE: "omakaseVideoTimeChange",
+  OMAKASE_VIDEO_AUDIO_SWITCHED: "omakaseVideoAudioSwitched",
+  OMAKASE_AUDIO_SWITCHED: "omakaseAudioSwitched",
+  OMAKASE_SUBTITLES_CREATE: "omakaseSubtitlesCreate",
+  OMAKASE_SUBTITLES_REMOVE: "omakaseSubtitlesRemove",
+  OMAKASE_SUBTITLES_SHOW: "omakaseSubtitlesShow",
+  OMAKASE_TIMELINE_SCROLL: "omakaseTimelineScroll"
 }
 
 export type OmakasePlayerEventsType = OmakasePlayerEventsMappingType<OmakasePlayerEventMap>
 
 export type OmakasePlayerEventsMappingType<T> = {
-    [K in keyof T as Uppercase<CamelToSnakeCase<string & K>>]: K
+  [K in keyof T as Uppercase<CamelToSnakeCase<string & K>>]: K
 }
 
 export type OmakasePlayerEventMap = VideoEventMap & AudioEventMap & SubtitlesEventMap & TimelineEventMap
 
 export type VideoEventMap = {
-    'omakaseVideoLoaded': VideoLoadedEvent,
-    'omakaseVideoPlay': VideoPlayEvent,
-    'omakaseVideoPause': VideoPlayEvent,
-    'omakaseVideoTimeChange': VideoTimeChangeEvent,
-    'omakaseVideoSeeking': VideoSeekingEvent,
-    'omakaseVideoSeeked': VideoSeekedEvent,
-    'omakaseVideoEnded': VideoEndedEvent,
-    'omakaseVideoAudioSwitched': AudioEvent,
-    'omakaseVideoBuffering': VideoBufferingEvent
+  'omakaseVideoLoaded': VideoLoadedEvent,
+  'omakaseVideoPlay': VideoPlayEvent,
+  'omakaseVideoPause': VideoPlayEvent,
+  'omakaseVideoTimeChange': VideoTimeChangeEvent,
+  'omakaseVideoSeeking': VideoSeekingEvent,
+  'omakaseVideoSeeked': VideoSeekedEvent,
+  'omakaseVideoEnded': VideoEndedEvent,
+  'omakaseVideoAudioSwitched': AudioEvent,
+  'omakaseVideoBuffering': VideoBufferingEvent
 }
 
 export type AudioEventMap = {
-    'omakaseAudioSwitched': AudioEvent,
+  'omakaseAudioSwitched': AudioEvent,
 }
 
 export type SubtitlesEventMap = {
-    'omakaseSubtitlesCreate': SubtitlesCreateEvent,
-    'omakaseSubtitlesRemove': SubtitlesEvent,
-    'omakaseSubtitlesShow': SubtitlesEvent,
-    'omakaseSubtitlesHide': SubtitlesEvent
+  'omakaseSubtitlesCreate': SubtitlesCreateEvent,
+  'omakaseSubtitlesRemove': SubtitlesEvent,
+  'omakaseSubtitlesShow': SubtitlesEvent,
+  'omakaseSubtitlesHide': SubtitlesEvent
 }
 
 export type TimelineEventMap = {
-    'omakaseTimelineScroll': TimelineScrollEvent,
-    'omakaseTimelineZoom': TimelineZoomEvent
+  'omakaseTimelineScroll': TimelineScrollEvent,
+  'omakaseTimelineZoom': TimelineZoomEvent
 }
 
 export interface OmakaseEvent {
@@ -84,8 +84,8 @@ export interface OmakaseEvent {
 // region general
 
 export interface OmakaseMouseEvent extends OmakaseEvent {
-    evt: MouseEvent;
-    position: Position;
+  evt: MouseEvent;
+  position: Position;
 }
 
 export interface ClickEvent extends OmakaseMouseEvent {
@@ -121,12 +121,12 @@ export interface VideoEvent extends OmakaseEvent {
 }
 
 export interface VideoLoadingEvent extends VideoEvent {
-    sourceUrl: string;
-    frameRate: number;
+  sourceUrl: string;
+  frameRate: number;
 }
 
 export interface VideoLoadedEvent extends VideoEvent {
-    video: Video;
+  video: Video;
 }
 
 export interface VideoPlayEvent extends VideoEvent {
@@ -134,21 +134,24 @@ export interface VideoPlayEvent extends VideoEvent {
 }
 
 export interface VideoTimeChangeEvent extends VideoEvent {
-    currentTime: number,
-    frame: number
+  currentTime: number,
+  frame: number
 }
 
 export interface VideoSeekingEvent extends VideoEvent {
-    currentTime: number,
-    newTime: number
+  currentTime: number,
+  newTime: number
 }
 
 export interface VideoSeekedEvent extends VideoEvent {
-    currentTime: number
+  currentTime: number
 }
 
 export interface VideoBufferingEvent extends VideoEvent {
-    bufferedTimespans: { start: number, end: number }[]
+  bufferedTimespans: {
+    start: number,
+    end: number
+  }[]
 }
 
 export interface VideoEndedEvent extends VideoEvent {
@@ -158,12 +161,12 @@ export interface VideoEndedEvent extends VideoEvent {
 export type VideoErrorType = 'VIDEO_LOAD_ERROR' | 'VIDEO_ERROR'
 
 export interface VideoErrorEvent extends VideoEvent {
-    type: VideoErrorType;
-    message?: string;
+  type: VideoErrorType;
+  message?: string;
 }
 
 export interface AudioEvent extends OmakaseEvent {
-    audioTrack: any
+  audioTrack: any
 }
 
 // endregion
@@ -175,7 +178,7 @@ export interface SubtitlesEvent extends OmakaseEvent {
 }
 
 export interface SubtitlesCreateEvent extends OmakaseEvent {
-    textTrack: OmakaseTextTrack<OmakaseTextTrackCue>
+  textTrack: OmakaseTextTrack<OmakaseTextTrackCue>
 }
 
 // endregion
@@ -187,11 +190,11 @@ export interface TimelineEvent extends OmakaseEvent {
 }
 
 export interface TimelineZoomEvent extends TimelineEvent {
-    zoomPercent: number;
+  zoomPercent: number;
 }
 
 export interface TimelineScrollEvent extends TimelineEvent {
-    scrollPercent: number;
+  scrollPercent: number;
 }
 
 // endregion
@@ -203,11 +206,11 @@ export interface ScrollbarEvent extends OmakaseEvent {
 }
 
 export interface ScrollbarScrollEvent extends ScrollbarEvent {
-    scrollPercent: number;
+  scrollPercent: number;
 }
 
 export interface ScrollbarZoomEvent extends ScrollbarEvent {
-    zoomPercent: number;
+  zoomPercent: number;
 }
 
 // endregion
@@ -215,7 +218,7 @@ export interface ScrollbarZoomEvent extends ScrollbarEvent {
 // region thumbnail
 
 export interface ThumbnailEvent extends OmakaseEvent {
-    thumbnail: Thumbnail
+  thumbnail: Thumbnail
 }
 
 // endregion
@@ -231,15 +234,15 @@ export interface MarkerChangeEvent extends MarkerEvent {
 }
 
 export interface MarkerFocusEvent extends MarkerEvent {
-    marker: GenericMarker;
+  marker: GenericMarker;
 }
 
 export interface MomentMarkerChangeEvent extends MarkerChangeEvent {
-    timeObservation: MomentObservation
+  timeObservation: MomentObservation
 }
 
 export interface PeriodMarkerChangeEvent extends MarkerChangeEvent {
-    timeObservation: PeriodObservation
+  timeObservation: PeriodObservation
 }
 
 // endregion

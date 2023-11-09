@@ -14,34 +14,33 @@
  *       limitations under the License.
  */
 
-import {HTMLVideoElementCrossorigin, HTMLVideoElementEventKeys, VideoController} from "./video-controller";
+import {HTMLVideoElementEventKeys, VideoController} from "./video-controller";
 import {first, forkJoin, fromEvent, Observable} from "rxjs";
 import {Video} from "./video";
-import {DomController} from "../dom/dom-controller";
 import {z} from "zod";
 
 export class VideoNativeController extends VideoController {
 
-    constructor(domController: DomController, crossorigin: HTMLVideoElementCrossorigin) {
-        super(domController, crossorigin);
-    }
+  constructor(playerHTMLElementId: string, crossorigin: 'anonymous' | 'use-credentials') {
+    super(playerHTMLElementId, crossorigin);
+  }
 
-    videoLoad(sourceUrl: string, frameRate: number, duration: number): Observable<Video> {
-        return new Observable<Video>(o$ => {
-            let videoLoadedData$ = fromEvent(this.videoElement, HTMLVideoElementEventKeys.LOADEDDATA).pipe(first());
+  videoLoad(sourceUrl: string, frameRate: number, duration: number): Observable<Video> {
+    return new Observable<Video>(o$ => {
+      let videoLoadedData$ = fromEvent(this.videoElement, HTMLVideoElementEventKeys.LOADEDDATA).pipe(first());
 
-            forkJoin([videoLoadedData$]).pipe(first()).subscribe(result => {
-                duration = duration ? z.coerce.number().parse(duration) : duration;
-                duration = duration ? duration : this.videoElement.duration;
-                let video = new Video(this.videoElement, sourceUrl, frameRate, duration)
+      forkJoin([videoLoadedData$]).pipe(first()).subscribe(result => {
+        duration = duration ? z.coerce.number().parse(duration) : duration;
+        duration = duration ? duration : this.videoElement.duration;
+        let video = new Video(sourceUrl, frameRate, duration)
 
-                o$.next(video);
-                o$.complete();
-            })
+        o$.next(video);
+        o$.complete();
+      })
 
-            this.videoElement.src = sourceUrl;
-            this.videoElement.load();
-        })
-    }
+      this.videoElement.src = sourceUrl;
+      this.videoElement.load();
+    })
+  }
 
 }

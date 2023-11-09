@@ -19,37 +19,37 @@ import {BehaviorSubject, Subject} from "rxjs";
 import {OmakasePlayerStyle} from "../omakase-player";
 
 export interface Styles {
-    omakasePlayerStyle: OmakasePlayerStyle
+  omakasePlayerStyle: OmakasePlayerStyle
 }
 
 export class StylesProvider {
-    private static _instance: StylesProvider;
+  private static _instance: StylesProvider;
 
-    public readonly onChange$: Subject<Styles> = new BehaviorSubject<Styles>(undefined);
+  public readonly onChange$: Subject<Styles> = new BehaviorSubject<Styles>(undefined);
 
-    private _styles: Styles;
+  private _styles: Styles;
 
-    private constructor() {
+  private constructor() {
 
+  }
+
+  public static instance(): StylesProvider {
+    if (!StylesProvider._instance) {
+      StylesProvider._instance = new StylesProvider();
     }
+    return StylesProvider._instance;
+  }
 
-    public static instance(): StylesProvider {
-        if (!StylesProvider._instance) {
-            StylesProvider._instance = new StylesProvider();
-        }
-        return StylesProvider._instance;
-    }
+  get styles(): Styles {
+    return this._styles;
+  }
 
-    get styles(): Styles {
-        return this._styles;
-    }
-
-    set styles(value: Partial<Styles>) {
-        this._styles = {
-            ...this._styles,
-            ...value
-        };
-        this.onChange$.next(this._styles);
-    }
+  set styles(value: Partial<Styles>) {
+    this._styles = {
+      ...this._styles,
+      ...value
+    };
+    this.onChange$.next(this._styles);
+  }
 
 }

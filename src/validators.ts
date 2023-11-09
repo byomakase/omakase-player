@@ -15,40 +15,39 @@
  */
 
 import {z} from "zod";
-import {zodErrorMapOverload} from "./util/error-util";
 
 export class Validators {
 
-    public static id(): (value: string) => string {
-        return (value: string) => {
-            return z.coerce.string()
-                .min(1)
-                .max(100)
-                .parse(value);
-        }
+  public static id(): (value: string) => string {
+    return (value: string) => {
+      return z.coerce.string()
+        .min(1)
+        .max(100)
+        .parse(value);
     }
+  }
 
-    public static description(): (value: string) => string {
-        return (value: string) => {
-            return z.coerce.string()
-                .max(1000)
-                .parse(value);
-        }
+  public static description(): (value: string) => string {
+    return (value: string) => {
+      return z.coerce.string()
+        .max(1000)
+        .parse(value);
     }
+  }
 
-    public static boolean(): (value: boolean) => boolean {
-        return (value: boolean) => {
-            return z.coerce.boolean()
-                .parse(value);
-        }
+  public static boolean(): (value: boolean) => boolean {
+    return (value: boolean) => {
+      return z.coerce.boolean()
+        .parse(value);
     }
+  }
 
-    public static url(): (value: string) => string {
-        return (value: string) => {
-            return z.coerce.string()
-                .url()
-                .parse(value);
-        }
+  public static url(): (value: string) => string {
+    return (value: string) => {
+      return z.coerce.string()
+        .url()
+        .parse(value);
     }
+  }
 
 }

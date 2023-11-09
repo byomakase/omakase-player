@@ -27,131 +27,131 @@ import {ScrubberLane} from "../timeline/scrubber-lane";
 import {Scrollbar} from "../timeline/scrollbar";
 
 export interface TimelineApi extends Api {
-    /***
-     *  Fires on Timeline scroll
-     */
-    onScroll$: Observable<TimelineScrollEvent>;
+  /***
+   *  Fires on Timeline scroll
+   */
+  onScroll$: Observable<TimelineScrollEvent>;
 
-    /***
-     *  Fires on Timeline zoom
-     */
-    onZoom$: Observable<TimelineZoomEvent>;
+  /***
+   *  Fires on Timeline zoom
+   */
+  onZoom$: Observable<TimelineZoomEvent>;
 
-    get style(): TimelineStyle;
+  get style(): TimelineStyle;
 
-    /***
-     * Timeline zoom
-     * @param percent number between 100 and TimelineConfig.zoomMax
-     */
-    zoomTo(percent: number): Observable<number>;
+  /***
+   * Timeline zoom
+   * @param percent number between 100 and TimelineConfig.zoomMax
+   */
+  zoomTo(percent: number): Observable<number>;
 
-    /***
-     * Zoom in. Zoom scale in single method call is defined with TimelineConfig.zoomScale
-     */
-    zoomIn(): Observable<number>;
+  /***
+   * Zoom in. Zoom scale in single method call is defined with TimelineConfig.zoomScale
+   */
+  zoomIn(): Observable<number>;
 
-    /***
-     * Zoom out. Zoom scale in single method call is defined with TimelineConfig.zoomScale
-     */
-    zoomOut(): Observable<number>;
+  /***
+   * Zoom out. Zoom scale in single method call is defined with TimelineConfig.zoomScale
+   */
+  zoomOut(): Observable<number>;
 
-    /***
-     * Returns current zoom perent
-     */
-    getZoomPercent(): number;
+  /***
+   * Returns current zoom perent
+   */
+  getZoomPercent(): number;
 
-    /***
-     * Scrolls timeline
-     * @param percent in range from 0 - timeline start or first timestamp, to 100 - timeline end or last timestamop
-     */
-    scrollTo(percent: number): Observable<number>;
+  /***
+   * Scrolls timeline
+   * @param percent in range from 0 - timeline start or first timestamp, to 100 - timeline end or last timestamop
+   */
+  scrollTo(percent: number): Observable<number>;
 
-    /***
-     * Scrolls timeline to playhead position
-     */
-    scrollToPlayhead(): Observable<number>;
+  /***
+   * Scrolls timeline to playhead position
+   */
+  scrollToPlayhead(): Observable<number>;
 
-    getScrollbar(): Scrollbar;
+  getScrollbar(): Scrollbar;
 
-    /***
-     * Adds instantiated TimelineLane to timeline
-     * @param timelineLane
-     */
-    addLane(timelineLane: GenericTimelaneLane): void;
+  /***
+   * Adds instantiated TimelineLane to timeline
+   * @param timelineLane
+   */
+  addLane(timelineLane: GenericTimelaneLane): void;
 
-    /***
-     * Removes TimelineLane by id
-     * @param id
-     */
-    removeLane(id: string);
+  /***
+   * Removes TimelineLane by id
+   * @param id
+   */
+  removeLane(id: string);
 
-    /***
-     * Adds multiple instantiated TimelineLane-s to timeline
-     * @param timelineLanes
-     */
-    addLanes(timelineLanes: GenericTimelaneLane[]): void;
+  /***
+   * Adds multiple instantiated TimelineLane-s to timeline
+   * @param timelineLanes
+   */
+  addLanes(timelineLanes: GenericTimelaneLane[]): void;
 
-    /***
-     * Returns all TimelineLane-s
-     */
-    getLanes(): GenericTimelaneLane[];
+  /***
+   * Returns all TimelineLane-s
+   */
+  getLanes(): GenericTimelaneLane[];
 
-    /***
-     * Returns single TimelineLane
-     * @param id TimelineLane.id
-     */
-    getLane(id: string): GenericTimelaneLane;
+  /***
+   * Returns single TimelineLane
+   * @param id TimelineLane.id
+   */
+  getLane(id: string): GenericTimelaneLane;
 
-    /***
-     * Returns ScrubberLane instance
-     */
-    getScrubberLane(): ScrubberLane;
+  /***
+   * Returns ScrubberLane instance
+   */
+  getScrubberLane(): ScrubberLane;
 
-    /***
-     * Returns MarkerLane instance
-     * @param id MarkerLane ID
-     */
-    getMarkerLane(id: string): MarkerLane;
+  /***
+   * Returns MarkerLane instance
+   * @param id MarkerLane ID
+   */
+  getMarkerLane(id: string): MarkerLane;
 
-    /***
-     * Returns ThumbnailLane instance
-     * @param id ThumbnailLane ID
-     */
-    getThumbnailLane(id: string): ThumbnailLane
+  /***
+   * Returns ThumbnailLane instance
+   * @param id ThumbnailLane ID
+   */
+  getThumbnailLane(id: string): ThumbnailLane
 
-    /***
-     * Returns SubtitlesLane instance
-     * @param id SubtitlesLane ID
-     */
-    getSubtitlesLane(id: string): SubtitlesLane;
+  /***
+   * Returns SubtitlesLane instance
+   * @param id SubtitlesLane ID
+   */
+  getSubtitlesLane(id: string): SubtitlesLane;
 
-    /***
-     * Returns AudioTrackLane instance
-     * @param id AudioTrackLane ID
-     */
-    getAudioTrackLane(id: string): AudioTrackLane;
+  /***
+   * Returns AudioTrackLane instance
+   * @param id AudioTrackLane ID
+   */
+  getAudioTrackLane(id: string): AudioTrackLane;
 
-    /***
-     * Creates new MarkerLane and adds it to Timeline
-     * @param config MarkerLane config
-     */
-    createMarkerLane(config: MarkerLaneConfig): MarkerLane;
+  /***
+   * Creates new MarkerLane and adds it to Timeline
+   * @param config MarkerLane config
+   */
+  createMarkerLane(config: MarkerLaneConfig): MarkerLane;
 
-    /***
-     * Creates new ThumbnailLane and adds it to Timeline
-     * @param config ThumbnailLane config
-     */
-    createThumbnailLane(config: ThumbnailLaneConfig): ThumbnailLane;
+  /***
+   * Creates new ThumbnailLane and adds it to Timeline
+   * @param config ThumbnailLane config
+   */
+  createThumbnailLane(config: ThumbnailLaneConfig): ThumbnailLane;
 
-    /***
-     * Creates new SubtitlesLane and adds it to Timeline
-     * @param config SubtitlesLane config
-     */
-    createSubtitlesLane(config: SubtitlesLaneConfig): SubtitlesLane;
+  /***
+   * Creates new SubtitlesLane and adds it to Timeline
+   * @param config SubtitlesLane config
+   */
+  createSubtitlesLane(config: SubtitlesLaneConfig): SubtitlesLane;
 
-    /***
-     * Shows or hides Timeline left panel
-     * @param visible
-     */
-    toggleLeftPanelVisible(visible: boolean): void;
+  /***
+   * Shows or hides Timeline left panel
+   * @param visible
+   */
+  toggleLeftPanelVisible(visible: boolean): void;
 }

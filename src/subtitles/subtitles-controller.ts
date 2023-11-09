@@ -17,203 +17,161 @@
 
 import {SubtitlesVttTrack} from "../track/subtitles-vtt-track";
 import {Destroyable, OmakaseTextTrack, OmakaseTextTrackCue, SubtitlesCreateEvent, SubtitlesEvent, SubtitlesVttTrackConfig} from "../types";
-import {filter, first, fromEvent, Observable, of, Subject} from "rxjs";
-import {VideoController} from "../video/video-controller";
+import {filter, Observable, of, Subject} from "rxjs";
 import {SubtitlesApi} from "../api/subtitles-api";
 import {completeSubjects, unsubscribeSubjects} from "../util/observable-util";
+import {VideoControllerApi} from "../video/video-controller-api";
 
 export class SubtitlesController implements SubtitlesApi, Destroyable {
-    protected currentTrack: OmakaseTextTrack<OmakaseTextTrackCue>;
+  protected currentTrack: OmakaseTextTrack<OmakaseTextTrackCue>;
 
-    protected videoController: VideoController;
+  protected videoController: VideoControllerApi;
 
-    protected subtitlesTracks: Map<string, OmakaseTextTrack<OmakaseTextTrackCue>> = new Map<string, OmakaseTextTrack<OmakaseTextTrackCue>>();
+  protected subtitlesTracks: Map<string, OmakaseTextTrack<OmakaseTextTrackCue>> = new Map<string, OmakaseTextTrack<OmakaseTextTrackCue>>();
 
-    public readonly onCreate$: Subject<SubtitlesCreateEvent> = new Subject<SubtitlesCreateEvent>();
-    public readonly onRemove$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
-    public readonly onShow$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
-    public readonly onHide$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
+  public readonly onCreate$: Subject<SubtitlesCreateEvent> = new Subject<SubtitlesCreateEvent>();
+  public readonly onRemove$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
+  public readonly onShow$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
+  public readonly onHide$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
 
-    constructor(videoController: VideoController) {
-        this.videoController = videoController;
+  constructor(videoController: VideoControllerApi) {
+    this.videoController = videoController;
 
-        this.videoController.onVideoLoaded$.pipe(filter(p => !!p)).subscribe((event) => {
-            this.removeAllTracks();
+    this.videoController.onVideoLoaded$.pipe(filter(p => !!p)).subscribe((event) => {
+      this.removeAllTracks();
+    })
+  }
+
+  createVttTrack(config: SubtitlesVttTrackConfig): Observable<SubtitlesVttTrack | undefined> {
+    if (!this.videoController.isVideoLoaded) {
+      return of(void 0);
+    } else {
+      return new Observable<SubtitlesVttTrack>(o$ => {
+        let track = new SubtitlesVttTrack(config)
+
+        if (this.subtitlesTracks.has(track.id)) {
+          this.removeTrack(track.id);
+        }
+
+        this.videoController.appendHTMLTrackElement(track).subscribe(element => {
+          track.element = element;
+
+          this.subtitlesTracks.set(track.id, track);
+          this.onCreate$.next({
+            textTrack: track
+          });
+
+          let textTrack = this.videoController.getTextTrackById(track.id);
+          textTrack.mode = "hidden";
+
+          o$.next(track);
+          o$.complete();
         })
+      });
+    }
+  }
+
+  getTracks(): OmakaseTextTrack<OmakaseTextTrackCue>[] {
+    if (!this.videoController.isVideoLoaded) {
+      return void 0;
     }
 
-    private getDomTextTrack(omakaseTextTrack: OmakaseTextTrack<OmakaseTextTrackCue>): TextTrack | undefined {
-        if (this.videoController && this.videoController.getHTMLVideoElement()) {
-            let textTrack = this.videoController.getHTMLVideoElement().textTracks.getTrackById(omakaseTextTrack.id);
-            if (textTrack.kind === "subtitles") {
-                return textTrack;
-            }
-        }
-        return void 0;
+    return [...this.subtitlesTracks.values()];
+  }
+
+  removeAllTracks() {
+    if (!this.videoController.isVideoLoaded) {
+      return;
     }
 
-    /***
-     * https://github.com/whatwg/html/issues/1921
-     * https://github.com/web-platform-tests/wpt/pull/6594
-     *
-     * @param track
-     * @private
-     */
-    private removeDomTextTrack(track: OmakaseTextTrack<OmakaseTextTrackCue>): boolean {
-        // there is not remove track method in HTML TextTrack API, we have to fake it
-        let domTextTrack: TextTrack = this.getDomTextTrack(track);
-        if (domTextTrack) {
-            this.videoController.getHTMLVideoElement().querySelectorAll<'track'>('track').forEach(trackElement => {
-                if (trackElement.getAttribute('id') === track.id) {
-                    trackElement.parentElement.removeChild(trackElement);
-                }
-            });
-            return true;
-        } else {
-            return false;
-        }
+    this.subtitlesTracks.forEach((value, key) => {
+      this.removeTrack(value.id);
+    })
+  }
+
+  removeTrack(id: string) {
+    if (!this.videoController.isVideoLoaded) {
+      return;
     }
 
-    private static createHTMLTrackElement(omakaseTextTrack: OmakaseTextTrack<OmakaseTextTrackCue>): HTMLTrackElement {
-        let element: HTMLTrackElement = document.createElement<'track'>("track");
-        element.kind = "subtitles";
-        element.id = omakaseTextTrack.id;
-        element.label = omakaseTextTrack.label;
-        element.srclang = omakaseTextTrack.language;
-        element.src = omakaseTextTrack.src;
-        element.default = omakaseTextTrack.default;
-        return element;
+    let track = this.subtitlesTracks.get(id);
+    if (track) {
+      // remove existing track
+      this.subtitlesTracks.delete(id);
+      // remove existing track from HTML DOM
+      this.videoController.removeTextTrackById(track.id);
+
+      this.onRemove$.next({});
+    }
+  }
+
+  getCurrentTrack(): OmakaseTextTrack<OmakaseTextTrackCue> | undefined {
+    return this.currentTrack;
+  }
+
+  showTrack(id: string = void 0) {
+    if (!this.videoController.isVideoLoaded) {
+      return;
     }
 
-    createVttTrack(config: SubtitlesVttTrackConfig): Observable<SubtitlesVttTrack | undefined> {
-        if (!this.videoController.isVideoLoaded) {
-            return of(void 0);
-        } else {
-            return new Observable<SubtitlesVttTrack>(o$ => {
-                let track = new SubtitlesVttTrack({...config})
+    id = id ? id : this.getCurrentTrack() ? this.getCurrentTrack().id : void 0;
 
-                if (this.subtitlesTracks.has(track.id)) {
-                    this.removeTrack(track.id);
-                }
-
-                track.element = SubtitlesController.createHTMLTrackElement(track);
-
-                fromEvent(track.element, "load").pipe(first()).subscribe((event) => {
-                    this.subtitlesTracks.set(track.id, track);
-                    o$.next(track);
-                    o$.complete();
-
-                    this.onCreate$.next({
-                        textTrack: track
-                    });
-                })
-
-                this.videoController.getHTMLVideoElement().appendChild(track.element);
-                let textTrack = this.getDomTextTrack(track);
-                textTrack.mode = "hidden";
-            });
-        }
+    if (!id) {
+      return;
     }
 
-    getTracks(): OmakaseTextTrack<OmakaseTextTrackCue>[] {
-        if (!this.videoController.isVideoLoaded) {
-            return void 0;
-        }
+    let track = this.subtitlesTracks.get(id);
 
-        return [...this.subtitlesTracks.values()];
+    if (track) {
+      let domTextTrack = this.videoController.getTextTrackById(track.id);
+
+      if (domTextTrack) {
+        let textTracksList = this.videoController.getTextTrackList();
+        for (let i = 0; i < textTracksList.length; i++) {
+          let textTrack = textTracksList[i];
+          textTrack.mode = "hidden";
+        }
+        domTextTrack.mode = "showing";
+        track.hidden = false;
+
+        this.currentTrack = track;
+
+        this.onShow$.next({});
+      }
+    }
+  }
+
+  hideTrack(id: string = void 0) {
+    if (!this.videoController.isVideoLoaded) {
+      return;
     }
 
-    removeAllTracks() {
-        if (!this.videoController.isVideoLoaded) {
-            return;
-        }
+    id = id ? id : this.getCurrentTrack() ? this.getCurrentTrack().id : void 0;
 
-        this.subtitlesTracks.forEach((value, key) => {
-            this.removeTrack(value.id);
-        })
+    if (!id) {
+      return;
     }
 
-    removeTrack(id: string) {
-        if (!this.videoController.isVideoLoaded) {
-            return;
-        }
+    let track = this.subtitlesTracks.get(id);
+    if (track) {
+      let domTextTrack = this.videoController.getTextTrackById(track.id);
+      if (domTextTrack) {
+        domTextTrack.mode = "hidden";
+        track.hidden = true;
 
-        let track = this.subtitlesTracks.get(id);
-        if (track) {
-            // remove existing track
-            this.subtitlesTracks.delete(id);
-            // remove existing track from HTML DOM
-            this.removeDomTextTrack(track);
-
-            this.onRemove$.next({});
-        }
+        this.onHide$.next({});
+      }
     }
+  }
 
-    getCurrentTrack(): OmakaseTextTrack<OmakaseTextTrackCue> | undefined {
-        return this.currentTrack;
-    }
+  destroy() {
+    this.removeAllTracks();
 
-    showTrack(id: string = void 0) {
-        if (!this.videoController.isVideoLoaded) {
-            return;
-        }
+    let subjects = [this.onCreate$, this.onRemove$, this.onShow$, this.onHide$];
+    completeSubjects(...subjects)
+    unsubscribeSubjects(...subjects);
 
-        id = id ? id : this.getCurrentTrack() ? this.getCurrentTrack().id : void 0;
-
-        if (!id) {
-            return;
-        }
-
-        let track = this.subtitlesTracks.get(id);
-
-        if (track) {
-            let domTextTrack = this.getDomTextTrack(track);
-            if (domTextTrack) {
-                for (let i = 0; i < this.videoController.getHTMLVideoElement().textTracks.length; i++) {
-                    let textTrack = this.videoController.getHTMLVideoElement().textTracks[i];
-                    textTrack.mode = "hidden";
-                }
-                domTextTrack.mode = "showing";
-                track.hidden = false;
-
-                this.currentTrack = track;
-
-                this.onShow$.next({});
-            }
-        }
-    }
-
-    hideTrack(id: string = void 0) {
-        if (!this.videoController.isVideoLoaded) {
-            return;
-        }
-
-        id = id ? id : this.getCurrentTrack() ? this.getCurrentTrack().id : void 0;
-
-        if (!id) {
-            return;
-        }
-
-        let track = this.subtitlesTracks.get(id);
-        if (track) {
-            let domTextTrack = this.getDomTextTrack(track);
-            if (domTextTrack) {
-                domTextTrack.mode = "hidden";
-                track.hidden = true;
-
-                this.onHide$.next({});
-            }
-        }
-    }
-
-    destroy() {
-        this.removeAllTracks();
-
-        let subjects = [this.onCreate$, this.onRemove$, this.onShow$, this.onHide$];
-        completeSubjects(...subjects)
-        unsubscribeSubjects(...subjects);
-
-        this.currentTrack = void 0;
-        this.videoController = void 0;
-    }
+    this.currentTrack = void 0;
+    this.videoController = void 0;
+  }
 }

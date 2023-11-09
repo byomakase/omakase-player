@@ -15,24 +15,27 @@
  */
 
 export interface OmakaseTrackConfig {
-    id: string;
-    src: string;
-    default: boolean;
-    label: string;
-    language: string;
+  id: string;
+  src: string;
+  default: boolean;
+  label: string;
+  language: string;
+  kind: string;
 }
+
 export interface OmakaseTextTrackCue {
-    id: string;
-    startTime: number;
-    endTime: number;
+  id: string;
+  startTime: number;
+  endTime: number;
 }
 
 export interface OmakaseTextTrack<T extends OmakaseTextTrackCue> {
-    id: string;
-    src: string;
-    default: boolean;
-    label: string;
-    language: string;
-    hidden: boolean;
-    cues: T[];
+  id: string;
+  src: string;
+  default: boolean;
+  label: string;
+  language: string;
+  kind: string;
+  hidden: boolean;
+  cues: T[];
 }

@@ -19,20 +19,20 @@ export interface TimeObservation {
 }
 
 export interface MomentObservation extends TimeObservation {
-    time: number;
+  time: number;
 }
 
 export interface PeriodObservation extends TimeObservation {
-    start: number;
-    end: number;
+  start: number;
+  end: number;
 }
 
 export interface HelpMenuGroup {
-    name: string;
-    items: HelpMenuItem[];
+  name: string;
+  items: HelpMenuItem[];
 }
 
 export interface HelpMenuItem {
-    name: string;
-    description: string;
+  name: string;
+  description: string;
 }

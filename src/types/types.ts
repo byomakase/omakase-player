@@ -16,8 +16,8 @@
 
 export type CamelToSnakeCase<S extends string> = S extends `${infer T}${infer U}` ? `${T extends Capitalize<T> ? "_" : ""}${Lowercase<T>}${CamelToSnakeCase<U>}` : S
 
-export type PartialRecord<K extends keyof any, T> =  Partial<Record<K, T>>
+export type PartialRecord<K extends keyof any, T> = Partial<Record<K, T>>
 
 export type WithOptionalPartial<T, K extends keyof T> = Omit<T, K> & PartialRecord<K, Partial<T[K]>>;
 
-export type AtLeastOne<T, U = {[K in keyof T]: Pick<T, K> }> = Partial<T> & U[keyof U];
+export type AtLeastOne<T, U = { [K in keyof T]: Pick<T, K> }> = Partial<T> & U[keyof U];

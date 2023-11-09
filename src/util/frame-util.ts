@@ -18,24 +18,24 @@ import Decimal from "decimal.js";
 
 export class FrameUtil {
 
-    /***
-     * Returns frame number
-     *
-     * @param time in Seconds
-     * @param frameRateDecimal
-     */
-    static timeToFrame(time: number, frameRateDecimal: Decimal): number {
-        return frameRateDecimal.mul(time).floor().toNumber();
-    }
+  /***
+   * Returns frame number
+   *
+   * @param time in Seconds
+   * @param frameRateDecimal
+   */
+  static timeToFrame(time: number, frameRateDecimal: Decimal): number {
+    return frameRateDecimal.mul(time).floor().toNumber();
+  }
 
-    /***
-     * Returns time in seconds
-     *
-     * @param framesCount
-     * @param frameRateDecimal
-     * @param timeCorrection
-     */
-    static frameToTime(framesCount: number, frameRateDecimal: Decimal): number {
-        return new Decimal(framesCount).dividedBy(frameRateDecimal).toNumber();
-    }
+  /***
+   * Returns time in seconds
+   *
+   * @param framesCount
+   * @param frameRateDecimal
+   * @param timeCorrection
+   */
+  static frameToTime(framesCount: number, frameRateDecimal: Decimal): number {
+    return new Decimal(framesCount).dividedBy(frameRateDecimal).toNumber();
+  }
 }
