@@ -27,306 +27,343 @@ import Decimal from "decimal.js";
 import {nextCompleteVoidSubject} from "../../util/observable-util";
 
 export interface AudioTrackLaneStyle extends TimelineLaneStyle {
-  paddingTop: number;
-  paddingBottom: number;
+    paddingTop: number;
+    paddingBottom: number;
 
-  itemWidth: number;
-  itemMinPadding: number;
-  itemCornerRadius: number;
-  maxSampleFillLinearGradientColorStops: (number | string)[];
-  minSampleFillLinearGradientColorStops: (number | string)[];
+    itemWidth: number;
+    itemMinPadding: number;
+    itemCornerRadius: number;
+    maxSampleFillLinearGradientColorStops: (number | string)[];
+    minSampleFillLinearGradientColorStops: (number | string)[];
 }
 
 const styleDefault: AudioTrackLaneStyle = {
-  ...TIMELINE_LANE_STYLE_DEFAULT,
-  height: 40,
-  paddingTop: 0,
-  paddingBottom: 0,
+    ...TIMELINE_LANE_STYLE_DEFAULT,
+    height: 40,
+    paddingTop: 0,
+    paddingBottom: 0,
 
-  itemWidth: 5,
-  itemMinPadding: 2,
-  itemCornerRadius: 5,
-  maxSampleFillLinearGradientColorStops: [0, 'red', 0.2, 'yellow', 1, 'green'],
-  minSampleFillLinearGradientColorStops: [0, 'green', 0.8, 'yellow', 1, 'red'],
+    itemWidth: 5,
+    itemMinPadding: 2,
+    itemCornerRadius: 5,
+    maxSampleFillLinearGradientColorStops: [0, 'red', 0.2, 'yellow', 1, 'green'],
+    minSampleFillLinearGradientColorStops: [0, 'green', 0.8, 'yellow', 1, 'red'],
 
 }
 
 export interface AudioTrackLaneConfig extends TimelaneLaneConfig<AudioTrackLaneStyle> {
-  audioVttFileUrl: string;
+    audioVttFileUrl: string;
 }
 
 export class AudioTrackLane extends BaseTimelineLane<AudioTrackLaneConfig, AudioTrackLaneStyle> {
-  // region config
-  private _audioVttFileUrl: string;
-  // endregion
+    // region config
+    private _audioVttFileUrl: string;
+    // endregion
 
-  // region components
-  protected readonly audioTrackLaneItemsMap: Map<number, AudioTrackLaneItem> = new Map<number, AudioTrackLaneItem>();
-  // endregion
+    // region components
+    protected readonly audioTrackLaneItemsMap: Map<number, AudioTrackLaneItem> = new Map<number, AudioTrackLaneItem>();
+    // endregion
 
-  // region konva
-  protected timecodedGroup: Konva.Group;
-  protected timecodedEventCatcher: Konva.Rect;
-  protected audioTrackLaneItemsGroup: Konva.Group;
-  // endregion
+    // region konva
+    protected timecodedGroup: Konva.Group;
+    protected timecodedEventCatcher: Konva.Rect;
+    protected audioTrackLaneItemsGroup: Konva.Group;
+    // endregion
 
-  private audioVttFile: AudioVttFile;
+    private audioVttFile: AudioVttFile;
 
-  private numOfInterpolations: number;
-  private itemPadding: number;
+    private numOfInterpolations: number;
+    private itemPadding: number;
 
-  readonly onSettleLayout$: Subject<void> = new Subject<void>();
+    readonly onSettleLayout$: Subject<void> = new Subject<void>();
 
-  constructor(config: ComponentConfigStyleComposed<AudioTrackLaneConfig>) {
-    super({
-      ...config,
-      style: {
-        ...styleDefault,
-        ...config.style
-      }
-    });
+    constructor(config: ComponentConfigStyleComposed<AudioTrackLaneConfig>) {
+        super({
+            ...config,
+            style: {
+                ...styleDefault,
+                ...config.style
+            }
+        });
 
-    this._audioVttFileUrl = this.config.audioVttFileUrl;
-  }
-
-  protected createCanvasNode(): Konva.Group {
-    super.createCanvasNode();
-
-    this.timecodedGroup = new Konva.Group({
-      ...this.timelinePosition,
-      width: this.timeline.getTimecodedGroupDimension().width,
-      height: this.bodyGroup.height()
-    });
-
-    this.timecodedEventCatcher = ShapeUtil.createEventCatcher({
-      width: this.timecodedGroup.width(),
-      height: this.timecodedGroup.height()
-    });
-
-    this.audioTrackLaneItemsGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
-      y: this.style.paddingTop,
-      width: this.timecodedGroup.width(),
-      height: this.timecodedGroup.height() - (this.style.paddingTop + this.style.paddingBottom)
-    });
-
-    this.timecodedGroup.add(this.timecodedEventCatcher);
-    this.timecodedGroup.add(this.audioTrackLaneItemsGroup);
-
-    this.timeline.addToTimecodedAudioGroup(this.timecodedGroup);
-
-    return this.bodyGroup;
-  }
-
-  protected settleLayout() {
-    super.settleLayout();
-
-    this.timecodedGroup.setAttrs({
-      ...this.timelinePosition,
-    })
-
-    let horizontalMeasurement = this.timeline.getTimecodedGroupHorizontalMeasurement();
-    [this.timecodedGroup, this.timecodedEventCatcher, this.audioTrackLaneItemsGroup].forEach(node => {
-      node.width(horizontalMeasurement.width)
-    })
-
-    this.onSettleLayout$.next();
-  }
-
-  protected afterCanvasNodeInit() {
-    super.afterCanvasNodeInit();
-
-    this.fetchAndCreateAudioTrack();
-
-    this.onSettleLayout$.pipe(takeUntil(this.onDestroy$)).subscribe(() => {
-      this.settlePosition();
-    })
-
-    combineLatest([
-      this.onSettleLayout$,
-      this.timeline.onScroll$
-    ]).pipe(takeUntil(this.onDestroy$), debounceTime(100)).subscribe(() => {
-      this.settleAll();
-    });
-  }
-
-  clearContent() {
-    this.audioVttFile = void 0;
-    this.clearItems();
-  }
-
-  private clearItems() {
-    this.audioTrackLaneItemsMap.forEach(p => p.destroy())
-    this.audioTrackLaneItemsMap.clear()
-    this.audioTrackLaneItemsGroup.destroyChildren();
-  }
-
-  private getVisibleCues(): AudioVttCue[] {
-    let timeRange = this.timeline.getVisibleTimeRange();
-    let cues = this.audioVttFile.findCues(timeRange.start, timeRange.end);
-    return cues;
-  }
-
-  private createEntities() {
-    if (!this.isVttLoaded()) {
-      return;
+        this._audioVttFileUrl = this.config.audioVttFileUrl;
     }
 
-    this.clearItems();
+    protected createCanvasNode(): Konva.Group {
+        super.createCanvasNode();
 
-    let cues = this.getVisibleCues();
+        this.timecodedGroup = new Konva.Group({
+            ...this.timelinePosition,
+            width: this.timeline.getTimecodedGroupDimension().width,
+            height: this.bodyGroup.height()
+        });
 
-    let timecodedContainerWidth = this.timeline.getTimecodedContainerDimension().width;
+        this.timecodedEventCatcher = ShapeUtil.createEventCatcher({
+            width: this.timecodedGroup.width(),
+            height: this.timecodedGroup.height()
+        });
 
-    this.numOfInterpolations = new Decimal(timecodedContainerWidth + this.style.itemMinPadding)
-      .div(this.style.itemWidth + this.style.itemMinPadding)
-      .floor().toNumber()
+        this.audioTrackLaneItemsGroup = new Konva.Group({
+            ...Constants.POSITION_TOP_LEFT,
+            y: this.style.paddingTop,
+            width: this.timecodedGroup.width(),
+            height: this.timecodedGroup.height() - (this.style.paddingTop + this.style.paddingBottom)
+        });
 
-    this.itemPadding = new Decimal(timecodedContainerWidth - this.numOfInterpolations * this.style.itemWidth)
-      .div(this.numOfInterpolations - 1)
-      .toNumber();
+        this.timecodedGroup.add(this.timecodedEventCatcher);
+        this.timecodedGroup.add(this.audioTrackLaneItemsGroup);
 
-    let numOfCuesPerInterpolation = this.resolveNumOfCuesPerInterpolation(cues.length);
+        this.timeline.addToTimecodedAudioGroup(this.timecodedGroup);
 
-    let cuesInterpolations = this.resolveCuesInterpolations(cues, numOfCuesPerInterpolation)
-    for (let i = 0; i < this.numOfInterpolations; i++) {
-      let cue = cuesInterpolations.get(i);
+        return this.bodyGroup;
+    }
 
-      let itemPosition = this.resolveInterpolatedItemPosition(i);
+    protected settleLayout() {
+        super.settleLayout();
 
-      let audioTrackLaneItem = new AudioTrackLaneItem({
-        x: itemPosition,
-        width: this.style.itemWidth,
-        audioVttCue: cue,
-        style: {
-          cornerRadius: this.style.itemCornerRadius,
-          height: this.audioTrackLaneItemsGroup.height(),
-          visible: true,
-          maxSampleFillLinearGradientColorStops: this.style.maxSampleFillLinearGradientColorStops,
-          minSampleFillLinearGradientColorStops: this.style.minSampleFillLinearGradientColorStops,
+        this.timecodedGroup.setAttrs({
+            ...this.timelinePosition,
+        })
+
+        let horizontalMeasurement = this.timeline.getTimecodedGroupHorizontalMeasurement();
+        [this.timecodedGroup, this.timecodedEventCatcher, this.audioTrackLaneItemsGroup].forEach(node => {
+            node.width(horizontalMeasurement.width)
+        })
+
+        this.onSettleLayout$.next();
+    }
+
+    protected afterCanvasNodeInit() {
+        super.afterCanvasNodeInit();
+
+        this.fetchAndCreateAudioTrack();
+
+        this.onSettleLayout$.pipe(takeUntil(this.onDestroy$)).subscribe(() => {
+            this.settlePosition();
+        })
+
+        combineLatest([
+            this.onSettleLayout$,
+            this.timeline.onScroll$
+        ]).pipe(takeUntil(this.onDestroy$), debounceTime(100)).subscribe(() => {
+            this.settleAll();
+        });
+    }
+
+    clearContent() {
+        this.audioVttFile = void 0;
+        this.clearItems();
+    }
+
+    private clearItems() {
+        this.audioTrackLaneItemsMap.forEach(p => p.destroy())
+        this.audioTrackLaneItemsMap.clear()
+        this.audioTrackLaneItemsGroup.destroyChildren();
+    }
+
+    private getVisibleCuesForInterpolation(): AudioVttCue[] {
+        let visibleTimeRange = this.timeline.getVisibleTimeRange();
+        let cues = this.audioVttFile.findCues(visibleTimeRange.start, visibleTimeRange.end);
+        return cues;
+    }
+
+    private createEntities() {
+        if (!this.isVttLoaded()) {
+            return;
         }
-      });
 
-      this.audioTrackLaneItemsMap.set(i, audioTrackLaneItem);
-      this.audioTrackLaneItemsGroup.add(audioTrackLaneItem.initCanvasNode());
-    }
-  }
+        this.clearItems();
 
-  private resolveNumOfCuesPerInterpolation(cuesLength: number): number {
-    return new Decimal(cuesLength).div(this.numOfInterpolations).floor().toNumber();
-  }
+        let timecodedContainerWidth = this.timeline.getTimecodedContainerDimension().width;
 
-  private resolveCuesInterpolations(cues: AudioVttCue[], numOfCuesPerInterpolation: number): Map<number, AudioVttCue> {
-    let interpolatedCuesSurplus = cues.length - numOfCuesPerInterpolation * this.numOfInterpolations;
-    let cuesInterpolations: Map<number, AudioVttCue> = new Map<number, AudioVttCue>();
+        this.numOfInterpolations = new Decimal(timecodedContainerWidth + this.style.itemMinPadding)
+            .div(this.style.itemWidth + this.style.itemMinPadding)
+            .floor().toNumber()
 
-    let sliceEndIndex = 0;
-    for (let i = 0; i < this.numOfInterpolations; i++) {
-      let interpolationLength = numOfCuesPerInterpolation + (i < interpolatedCuesSurplus ? 1 : 0)
-      let sliceStartIndex = sliceEndIndex;
-      sliceEndIndex = sliceStartIndex + interpolationLength;
+        this.itemPadding = new Decimal(timecodedContainerWidth - this.numOfInterpolations * this.style.itemWidth)
+            .div(this.numOfInterpolations - 1)
+            .toNumber();
 
-      let cuesForInterpolation = cues.slice(sliceStartIndex, sliceEndIndex);
-      let firstCue = cues[sliceStartIndex];
-      let lastCue = cues[sliceEndIndex - 1];
+        let cuesInterpolations = this.resolveCuesInterpolations()
 
-      let minSampleSum = 0, maxSampleSum = 0;
-      cuesForInterpolation.forEach(cue => {
-        minSampleSum += cue.minSample;
-        maxSampleSum += cue.maxSample;
-      })
+        for (let i = 0; i < this.numOfInterpolations; i++) {
+            let cue = cuesInterpolations.get(i);
 
-      let cue: AudioVttCue = {
-        id: `${i}`,
-        text: '',
-        minSample: new Decimal(minSampleSum).div(interpolationLength).toDecimalPlaces(3).toNumber(),
-        maxSample: new Decimal(maxSampleSum).div(interpolationLength).toDecimalPlaces(3).toNumber(),
-        startTime: firstCue.startTime,
-        endTime: lastCue.endTime
-      }
+            let itemPosition = this.resolveInterpolatedItemPosition(i);
 
-      cuesInterpolations.set(i, cue);
-    }
-    return cuesInterpolations
-  }
+            let audioTrackLaneItem = new AudioTrackLaneItem({
+                x: itemPosition,
+                width: this.style.itemWidth,
+                audioVttCue: cue,
+                style: {
+                    cornerRadius: this.style.itemCornerRadius,
+                    height: this.audioTrackLaneItemsGroup.height(),
+                    visible: true,
+                    maxSampleFillLinearGradientColorStops: this.style.maxSampleFillLinearGradientColorStops,
+                    minSampleFillLinearGradientColorStops: this.style.minSampleFillLinearGradientColorStops,
+                }
+            });
 
-  private settleAll() {
-    if (!this.isVttLoaded() || this.audioTrackLaneItemsMap.size < 1) {
-      return;
+            this.audioTrackLaneItemsMap.set(i, audioTrackLaneItem);
+            this.audioTrackLaneItemsGroup.add(audioTrackLaneItem.initCanvasNode());
+        }
     }
 
-    let cues = this.getVisibleCues();
-    let numOfCuesPerInterpolation = this.resolveNumOfCuesPerInterpolation(cues.length);
-    let cuesInterpolations = this.resolveCuesInterpolations(cues, numOfCuesPerInterpolation)
-
-    for (let i = 0; i < this.numOfInterpolations; i++) {
-      let cue = cuesInterpolations.get(i);
-      let audioTrackLaneItem = this.audioTrackLaneItemsMap.get(i);
-      audioTrackLaneItem.setAudioVttCue(cue);
-      audioTrackLaneItem.setPosition({
-        x: this.resolveInterpolatedItemPosition(i)
-      })
-    }
-  }
-
-  private resolveInterpolatedItemPosition(itemIndex: number) {
-    return Math.abs(this.timeline.getTimecodedGroupHorizontalMeasurement().x) + itemIndex * this.style.itemWidth + itemIndex * this.itemPadding;
-  }
-
-  private settlePosition() {
-    if (!this.isVttLoaded() || this.audioTrackLaneItemsMap.size < 1) {
-      return;
+    private resolveNumOfCuesPerInterpolation(cuesLength: number): number {
+        return new Decimal(cuesLength).div(this.numOfInterpolations).floor().toNumber();
     }
 
-    for (let i = 0; i < this.numOfInterpolations; i++) {
-      let audioTrackLaneItem = this.audioTrackLaneItemsMap.get(i);
-      let x = this.timeline.timeToTimelinePosition(audioTrackLaneItem.getAudioVttCue().startTime);
-      audioTrackLaneItem.setPosition({x})
+
+    private resolveCuesInterpolations(): Map<number, AudioVttCue> {
+        let cues = this.getVisibleCuesForInterpolation();
+
+        let barWidth = this.style.itemWidth;
+        let paddingWidth = this.itemPadding;
+
+        let cuesInterpolations: Map<number, AudioVttCue> = new Map<number, AudioVttCue>();
+
+        for (let i = 0; i < this.numOfInterpolations; i++) {
+            let isFirst = i === 0;
+            let isLast = i === (this.numOfInterpolations - 1);
+            let interpolationStartX: number;
+            let interpolationEndX: number;
+
+            if (isFirst) {
+                // first interpolation
+                interpolationStartX = 0;
+                interpolationEndX = new Decimal(barWidth).plus(new Decimal(paddingWidth).div(2)).toNumber();
+
+            } else if (isLast) {
+                // last interpolation
+                interpolationStartX = (new Decimal(i).mul(barWidth + paddingWidth).minus(new Decimal(paddingWidth).div(2))).toNumber();
+                interpolationEndX = this.timeline.getTimecodedContainerDimension().width;
+            } else {
+                // every interpolation in between first and last
+                interpolationStartX = (new Decimal(i).mul(barWidth + paddingWidth).minus(new Decimal(paddingWidth).div(2))).toNumber();
+                interpolationEndX = new Decimal(interpolationStartX).plus(barWidth).plus(paddingWidth).toNumber();
+            }
+
+            let interpolationStartTime = this.timeline.timelinePositionToTimeRelativeToTimecoded(interpolationStartX);
+            let interpolationEndTime = this.timeline.timelinePositionToTimeRelativeToTimecoded(interpolationEndX);
+
+            let cuesForInterpolation = cues.filter(p => p.startTime >= interpolationStartTime && (isLast ? p.endTime <= interpolationEndTime : p.endTime < interpolationEndTime));
+
+            let cue: AudioVttCue = {
+                id: `${i}`,
+                text: '',
+                minSample: 0,
+                maxSample: 0,
+                startTime: interpolationStartTime,
+                endTime: interpolationEndTime
+            }
+
+            if (cuesForInterpolation.length > 0) {
+                let firstCue = cuesForInterpolation[0];
+                let lastCue = cuesForInterpolation[cuesForInterpolation.length - 1];
+
+                // console.log(`interpolation_${i}\t\t ${interpolationStartX},${interpolationEndX} \t\t ${interpolationStartTime},${interpolationEndTime}`)
+
+                let minSampleSum = 0, maxSampleSum = 0;
+                cuesForInterpolation.forEach(cue => {
+                    minSampleSum += cue.minSample;
+                    maxSampleSum += cue.maxSample;
+                })
+
+                cue = {
+                    ...cue,
+                    minSample: new Decimal(minSampleSum).div(cuesForInterpolation.length).toDecimalPlaces(3).toNumber(),
+                    maxSample: new Decimal(maxSampleSum).div(cuesForInterpolation.length).toDecimalPlaces(3).toNumber(),
+                    // startTime: firstCue.startTime,
+                    // endTime: lastCue.endTime
+                }
+            } else {
+                // console.log(`Period ${}`)
+            }
+
+            cuesInterpolations.set(i, cue);
+        }
+
+        return cuesInterpolations
     }
-  }
 
-  private fetchAndCreateAudioTrack() {
-    this.fetchAudioTrackVttFile(this._audioVttFileUrl).pipe(take(1)).subscribe((audioVttFile) => {
-      this.audioVttFile = audioVttFile;
-      this.createEntities();
-    })
-  }
+    private settleAll() {
+        this.createEntities();
+        return;
 
-  private fetchAudioTrackVttFile(url: string): Observable<AudioVttFile> {
-    if (url) {
-      return AudioVttFile.create(url).pipe(map(audioTrackVttFile => {
-        return audioTrackVttFile;
-      }), catchError((err, caught) => {
-        return of(void 0);
-      }))
-    } else {
-      return of(void 0);
+        if (!this.isVttLoaded() || this.audioTrackLaneItemsMap.size < 1) {
+            return;
+        }
+
+        let cuesInterpolations = this.resolveCuesInterpolations()
+
+        for (let i = 0; i < this.numOfInterpolations; i++) {
+            let cue = cuesInterpolations.get(i);
+            let audioTrackLaneItem = this.audioTrackLaneItemsMap.get(i);
+            audioTrackLaneItem.setAudioVttCue(cue);
+            audioTrackLaneItem.setPosition({
+                x: this.resolveInterpolatedItemPosition(i)
+            })
+        }
     }
-  }
 
-  private isVttLoaded(): boolean {
-    return !!this.audioVttFile;
-  }
+    private resolveInterpolatedItemPosition(itemIndex: number) {
+        return Math.abs(this.timeline.getTimecodedGroupHorizontalMeasurement().x) + itemIndex * this.style.itemWidth + itemIndex * this.itemPadding;
+    }
 
-  get audioVttFileUrl(): string {
-    return this._audioVttFileUrl;
-  }
+    private settlePosition() {
+        if (!this.isVttLoaded() || this.audioTrackLaneItemsMap.size < 1) {
+            return;
+        }
 
-  set audioVttFileUrl(value: string) {
-    this._audioVttFileUrl = value;
-    this.clearContent();
-    this.fetchAndCreateAudioTrack();
-  }
+        for (let i = 0; i < this.numOfInterpolations; i++) {
+            let audioTrackLaneItem = this.audioTrackLaneItemsMap.get(i);
+            let x = this.timeline.timeToTimelinePosition(audioTrackLaneItem.getAudioVttCue().startTime);
+            audioTrackLaneItem.setPosition({x})
+        }
+    }
 
-  destroy() {
-    this.audioTrackLaneItemsMap.forEach(audioTrackLineItem => {
-      audioTrackLineItem.destroy();
-    })
+    private fetchAndCreateAudioTrack() {
+        this.fetchAudioTrackVttFile(this._audioVttFileUrl).pipe(take(1)).subscribe((audioVttFile) => {
+            this.audioVttFile = audioVttFile;
+            this.createEntities();
+        })
+    }
 
-    this.audioVttFile = void 0;
+    private fetchAudioTrackVttFile(url: string): Observable<AudioVttFile> {
+        if (url) {
+            return AudioVttFile.create(url).pipe(map(audioTrackVttFile => {
+                return audioTrackVttFile;
+            }), catchError((err, caught) => {
+                return of(void 0);
+            }))
+        } else {
+            return of(void 0);
+        }
+    }
 
-    nextCompleteVoidSubject(this.onSettleLayout$);
+    private isVttLoaded(): boolean {
+        return !!this.audioVttFile;
+    }
 
-    super.destroy();
-  }
+    get audioVttFileUrl(): string {
+        return this._audioVttFileUrl;
+    }
+
+    set audioVttFileUrl(value: string) {
+        this._audioVttFileUrl = value;
+        this.clearContent();
+        this.fetchAndCreateAudioTrack();
+    }
+
+    destroy() {
+        this.audioTrackLaneItemsMap.forEach(audioTrackLineItem => {
+            audioTrackLineItem.destroy();
+        })
+
+        this.audioVttFile = void 0;
+
+        nextCompleteVoidSubject(this.onSettleLayout$);
+
+        super.destroy();
+    }
 }
