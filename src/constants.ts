@@ -14,23 +14,28 @@
  *       limitations under the License.
  */
 
-import {Dimension, Position} from "./common/measurement";
+import {Dimension, Position} from './common/measurement';
 
 export class Constants {
-    public static POSITION_TOP_LEFT: Position = {
-        x: 0,
-        y: 0
-    }
+  public static POSITION_TOP_LEFT: Position = {
+    x: 0,
+    y: 0
+  }
 
-    public static DIMENSION_ZERO: Dimension = {
-        width: 0,
-        height: 0
-    }
+  public static DIMENSION_ZERO: Dimension = {
+    width: 0,
+    height: 0
+  }
 
-    public static GOLDEN_RATIO = 1.61
+  public static GOLDEN_RATIO = 1.61;
 
-    public static TIMELINE_ZOOM_EASED_DURATION_MS = 800
-    public static TIMELINE_SCROLL_EASED_DURATION_MS = 200
+  public static TIMELINE_ZOOM_EASED_DURATION_MS = 800;
+  public static TIMELINE_SCROLL_EASED_DURATION_MS = 200;
 
-    public static MIME_TYPE_VND_APPLE_MPEGURL = 'application/vnd.apple.mpegurl';
+  public static TWO_PI_RADIANS = Math.PI * 2;
+
+  public static FILL_LINEAR_GRADIENT_AUDIO_PEAK = [0, '#F58428', 0.33, '#FCD151', 0.5, '#FFF263', 0.59, '#DEE666', 0.78, '#A2D06C', 0.93, '#7DC370', 1, '#6FBE72'];
+
+
+  public static MIME_TYPE_VND_APPLE_MPEGURL = 'application/vnd.apple.mpegurl';
 }

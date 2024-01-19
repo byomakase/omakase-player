@@ -14,7 +14,7 @@
  *       limitations under the License.
  */
 
-export * from "./timeline/marker"
-export * from "./timeline"
-export * from "./omakase-player"
+export * from './timeline/marker'
+export * from './timeline'
+export * from './omakase-player'
 

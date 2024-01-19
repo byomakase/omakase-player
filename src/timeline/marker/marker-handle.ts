@@ -14,232 +14,232 @@
  *       limitations under the License.
  */
 
-import {BaseComponent, Component, ComponentConfig} from "../../common/component";
-import Konva from "konva";
-import {OnMeasurementsChange, Position, VerticalMeasurement} from "../../common/measurement";
-import {WindowUtil} from "../../util/window-util";
-import {MarkerLane} from "./marker-lane";
-import {Timeline} from "../timeline";
-import {MarkerRenderType, MarkerSymbolType} from "./marker";
+import {BaseComponent, Component, ComponentConfig} from '../../common/component';
+import Konva from 'konva';
+import {OnMeasurementsChange, Position, VerticalMeasurement} from '../../common/measurement';
+import {WindowUtil} from '../../util/window-util';
+import {MarkerLane} from './marker-lane';
+import {Timeline} from '../timeline';
+import {MarkerRenderType, MarkerSymbolType} from './marker';
 
 export interface MarkerHandleStyle {
-    color: string,
-    markerRenderType: MarkerRenderType,
-    markerSymbolType: MarkerSymbolType,
-    lineStrokeWidth: number;
-    lineOpacity: number;
+  color: string,
+  markerRenderType: MarkerRenderType,
+  markerSymbolType: MarkerSymbolType,
+  lineStrokeWidth: number;
+  lineOpacity: number;
 }
 
 export const MARKER_HANDLE_STYLE_DEFAULT: MarkerHandleStyle = {
-    color: '#ff6c6c',
-    markerRenderType: 'lane',
-    markerSymbolType: 'square',
-    lineStrokeWidth: 1,
-    lineOpacity: 0.7
+  color: '#ff6c6c',
+  markerRenderType: 'lane',
+  markerSymbolType: 'square',
+  lineStrokeWidth: 1,
+  lineOpacity: 0.7
 }
 
 export interface MarkerHandleConfig<S extends MarkerHandleStyle> extends ComponentConfig<S> {
-    x: number;
-    editable: boolean;
+  x: number;
+  editable: boolean;
 }
 
 export interface MarkerHandle<C extends MarkerHandleConfig<S>, S extends MarkerHandleStyle> extends Component<C, S, Konva.Group>, OnMeasurementsChange {
-    getPosition(): Position;
+  getPosition(): Position;
 
-    setPosition(position: Position);
+  setPosition(position: Position);
 
-    getHandleGroup(): Konva.Group;
+  getHandleGroup(): Konva.Group;
 
-    getSymbol(): Konva.Shape;
+  getSymbol(): Konva.Shape;
 
-    getVerticalMeasurement(): VerticalMeasurement;
+  getVerticalMeasurement(): VerticalMeasurement;
 
-    setColor(color: string);
+  setColor(color: string);
 
-    onDrag: (markerHandleGroup: Konva.Group) => void;
+  onDrag: (markerHandleGroup: Konva.Group) => void;
 
-    onDragEnd: (markerHandleGroup: Konva.Group) => void;
+  onDragEnd: (markerHandleGroup: Konva.Group) => void;
 }
 
 export abstract class BaseMarkerHandle<C extends MarkerHandleConfig<S>, S extends MarkerHandleStyle> extends BaseComponent<C, S, Konva.Group> implements MarkerHandle<C, S> {
-    protected x: number;
-    protected editable: boolean;
+  protected x: number;
+  protected editable: boolean;
 
-    // region konva
-    protected group: Konva.Group;
-    protected symbol: Konva.Shape;
-    protected line: Konva.Line;
-    protected handleGroup: Konva.Group;
-    // endregion
+  // region konva
+  protected group: Konva.Group;
+  protected symbol: Konva.Shape;
+  protected line: Konva.Line;
+  protected handleGroup: Konva.Group;
+  // endregion
 
-    protected markerLane: MarkerLane;
-    protected timeline: Timeline
+  protected markerLane: MarkerLane;
+  protected timeline: Timeline
 
-    onDrag: (markerHandleGroup: Konva.Group) => void = (markerHandleGroup) => {
-    };
-    onDragEnd: (markerHandleGroup: Konva.Group) => void = (markerHandleGroup) => {
-    };
+  onDrag: (markerHandleGroup: Konva.Group) => void = (markerHandleGroup) => {
+  };
+  onDragEnd: (markerHandleGroup: Konva.Group) => void = (markerHandleGroup) => {
+  };
 
-    protected constructor(config: C, markerLane: MarkerLane, timeline: Timeline) {
-        super(config);
-        this.markerLane = markerLane;
-        this.timeline = timeline;
+  protected constructor(config: C, markerLane: MarkerLane, timeline: Timeline) {
+    super(config);
+    this.markerLane = markerLane;
+    this.timeline = timeline;
 
-        this.x = this.config.x;
-        this.editable = this.config.editable;
-    }
+    this.x = this.config.x;
+    this.editable = this.config.editable;
+  }
 
-    protected createCanvasNode(): Konva.Group {
-        let verticalMeasurement = this.getVerticalMeasurement();
+  protected createCanvasNode(): Konva.Group {
+    let verticalMeasurement = this.getVerticalMeasurement();
 
-        this.group = new Konva.Group({
-            x: this.x,
-            y: verticalMeasurement.y,
-            draggable: this.editable
-        });
+    this.group = new Konva.Group({
+      x: this.x,
+      y: verticalMeasurement.y,
+      draggable: this.editable
+    });
 
-        this.line = new Konva.Line({
-            stroke: this.style.color,
-            strokeWidth: this.style.lineStrokeWidth,
-            opacity: this.style.lineOpacity,
-            points: [
-                0, 0,
-                0, verticalMeasurement.height
-            ],
-            listening: false
+    this.line = new Konva.Line({
+      stroke: this.style.color,
+      strokeWidth: this.style.lineStrokeWidth,
+      opacity: this.style.lineOpacity,
+      points: [
+        0, 0,
+        0, verticalMeasurement.height
+      ],
+      listening: false
+    })
+
+    this.handleGroup = new Konva.Group({
+      x: 0,
+      y: this.markerLane.getPosition().y - verticalMeasurement.y + this.markerLane.getDimension().height / 2
+    });
+
+    this.symbol = this.createSymbol();
+    this.handleGroup.add(this.symbol);
+
+    this.handleGroup.on('mouseover', (event) => {
+      if (this.editable) {
+        this.handleGroup.to({
+          scaleX: 1.5,
+          scaleY: 1.5,
+          duration: 0.1,
         })
+        WindowUtil.cursor('grab')
+      }
+    })
 
-        this.handleGroup = new Konva.Group({
-            x: 0,
-            y: this.markerLane.getPosition().y - verticalMeasurement.y + this.markerLane.getDimension().height / 2
-        });
-
-        this.symbol = this.createSymbol();
-        this.handleGroup.add(this.symbol);
-
-        this.handleGroup.on('mouseover', (event) => {
-            if (this.editable) {
-                this.handleGroup.to({
-                    scaleX: 1.5,
-                    scaleY: 1.5,
-                    duration: 0.1,
-                })
-                WindowUtil.cursor("grab")
-            }
+    this.handleGroup.on('mouseleave', () => {
+      if (this.editable) {
+        this.handleGroup.to({
+          scaleX: 1,
+          scaleY: 1,
+          duration: 0.1
         })
+        WindowUtil.cursor('default')
+      }
+    })
 
-        this.handleGroup.on('mouseleave', () => {
-            if (this.editable) {
-                this.handleGroup.to({
-                    scaleX: 1,
-                    scaleY: 1,
-                    duration: 0.1
-                })
-                WindowUtil.cursor("default")
-            }
-        })
+    this.group.add(this.line)
+    this.group.add(this.handleGroup)
 
-        this.group.add(this.line)
-        this.group.add(this.handleGroup)
+    return this.group;
+  }
 
-        return this.group;
-    }
+  protected abstract createSymbol(): Konva.Shape;
 
-    protected abstract createSymbol(): Konva.Shape;
+  protected afterCanvasNodeInit() {
+    let verticalMeasurement = this.getVerticalMeasurement();
 
-    protected afterCanvasNodeInit() {
-        let verticalMeasurement = this.getVerticalMeasurement();
+    this.group.on('dragstart dragmove', (event) => {
+      WindowUtil.cursor('grabbing')
+      let newX = this.timeline.constrainTimelinePosition(this.group.getPosition().x);
+      this.group.setAttrs({
+        x: newX,
+        y: verticalMeasurement.y  // restrict vertical movement
+      })
+      this.onDrag(this.group);
+    })
 
-        this.group.on('dragstart dragmove', (event) => {
-            WindowUtil.cursor("grabbing")
-            let newX = this.timeline.constrainTimelinePosition(this.group.getPosition().x);
-            this.group.setAttrs({
-                x: newX,
-                y: verticalMeasurement.y  // restrict vertical movement
-            })
-            this.onDrag(this.group);
-        })
+    this.group.on('dragend', (event) => {
+      let newX = this.timeline.constrainTimelinePosition(this.group.getPosition().x);
+      this.group.setAttrs({
+        x: newX,
+        y: verticalMeasurement.y   // restrict vertical movement
+      })
+      this.onDragEnd(this.group);
+      WindowUtil.cursor('default')
+    })
+  }
 
-        this.group.on('dragend', (event) => {
-            let newX = this.timeline.constrainTimelinePosition(this.group.getPosition().x);
-            this.group.setAttrs({
-                x: newX,
-                y: verticalMeasurement.y   // restrict vertical movement
-            })
-            this.onDragEnd(this.group);
-            WindowUtil.cursor("default")
-        })
-    }
+  onMeasurementsChange() {
+    let verticalMeasurement = this.getVerticalMeasurement();
 
-    onMeasurementsChange() {
-        let verticalMeasurement = this.getVerticalMeasurement();
+    this.group.setAttrs({
+      y: verticalMeasurement.y,
+    })
 
-        this.group.setAttrs({
-            y: verticalMeasurement.y,
-        })
+    this.line.setAttrs({
+      points: [
+        0, 0,
+        0, verticalMeasurement.height
+      ],
+    })
 
-        this.line.setAttrs({
-            points: [
-                0, 0,
-                0, verticalMeasurement.height
-            ],
-        })
+    this.handleGroup.setAttrs({
+      y: this.markerLane.getPosition().y - verticalMeasurement.y + this.markerLane.getDimension().height / 2
+    })
+  }
 
-        this.handleGroup.setAttrs({
-            y: this.markerLane.getPosition().y - verticalMeasurement.y + this.markerLane.getDimension().height / 2
-        })
-    }
-
-    getVerticalMeasurement(): VerticalMeasurement {
-        switch (this.style.markerRenderType) {
-            case 'spanning':
-                return {
-                    y: 0,
-                    height: this.timeline.getTimecodedGroupDimension().height
-                }
-            default:
-                return {
-                    y: this.markerLane.getTimelinePosition().y,
-                    height: this.markerLane.getDimension().height
-                }
+  getVerticalMeasurement(): VerticalMeasurement {
+    switch (this.style.markerRenderType) {
+      case 'spanning':
+        return {
+          y: 0,
+          height: this.timeline.getTimecodedGroupDimension().height
+        }
+      default:
+        return {
+          y: this.markerLane.getTimelinePosition().y,
+          height: this.markerLane.getDimension().height
         }
     }
+  }
 
-    getHandleGroup(): Konva.Group {
-        return this.handleGroup;
-    }
+  getHandleGroup(): Konva.Group {
+    return this.handleGroup;
+  }
 
-    getSymbol(): Konva.Shape {
-        return this.symbol;
-    }
+  getSymbol(): Konva.Shape {
+    return this.symbol;
+  }
 
-    /**
-     * Caution: returns group that is draggable
-     */
-    getPosition(): Position {
-        return this.group.getPosition();
-    }
+  /**
+   * Caution: returns group that is draggable
+   */
+  getPosition(): Position {
+    return this.group.getPosition();
+  }
 
-    setPosition(position: Position) {
-        this.group.setAttrs({
-            ...position
-        });
-        this.onMeasurementsChange();
-    }
+  setPosition(position: Position) {
+    this.group.setAttrs({
+      ...position
+    });
+    this.onMeasurementsChange();
+  }
 
-    setColor(color: string) {
-        this.style.color = color;
-        this.line.setAttrs({
-            stroke: this.style.color
-        })
-        this.symbol.setAttrs({
-            fill: this.style.color
-        })
-    }
+  setColor(color: string) {
+    this.style.color = color;
+    this.line.setAttrs({
+      stroke: this.style.color
+    })
+    this.symbol.setAttrs({
+      fill: this.style.color
+    })
+  }
 
-    setEditable(editable: boolean) {
-        this.editable = editable;
-        this.group.draggable(this.editable);
-    }
+  setEditable(editable: boolean) {
+    this.editable = editable;
+    this.group.draggable(this.editable);
+  }
 
 }

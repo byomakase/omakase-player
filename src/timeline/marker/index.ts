@@ -14,7 +14,7 @@
  *       limitations under the License.
  */
 
-export type {Marker} from "./marker";
-export {MarkerLane} from "./marker-lane";
-export {MomentMarker} from "./moment-marker";
-export {PeriodMarker} from "./period-marker";
+export type {Marker} from './marker';
+export {MarkerLane} from './marker-lane';
+export {MomentMarker} from './moment-marker';
+export {PeriodMarker} from './period-marker';

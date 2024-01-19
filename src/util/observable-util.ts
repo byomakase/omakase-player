@@ -14,59 +14,59 @@
  *       limitations under the License.
  */
 
-import {Subject} from "rxjs";
+import {Subject} from 'rxjs';
 
 export function nextCompleteVoidSubject(subject: Subject<void>) {
-    if (subject) {
-        if (subject.closed) {
-            //console.debug('subject is already closed')
-        } else {
-            subject.next();
-            subject.complete();
-        }
+  if (subject) {
+    if (subject.closed) {
+      //console.debug('subject is already closed')
     } else {
-        //console.debug('subject is undefined or null')
+      subject.next();
+      subject.complete();
     }
+  } else {
+    //console.debug('subject is undefined or null')
+  }
 }
 
 export function nextCompleteVoidSubjects(...subjects: Subject<void>[]) {
-    subjects.forEach(subject => {
-        nextCompleteVoidSubject(subject);
-    })
+  subjects.forEach(subject => {
+    nextCompleteVoidSubject(subject);
+  })
 }
 
 export function completeSubject(subject: Subject<any>) {
-    if (subject) {
-        if (subject.closed) {
-            //console.debug('subject is already closed')
-        } else {
-            subject.complete();
-        }
+  if (subject) {
+    if (subject.closed) {
+      //console.debug('subject is already closed')
     } else {
-        //console.debug('subject is undefined or null')
+      subject.complete();
     }
+  } else {
+    //console.debug('subject is undefined or null')
+  }
 }
 
 export function completeSubjects(...subjects: Subject<any>[]) {
-    subjects.forEach(subject => {
-        completeSubject(subject);
-    })
+  subjects.forEach(subject => {
+    completeSubject(subject);
+  })
 }
 
 export function unsubscribeSubjects(...subjects: Subject<any>[]) {
-    subjects.forEach(subject => {
-        unsubscribeSubject(subject);
-    })
+  subjects.forEach(subject => {
+    unsubscribeSubject(subject);
+  })
 }
 
 export function unsubscribeSubject(subject: Subject<any>) {
-    if (subject) {
-        if (subject.closed) {
-            //console.debug('subject is closed')
-        } else {
-            subject.unsubscribe();
-        }
+  if (subject) {
+    if (subject.closed) {
+      //console.debug('subject is closed')
     } else {
-        //console.debug('subject is undefined or null')
+      subject.unsubscribe();
     }
+  } else {
+    //console.debug('subject is undefined or null')
+  }
 }

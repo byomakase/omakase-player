@@ -14,46 +14,59 @@
  *       limitations under the License.
  */
 
-import Decimal from "decimal.js";
-import {FrameUtil} from "./frame-util";
+import Decimal from 'decimal.js';
+import {FrameUtil} from './frame-util';
 
 export class TimestampUtil {
-    public static readonly VIDEO_ZERO_TIMESTAMP = `${TimestampUtil.padZero(0)}:${TimestampUtil.padZero(0)}:${TimestampUtil.padZero(0)}:${TimestampUtil.padZero(0)}`;
+  public static readonly HOUR_MINUTE_SECOND_FRAME_FORMATTED_ZERO = `${TimestampUtil.padZero(0)}:${TimestampUtil.padZero(0)}:${TimestampUtil.padZero(0)}:${TimestampUtil.padZero(0)}`;
 
-    static formatVideoTimestamp(time: number, frameRateDecimal: Decimal): string {
-        if (time <= 0) {
-            return TimestampUtil.VIDEO_ZERO_TIMESTAMP;
-        }
-
-        const hours = Math.floor(time / 3600);
-        const minutes = Math.floor((time % 3600) / 60);
-        const seconds = Math.floor(time % 60);
-
-        let frameInSecond = new Decimal(FrameUtil.timeToFrame(time, frameRateDecimal)).mod(frameRateDecimal).toNumber();
-        return `${TimestampUtil.padZero(hours)}:${TimestampUtil.padZero(minutes)}:${TimestampUtil.padZero(seconds)}:${TimestampUtil.padZero(frameInSecond)}`;
+  static formatHourMinuteSecondFrame(time: number, frameRateDecimal: Decimal): string {
+    if (time <= 0) {
+      return TimestampUtil.HOUR_MINUTE_SECOND_FRAME_FORMATTED_ZERO;
     }
 
-    static formattedTimestampToFrame(timestamp: string, frameRateDecimal: Decimal): number {
-        // Split the timestamp into its components
-        const parts = timestamp.split(':');
+    const hours = Math.floor(time / 3600);
+    const minutes = Math.floor((time % 3600) / 60);
+    const seconds = Math.floor(time % 60);
 
-        // Check if the format is valid
-        if (parts.length !== 4) {
-            throw new Error('Invalid timestamp format. It should be in the format "HH:MM:SS:FF".');
-        }
+    let frameInSecond = new Decimal(FrameUtil.timeToFrame(time, frameRateDecimal)).mod(frameRateDecimal).toNumber();
+    return `${TimestampUtil.padZero(hours)}:${TimestampUtil.padZero(minutes)}:${TimestampUtil.padZero(seconds)}:${TimestampUtil.padZero(frameInSecond)}`;
+  }
 
-        // Extract hours, minutes, seconds, and frames
-        const hours = parseInt(parts[0], 10);
-        const minutes = parseInt(parts[1], 10);
-        const seconds = parseInt(parts[2], 10);
-        const frames = parseInt(parts[3], 10);
+  static calculateFramesFromHourMinuteSecondFrameFormatted(timestamp: string, frameRateDecimal: Decimal): number {
+    // Split the timestamp into its components
+    const parts = timestamp.split(':');
 
-        // Calculate the total number of frames
-        const totalFrames = new Decimal(hours * 3600 + minutes * 60 + seconds).mul(frameRateDecimal).plus(frames).toNumber();
-        return totalFrames;
+    // Check if the format is valid
+    if (parts.length !== 4) {
+      throw new Error('Invalid timestamp format. It should be in the format "HH:MM:SS:FF".');
     }
 
-    private static padZero(num, length = 2) {
-        return num.toString().padStart(length, "0");
+    // Extract hours, minutes, seconds, and frames
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    const seconds = parseInt(parts[2], 10);
+    const frames = parseInt(parts[3], 10);
+
+    // Calculate the total number of frames
+    const totalFrames = new Decimal(hours * 3600 + minutes * 60 + seconds).mul(frameRateDecimal).plus(frames).toNumber();
+    return totalFrames;
+  }
+
+  static formatHourMinuteSecondMillisecond(time: number, frameRateDecimal: Decimal): string {
+    if (time <= 0) {
+      return TimestampUtil.HOUR_MINUTE_SECOND_FRAME_FORMATTED_ZERO;
     }
+
+    const hours = Math.floor(time / 3600);
+    const minutes = Math.floor((time % 3600) / 60);
+    const seconds = Math.floor(time % 60);
+    const milliseconds = Math.floor((time % 1) * 1000);
+
+    return `${TimestampUtil.padZero(hours)}:${TimestampUtil.padZero(minutes)}:${TimestampUtil.padZero(seconds)}:${TimestampUtil.padZero(milliseconds, 3)}`;
+  }
+
+  private static padZero(num, length = 2) {
+    return num.toString().padStart(length, '0');
+  }
 }

@@ -15,26 +15,26 @@
  *
  */
 
-import {Subject} from "rxjs";
+import {Subject} from 'rxjs';
 
 export class StyleAdapter<T> {
-    public readonly onChange$: Subject<T> = new Subject<T>();
+  public readonly onChange$: Subject<T> = new Subject<T>();
 
-    private _style: T;
+  private _style: T;
 
-    constructor(style: T) {
-        this.style = style;
-    }
+  constructor(style: T) {
+    this.style = style;
+  }
 
-    get style(): T {
-        return this._style;
-    }
+  get style(): T {
+    return this._style;
+  }
 
-    set style(value: Partial<T>) {
-        this._style = {
-            ...this._style,
-            ...value
-        };
-        this.onChange$.next(this._style);
-    }
+  set style(value: Partial<T>) {
+    this._style = {
+      ...this._style,
+      ...value
+    };
+    this.onChange$.next(this._style);
+  }
 }

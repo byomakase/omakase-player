@@ -15,41 +15,41 @@
  *
  */
 
-import {AudioApi} from "../api/audio-api";
-import {Subject} from "rxjs";
-import {AudioEvent, Destroyable} from "../types";
-import {VideoControllerApi} from "../video/video-controller-api";
+import {AudioApi} from '../api/audio-api';
+import {Subject} from 'rxjs';
+import {AudioEvent, Destroyable} from '../types';
+import {VideoControllerApi} from '../video/video-controller-api';
 
 export class AudioController implements AudioApi, Destroyable {
-    protected videoController: VideoControllerApi;
+  protected videoController: VideoControllerApi;
 
-    public readonly onAudioSwitched$: Subject<AudioEvent> = new Subject<AudioEvent>();
+  public readonly onAudioSwitched$: Subject<AudioEvent> = new Subject<AudioEvent>();
 
-    constructor(videoController: VideoControllerApi) {
-        this.videoController = videoController;
+  constructor(videoController: VideoControllerApi) {
+    this.videoController = videoController;
+  }
+
+  getAudioTracks(): any[] {
+    return this.videoController.getAudioTracks();
+  }
+
+  getCurrentAudioTrack(): any {
+    return this.videoController.getCurrentAudioTrack();
+  }
+
+  setAudioTrack(audioTrackId: number) {
+    let previous = this.getCurrentAudioTrack();
+    this.videoController.setAudioTrack(audioTrackId);
+    let current = this.getCurrentAudioTrack();
+    if (previous !== current) {
+      this.onAudioSwitched$.next({
+        audioTrack: current
+      });
     }
+  }
 
-    getAudioTracks(): any[] {
-        return this.videoController.getAudioTracks();
-    }
-
-    getCurrentAudioTrack(): any {
-        return this.videoController.getCurrentAudioTrack();
-    }
-
-    setAudioTrack(audioTrackId: number) {
-        let previous = this.getCurrentAudioTrack();
-        this.videoController.setAudioTrack(audioTrackId);
-        let current = this.getCurrentAudioTrack();
-        if (previous !== current) {
-            this.onAudioSwitched$.next({
-                audioTrack: current
-            });
-        }
-    }
-
-    destroy() {
-    }
+  destroy() {
+  }
 
 
 }

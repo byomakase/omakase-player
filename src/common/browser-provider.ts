@@ -15,61 +15,61 @@
  */
 
 export class BrowserProvider {
-    private static _instance: BrowserProvider;
+  private static _instance: BrowserProvider;
 
-    private _userAgent: string;
+  private _userAgent: string;
 
-    private _isFirefox;
-    private _isEdge;
-    private _isChromium;
-    private _isChrome;
-    private _isAndroid;
-    private _isSafari;
+  private _isFirefox;
+  private _isEdge;
+  private _isChromium;
+  private _isChrome;
+  private _isAndroid;
+  private _isSafari;
 
-    private constructor() {
-        this.resolveUserAgent();
+  private constructor() {
+    this.resolveUserAgent();
+  }
+
+  public static instance(): BrowserProvider {
+    if (!BrowserProvider._instance) {
+      BrowserProvider._instance = new BrowserProvider();
     }
-
-    public static instance(): BrowserProvider {
-        if (!BrowserProvider._instance) {
-            BrowserProvider._instance = new BrowserProvider();
-        }
-        return BrowserProvider._instance;
-    }
+    return BrowserProvider._instance;
+  }
 
 
-    private resolveUserAgent() {
-        this._userAgent = window.navigator && window.navigator.userAgent || '';
+  private resolveUserAgent() {
+    this._userAgent = window.navigator && window.navigator.userAgent || '';
 
-        this._isAndroid = (/Android/i).test(this._userAgent);
-        this._isFirefox = (/Firefox/i).test(this._userAgent);
-        this._isEdge = (/Edg/i).test(this._userAgent);
-        this._isChromium = ((/Chrome/i).test(this._userAgent) || (/CriOS/i).test(this._userAgent));
-        this._isChrome = !this.isEdge && this.isChromium;
-        this._isSafari = (/Safari/i).test(this._userAgent) && !this.isChrome && !this.isAndroid && !this.isEdge;
-    }
+    this._isAndroid = (/Android/i).test(this._userAgent);
+    this._isFirefox = (/Firefox/i).test(this._userAgent);
+    this._isEdge = (/Edg/i).test(this._userAgent);
+    this._isChromium = ((/Chrome/i).test(this._userAgent) || (/CriOS/i).test(this._userAgent));
+    this._isChrome = !this.isEdge && this.isChromium;
+    this._isSafari = (/Safari/i).test(this._userAgent) && !this.isChrome && !this.isAndroid && !this.isEdge;
+  }
 
-    get isSafari() {
-        return this._isSafari;
-    }
+  get isSafari() {
+    return this._isSafari;
+  }
 
-    get isFirefox() {
-        return this._isFirefox;
-    }
+  get isFirefox() {
+    return this._isFirefox;
+  }
 
-    get isEdge() {
-        return this._isEdge;
-    }
+  get isEdge() {
+    return this._isEdge;
+  }
 
-    get isChromium() {
-        return this._isChromium;
-    }
+  get isChromium() {
+    return this._isChromium;
+  }
 
-    get isChrome() {
-        return this._isChrome;
-    }
+  get isChrome() {
+    return this._isChrome;
+  }
 
-    get isAndroid() {
-        return this._isAndroid;
-    }
+  get isAndroid() {
+    return this._isAndroid;
+  }
 }

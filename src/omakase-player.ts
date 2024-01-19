@@ -38,11 +38,11 @@ import {VideoControllerApi} from "./video/video-controller-api";
 import {DestroyUtil} from "./util/destroy-util";
 
 export interface OmakasePlayerStyle {
-    fontFamily: string
+  fontFamily: string
 }
 
 export const OMAKASE_PLAYER_STYLE_DEFAULT: OmakasePlayerStyle = {
-    fontFamily: 'Arial'
+  fontFamily: 'Arial'
 }
 
 export interface OmakasePlayerConfig {
@@ -60,256 +60,256 @@ const configDefault: OmakasePlayerConfig = {
 }
 
 export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
-    private stylesProvider: StylesProvider = StylesProvider.instance();
+  private stylesProvider: StylesProvider = StylesProvider.instance();
 
-    // controllers
-    private videoController: VideoControllerApi;
-    private audioController: AudioController;
-    private subtitlesController: SubtitlesController;
+  // controllers
+  private videoController: VideoControllerApi;
+  private audioController: AudioController;
+  private subtitlesController: SubtitlesController;
 
-    private readonly config: OmakasePlayerConfig;
-    private readonly playerHTMLElementId: string;
+  private readonly config: OmakasePlayerConfig;
+  private readonly playerHTMLElementId: string;
 
-    private eventEmitter = new EventEmitter();
-    private onDestroy$ = new Subject<void>();
+  private eventEmitter = new EventEmitter();
+  private onDestroy$ = new Subject<void>();
 
-    private styleAdapter: StyleAdapter<OmakasePlayerStyle>;
-    private _timeline: Timeline;
+  private styleAdapter: StyleAdapter<OmakasePlayerStyle>;
+  private _timeline: Timeline;
 
-    constructor(config: WithOptionalPartial<OmakasePlayerConfig, 'style'>) {
-        this.config = {
-            ...configDefault,
-            ...config,
-            style: {
-                ...configDefault.style,
-                ...config.style,
-            }
-        };
+  constructor(config: WithOptionalPartial<OmakasePlayerConfig, 'style'>) {
+    this.config = {
+      ...configDefault,
+      ...config,
+      style: {
+        ...configDefault.style,
+        ...config.style,
+      }
+    };
 
-        this.styleAdapter = new StyleAdapter<OmakasePlayerStyle>({
-            ...OMAKASE_PLAYER_STYLE_DEFAULT,
-            ...this.config.style
-        })
+    this.styleAdapter = new StyleAdapter<OmakasePlayerStyle>({
+      ...OMAKASE_PLAYER_STYLE_DEFAULT,
+      ...this.config.style
+    })
 
-        // set initial style to provider
-        this.stylesProvider.styles = {
-            omakasePlayerStyle: this.style
-        }
+    // set initial style to provider
+    this.stylesProvider.styles = {
+      omakasePlayerStyle: this.style
+    }
 
-        this.styleAdapter.onChange$.pipe(takeUntil(this.onDestroy$)).subscribe((style) => {
-            this.stylesProvider.styles = {
-                omakasePlayerStyle: this.style
-            }
-        })
+    this.styleAdapter.onChange$.pipe(takeUntil(this.onDestroy$)).subscribe((style) => {
+      this.stylesProvider.styles = {
+        omakasePlayerStyle: this.style
+      }
+    })
 
         this.videoController = new VideoHlsController(this.config.playerHTMLElementId, this.config.crossorigin);
         this.audioController = new AudioController(this.videoController);
         this.subtitlesController = new SubtitlesController(this.videoController);
 
-        this.bindEventHandlers();
-    }
+    this.bindEventHandlers();
+  }
 
-    loadVideo(videoSourceUrl: string, videoFrameRate: number, duration?: number): Observable<Video> {
-        return new Observable<Video>(o$ => {
-            this.videoController.loadVideo(videoSourceUrl, videoFrameRate, duration).pipe(first()).subscribe({
-                next: video => {
-                    o$.next(video);
-                    o$.complete();
-                },
-                error: (error) => {
-                    o$.error(error);
-                    o$.complete();
-                }
-            })
-        })
-    }
+  loadVideo(videoSourceUrl: string, videoFrameRate: number, duration?: number): Observable<Video> {
+    return new Observable<Video>(o$ => {
+      this.videoController.loadVideo(videoSourceUrl, videoFrameRate, duration).pipe(first()).subscribe({
+        next: video => {
+          o$.next(video);
+          o$.complete();
+        },
+        error: (error) => {
+          o$.error(error);
+          o$.complete();
+        }
+      })
+    })
+  }
 
-    createTimeline(config: Partial<ComponentConfigStyleComposed<TimelineConfig>>): Observable<Timeline> {
-        return new Observable<Timeline>(o$ => {
-            let createTimeline = () => {
-                console.debug('Creating timeline')
+  createTimeline(config: Partial<ComponentConfigStyleComposed<TimelineConfig>>): Observable<Timeline> {
+    return new Observable<Timeline>(o$ => {
+      let createTimeline = () => {
+        console.debug('Creating timeline')
 
-                this._timeline = new Timeline(config, this.videoController);
+        this._timeline = new Timeline(config, this.videoController);
 
-                this._timeline.initCanvasNode();
+        this._timeline.initCanvasNode();
 
-                // bind timeline event handlers
-                this._timeline.onScroll$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-                    this.emit('omakaseTimelineScroll', event);
-                })
-
-                this._timeline.onZoom$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-                    this.emit('omakaseTimelineZoom', event);
-                })
-            }
-
-            if (!this.timeline) {
-                // wait for video to load and then create Timeline
-                // stay subscribed, every next change of video will trigger setVideo
-                console.debug('Timeline creation in progress, checking video load status..')
-
-                if (this.videoController.isVideoLoaded()) {
-                    console.debug('Video is already loaded')
-                    createTimeline();
-
-                    o$.next(this._timeline);
-                    o$.complete();
-                } else {
-                    console.debug('Waiting video to load..')
-                    this.videoController.onVideoLoaded$.pipe(filter(p => !!p), first()).subscribe(video => {
-                        console.debug('Video just loaded')
-                        createTimeline();
-
-                        o$.next(this._timeline);
-                        o$.complete();
-                    })
-                }
-
-            } else {
-                // cannot create Timeline twice, just return current instance
-                o$.next(this._timeline);
-                o$.complete();
-            }
-        })
-    }
-
-    private bindEventHandlers() {
-        // video
-        this.videoController.onPlay$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-            this.emit('omakaseVideoPlay', event);
+        // bind timeline event handlers
+        this._timeline.onScroll$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+          this.emit('omakaseTimelineScroll', event);
         })
 
-        this.videoController.onPause$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-            this.emit('omakaseVideoPause', event);
+        this._timeline.onZoom$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+          this.emit('omakaseTimelineZoom', event);
         })
+      }
 
-        this.videoController.onVideoLoaded$.pipe(takeUntil(this.onDestroy$), filter(p => !!p)).subscribe((event) => {
-            this.emit('omakaseVideoLoaded', event);
-        })
+      if (!this.timeline) {
+        // wait for video to load and then create Timeline
+        // stay subscribed, every next change of video will trigger setVideo
+        console.debug('Timeline creation in progress, checking video load status..')
 
-        this.videoController.onVideoTimeChange$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-            this.emit('omakaseVideoTimeChange', event);
-        })
+        if (this.videoController.isVideoLoaded()) {
+          console.debug('Video is already loaded')
+          createTimeline();
 
-        this.videoController.onSeeking$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-            this.emit('omakaseVideoSeeking', event);
-        })
+          o$.next(this._timeline);
+          o$.complete();
+        } else {
+          console.debug('Waiting video to load..')
+          this.videoController.onVideoLoaded$.pipe(filter(p => !!p), first()).subscribe(video => {
+            console.debug('Video just loaded')
+            createTimeline();
 
-        this.videoController.onSeeked$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-            this.emit('omakaseVideoSeeked', event);
-        })
+            o$.next(this._timeline);
+            o$.complete();
+          })
+        }
 
-        this.videoController.onBuffering$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-            this.emit('omakaseVideoBuffering', event);
-        })
+      } else {
+        // cannot create Timeline twice, just return current instance
+        o$.next(this._timeline);
+        o$.complete();
+      }
+    })
+  }
 
-        this.videoController.onEnded$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-            this.emit('omakaseVideoEnded', event);
-        })
+  private bindEventHandlers() {
+    // video
+    this.videoController.onPlay$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+      this.emit('omakaseVideoPlay', event);
+    })
 
-        this.videoController.onAudioSwitched$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-            this.emit('omakaseVideoAudioSwitched', event);
-        })
+    this.videoController.onPause$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+      this.emit('omakaseVideoPause', event);
+    })
 
-        // audio
-        this.audioController.onAudioSwitched$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-            this.emit('omakaseAudioSwitched', event);
-        })
+    this.videoController.onVideoLoaded$.pipe(takeUntil(this.onDestroy$), filter(p => !!p)).subscribe((event) => {
+      this.emit('omakaseVideoLoaded', event);
+    })
 
-        // subtitles
-        this.subtitlesController.onCreate$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-            this.emit('omakaseSubtitlesCreate', event);
-        })
+    this.videoController.onVideoTimeChange$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+      this.emit('omakaseVideoTimeChange', event);
+    })
 
-        this.subtitlesController.onRemove$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-            this.emit('omakaseSubtitlesRemove', event);
-        })
+    this.videoController.onSeeking$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+      this.emit('omakaseVideoSeeking', event);
+    })
 
-        this.subtitlesController.onShow$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-            this.emit('omakaseSubtitlesShow', event);
-        })
+    this.videoController.onSeeked$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+      this.emit('omakaseVideoSeeked', event);
+    })
 
-        this.subtitlesController.onHide$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-            this.emit('omakaseSubtitlesHide', event);
-        })
-    }
+    this.videoController.onBuffering$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+      this.emit('omakaseVideoBuffering', event);
+    })
 
-    // region eventemmiter
+    this.videoController.onEnded$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+      this.emit('omakaseVideoEnded', event);
+    })
 
-    emit<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey: K, event: OmakasePlayerEventMap[K]): void {
-        this.eventEmitter.emit(eventKey, event);
-    }
+    this.videoController.onAudioSwitched$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+      this.emit('omakaseVideoAudioSwitched', event);
+    })
 
-    off<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey: K, handler: OmakaseEventListener<OmakasePlayerEventMap[K]>): void {
-        this.eventEmitter.off(eventKey, handler);
-    }
+    // audio
+    this.audioController.onAudioSwitched$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+      this.emit('omakaseAudioSwitched', event);
+    })
 
-    on<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey: K, handler: OmakaseEventListener<OmakasePlayerEventMap[K]>): void {
-        this.eventEmitter.on(eventKey, handler);
-    }
+    // subtitles
+    this.subtitlesController.onCreate$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+      this.emit('omakaseSubtitlesCreate', event);
+    })
 
-    listenerCount<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey: K): void {
-        this.eventEmitter.listenerCount(eventKey);
-    }
+    this.subtitlesController.onRemove$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+      this.emit('omakaseSubtitlesRemove', event);
+    })
 
-    listeners<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey: K): OmakaseEventListener<OmakasePlayerEventMap[K]>[] {
-        return this.eventEmitter.listeners(eventKey);
-    }
+    this.subtitlesController.onShow$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+      this.emit('omakaseSubtitlesShow', event);
+    })
 
-    once<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey: K, handler: OmakaseEventListener<OmakasePlayerEventMap[K]>): void {
-        this.eventEmitter.once(eventKey, handler);
-    }
+    this.subtitlesController.onHide$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+      this.emit('omakaseSubtitlesHide', event);
+    })
+  }
 
-    removeAllListeners<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey?: K): void {
-        this.eventEmitter.removeAllListeners(eventKey);
-    }
+  // region eventemmiter
 
-    // endregion
+  emit<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey: K, event: OmakasePlayerEventMap[K]): void {
+    this.eventEmitter.emit(eventKey, event);
+  }
 
-    get style(): OmakasePlayerStyle {
-        return this.styleAdapter.style;
-    }
+  off<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey: K, handler: OmakaseEventListener<OmakasePlayerEventMap[K]>): void {
+    this.eventEmitter.off(eventKey, handler);
+  }
 
-    set style(value: Partial<OmakasePlayerStyle>) {
-        this.styleAdapter.style = value;
-    }
+  on<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey: K, handler: OmakaseEventListener<OmakasePlayerEventMap[K]>): void {
+    this.eventEmitter.on(eventKey, handler);
+  }
 
-    get timeline(): Timeline {
-        return this._timeline;
-    }
+  listenerCount<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey: K): void {
+    this.eventEmitter.listenerCount(eventKey);
+  }
 
-    get video(): VideoApi {
-        return this.videoController;
-    }
+  listeners<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey: K): OmakaseEventListener<OmakasePlayerEventMap[K]>[] {
+    return this.eventEmitter.listeners(eventKey);
+  }
 
-    get audio(): AudioApi {
-        return this.audioController;
-    }
+  once<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey: K, handler: OmakaseEventListener<OmakasePlayerEventMap[K]>): void {
+    this.eventEmitter.once(eventKey, handler);
+  }
 
-    get subtitles(): SubtitlesApi {
-        return this.subtitlesController;
-    }
+  removeAllListeners<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey?: K): void {
+    this.eventEmitter.removeAllListeners(eventKey);
+  }
 
-    get EVENTS(): OmakasePlayerEventsType {
-        return OmakasePlayerEvents;
-    }
+  // endregion
 
-    destroy() {
-        DestroyUtil.destroy(this._timeline, this.videoController, this.audioController, this.subtitlesController);
+  get style(): OmakasePlayerStyle {
+    return this.styleAdapter.style;
+  }
 
-        this.eventEmitter.removeAllListeners();
+  set style(value: Partial<OmakasePlayerStyle>) {
+    this.styleAdapter.style = value;
+  }
 
-        this._timeline = void 0;
-        this.videoController = void 0;
-        this.audioController = void 0;
-        this.subtitlesController = void 0;
+  get timeline(): Timeline {
+    return this._timeline;
+  }
 
-        this.styleAdapter = void 0;
-        this.stylesProvider = void 0;
-        this.eventEmitter = void 0;
+  get video(): VideoApi {
+    return this.videoController;
+  }
 
-        nextCompleteVoidSubject(this.onDestroy$);
+  get audio(): AudioApi {
+    return this.audioController;
+  }
 
-        // TODO: clean remaining items
-    }
+  get subtitles(): SubtitlesApi {
+    return this.subtitlesController;
+  }
+
+  get EVENTS(): OmakasePlayerEventsType {
+    return OmakasePlayerEvents;
+  }
+
+  destroy() {
+    DestroyUtil.destroy(this._timeline, this.videoController, this.audioController, this.subtitlesController);
+
+    this.eventEmitter.removeAllListeners();
+
+    this._timeline = void 0;
+    this.videoController = void 0;
+    this.audioController = void 0;
+    this.subtitlesController = void 0;
+
+    this.styleAdapter = void 0;
+    this.stylesProvider = void 0;
+    this.eventEmitter = void 0;
+
+    nextCompleteVoidSubject(this.onDestroy$);
+
+    // TODO: clean remaining items
+  }
 }

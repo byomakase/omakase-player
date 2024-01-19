@@ -15,8 +15,9 @@
  */
 
 export type {TimelaneLane} from './timeline-lane';
-export * from "./marker";
-export * from "./subtitles";
-export * from "./thumbnail";
-export * from "./audio-track";
+export * from './marker';
+export * from './subtitles';
+export * from './thumbnail';
+export * from './audio-track';
+export * from './chart-track';
 

@@ -14,29 +14,29 @@
  *       limitations under the License.
  */
 
-import {ZodError} from "zod";
-import {ParseParams} from "zod/lib/helpers/parseUtil";
+import {ZodError} from 'zod';
+import {ParseParams} from 'zod/lib/helpers/parseUtil';
 
 export function parseErrorMessage(error: string | Error): string {
-    let message;
-    if (typeof error === "string") {
-        message = error;
-    } else if (error instanceof ZodError) {
-        console.log(error)
-        message = (error as ZodError).errors.map(p => p.message).join('. ');
-    } else if (error instanceof Error) {
-        message = error.message;
-    } else {
-        message = 'Unexpected error';
-    }
+  let message;
+  if (typeof error === 'string') {
+    message = error;
+  } else if (error instanceof ZodError) {
+    console.log(error)
+    message = (error as ZodError).errors.map(p => p.message).join('. ');
+  } else if (error instanceof Error) {
+    message = error.message;
+  } else {
+    message = 'Unexpected error';
+  }
 
-    return message;
+  return message;
 }
 
 export function zodErrorMapOverload(message: string): Partial<ParseParams> {
-    return {
-        errorMap: (issue, ctx) => {
-            return {message}
-        }
+  return {
+    errorMap: (issue, ctx) => {
+      return {message}
     }
+  }
 }

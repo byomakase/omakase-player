@@ -14,51 +14,51 @@
  *       limitations under the License.
  */
 
-import {BaseOmakaseVttFile, VttCueParsed} from "./vtt-file";
-import {ThumbnailVttCue} from "../types";
-import {map, Observable} from "rxjs";
-import Decimal from "decimal.js";
-import {AxiosRequestConfig} from "axios";
+import {BaseOmakaseVttFile, VttCueParsed} from './vtt-file';
+import {ThumbnailVttCue} from '../types';
+import {map, Observable} from 'rxjs';
+import Decimal from 'decimal.js';
+import {AxiosRequestConfig} from 'axios';
 
 export class ThumbnailVttFile extends BaseOmakaseVttFile<ThumbnailVttCue> {
 
-    protected constructor(url: string, axiosConfig?: AxiosRequestConfig) {
-        super(url, axiosConfig);
-    }
+  protected constructor(url: string, axiosConfig?: AxiosRequestConfig) {
+    super(url, axiosConfig);
+  }
 
-    static create(url: string, axiosConfig?: AxiosRequestConfig): Observable<ThumbnailVttFile> {
-        let instance = new ThumbnailVttFile(url, axiosConfig);
-        return instance.fetch().pipe(map(result => {
-            return instance;
-        }))
-    }
+  static create(url: string, axiosConfig?: AxiosRequestConfig): Observable<ThumbnailVttFile> {
+    let instance = new ThumbnailVttFile(url, axiosConfig);
+    return instance.fetch().pipe(map(result => {
+      return instance;
+    }))
+  }
 
-    protected mapCue(vttCueParsed: VttCueParsed): ThumbnailVttCue {
-        return {
-            id: vttCueParsed.identifier,
-            startTime: new Decimal(vttCueParsed.start).toDecimalPlaces(3).toNumber(),
-            endTime: new Decimal(vttCueParsed.end).toDecimalPlaces(3).toNumber(),
-            text: vttCueParsed.text,
-            url: this.resolveThumbnailUrl(vttCueParsed)
-        }
+  protected mapCue(vttCueParsed: VttCueParsed): ThumbnailVttCue {
+    return {
+      id: vttCueParsed.identifier,
+      startTime: new Decimal(vttCueParsed.start).toDecimalPlaces(3).toNumber(),
+      endTime: new Decimal(vttCueParsed.end).toDecimalPlaces(3).toNumber(),
+      text: vttCueParsed.text,
+      url: this.resolveThumbnailUrl(vttCueParsed)
     }
+  }
 
-    private resolveThumbnailUrl(vttCueParsed: VttCueParsed): string {
-        return this.isUrlAbsolute(vttCueParsed.text) ? vttCueParsed.text : this.createThumbnailUrlFromRelativeUrl(vttCueParsed.text);
-    }
+  private resolveThumbnailUrl(vttCueParsed: VttCueParsed): string {
+    return this.isUrlAbsolute(vttCueParsed.text) ? vttCueParsed.text : this.createThumbnailUrlFromRelativeUrl(vttCueParsed.text);
+  }
 
-    private createThumbnailUrlFromRelativeUrl(relativePath: string) {
-        if (this.url.lastIndexOf('/') > 2) {
-            return `${this.url.substring(0, this.url.lastIndexOf('/'))}/${relativePath}`
-        } else {
-            // cannot resolve absolute url :(
-            return relativePath;
-        }
+  private createThumbnailUrlFromRelativeUrl(relativePath: string) {
+    if (this.url.lastIndexOf('/') > 2) {
+      return `${this.url.substring(0, this.url.lastIndexOf('/'))}/${relativePath}`
+    } else {
+      // cannot resolve absolute url :(
+      return relativePath;
     }
+  }
 
-    private isUrlAbsolute(url: string) {
-        const regex = /^(http(s):\/\/.)[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)$/;
-        return regex.test(url);
-    }
+  private isUrlAbsolute(url: string) {
+    const regex = /^(http(s):\/\/.)[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)$/;
+    return regex.test(url);
+  }
 
 }

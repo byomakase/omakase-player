@@ -72,20 +72,20 @@ window.addEventListener('load', () => {
         }
   }).subscribe(timeline => {
 
-        timeline.getScrubberLane().style = {
-            backgroundFill: '#EDEFEE',
-            leftBackgroundFill: '#E4E5E5'
-        }
+    timeline.getScrubberLane().style = {
+      backgroundFill: '#EDEFEE',
+      leftBackgroundFill: '#E4E5E5'
+    }
 
-        //Creating Marker Lane
-        let inAndOutMarkersLane = new omakase.MarkerLane({
-            id: "marker_lane_inout_1", description: "In and out markers",
-            style: {
-                backgroundFill: '#E9F7FF',
-                height: 30,
-                leftBackgroundFill: '#E4E5E5',
-            }
-        });
+    //Creating Marker Lane
+    let inAndOutMarkersLane = new omakase.MarkerLane({
+      id: "marker_lane_inout_1", description: "In and out markers",
+      style: {
+        backgroundFill: '#E9F7FF',
+        height: 30,
+        leftBackgroundFill: '#E4E5E5',
+      }
+    });
 
     timeline.addLane(inAndOutMarkersLane);
 
@@ -576,11 +576,18 @@ window.addEventListener('load', () => {
     let buttonOutToPlayhead = document.getElementById('out-to-playhead');
     buttonOutToPlayhead.onclick = setOutMarkertoPlayhead;
 
-        let buttonFullscreen = document.getElementById('full-screen');
-        buttonFullscreen.onclick = function () {
-            omakasePlayer.video.toggleFullscreen();
-        };
-    })
+    let buttonFullscreen = document.getElementById('full-screen');
+    buttonFullscreen.onclick = function () {
+      omakasePlayer.video.toggleFullscreen();
+    };
+
+    document.getElementById('addMarker').onclick = addMarker;
+    let initialMarker = document.getElementById('marker1');
+    initialMarker.onclick = function () {
+      toggleMarkers(initialMarker);
+    };
+
+  })
 
   function pause() {
     omakasePlayer.video.pause();
@@ -946,13 +953,6 @@ function addMarker() {
     document.getElementById('addMarker').remove();
   }
 }
-
-document.getElementById('addMarker').onclick = addMarker;
-let initialMarker = document.getElementById('marker1');
-initialMarker.onclick = function () {
-    toggleMarkers(initialMarker);
-};
-
 
 function setPlaybackRate(speed) {
   omakasePlayer.video.setPlaybackRate(speed);

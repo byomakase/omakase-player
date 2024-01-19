@@ -15,15 +15,15 @@
  *
  */
 
-import Konva from "konva";
-import {map, Observable, of, Subject} from "rxjs";
-import {StyleAdapter} from "./style-adapter";
-import {WithOptionalPartial} from "../types/types";
-import {Destroyable} from "../types";
-import {nextCompleteVoidSubject} from "../util/observable-util";
+import Konva from 'konva';
+import {map, Observable, of, Subject} from 'rxjs';
+import {StyleAdapter} from './style-adapter';
+import {WithOptionalPartial} from '../types/types';
+import {Destroyable} from '../types';
+import {nextCompleteVoidSubject} from '../util/observable-util';
 
 export interface ComponentConfig<S> {
-    style: S
+  style: S
 }
 
 /***
@@ -32,94 +32,94 @@ export interface ComponentConfig<S> {
 export type ComponentConfigStyleComposed<T extends ComponentConfig<any>> = WithOptionalPartial<T, 'style'>;
 
 export const composeConfigAndDefault = <T extends ComponentConfig<any>>(config: Partial<ComponentConfigStyleComposed<T>>, configDefault: T): T => {
-    return {
-        ...configDefault,
-        ...config,
-        style: {
-            ...configDefault.style,
-            ...config.style,
-        },
-    }
+  return {
+    ...configDefault,
+    ...config,
+    style: {
+      ...configDefault.style,
+      ...config.style,
+    },
+  }
 }
 
 export interface Component<C extends ComponentConfig<S>, S, T extends Konva.Node> extends Destroyable {
-    get style(): S;
+  get style(): S;
 
-    set style(value: Partial<S>);
+  set style(value: Partial<S>);
 
-    initCanvasNode(): T;
+  initCanvasNode(): T;
 
-    getCanvasNode(): T;
+  getCanvasNode(): T;
 
-    isInitialized(): boolean;
+  isInitialized(): boolean;
 }
 
 export abstract class BaseComponent<C extends ComponentConfig<S>, S, T extends Konva.Node> implements Component<C, S, T> {
-    protected config: C;
-    protected styleAdapter: StyleAdapter<S>;
-    protected canvasNode: T;
+  protected config: C;
+  protected styleAdapter: StyleAdapter<S>;
+  protected canvasNode: T;
 
-    public readonly onDestroy$ = new Subject<void>();
+  public readonly onDestroy$ = new Subject<void>();
 
-    protected constructor(config: C) {
-        this.config = config;
-        this.styleAdapter = new StyleAdapter(config.style);
+  protected constructor(config: C) {
+    this.config = config;
+    this.styleAdapter = new StyleAdapter(config.style);
+  }
+
+  protected abstract createCanvasNode(): T;
+
+  initCanvasNode(): T {
+    if (this.isInitialized()) {
+      throw new Error('Konva node already initalized')
+    }
+    this.canvasNode = this.createCanvasNode();
+    this.afterCanvasNodeInit();
+    return this.canvasNode;
+  }
+
+  initCanvasNodeAsync(): Observable<T> {
+    return this.createCanvasNodeAsync().pipe(map(konvaNode => {
+      this.canvasNode = konvaNode;
+      this.afterCanvasNodeInit();
+      return this.canvasNode;
+    }))
+  }
+
+  protected createCanvasNodeAsync(): Observable<T> {
+    return of(this.createCanvasNode());
+  }
+
+  protected afterCanvasNodeInit() {
+
+  }
+
+  destroy() {
+    if (this.isInitialized()) {
+      this.getCanvasNode().destroy();
     }
 
-    protected abstract createCanvasNode(): T;
+    nextCompleteVoidSubject(this.onDestroy$);
 
-    initCanvasNode(): T {
-        if (this.isInitialized()) {
-            throw new Error('Konva node already initalized')
-        }
-        this.canvasNode = this.createCanvasNode();
-        this.afterCanvasNodeInit();
-        return this.canvasNode;
-    }
+    this.config = void 0;
+    this.styleAdapter = void 0;
+    this.canvasNode = void 0;
+  }
 
-    initCanvasNodeAsync(): Observable<T> {
-        return this.createCanvasNodeAsync().pipe(map(konvaNode => {
-            this.canvasNode = konvaNode;
-            this.afterCanvasNodeInit();
-            return this.canvasNode;
-        }))
-    }
+  getCanvasNode(): T {
+    return this.canvasNode;
+  }
 
-    protected createCanvasNodeAsync(): Observable<T> {
-        return of(this.createCanvasNode());
-    }
+  isInitialized(): boolean {
+    return !!this.getCanvasNode();
+  }
 
-    protected afterCanvasNodeInit() {
+  get style(): S {
+    return this.styleAdapter.style;
+  }
 
-    }
-
-    destroy() {
-        if (this.isInitialized()) {
-            this.getCanvasNode().destroy();
-        }
-
-        nextCompleteVoidSubject(this.onDestroy$);
-
-        this.config = void 0;
-        this.styleAdapter = void 0;
-        this.canvasNode = void 0;
-    }
-
-    getCanvasNode(): T {
-        return this.canvasNode;
-    }
-
-    isInitialized(): boolean {
-        return !!this.getCanvasNode();
-    }
-
-    get style(): S {
-        return this.styleAdapter.style;
-    }
-
-    set style(value: Partial<S>) {
-        this.styleAdapter.style = value;
-    }
+  set style(value: Partial<S>) {
+    this.styleAdapter.style = value;
+  }
 
 
 }

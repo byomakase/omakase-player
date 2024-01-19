@@ -16,12 +16,12 @@
 
 export class WindowUtil {
 
-    static resetCursorStyle() {
-        this.cursor("default");
-    }
+  static resetCursorStyle() {
+    this.cursor('default');
+  }
 
-    static cursor(cursor: 'default' | 'pointer' | 'grab' | 'grabbing' | 'ew-resize') {
-        document.body.style.cursor = cursor;
-    }
+  static cursor(cursor: 'default' | 'pointer' | 'grab' | 'grabbing' | 'ew-resize') {
+    document.body.style.cursor = cursor;
+  }
 
 }
