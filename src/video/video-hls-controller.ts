@@ -14,21 +14,34 @@
  *       limitations under the License.
  */
 
-import {HTMLVideoElementEventKeys, VideoController} from "./video-controller";
+import {HTMLVideoElementEventKeys, VIDEO_CONTROLLER_CONFIG_DEFAULT, VideoController, VideoControllerConfig} from './video-controller';
 // TODO important when building !
 // import Hls from "hls.js/dist/hls.min";
-import Hls, {MediaPlaylist} from "hls.js";
+import Hls, {HlsConfig, MediaPlaylist} from 'hls.js';
 
 import {first, forkJoin, fromEvent, Observable} from 'rxjs';
 import {Video} from './video';
 import {z} from 'zod';
 
+export interface VideoHlsControllerConfig extends VideoControllerConfig {
+  hls: Partial<HlsConfig>
+}
+
+export const VIDEO_HLS_CONTROLLER_CONFIG_DEFAULT: VideoHlsControllerConfig = {
+  ...VIDEO_CONTROLLER_CONFIG_DEFAULT,
+  hls: {
+    ...Hls.DefaultConfig
+  }
+}
+
 export class VideoHlsController extends VideoController {
   protected hls: Hls;
 
-
-    constructor(playerHTMLElementId: string, crossorigin: 'anonymous' | 'use-credentials') {
-        super(playerHTMLElementId, crossorigin);
+  constructor(videoHlsControllerConfig: Partial<VideoHlsControllerConfig>) {
+    super({
+      ...VIDEO_HLS_CONTROLLER_CONFIG_DEFAULT,
+      ...videoHlsControllerConfig
+    });
 
     if (Hls.isSupported()) {
       console.debug('video load with hls.js')
@@ -36,14 +49,10 @@ export class VideoHlsController extends VideoController {
       console.error('hls is not supported through MediaSource extensions')
     }
 
-        let config = {
-            ...Hls.DefaultConfig,
-            enableWorker: false
-            // TODO for PROD builds we should remove this property and use hls.js/dist/hls.min | See https://github.com/video-dev/hls.js/issues/5146#issuecomment-1375070955
-        };
-
-        this.hls = new Hls(config);
-    }
+    this.hls = new Hls({
+      ...videoHlsControllerConfig.hls
+    });
+  }
 
   videoLoad(sourceUrl: string, frameRate: number, duration: number): Observable<Video> {
     return new Observable<Video>(o$ => {

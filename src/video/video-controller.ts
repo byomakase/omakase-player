@@ -14,21 +14,20 @@
  *       limitations under the License.
  */
 
-import Decimal from "decimal.js";
-import {AudioEvent, VideoBufferingEvent, VideoEndedEvent, VideoErrorEvent, VideoLoadedEvent, VideoLoadingEvent, VideoPlayEvent, VideoSeekedEvent, VideoSeekingEvent, VideoTimeChangeEvent} from "../types/events";
-import {BehaviorSubject, catchError, delay, first, fromEvent, interval, map, Observable, of, Subject, take, takeUntil, throwError} from "rxjs";
-import {FrameUtil} from "../util/frame-util";
-import {completeSubjects, nextCompleteVoidSubject, nextCompleteVoidSubjects, unsubscribeSubjects} from "../util/observable-util";
-import {z} from "zod";
-import {TimestampUtil} from "../util/timestamp-util";
-import {Video} from "./video";
-import {VideoDomController} from "./video-dom-controller";
-import {PlaybackState, PlaybackStateMachine} from "./playback-state";
-import Hls from "hls.js";
-import {Validators} from "../validators";
-import {Destroyable, HelpMenuGroup, OmakaseTextTrack, OmakaseTextTrackCue} from "../types";
-import {parseErrorMessage, zodErrorMapOverload} from "../util/error-util";
-import {VideoControllerApi} from "./video-controller-api";
+import Decimal from 'decimal.js';
+import {AudioEvent, Destroyable, HelpMenuGroup, OmakaseTextTrack, OmakaseTextTrackCue, VideoBufferingEvent, VideoEndedEvent, VideoErrorEvent, VideoLoadedEvent, VideoLoadingEvent, VideoPlayEvent, VideoSeekedEvent, VideoSeekingEvent, VideoTimeChangeEvent} from '../types';
+import {BehaviorSubject, catchError, delay, first, fromEvent, interval, map, Observable, of, Subject, take, takeUntil, throwError} from 'rxjs';
+import {FrameUtil} from '../util/frame-util';
+import {completeSubjects, nextCompleteVoidSubject, nextCompleteVoidSubjects, unsubscribeSubjects} from '../util/observable-util';
+import {z} from 'zod';
+import {TimestampUtil} from '../util/timestamp-util';
+import {Video} from './video';
+import {VideoDomController} from './video-dom-controller';
+import {PlaybackState, PlaybackStateMachine} from './playback-state';
+import Hls from 'hls.js';
+import {Validators} from '../validators';
+import {parseErrorMessage, zodErrorMapOverload} from '../util/error-util';
+import {VideoControllerApi} from './video-controller-api';
 
 export const HTMLVideoElementEventKeys = {
   PAUSE: 'pause',
@@ -65,6 +64,16 @@ interface SyncConditions {
   currentTime?: number;
   videoFrameCallbackData?: VideoFrameCallbackData,
   seekDirection?: SeekDirection
+}
+
+export interface VideoControllerConfig {
+  playerHTMLElementId: string;
+  crossorigin: 'anonymous' | 'use-credentials'
+}
+
+export const VIDEO_CONTROLLER_CONFIG_DEFAULT: VideoControllerConfig = {
+  playerHTMLElementId: 'omakase-player',
+  crossorigin: 'anonymous',
 }
 
 
@@ -117,8 +126,8 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
   public readonly onHelpMenuChange$: Subject<void> = new BehaviorSubject<void>(void 0);
   public readonly onVideoError$: Subject<VideoErrorEvent> = new Subject<VideoErrorEvent>();
 
-    protected constructor(playerHTMLElementId: string, crossorigin: 'anonymous' | 'use-credentials') {
-        this.videoDomController = new VideoDomController(playerHTMLElementId, crossorigin, this);
+  protected constructor(config: VideoControllerConfig) {
+    this.videoDomController = new VideoDomController(config.playerHTMLElementId, config.crossorigin, this);
 
     if (!this.videoDomController.videoElement) {
       throw new Error('VideoController element not set');

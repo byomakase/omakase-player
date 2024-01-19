@@ -14,16 +14,27 @@
  *       limitations under the License.
  */
 
-import {HTMLVideoElementEventKeys, VideoController} from "./video-controller";
-import {first, forkJoin, fromEvent, Observable} from "rxjs";
-import {Video} from "./video";
-import {z} from "zod";
+import {HTMLVideoElementEventKeys, VIDEO_CONTROLLER_CONFIG_DEFAULT, VideoController, VideoControllerConfig} from './video-controller';
+import {first, forkJoin, fromEvent, Observable} from 'rxjs';
+import {Video} from './video';
+import {z} from 'zod';
+
+export interface VideoNativeControllerConfig extends VideoControllerConfig {
+
+}
+
+export const VIDEO_NATIVE_CONTROLLER_CONFIG_DEFAULT: VideoNativeControllerConfig = {
+  ...VIDEO_CONTROLLER_CONFIG_DEFAULT
+}
 
 export class VideoNativeController extends VideoController {
 
-    constructor(playerHTMLElementId: string, crossorigin: 'anonymous' | 'use-credentials') {
-        super(playerHTMLElementId, crossorigin);
-    }
+  constructor(videoHlsControllerConfig: Partial<VideoNativeControllerConfig>) {
+    super({
+      ...VIDEO_NATIVE_CONTROLLER_CONFIG_DEFAULT,
+      ...videoHlsControllerConfig
+    });
+  }
 
   videoLoad(sourceUrl: string, frameRate: number, duration: number): Observable<Video> {
     return new Observable<Video>(o$ => {

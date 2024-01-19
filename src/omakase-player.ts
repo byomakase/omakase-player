@@ -14,28 +14,30 @@
  *       limitations under the License.
  */
 
-import {Timeline, TimelineConfig} from "./timeline/timeline";
-import {filter, first, Observable, Subject, takeUntil} from "rxjs";
-import {OmakasePlayerApi} from "./api/omakase-player-api";
-import {VideoHlsController} from "./video/video-hls-controller";
-import {SubtitlesController} from "./subtitles/subtitles-controller";
-import {SubtitlesApi} from "./api/subtitles-api";
-import {VideoApi} from "./api/video-api";
-import {Video} from "./video/video";
-import EventEmitter from "eventemitter3";
-import {OmakaseEventKey, OmakaseEventListener} from "./events";
-import {Destroyable, OmakasePlayerEventMap, OmakasePlayerEvents, OmakasePlayerEventsType} from "./types";
-import {AudioController} from "./audio/audio-controller";
-import {AudioApi} from "./api/audio-api";
-import {StyleAdapter} from "./common/style-adapter";
-import {StylesProvider} from "./common/styles-provider";
-import {ComponentConfigStyleComposed} from "./common/component";
-import {WithOptionalPartial} from "./types/types";
+import {Timeline, TimelineConfig} from './timeline/timeline';
+import {filter, first, Observable, Subject, takeUntil} from 'rxjs';
+import {OmakasePlayerApi} from './api/omakase-player-api';
+import {VIDEO_HLS_CONTROLLER_CONFIG_DEFAULT, VideoHlsController} from './video/video-hls-controller';
+import {SubtitlesController} from './subtitles/subtitles-controller';
+import {SubtitlesApi} from './api/subtitles-api';
+import {VideoApi} from './api/video-api';
+import {Video} from './video/video';
+import EventEmitter from 'eventemitter3';
+import {OmakaseEventKey, OmakaseEventListener} from './events';
+import {Destroyable, OmakasePlayerEventMap, OmakasePlayerEvents, OmakasePlayerEventsType} from './types';
+import {AudioController} from './audio/audio-controller';
+import {AudioApi} from './api/audio-api';
+import {StyleAdapter} from './common/style-adapter';
+import {StylesProvider} from './common/styles-provider';
+import {ComponentConfigStyleComposed} from './common/component';
+import {WithOptionalPartial} from './types';
 // needed for styles compilation
 import './../style/omakase-player.scss'
-import {nextCompleteVoidSubject} from "./util/observable-util";
-import {VideoControllerApi} from "./video/video-controller-api";
-import {DestroyUtil} from "./util/destroy-util";
+import {nextCompleteVoidSubject} from './util/observable-util';
+import {VideoControllerApi} from './video/video-controller-api';
+import {DestroyUtil} from './util/destroy-util';
+import {HlsConfig} from 'hls.js';
+import {VIDEO_CONTROLLER_CONFIG_DEFAULT} from './video/video-controller';
 
 export interface OmakasePlayerStyle {
   fontFamily: string
@@ -46,17 +48,25 @@ export const OMAKASE_PLAYER_STYLE_DEFAULT: OmakasePlayerStyle = {
 }
 
 export interface OmakasePlayerConfig {
-    playerHTMLElementId: string;
-    crossorigin: 'anonymous' | 'use-credentials',
-    style: OmakasePlayerStyle
+  playerHTMLElementId: string;
+  crossorigin: 'anonymous' | 'use-credentials',
+
+  hls: Partial<HlsConfig>,
+
+  style: OmakasePlayerStyle
 }
 
 const configDefault: OmakasePlayerConfig = {
-    playerHTMLElementId: 'omakase-player',
-    crossorigin: 'anonymous',
-    style: {
-        ...OMAKASE_PLAYER_STYLE_DEFAULT
-    }
+  playerHTMLElementId: VIDEO_CONTROLLER_CONFIG_DEFAULT.playerHTMLElementId,
+  crossorigin: VIDEO_CONTROLLER_CONFIG_DEFAULT.crossorigin,
+
+  hls: {
+    ...VIDEO_HLS_CONTROLLER_CONFIG_DEFAULT.hls
+  },
+
+  style: {
+    ...OMAKASE_PLAYER_STYLE_DEFAULT
+  }
 }
 
 export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
@@ -102,9 +112,13 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
       }
     })
 
-        this.videoController = new VideoHlsController(this.config.playerHTMLElementId, this.config.crossorigin);
-        this.audioController = new AudioController(this.videoController);
-        this.subtitlesController = new SubtitlesController(this.videoController);
+    this.videoController = new VideoHlsController({
+      playerHTMLElementId: this.config.playerHTMLElementId,
+      crossorigin: this.config.crossorigin,
+      hls: this.config.hls
+    });
+    this.audioController = new AudioController(this.videoController);
+    this.subtitlesController = new SubtitlesController(this.videoController);
 
     this.bindEventHandlers();
   }

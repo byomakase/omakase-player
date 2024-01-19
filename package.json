@@ -32,7 +32,7 @@
     "axios": "1.3.3",
     "decimal.js": "10.4.3",
     "eventemitter3": "5.0.0",
-    "hls.js": "1.3.3",
+    "hls.js": "1.4.14",
     "konva": "8.3.14",
     "node-webvtt": "1.9.4",
     "rxjs": "7.8.0",
