@@ -1,198 +1,217 @@
-/**
- *       Copyright 2023 ByOmakase, LLC (https://byomakase.org)
+/*
+ * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
- *       Licensed under the Apache License, Version 2.0 (the "License");
- *       you may not use this file except in compliance with the License.
- *       You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *           http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *       Unless required by applicable law or agreed to in writing, software
- *       distributed under the License is distributed on an "AS IS" BASIS,
- *       WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *       See the License for the specific language governing permissions and
- *       limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-import {OnMeasurementsChange} from '../../common/measurement';
-import {BaseComponent, Component, ComponentConfig} from '../../common/component';
+import {Position} from '../../common/measurement';
+import {BaseKonvaComponent, ComponentConfig, KonvaComponent} from '../../layout/konva-component';
 import Konva from 'konva';
-import {HasMarkerLane, MarkerLane} from './marker-lane';
+import {MarkerLane} from './marker-lane';
 import {MarkerChangeEvent, MarkerEvent, TimeObservation} from '../../types';
-import {Constants} from '../../constants';
-import {Subject, takeUntil} from 'rxjs';
+import {Observable, Subject} from 'rxjs';
 import {Timeline} from '../timeline';
 import {Validators} from '../../validators';
-import {completeSubjects, unsubscribeSubjects} from '../../util/observable-util';
-
-export type MarkerRenderType = 'lane' | 'spanning'
-export type MarkerSymbolType = 'square' | 'triangle' | 'circle';
-
-export interface MarkerStyle {
-  color: string;
-  renderType: MarkerRenderType;
-  symbolType: MarkerSymbolType;
-}
-
-export const MARKER_STYLE_DEFAULT: MarkerStyle = {
-  color: 'rgba(255,73,145)',
-  renderType: 'lane',
-  symbolType: 'square'
-}
+import {completeUnsubscribeSubjects} from '../../util/observable-util';
+import {StringUtil} from '../../util/string-util';
+import {UuidUtil} from '../../util/uuid-util';
+import {konvaUnlistener} from '../../util/konva-util';
+import {MarkerHandleVerticals, MarkerStyle} from './marker-types';
 
 export interface MarkerConfig<T extends TimeObservation, S extends MarkerStyle> extends ComponentConfig<S> {
-  id: string;
-  observation: T;
-  description?: string;
+  timeObservation: T;
+
+  id?: string;
+  text?: string;
   editable?: boolean;
 }
 
-export interface Marker<T extends TimeObservation, C extends MarkerConfig<T, S>, S extends MarkerStyle, E extends MarkerChangeEvent> extends Component<C, S, Konva.Group>, HasMarkerLane, OnMeasurementsChange {
-  onChange$: Subject<E>;
-  onClick$: Subject<MarkerEvent>;
-  onMouseEnter$: Subject<MarkerEvent>;
-  onMouseLeave$: Subject<MarkerEvent>;
-  onMouseOver$: Subject<MarkerEvent>;
-  onMouseOut$: Subject<MarkerEvent>;
+export interface Marker extends KonvaComponent<MarkerConfig<any, any>, MarkerStyle, Konva.Group> {
+  onClick$: Observable<MarkerEvent>;
+  onMouseEnter$: Observable<MarkerEvent>;
+  onMouseLeave$: Observable<MarkerEvent>;
+  onMouseOver$: Observable<MarkerEvent>;
+  onMouseOut$: Observable<MarkerEvent>;
 
-  get style(): S;
+  refreshTimelinePosition(): void;
 
-  setStyle(value: Partial<S>);
+  get id(): string;
 
-  getId(): string;
+  get timeObservation(): TimeObservation;
 
-  getDescription(): string;
+  set timeObservation(timeObservation: TimeObservation);
 
-  getTimeObservation(): T;
+  get editable(): boolean;
 
-  setTimeObservation(timeObservation: T): void;
+  set editable(editable: boolean);
 
-  setEditable(editable: boolean);
-
-  setTimeline(timeline: Timeline);
+  get text(): string | undefined;
 }
 
-export type GenericMarker = Marker<TimeObservation, MarkerConfig<TimeObservation, MarkerStyle>, MarkerStyle, MarkerChangeEvent>;
-
-export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConfig<T, S>, S extends MarkerStyle, E extends MarkerChangeEvent> extends BaseComponent<C, S, Konva.Group> implements Marker<T, C, S, E> {
-  protected id: string;
-  protected observation: T;
-  protected description: string;
-  protected editable: boolean;
-
-  // region konva
-  protected group: Konva.Group;
-  // endregion
-
-  protected markerLane: MarkerLane;
-  protected timeline: Timeline;
-
-  public readonly onChange$: Subject<E> = new Subject<E>();
+export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConfig<T, S>, S extends MarkerStyle, E extends MarkerChangeEvent> extends BaseKonvaComponent<C, S, Konva.Group> implements Marker {
   public readonly onClick$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
   public readonly onMouseEnter$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
   public readonly onMouseLeave$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
   public readonly onMouseOver$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
   public readonly onMouseOut$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
 
+  public readonly onChange$: Subject<E> = new Subject<E>();
+
+  protected _group: Konva.Group;
+  protected _timeline?: Timeline;
+  protected _markerLane?: MarkerLane;
+
+  protected _id: string;
+  protected _timeObservation: T;
+  protected _editable: boolean;
+  private _text?: string;
+
   protected constructor(config: C) {
     super(config);
-    this.id = Validators.id()(this.config.id);
-    this.description = Validators.description()(this.config.description);
-    this.editable = Validators.boolean()(this.config.editable);
-    this.observation = this.config.observation;
-  }
 
-  protected createCanvasNode(): Konva.Group {
-    this.group = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
-      ...this.timeline.getTimecodedGroupDimension()
-    });
+    this._id = StringUtil.isNullUndefinedOrWhitespace(this.config.id) ? UuidUtil.uuid() : Validators.id()(this.config.id!);
 
-    return this.group;
-  }
+    this._timeObservation = this.config.timeObservation;
+    this._editable = this.config.editable ? Validators.boolean()(this.config.editable!) : false;
+    this._text = this.config.text;
 
-  protected afterCanvasNodeInit() {
-    this.timeline.onZoom$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-      this.onMeasurementsChange();
-    })
+    this._group = new Konva.Group();
 
-    this.group.on('click', (event) => {
+    this._group.on('click', (event) => {
       this.onClick$.next({})
     })
 
-        this.group.on('touchend', (event) => {
-            this.onClick$.next({})
-        })
-
-    this.group.on('mouseenter', (event) => {
+    this._group.on('mouseenter', (event) => {
       this.onMouseEnter$.next({})
     })
 
-    this.group.on('mouseleave', (event) => {
+    this._group.on('mouseleave', (event) => {
       this.onMouseLeave$.next({})
     })
 
-    this.group.on('mouseover', (event) => {
+    this._group.on('mouseover', (event) => {
       this.onMouseOver$.next({})
     })
 
-    this.group.on('mouseout', (event) => {
+    this._group.on('mouseout', (event) => {
       this.onMouseOut$.next({})
     })
   }
 
-  onMeasurementsChange() {
-    this.group.setAttrs({
-      ...this.timeline.getTimecodedGroupDimension()
-    })
+  protected provideKonvaNode(): Konva.Group {
+    if (!this._timeline) {
+      throw new Error(`Marker not attached to timeline`);
+    }
+
+    return this._group;
   }
 
-  destroy() {
+  abstract onObservationChange(): void;
+
+  abstract refreshTimelinePosition(): void;
+
+  override destroy() {
     super.destroy();
 
-    let subjects = [this.onChange$, this.onClick$, this.onMouseEnter$, this.onMouseLeave$];
-    completeSubjects(...subjects);
-    unsubscribeSubjects(...subjects)
+    konvaUnlistener(
+      this._group
+    )
+
+    completeUnsubscribeSubjects(
+      this.onChange$,
+      this.onClick$,
+      this.onMouseEnter$,
+      this.onMouseLeave$,
+      this.onMouseOver$,
+      this.onMouseOut$
+    )
   }
 
-  abstract onChange();
-
-  setTimeline(timeline: Timeline) {
-    this.timeline = timeline;
+  attachToTimeline(timeline: Timeline, markerLane: MarkerLane) {
+    this._timeline = timeline;
+    this._markerLane = markerLane;
   }
 
-  setMarkerLane(markerLane: MarkerLane) {
-    this.markerLane = markerLane;
-  }
+  protected getMarkerHandleVerticals(): MarkerHandleVerticals {
+    if (!this._timeline) {
+      throw new Error(`Marker not attached to timeline`);
+    }
 
-  getId(): string {
-    return this.id;
-  }
+    let timelineTimecodedRect = this._timeline!.getTimecodedFloatingDimension();
+    let timecodedRect = this._markerLane!.getTimecodedRect();
 
-  getDescription(): string {
-    return this.description;
-  }
-
-  getTimeObservation(): T {
-    return this.observation;
-  }
-
-  setTimeObservation(timeObservation: T) {
-    if (this.editable) {
-      this.observation = timeObservation;
-      this.onChange();
+    switch (this.style.renderType) {
+      case 'spanning':
+        return {
+          area: {
+            y: 0,
+            height: timelineTimecodedRect.height
+          },
+          handle: {
+            y: timecodedRect.y + (timecodedRect.height / 2),
+            height: 0
+          }
+        }
+      case 'lane':
+        return {
+          area: {
+            y: timecodedRect.y,
+            height: timecodedRect.height
+          },
+          handle: {
+            y: timecodedRect.height / 2,
+            height: 0
+          }
+        }
     }
   }
 
-  setEditable(editable: boolean) {
-    this.editable = editable;
+  protected onDragMove(newPosition: Position): Position {
+    if (!this._timeline) {
+      throw new Error(`Marker not attached to timeline`);
+    }
+
+    let newX = this._timeline.constrainTimelinePosition(newPosition.x);
+    return {
+      x: newX,
+      y: this.getMarkerHandleVerticals().area.y  // restrict vertical movement
+    };
   }
 
-  get style(): S {
-    return this.styleAdapter.style;
+  get timeObservation(): T {
+    return this._timeObservation;
   }
 
-  setStyle(value: Partial<S>) {
-    this.styleAdapter.style = value;
+  set timeObservation(value: T) {
+    if (this.editable) {
+      this._timeObservation = value;
+      this.onObservationChange();
+    }
+  }
+
+  get editable(): boolean {
+    return this._editable;
+  }
+
+  set editable(value: boolean) {
+    this._editable = value;
+  }
+
+  get id(): string {
+    return this._id;
+  }
+
+  get text(): string | undefined {
+    return this._text;
   }
 }

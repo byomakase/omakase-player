@@ -1,37 +1,40 @@
-/**
- *       Copyright 2023 ByOmakase, LLC (https://byomakase.org)
+/*
+ * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
- *       Licensed under the Apache License, Version 2.0 (the "License");
- *       you may not use this file except in compliance with the License.
- *       You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *           http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *       Unless required by applicable law or agreed to in writing, software
- *       distributed under the License is distributed on an "AS IS" BASIS,
- *       WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *       See the License for the specific language governing permissions and
- *       limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-import {BaseComponent, ComponentConfig, ComponentConfigStyleComposed, composeConfigAndDefault} from '../common/component';
+import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle} from '../layout/konva-component';
 import Konva from 'konva';
 import {Constants} from '../constants';
-import {HasRectMeasurement, OnMeasurementsChange, Position, RectMeasurement} from '../common/measurement';
+import {HasRectMeasurement, OnMeasurementsChange, RectMeasurement} from '../common/measurement';
 import {filter, Subject, takeUntil} from 'rxjs';
 import {VideoLoadedEvent} from '../types';
-import {StylesProvider} from '../common/styles-provider';
 import {nextCompleteVoidSubject} from '../util/observable-util';
 import {VideoControllerApi} from '../video/video-controller-api';
+import {TimelineApi} from '../api';
 
 export interface TimecodeDisplayStyle {
   x: number;
   y: number;
   width: number;
   height: number;
-  textFontSize: number;
-  textFill: string;
-  visible: boolean
+
+  visible: boolean,
+
+  fontSize?: number;
+  fill?: string;
+  offsetY?: number,
 }
 
 export interface TimecodeDisplayConfig extends ComponentConfig<TimecodeDisplayStyle> {
@@ -43,94 +46,104 @@ const configDefault: TimecodeDisplayConfig = {
     ...Constants.POSITION_TOP_LEFT,
     width: 150,
     height: 20,
-    textFontSize: 20,
-    textFill: '#0d0f05',
-    visible: true
+
+    visible: true,
+
+    fontSize: 20,
+    fill: '#0d0f05',
+    offsetY: -3,
   }
 }
 
-export class TimecodeDisplay extends BaseComponent<TimecodeDisplayConfig, TimecodeDisplayStyle, Konva.Group> implements OnMeasurementsChange, HasRectMeasurement {
-  protected readonly stylesProvider: StylesProvider = StylesProvider.instance();
+export class TimecodeDisplay extends BaseKonvaComponent<TimecodeDisplayConfig, TimecodeDisplayStyle, Konva.Group> implements OnMeasurementsChange, HasRectMeasurement {
+  private _timeline: TimelineApi;
+  private _videoController: VideoControllerApi;
 
-  // region konva
-  private group: Konva.Group;
-  private text: Konva.Text;
-  // endregion
+  private _group: Konva.Group;
+  private _text: Konva.Text;
 
-  private videoController: VideoControllerApi;
-  private videoEventStreamBreaker$ = new Subject<void>();
+  private _videoEventStreamBreaker$ = new Subject<void>();
 
-  constructor(config: Partial<ComponentConfigStyleComposed<TimecodeDisplayConfig>>, videoController: VideoControllerApi) {
-    super(composeConfigAndDefault(config, configDefault));
+  constructor(config: Partial<ConfigWithOptionalStyle<TimecodeDisplayConfig>>, timeline: TimelineApi, videoController: VideoControllerApi) {
+    super({
+      ...configDefault,
+      ...config,
+      style: {
+        ...configDefault.style,
+        ...config.style,
+      },
+    });
 
-    this.videoController = videoController;
-  }
+    this._timeline = timeline;
+    this._videoController = videoController;
 
-  protected createCanvasNode(): Konva.Group {
-    this.group = new Konva.Group({
+    this._group = new Konva.Group({
       x: this.style.x,
       y: this.style.y,
       width: this.style.width,
       height: this.style.height,
       listening: false,
-      visible: this.style.visible
+      visible: this.style.visible,
     });
 
-    this.text = new Konva.Text({
+    this._text = new Konva.Text({
       ...Constants.POSITION_TOP_LEFT,
-      width: this.group.width(),
-      height: this.group.height(),
+      width: this._group.width(),
+      // height: this._group.height(),
       text: ``,
-      fontSize: this.style.textFontSize,
-      fontFamily: this.stylesProvider.styles.omakasePlayerStyle.fontFamily,
-      fill: this.style.textFill,
+      fontSize: this.style.fontSize,
+      fontFamily: this._timeline.style.textFontFamily,
+      fontStyle: this._timeline.style.textFontStyle,
+      fill: this.style.fill,
       visible: true,
       align: 'left',
-      verticalAlign: 'middle'
+      verticalAlign: 'middle',
+      offsetY: this.style.offsetY
     });
 
-    this.group.add(this.text);
+    this._group.add(this._text);
 
-    return this.group;
+    this._timeline.onStyleChange$.pipe(takeUntil(this._destroyed$)).subscribe((timelineStyle) => {
+      this._text.setAttrs({
+        fontFamily: this._timeline.style.textFontFamily,
+        fontStyle: this._timeline.style.textFontStyle,
+      })
+    })
+
+    this._styleAdapter.onChange$.pipe(takeUntil(this._destroyed$), filter(p => !!p)).subscribe((styles) => {
+      this._text.setAttrs({
+        fontSize: styles.fontSize,
+        fill: styles.fill
+      })
+    })
+
+    this._videoController.onVideoLoaded$.pipe(filter(p => !!p), takeUntil(this._destroyed$)).subscribe((event) => {
+      this.onVideoLoadedEvent(event!);
+    })
   }
 
-  protected afterCanvasNodeInit() {
-    super.afterCanvasNodeInit();
-
-    this.stylesProvider.onChange$.pipe(filter(p => !!p), takeUntil(this.onDestroy$)).subscribe((styles) => {
-      this.text.setAttrs({
-        fontFamily: this.stylesProvider.styles.omakasePlayerStyle.fontFamily
-      })
-    })
-
-    this.styleAdapter.onChange$.pipe(takeUntil(this.onDestroy$), filter(p => !!p)).subscribe((styles) => {
-      this.text.setAttrs({
-        fontSize: styles.textFontSize,
-        fill: styles.textFill
-      })
-    })
-
-    this.videoController.onVideoLoaded$.pipe(filter(p => !!p), takeUntil(this.onDestroy$)).subscribe((event) => {
-      this.onVideoLoadedEvent(event);
-    })
+  protected provideKonvaNode(): Konva.Group {
+    return this._group;
   }
 
   onMeasurementsChange() {
-    this.group.width(this.style.width);
+    this._text.size({
+      ...this._group.size()
+    })
   }
 
   private fireVideoEventStreamBreaker() {
-    nextCompleteVoidSubject(this.videoEventStreamBreaker$);
-    this.videoEventStreamBreaker$ = new Subject<void>();
+    nextCompleteVoidSubject(this._videoEventStreamBreaker$);
+    this._videoEventStreamBreaker$ = new Subject<void>();
   }
 
   private onVideoLoadedEvent(event: VideoLoadedEvent) {
     this.fireVideoEventStreamBreaker();
 
-    this.text.text(this.videoController.formatTimestamp(0));
+    this._text.text(this._videoController.formatToTimecode(0));
 
-    this.videoController.onVideoTimeChange$.pipe(takeUntil(this.videoEventStreamBreaker$)).subscribe((event) => {
-      this.text.text(this.videoController.formatTimestamp(event.currentTime));
+    this._videoController.onVideoTimeChange$.pipe(takeUntil(this._videoEventStreamBreaker$)).subscribe((event) => {
+      this._text.text(this._videoController.formatToTimecode(event.currentTime));
     })
   }
 
@@ -138,23 +151,11 @@ export class TimecodeDisplay extends BaseComponent<TimecodeDisplayConfig, Timeco
     this.style = {
       visible: visible
     }
-    if (this.isInitialized()) {
-      this.group.visible(visible);
-    }
-  }
-
-  setPosition(position: Position) {
-    this.style = {
-      ...position
-    }
-    this.group.setAttrs({
-      ...position
-    });
-    this.onMeasurementsChange();
+    this._group.visible(visible);
   }
 
   getRect(): RectMeasurement {
-    return this.group.getClientRect();
+    return this._group.getClientRect();
   }
 
 }

@@ -1,46 +1,51 @@
-/**
- *       Copyright 2023 ByOmakase, LLC (https://byomakase.org)
+/*
+ * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
- *       Licensed under the Apache License, Version 2.0 (the "License");
- *       you may not use this file except in compliance with the License.
- *       You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *           http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *       Unless required by applicable law or agreed to in writing, software
- *       distributed under the License is distributed on an "AS IS" BASIS,
- *       WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *       See the License for the specific language governing permissions and
- *       limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 import {HTMLVideoElementEventKeys, VIDEO_CONTROLLER_CONFIG_DEFAULT, VideoController, VideoControllerConfig} from './video-controller';
-// TODO important when building !
-// import Hls from "hls.js/dist/hls.min";
 import Hls, {HlsConfig, MediaPlaylist} from 'hls.js';
 
-import {first, forkJoin, fromEvent, Observable} from 'rxjs';
-import {Video} from './video';
+import {first, forkJoin, fromEvent, map, Observable} from 'rxjs';
 import {z} from 'zod';
+import {VttUtil} from '../util/vtt-util';
+import {SubtitlesVttTrack} from '../track';
+import {UuidUtil} from '../util/uuid-util';
+import {Video, VideoLoadOptions} from './model';
 
 export interface VideoHlsControllerConfig extends VideoControllerConfig {
-  hls: Partial<HlsConfig>
+  hls: Partial<HlsConfig>,
+  fetchManifestSubtitleTracks: boolean,
+  subtitleDisplay: boolean
 }
 
 export const VIDEO_HLS_CONTROLLER_CONFIG_DEFAULT: VideoHlsControllerConfig = {
   ...VIDEO_CONTROLLER_CONFIG_DEFAULT,
   hls: {
     ...Hls.DefaultConfig
-  }
+  },
+  fetchManifestSubtitleTracks: true,
+  subtitleDisplay: false
 }
 
-export class VideoHlsController extends VideoController {
-  protected hls: Hls;
+export class VideoHlsController extends VideoController<VideoHlsControllerConfig> {
+  protected _hls: Hls;
 
-  constructor(videoHlsControllerConfig: Partial<VideoHlsControllerConfig>) {
+  constructor(config: Partial<VideoHlsControllerConfig>) {
     super({
       ...VIDEO_HLS_CONTROLLER_CONFIG_DEFAULT,
-      ...videoHlsControllerConfig
+      ...config
     });
 
     if (Hls.isSupported()) {
@@ -49,15 +54,15 @@ export class VideoHlsController extends VideoController {
       console.error('hls is not supported through MediaSource extensions')
     }
 
-    this.hls = new Hls({
-      ...videoHlsControllerConfig.hls
+    this._hls = new Hls({
+      ...config.hls
     });
   }
 
-  videoLoad(sourceUrl: string, frameRate: number, duration: number): Observable<Video> {
+  loadVideoInternal(sourceUrl: string, frameRate: number, options?: VideoLoadOptions): Observable<Video> {
     return new Observable<Video>(o$ => {
 
-      this.hls.on(Hls.Events.ERROR, function (event, data) {
+      this._hls.on(Hls.Events.ERROR, function (event, data) {
         let errorType = data.type;
         let errorDetails = data.details;
         let errorFatal = data.fatal;
@@ -75,7 +80,7 @@ export class VideoHlsController extends VideoController {
 
       let hlsMediaAttached$ = new Observable<boolean>(o$ => {
         // MEDIA_ATTACHED event is fired by hls object once MediaSource is ready
-        this.hls.once(Hls.Events.MEDIA_ATTACHED, function (event, mediaAttachedData) {
+        this._hls.once(Hls.Events.MEDIA_ATTACHED, function (event, mediaAttachedData) {
           console.debug('video element and hls.js are now bound together');
           o$.next(true);
           o$.complete();
@@ -83,8 +88,16 @@ export class VideoHlsController extends VideoController {
       })
 
       let hlsManifestParsed$ = new Observable<boolean>(o$ => {
-        this.hls.once(Hls.Events.MANIFEST_PARSED, function (event, manifestParsedData) {
+        this._hls.once(Hls.Events.MANIFEST_PARSED, function (event, manifestParsedData) {
           console.debug('manifest loaded, found ' + manifestParsedData.levels.length + ' quality level');
+          o$.next(true);
+          o$.complete();
+        });
+      })
+
+      let hlsFragLoaded$ = new Observable<boolean>(o$ => {
+        this._hls.once(Hls.Events.FRAG_LOADED, function (event, manifestParsedData) {
+
           o$.next(true);
           o$.complete();
         });
@@ -94,23 +107,83 @@ export class VideoHlsController extends VideoController {
       let videoLoadedMetadata$ = fromEvent(this.videoElement, HTMLVideoElementEventKeys.LOADEDMETEDATA).pipe(first());
 
       forkJoin([hlsMediaAttached$, hlsManifestParsed$, videoLoadedData$, videoLoadedMetadata$]).pipe(first()).subscribe(result => {
-        duration = duration ? z.coerce.number().parse(duration) : duration;
-        duration = duration ? duration : this.videoElement.duration;
+        let duration: number;
+        if (options && options.duration) {
+          duration = z.coerce.number().parse(options.duration);
+          duration = duration ? duration : this.videoElement.duration;
+        } else {
+          duration = this.videoElement.duration;
+        }
         let video = new Video(sourceUrl, frameRate, duration)
 
-        o$.next(video);
-        o$.complete();
+        this._hls.on(Hls.Events.FRAG_LOADED, (event, data) => {
+          if (data.frag.endList && data.frag.type == 'main' && video.correctedDuration && (video.correctedDuration > (data.frag.start + data.frag.duration))) {
+            /**
+             * if we land on exact time of the frame start at the end of video, there is the chance that we won't load the frame
+             */
+            video.correctedDuration = Number.isInteger(data.frag.start + data.frag.duration * video.frameRate) ? data.frag.start + data.frag.duration - this._frameDurationSpillOverCorrection : data.frag.start + data.frag.duration;
+          }
+        });
+
+        let durationFractionThree = Number.parseFloat(video.duration.toFixed(3));
+        if (Number.isInteger(Number.parseFloat(((video.duration) * video.frameRate).toFixed(1)))) {
+          durationFractionThree = Number.parseFloat((durationFractionThree - this._frameDurationSpillOverCorrection).toFixed(3));
+          video.correctedDuration = durationFractionThree;
+        }
+
+        this._hls.subtitleDisplay = this._config.subtitleDisplay;
+        if (!this._config.subtitleDisplay) {
+          this._hls.subtitleTrack = -1;
+        }
+        if (this._config.fetchManifestSubtitleTracks && this._hls.allSubtitleTracks && this._hls.allSubtitleTracks.length > 0) {
+          this._subtitlesVttTracks = [];
+
+          let os$ = this._hls.allSubtitleTracks.map(subtitleTrack => {
+            return VttUtil.fetchFromM3u8SegmentedConcat(subtitleTrack.url).pipe(map(webvttText => {
+              return {
+                subtitleTrack: subtitleTrack,
+                webvttText: webvttText
+              }
+            }))
+          });
+
+          forkJoin(os$).subscribe({
+            next: (resultList) => {
+              resultList.forEach(result => {
+                if (result.webvttText) {
+                  let subtitlesVttTrack = new SubtitlesVttTrack({
+                    id: UuidUtil.uuid(),
+                    default: false,
+                    src: VttUtil.createWebvttBlob(result.webvttText),
+                    language: result.subtitleTrack.lang ? result.subtitleTrack.lang : 'n/a',
+                    label: result.subtitleTrack.name ? result.subtitleTrack.name : 'n/a',
+                  })
+                  this._subtitlesVttTracks?.push(subtitlesVttTrack);
+                }
+              })
+
+              o$.next(video);
+              o$.complete();
+            }
+          })
+
+        } else {
+          o$.next(video);
+          o$.complete();
+        }
+
+
       })
 
-      this.hls.loadSource(sourceUrl)
-      this.hls.attachMedia(this.videoElement);
+      this._hls.loadSource(sourceUrl)
+      this._hls.attachMedia(this.videoElement);
     })
   }
 
-  protected initEventHandlers() {
+  protected override initEventHandlers() {
     super.initEventHandlers();
 
-    this.hls.on(Hls.Events.ERROR, function (event, data) {
+    this._hls.on(Hls.Events.ERROR, function (event, data) {
       let errorType = data.type;
       let errorDetails = data.details;
       let errorFatal = data.fatal;
@@ -120,32 +193,29 @@ export class VideoHlsController extends VideoController {
       if (data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR
         || data.details === Hls.ErrorDetails.BUFFER_APPEND_ERROR
         || data.details === Hls.ErrorDetails.BUFFER_APPENDING_ERROR) {
-
-        // TODO: commenting out unitialized variable
-        // this.videoPlaybackStateHolder.buffering = true;
       }
     });
   }
 
-  getAudioTracks(): MediaPlaylist[] {
+  override getAudioTracks(): MediaPlaylist[] {
     if (!this.isVideoLoaded) {
-      return null;
+      return [];
     }
-    return this.hls.audioTracks;
+    return this._hls.audioTracks;
   }
 
-  getCurrentAudioTrack(): any {
-    return this.getAudioTracks()[this.hls.audioTrack];
+  override getCurrentAudioTrack(): any {
+    return this.getAudioTracks()[this._hls.audioTrack];
   }
 
-  setAudioTrack(audioTrackId: number) {
+  override setAudioTrack(audioTrackId: number) {
     if (!this.isVideoLoaded) {
-      return null;
+      return;
     }
 
-    let previousIndex: number = this.hls.audioTrack;
-    this.hls.audioTrack = audioTrackId;
-    let currentIndex: number = this.hls.audioTrack;
+    let previousIndex: number = this._hls.audioTrack;
+    this._hls.audioTrack = audioTrackId;
+    let currentIndex: number = this._hls.audioTrack;
 
     if (currentIndex >= 0 && previousIndex !== currentIndex) {
       this.onAudioSwitched$.next({
@@ -154,9 +224,20 @@ export class VideoHlsController extends VideoController {
     }
   }
 
-  getHls(): Hls {
-    return this.hls;
+  override getHls(): Hls {
+    return this._hls;
   }
 
+  override destroy() {
+    super.destroy();
 
+    try {
+      if (this._hls) {
+        this._hls.removeAllListeners();
+        this._hls.destroy();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
 }

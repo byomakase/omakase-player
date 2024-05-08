@@ -1,26 +1,27 @@
-/**
- *       Copyright 2023 ByOmakase, LLC (https://byomakase.org)
+/*
+ * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
- *       Licensed under the Apache License, Version 2.0 (the "License");
- *       you may not use this file except in compliance with the License.
- *       You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *           http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *       Unless required by applicable law or agreed to in writing, software
- *       distributed under the License is distributed on an "AS IS" BASIS,
- *       WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *       See the License for the specific language governing permissions and
- *       limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 import {Position} from '../common/measurement';
 import {MomentObservation, PeriodObservation} from './model';
 import {Thumbnail} from '../timeline/thumbnail/thumbnail';
-import {Video} from '../video/video';
 import {CamelToSnakeCase} from './types';
 import {OmakaseTextTrack, OmakaseTextTrackCue} from './track';
-import {GenericMarker} from '../timeline/marker/marker';
+import {Marker} from '../timeline';
+import {OmakaseChartCue} from './chart';
+import {Video} from '../video';
 
 export const OmakasePlayerEvents: OmakasePlayerEventsType = {
   OMAKASE_SUBTITLES_HIDE: 'omakaseSubtitlesHide',
@@ -35,6 +36,7 @@ export const OmakasePlayerEvents: OmakasePlayerEventsType = {
   OMAKASE_VIDEO_TIME_CHANGE: 'omakaseVideoTimeChange',
   OMAKASE_VIDEO_AUDIO_SWITCHED: 'omakaseVideoAudioSwitched',
   OMAKASE_AUDIO_SWITCHED: 'omakaseAudioSwitched',
+  OMAKASE_SUBTITLES_LOADED: 'omakaseSubtitlesLoaded',
   OMAKASE_SUBTITLES_CREATE: 'omakaseSubtitlesCreate',
   OMAKASE_SUBTITLES_REMOVE: 'omakaseSubtitlesRemove',
   OMAKASE_SUBTITLES_SHOW: 'omakaseSubtitlesShow',
@@ -66,6 +68,7 @@ export type AudioEventMap = {
 }
 
 export type SubtitlesEventMap = {
+  'omakaseSubtitlesLoaded': SubtitlesLoadedEvent,
   'omakaseSubtitlesCreate': SubtitlesCreateEvent,
   'omakaseSubtitlesRemove': SubtitlesEvent,
   'omakaseSubtitlesShow': SubtitlesEvent,
@@ -130,20 +133,40 @@ export interface VideoLoadedEvent extends VideoEvent {
 }
 
 export interface VideoPlayEvent extends VideoEvent {
-
+  /**
+   * Current time
+   */
+  currentTime: number;
 }
 
 export interface VideoTimeChangeEvent extends VideoEvent {
+  /**
+   * Current time
+   */
   currentTime: number,
+
+  /**
+   * Current frame
+   */
   frame: number
 }
 
 export interface VideoSeekingEvent extends VideoEvent {
+  /**
+   * Current time
+   */
   currentTime: number,
+
+  /**
+   * Time to seek
+   */
   newTime: number
 }
 
 export interface VideoSeekedEvent extends VideoEvent {
+  /**
+   * Current time
+   */
   currentTime: number
 }
 
@@ -152,6 +175,13 @@ export interface VideoBufferingEvent extends VideoEvent {
     start: number,
     end: number
   }[]
+}
+
+export interface VideoVolumeEvent extends VideoEvent {
+  /**
+   * Volume
+   */
+  volume: number
 }
 
 export interface VideoEndedEvent extends VideoEvent {
@@ -166,6 +196,10 @@ export interface VideoErrorEvent extends VideoEvent {
 }
 
 export interface AudioEvent extends OmakaseEvent {
+
+  /**
+   * Audio track. Type depends on VideoController implementation.
+   */
   audioTrack: any
 }
 
@@ -174,6 +208,10 @@ export interface AudioEvent extends OmakaseEvent {
 // region subtitles
 
 export interface SubtitlesEvent extends OmakaseEvent {
+
+}
+
+export interface SubtitlesLoadedEvent extends OmakaseEvent {
 
 }
 
@@ -211,6 +249,7 @@ export interface ScrollbarScrollEvent extends ScrollbarEvent {
 
 export interface ScrollbarZoomEvent extends ScrollbarEvent {
   zoomPercent: number;
+  zoomFocus: number;
 }
 
 // endregion
@@ -234,7 +273,7 @@ export interface MarkerChangeEvent extends MarkerEvent {
 }
 
 export interface MarkerFocusEvent extends MarkerEvent {
-  marker: GenericMarker;
+  marker: Marker;
 }
 
 export interface MomentMarkerChangeEvent extends MarkerChangeEvent {
@@ -243,6 +282,18 @@ export interface MomentMarkerChangeEvent extends MarkerChangeEvent {
 
 export interface PeriodMarkerChangeEvent extends MarkerChangeEvent {
   timeObservation: PeriodObservation
+}
+
+// endregion
+
+// region charts
+
+export interface ChartEvent extends OmakaseEvent {
+
+}
+
+export interface ChartCueEvent extends ChartEvent {
+  cue: OmakaseChartCue;
 }
 
 // endregion

@@ -1,39 +1,42 @@
-/**
- *       Copyright 2023 ByOmakase, LLC (https://byomakase.org)
+/*
+ * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
- *       Licensed under the Apache License, Version 2.0 (the "License");
- *       you may not use this file except in compliance with the License.
- *       You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *           http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *       Unless required by applicable law or agreed to in writing, software
- *       distributed under the License is distributed on an "AS IS" BASIS,
- *       WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *       See the License for the specific language governing permissions and
- *       limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-import {BaseComponent, ComponentConfig, ComponentConfigStyleComposed, composeConfigAndDefault} from '../common/component';
+import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle} from '../layout/konva-component';
 import Konva from 'konva';
 import {Constants} from '../constants';
 import {OnMeasurementsChange} from '../common/measurement';
 import {Timeline} from './timeline';
-import {filter, takeUntil} from 'rxjs';
-import {StylesProvider} from '../common/styles-provider';
+import {takeUntil} from 'rxjs';
 
 export interface PlayheadHoverStyle {
   x: number;
   y: number;
   height: number;
   fill: string;
-  fillSnapped: string;
+  snappedFill: string;
   lineWidth: number;
-  symbolY: number;
+
   symbolHeight: number;
+  symbolYOffset: number;
+
   textFontSize: number;
   textFill: string;
   textSnappedFill: string;
+  textYOffset: number;
+
   visible: boolean;
 }
 
@@ -46,94 +49,104 @@ const configDefault: PlayheadHoverConfig = {
     ...Constants.POSITION_TOP_LEFT,
     height: 100,
     fill: '#737373',
-    fillSnapped: '#ffd500',
+    snappedFill: '#ffd500',
     lineWidth: 2,
-    symbolY: 0,
+
+
     symbolHeight: 15,
+    symbolYOffset: 0,
+
     textFontSize: 12,
     textFill: '#0d0f05',
     textSnappedFill: '#f43530',
+    textYOffset: 0,
+
     visible: false
   }
 }
 
-export class PlayheadHover extends BaseComponent<PlayheadHoverConfig, PlayheadHoverStyle, Konva.Group> implements OnMeasurementsChange {
-  protected readonly stylesProvider: StylesProvider = StylesProvider.instance();
+export class PlayheadHover extends BaseKonvaComponent<PlayheadHoverConfig, PlayheadHoverStyle, Konva.Group> implements OnMeasurementsChange {
+  private _timeline: Timeline;
 
-  protected group: Konva.Group;
-  protected line: Konva.Line;
-  protected symbol: Konva.Circle;
-  protected label: Konva.Label;
-  protected text: Konva.Text;
+  protected _group: Konva.Group;
+  protected _line: Konva.Line;
+  protected _symbol: Konva.Circle;
+  protected _label: Konva.Label;
+  protected _text: Konva.Text;
 
-  private timeline: Timeline;
+  constructor(config: Partial<ConfigWithOptionalStyle<PlayheadHoverConfig>>, timeline: Timeline) {
+    super({
+      ...configDefault,
+      ...config,
+      style: {
+        ...configDefault.style,
+        ...config.style,
+      },
+    });
 
-  constructor(config: Partial<ComponentConfigStyleComposed<PlayheadHoverConfig>>, timeline: Timeline) {
-    super(composeConfigAndDefault(config, configDefault));
-    this.timeline = timeline;
-  }
+    this._timeline = timeline;
 
-  protected createCanvasNode(): Konva.Group {
-    this.group = new Konva.Group({
+    this._group = new Konva.Group({
       x: this.style.x,
       y: this.style.y,
       visible: this.style.visible,
       listening: false
     });
 
-    this.line = new Konva.Line({
+    this._line = new Konva.Line({
       points: [this.style.x, 0, this.style.x, this.style.height],
       stroke: this.style.fill,
       strokeWidth: this.style.lineWidth,
       listening: false
     })
 
-    this.symbol = new Konva.Circle({
-      y: this.style.symbolY,
+    this._symbol = new Konva.Circle({
       fill: this.style.fill,
       radius: this.style.symbolHeight / 2,
-      offsetY: -this.style.symbolHeight / 2
+      offsetY: this.style.symbolYOffset,
     });
 
-    this.group.add(this.symbol);
-    this.group.add(this.line);
+    this._group.add(this._symbol);
+    this._group.add(this._line);
 
-    this.label = new Konva.Label({
-      ...Constants.POSITION_TOP_LEFT,
+    this._label = new Konva.Label({
+      y: this.style.textYOffset,
       listening: false
     });
 
-    this.text = new Konva.Text({
+    this._text = new Konva.Text({
       fontSize: this.style.textFontSize,
-      fontFamily: this.stylesProvider.styles.omakasePlayerStyle.fontFamily,
+      fontFamily: this._timeline.style.textFontFamily,
       fill: this.style.textFill,
       ...Constants.POSITION_TOP_LEFT,
       text: ``,
       listening: false
     });
 
-    this.label.y(-this.text.getSelfRect().height);
+    // this._label.y(-this._text.getSelfRect().height);
 
-    this.label.add(this.text);
-    this.group.add(this.label)
+    this._label.add(this._text);
+    this._group.add(this._label)
 
-    return this.group;
-  }
 
-  protected afterCanvasNodeInit() {
-    this.styleAdapter.onChange$.pipe(takeUntil(this.onDestroy$)).subscribe((style) => {
+    this._styleAdapter.onChange$.pipe(takeUntil(this._destroyed$)).subscribe((style) => {
       this.onMeasurementsChange();
     })
 
-    this.stylesProvider.onChange$.pipe(filter(p => !!p), takeUntil(this.onDestroy$)).subscribe((styles) => {
-      this.text.setAttrs({
-        fontFamily: this.stylesProvider.styles.omakasePlayerStyle.fontFamily
+    this._timeline.onStyleChange$.pipe(takeUntil(this._destroyed$)).subscribe((timelineStyle) => {
+      this._text.setAttrs({
+        fontFamily: this._timeline.style.textFontFamily,
+        fontStyle: this._timeline.style.textFontStyle,
       })
     })
   }
 
+  protected provideKonvaNode(): Konva.Group {
+    return this._group;
+  }
+
   onMeasurementsChange() {
-    this.line.points([this.line.x(), 0, this.line.x(), this.style.height])
+    this._line.points([this._line.x(), 0, this._line.x(), this.style.height])
   }
 
   sync(x: number, isSnapped = false) {
@@ -141,31 +154,31 @@ export class PlayheadHover extends BaseComponent<PlayheadHoverConfig, PlayheadHo
       this.toggleVisible(true);
     }
 
-    let text = this.timeline.timelinePositionToTimeFormatted(x);
+    let text = this._timeline.timelinePositionToTimeFormatted(x);
 
-    let textRect = this.text.getSelfRect();
+    let textRect = this._text.getSelfRect();
     let textHalfWidth = textRect.width / 2
     let labelX = -textHalfWidth;
-    let horizontalMeasurement = this.timeline.getTimecodedGroupHorizontalMeasurement();
+    let horizontals = this._timeline.getTimecodedFloatingHorizontals();
 
-    if ((horizontalMeasurement.width - x) < (textHalfWidth)) {
-      labelX = -textRect.width + (horizontalMeasurement.width - x);
+    if ((horizontals.width - x) < (textHalfWidth)) {
+      labelX = -textRect.width + (horizontals.width - x);
     } else if (x < textHalfWidth) {
       labelX = -textHalfWidth + (textHalfWidth - x);
     }
 
-    this.group.x(x);
-    this.text.text(text);
-    this.label.x(labelX)
+    this._group.x(x);
+    this._text.text(text);
+    this._label.x(labelX)
 
     if (isSnapped) {
-      this.line.stroke(this.style.fillSnapped)
-      this.text.fill(this.style.fillSnapped)
-      this.symbol.visible(false);
+      this._line.stroke(this.style.snappedFill)
+      this._text.fill(this.style.snappedFill)
+      this._symbol.visible(false);
     } else {
-      this.line.stroke(this.style.fill)
-      this.text.fill(this.style.fill)
-      this.symbol.visible(true);
+      this._line.stroke(this.style.fill)
+      this._text.fill(this.style.textFill)
+      this._symbol.visible(true);
     }
   }
 
@@ -173,7 +186,7 @@ export class PlayheadHover extends BaseComponent<PlayheadHoverConfig, PlayheadHo
     this.style = {
       visible: visible
     }
-    this.group.visible(visible);
+    this._group.visible(visible);
   }
 
 }

@@ -6,16 +6,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Omakase Player demo</title>
   <link rel="stylesheet" href="css/player.css">
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.14/dist/hls.min.js"></script>
-  <script src="https://demo.player.byomakase.org/js/omakase-player.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@0.9.1-SNAPSHOT.1715195070/dist/omakase-player.umd.min.js"></script>
   <script src="https://esonderegger.github.io/web-audio-peak-meter/web-audio-peak-meter-2.1.0.min.js"></script>
   <script src="js/index.js"></script>
 </head>
 
 <body>
-<div>
+<div class="header"><span><img alt="omakaseplayer" src="images/logo-w.png" height="35"></span></div>
+<div class="content">
   <div id="video-container" class="video-container">
-    <div id="omakase-player"></div>
+    <div id="omakase-player" class="omakase-player-div"></div>
     <div id="controls" class="controls prevent-select">
       <span id="ff-back" class="icon"><img src="images/ff-back.svg" alt="" height="12"/></span>
       <span id="back" class="icon"><img src="images/back.svg" alt="" height="12"/></span>
@@ -39,6 +40,8 @@
       <span id="playhead-to-out" class="icon"><img src="images/playhead-to-out.svg" alt="" height="12"/></span>
       <span id="in-to-playhead" class="icon"><img src="images/in-to-playhead.svg" alt="" height="12"/></span>
       <span id="out-to-playhead" class="icon"><img src="images/out-to-playhead.svg" alt="" height="12"/></span>
+      <span id="safe-zone-off" class="icon"><img src="images/safe-zone-off.svg" alt="" height="12"/></span>
+      <span id="safe-zone-on" class="icon" style="display: none;"><img src="images/safe-zone-on.svg" alt="" height="12"/></span>
       <span id="full-screen" class="icon"><img src="images/full-screen.svg" alt="" height="12"/></span>
     </div>
   </div>
@@ -67,7 +70,7 @@
         <div id="marker1"
              style="opacity: 0.7; padding-left: 0px; border-left: 5px solid #6AC7F6; height: 45px; border-bottom: 2px solid #235067; border-right: 2px solid #235067">
           <div class="marker-image">
-            <img id="predefined-image" src="https://demo.player.byomakase.org/data/thumbnails/thumbnail.0000001.jpg" height="45px"/>
+            <img id="predefined-image" src="https://demo.player.byomakase.org/data/thumbnails/thumbnail.0000001.jpg" height="46px"/>
           </div>
           <div class="marker-details">
             <div>
@@ -87,14 +90,13 @@
       <div class="player-time">
         <span>TC: </span><span id="inputTimestampFormatted" style="display: inline-block; width: 75px;">00:00:00:00</span>
         <span> | Frame: </span><span id="inputFrameSeek" style="display: inline-block; width: 43px;">0</span>
-        <span> | Time: </span><span id="inputTimestamp"
-                                    style="display: inline-block; width: 35px;">0.000   </span>
+        <span> | Time: </span><span id="inputTimestamp" style="display: inline-block; width: 35px;">0.000   </span>
       </div>
       <br>
     </div>
   </div>
 </div>
-<div>
+<div style="margin:10px">
   <div id="omakase-timeline"></div>
 </div>
 </body>

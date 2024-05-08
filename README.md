@@ -1,254 +1,602 @@
-# Omakase Player #
-
-## Player Initialization and Usage
-
-### Player initialization
-
-Omakase player requires hls.js library. Include hls.js library with Omakase Player
-
-```
+# Omakase Player v0.9.1
+## Prerequisites
+Omakase Player can be loaded as UMD module inside HTML page. If loaded as UMD module it requires hls.js loaded before Omakase Player:
+```html
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@0.9.1/dist/omakase-player.umd.min.js"></script>
 ```
 
-Include Omakase Player js library
+Omakase Player can be used as ES module and CJS module as well.
 
-```
-<script src="dist/omakase-player.umd.js"></script>
-```
-
-Alternatively, you can include Omakase Player by getting it from npm:
-
-```
-npm i @byomakase/omakase-player
+If used with modern Typescript / Javascript frameworks (such as Angular, React or Vue), it is recommended to simply install Omakase Player as dependency into `package.json`:
+```bash
+npm install @byomakase/omakase-player
 ```
 
-Create a div with id=omakase-player as placeholder for the player
-
+Optionally, you can include default Omakase Player CSS stylesheet or import and use  `omakase-player.scss` SCSS stylesheet.
+```html
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@0.9.1/dist/style.min.css">
 ```
+
+Stylesheet references default player overlay icons, help menu icons and default styles for video safe zones. All of which can be overridden.
+
+## Player Initialization
+
+Omakase Player requires div as a placeholder for HTML5 player.
+```html
 <div id="omakase-player"></div>
 ```
 
-Initialize the player with following code. Use appropriate font family to match desired page font.
-
-```
+Initialize the player by providing div id in player configuration. If used as UMD module, Omakase Player objects are available in global `omakase` namespace: 
+```javascript
+// Create new OmakasePlayer instance
 let omakasePlayer = new omakase.OmakasePlayer({
-        videoHTMLElementId: 'omakase-player',
-        fontFamily: 'Arial'
-    })
+  playerHTMLElementId: 'omakase-player',
+});
 ```
 
-Player supports default overlay showing Play, Pause and Processing icon. This overlay requires styling. Sample styling definition is provided in omakase-player/player.css with referenced icons in omakase-player/images
-
-Once player is initialized we can load hls video stream with following code
-
-```
-omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8', 25).subscribe()
-```
-
-Within observable, we can initialize dependant logic, as a subscription to various events, load caption tracks etc.
-
-```
-omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8', 25).subscribe(
-    video => {
-
-        omakasePlayer.video.onVideoTimeChange$.subscribe((event) => {
-            //Get current frame
-            console.log(event.frame)
-            
-            //Get current time
-            console.log(event.currentTime)
-            
-            //Format current time to 
-            console.log(omakasePlayer.video.formatTimestamp(event.currentTime))
-        })
-
-        omakasePlayer.video.onSeeked$.subscribe(event => {
-            // console.log('omakasePlayer.video.onSeeked$', event)
-        })
-
-        omakasePlayer.video.onAudioSwitched$.subscribe(event => {
-            // console.log('omakasePlayer.video.onAudioSwitched$', event)
-        })
-
-        let daDkSubtitles$ = omakasePlayer.subtitles.createVttTrack({
-            id: 'da-dk-1', 
-            src: 'https://my-server.com/mysub1.vtt', 
-            label: 'Dutch', 
-            language: 'da-dk', 
-            default: true
-        })
-
-        let hrHrSubtitles$ = omakasePlayer.subtitles.createVttTrack({
-            id: 'hr-hr-1', 
-            src: 'https://my-server.com/mysub2.vtt',
-            label: 'Hrvatski', 
-            language: 'hr-hr'
-        })
-
-        omakasePlayer.on(omakasePlayer.EVENTS.OMAKASE_SUBTITLES_SHOW, (event) => {
-            console.log('Subtitles on', event)
-        })
-
-        omakasePlayer.on(omakasePlayer.EVENTS.OMAKASE_SUBTITLES_HIDE, (event) => {
-            console.log('Subtitles off', event)
-        })
-    })
+Once player is initialized we can load hls video stream by providing stream URL and stream frame rate:
+```javascript
+omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8', 25).subscribe({ // 25 - frame rate
+  next: (video) => {
+    console.log(`Video loaded. Duration: ${video.duration}, totalFrames: ${video.totalFrames}`)
+  }
+})
 ```
 
-If required, hls.js instance and video html element can be fetched through Player API
+## Video API
+Complete list of Video API methods is available in API Reference Docs
+### Video playback control
+Video playback control is achieved through Video API.
+
+```javascript
+// plays video
+omakasePlayer.video.play();
+
+// pauses video
+omakasePlayer.video.pause();
+
+// seeks to timestamp
+omakasePlayer.video.seekToTime(123.45).subscribe({
+  next: (result) => {
+    if (result) {
+      console.log(`Seek to timestamp success`);
+    }
+  }
+})
+
+// seeks to frame
+omakasePlayer.video.seekToFrame(123).subscribe({
+  next: (result) => {
+    if (result) {
+      console.log(`Seek to frame success`);
+    }
+  }
+})
+
+// toggles mute / unmute
+omakasePlayer.video.toggleMuteUnmute();
+```
+### Events
+Before or after loading video stream, we can subscribe to various events. All events are available in API objects as Observables or we can subscribe to events by using *EventEmmiter* like methods.
+Example how to subscribe to video loaded event Observable:
+```javascript
+// Subscribe to Observable
+omakasePlayer.video.onVideoLoaded$.subscribe({
+  next: (event) => {
+    if (event) {	
+      let video = event.video;
+      console.log(`Video loaded. Duration: ${video.duration}, totalFrames: ${video.totalFrames}`)
+    }
+  }
+})
+```
+
+Example how to subscribe to video time change event using *EventEmmiter* like methods:
+
+```javascript
+// alternatively, subscribe to events by using 'EventEmmiter' methods
+omakasePlayer.on(omakasePlayer.EVENTS.OMAKASE_VIDEO_TIME_CHANGE, (event) => {
+    console.log(`Video time change. Timestamp: ${event.currentTime} => ${omakasePlayer.video.formatToTimecode(event.currentTime)}. Frame: ${event.frame}`)
+})
+```
+
+Video playback events subscription examples:
+
+```javascript
+omakasePlayer.video.onPlay$.subscribe({
+    next: (event) => {
+        console.log(`Video play. Timestamp: ${event.currentTime} => ${omakasePlayer.video.formatToTimecode(event.currentTime)}`)
+    }
+})
+
+omakasePlayer.video.onPause$.subscribe({
+    next: (event) => {
+        console.log(`Video pause. Timestamp: ${event.currentTime} => ${omakasePlayer.video.formatToTimecode(event.currentTime)}`)
+    }
+})
+
+omakasePlayer.video.onSeeked$.subscribe({
+    next: (event) => {
+        console.log(`Video seeked. Timestamp: ${event.currentTime} => ${omakasePlayer.video.formatToTimecode(event.currentTime)}`)
+    }
+})
+
+omakasePlayer.video.onVideoTimeChange$.subscribe({
+    next: (event) => {
+        console.log(`Video time change. Timestamp: ${event.currentTime} => ${omakasePlayer.video.formatToTimecode(event.currentTime)}. Frame: ${event.frame}`)
+    }
+})
+```
+
+### Hls.js
+We can fetch hls.js instance through API, as well as subscribe to hls.js events:
+```javascript
+// Get hls.js instance and hook onto hls.js events
+let hlsInstance = omakasePlayer.video.getHls();
+hlsInstance.on('hlsManifestParsed', (event, data) => {
+  console.log(`HLS manifest parsed`, data);
+})
+```
+
+### Utilities
+```javascript
+// adds safe zone 10% from all player edges
+omakasePlayer.video.addSafeZone({
+  topRightBottomLeftPercent: [10, 10, 10, 10]
+})
+
+// adds safe zone calculated from provided aspect ratio expression
+omakasePlayer.video.addSafeZoneWithAspectRatio({
+  aspectRatioText: "16/9"
+})
+
+// toggles fullscreen
+omakasePlayer.video.toggleFullscreen();
+```
+
+## Audio API
+Complete list of Audio API methods is available in API Reference Docs. 
+
+Few common usages of Audio API:
+```javascript
+// retrieves all available audio tracks
+let audioTracks = omakasePlayer.audio.getAudioTracks();
+
+// retrieves active audio track
+let activeAudioTrack = omakasePlayer.audio.getCurrentAudioTrack();
+
+// detect audio tracks switching
+omakasePlayer.audio.onAudioSwitched$.subscribe({
+  next: (event) => {
+    console.log(`Audio switched`, event)
+  }
+})
+
+// sets audio track with id=0 as active audio track
+omakasePlayer.audio.setAudioTrack(0);
 
 ```
-let videoHtmlElement = omakasePlayer.video.getHTMLVideoElement()
 
-let hlsInstance = omakasePlayer.video.getHls()
-hlsInstance.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
-        console.log('Hls event MANIFEST_PARSED', data)
-    })
-```
+## Timeline
 
-Player CSS styling should be placed in following class
-
-```
-.omakase-player-wrapper .omakase-video {
-    width: 500px;
-}
-```
-
-### Timeline initialization
-
-Timeline will be inserted in following div
-
-```
+Timeline is initialized by defining div placeholder and calling `createTimeline()` API method with optional configuration and style settings.
+```html
 <div id="omakase-timeline"></div>
 ```
 
-Omakase Player will initialize timeline with createTimeline method. Next sample is loading video thumbnails sequence and adding custom styling to timeline
-
-```
+```javascript
 omakasePlayer.createTimeline({
-        thumbnailVttUrl: 'https://my-server.com/mythumb.vtt',
-        style:
-        {
-            stageMinWidth: 700,
-            backgroundFill: '#E4E5E5',
-            headerBackgroundFill: '#EDEFEE',
-            footerBackgroundFill: '#EDEFEE',
+  // html timeline div id
+  timelineHTMLElementId: 'omakase-timeline',
+  // thumbnails can be loaded from VTT file and shown in Timeline Scrubber Lane on mouse hover
+  thumbnailVttUrl: 'https://my-server.com/thumbnails/timeline.vtt',
+  style: {
+    stageMinHeight: 300,
+    backgroundFill: '#fef9f7'
+	// ...see API Reference Docks for all other available style properties
+  }
+}).subscribe({
+  next: (timelineApi) => {
+    console.log(`Timeline loaded`)
+  }
+})
+```
 
-            playProgressBarHeight: 12,
-            scrollbarHeight: 15,
+## Timeline Lanes
+Omakase Player supports adding various Timeline Lanes:
+- Scrubber Lane
+- Thumbnail Lane
+- Marker Lane
+- Subtitles Lane
+- Audio Track Lane
+- Label Lane
+- Scrollbar Lane
+- Line Chart Lane
+- Bar Chart Lane
+- Og Chart Lane
 
-            thumbnailHoverWidth: 200,
-            thumbnailHoverStroke: 'rgba(255,73,145,0.9)',
-            thumbnailHoverStrokeWidth: 5,
-            thumbnailHoverYOffset: 0,
+Timeline Lanes are added after Timeline creation. Base Timeline Lanes can be configured, styled and extended with custom functionalities.
 
-            headerHeight: 50,
-            footerHeight: 40,
-            leftPanelWidth: 200,
-            rightPanelLeftGutterWidth: 30,
-            rightPanelRightGutterWidth: 30,
-            timecodedContainerClipPadding: 20
+### Scrubber Lane
+Scrubber Lane is created automatically. Scrubber Lane instance can be fetched by using Timeline API after Timeline is created
+```javascript
+omakasePlayer.createTimeline().subscribe({
+  next: (timelineApi) => {
+    console.log(`Timeline loaded`);
+
+    let scrubberLane = omakasePlayer.timeline.getScrubberLane();
+    // set custom styles for Scrubber Lane
+    scrubberLane.style = {
+      backgroundFill: '#dfe0e2',
+      tickFill: '#08327d',
+      timecodeFill: '#08327d'
+      // ...see API Reference Docks for all other available style properties
+    }
+
+  }
+})
+```
+
+### Thumbnail Lane
+Thumbnail Lane loads thumbnails from VTT file and shows them on timeline. In example below thumbnail mouse click event is handled.
+
+```javascript
+let thumbnailLane = new omakase.ThumbnailLane({
+  description: 'Thumbnails',
+  vttUrl: 'https://my-server.com/thumbnails.vtt'
+})
+omakasePlayer.timeline.addTimelineLane(thumbnailLane);
+
+// Handle thumbnail click event
+thumbnailLane.onClick$.subscribe({
+  next: (event) => {
+    if (event.thumbnail.cue) {
+      console.log(`Seeking to to thumbnail: ${omakasePlayer.video.formatToTimecode(event.thumbnail.cue.startTime)}`);
+      omakasePlayer.video.seekToTime(event.thumbnail.cue.startTime).subscribe({
+        next: () => {
+          console.log(`Seek complete`);
         }
-}).subscribe()
+      })
+    }
+  }
+})
 ```
 
-Timeline is supporting various timeline rows as:
+### Marker Lane
+Marker Lane can be populated from VTT file or by using API methods directly:
+```javascript
+// marker lane
+let markerLane = new omakase.MarkerLane({
+  description: 'Markers',
+  vttUrl: 'https://my-server.com/thumbnails/timeline.vtt',
+  markerCreateFn: (cue, index) => {
+    return new omakase.PeriodMarker({
+      timeObservation: {
+        start: cue.startTime,
+        end: cue.endTime
+      },
+      text: `${cue.text}`,
+      editable: true,
+      style: {
+        renderType: 'lane',
+        color: index % 2 ? '#2677bb' : '#dd6464',
+        symbolType: 'triangle'
+      }
+    })
+  },
+  markerProcessFn: (marker, index) => {
+    marker.onClick$.subscribe({
+      next: (event) => {
+        console.log(`Clicked on marker with text: `, marker.text)
+      }
+    })
 
-* Markers
-* Subtitle visualization
-* Audio visualization
-* Thumbnail visualization
+    marker.onChange$.subscribe({
+      next: (event) => {
+        console.log(`Marker time observation change: `, event)
+      }
+    })
+  }
+})
+omakasePlayer.timeline.addTimelineLane(markerLane);
 
-Following example is initializing each of these:
-
+// manually adding markers through API
+markerLane.addMarker(new omakase.MomentMarker({
+  timeObservation: {
+    time: 100
+  },
+  style: {
+    renderType: 'spanning',
+    color: '#ff0000',
+    symbolType: 'circle'
+  }
+}));
 ```
-omakasePlayer.createTimeline({
-        thumbnailVttUrl: 'https://my-server.com/mythumb.vtt'
-}).subscribe(timeline =>{
-        //Creating Marker Lane
-        let inAndOutMarkersLane = new omakase.MarkerLane({
-            id: 'marker_lane_inout_1', description: 'In and out markers',
-            style: {
-                backgroundFill: '#E9F7FF',
-                height: 30,
-                leftBackgroundFill: '#E4E5E5',
-            }
-        })
 
-        timeline.addLane(inAndOutMarkersLane)
+### Subtitles Lane
+Subtitles Lane is used for subtitles visualisation on timeline. It is populated from VTT file.
+```javascript
+let subtitlesLane = new omakase.SubtitlesLane({
+  description: 'Subtitles',
+  vttUrl: 'https://my-server.com/subtitles.vtt'
+})
+omakasePlayer.timeline.addTimelineLane(subtitlesLane);
+```
 
-        //Adding sample Range marker to Marker Lane
-        let periodMarker1 = inAndOutMarkersLane.addMarker(new omakase.PeriodMarker({
-            id: 'periodMarker1',
-            observation: {
-                start: 0,
-                end: 0
-            },
-            style: {
-                symbolType: 'triangle',
-                color: '#CD5600',
-                renderType: 'lane'
-            }
-        }))
+### Audio Track Lane
+Audio Track Lane is used for audio track visualisation.
+```javascript
+let audioTrackLane = new omakase.AudioTrackLane({
+  description: 'Audio Track',
+  vttUrl: 'https://my-server.com/audio-track.vtt'
+})
+omakasePlayer.timeline.addTimelineLane(audioTrackLane);
+```
 
-        //Adding Thumbnal Lane to timeline
-        let defaultThumbnailLane = new omakase.ThumbnailLane({
-            id: 'thumbnail_lane_default', 
-            description: 'Thumbnails', 
-            thumbnailVttUrl: 'https://my-server.com/mythumb.vtt',
-            style: {
-                backgroundFill: '#E9F7FF',
-                height: 60,
-                leftBackgroundFill: '#E4E5E5'
-            }
-        })
+### Label Lane
+Label Lane is usually used on timeline as grouping lane that contains other timeline components, such as timeline buttons and labels.
+```javascript
+let labelLane = new omakase.LabelLane({
+  description: 'Label lane', // appears in left pane
+  text: 'Right pane label', // appears in right pane
+  style: {
+    backgroundFill: '#a5a6a9',
+    textFill: '#f45844',
+    textFontSize: 20
+  }
+});
+omakasePlayer.timeline.addTimelineLane(labelLane);
+```
 
-        timeline.addLane(defaultThumbnailLane)
+### Scrollbar Lane
+Scrollbar Lane contains Timeline scrollbar that controls timeline zoom and scroll.
+```javascript
+// scrollbar lane
+let scrollbarLane = new omakase.ScrollbarLane({
+  description: ''
+});
+omakasePlayer.timeline.addTimelineLane(scrollbarLane);
+```
 
-        //Enable automatic position to thumb start frame when clicked on thumbnail
-        defaultThumbnailLane.onClick$.subscribe((event) => {
-            omakasePlayer.video.seekToTimestamp(
-                event.thumbnail.getThumbnailVttCue().startTime).subscribe()
-        })
+### Line Chart Lane
+Line Chart Lane for data visualisation. 
+```javascript
+let lineChartLane = new omakase.LineChartLane({
+  vttUrl: 'https://my-server.com/line-chart.vtt',
+  yMax: 100, // optional custom max value, if not provided it will be resolved from data
+  yMin: -50, // optional custom min value, if not provided it will be resolved from data
+  style: {
+    pointWidth: 5,
+    lineStrokeWidth: 2
+  },
+});
+omakasePlayer.timeline.addTimelineLane(lineChartLane);
+```
 
-        //Adding subtitle visualization Lane to timeline
-        let subtitlesLane1 = new omakase.SubtitlesLane({
-            id: 'subtitles_lane_1',
-            description: 'Subtitle DK',
-            subtitlesVttUrl: 'https://my-server.com/mysub.vtt',
-            style: {
-                backgroundFill: "#E9F7FF",
-                height: 25,
-                leftBackgroundFill: '#E4E5E5',
-                subtitlesLaneItemOpacity: 0.7,
-                subtitlesLaneItemFill: '#87D798'
-            }
-        })
+### Bar Chart Lane
+Bar Chart Lane for data visualisation. 
+```javascript
+let barChartLane = new omakase.BarChartLane({
+  vttUrl: 'https://my-server.com/bar-chart.vtt',
+  description: 'Bar Chart',
+  valueMax: 120,  // optional custom max value, if not provided it will be resolved from data
+  valueMin: 50,   // optional custom min value, if not provided it will be resolved from data
+  valueTransformFn: (value) => {
+    // each value can be transformed in this hook function
+    return value;
+  },
+  itemProcessFn: (item, index) => {
+    // each chart item can be processed in this hook function
+    item.onClick$.subscribe({
+      next: (event) => {
+        console.log(event, item)
+      }
+    })
+  },
+  valueInterpolationStrategy: 'max' // average - take interpolated points average | max - take interpolated points max
+});
+omakasePlayer.timeline.addTimelineLane(barChartLane);
+```
 
-        timeline.addLane(subtitlesLane1)
+### OG Chart Lane
+OG Chart Lane for data visualisation. 
+```javascript
+let ogChartLane = new omakase.OgChartLane({
+  vttUrl: 'https://my-server.com/og-chart.vtt',
+  description: 'Bar Chart',
+  valueMax: 120,  // optional custom max value, if not provided it will be resolved from data
+  valueMin: 50,   // optional custom min value, if not provided it will be resolved from data
+  valueTransformFn: (value) => {
+    // each value can be transformed in this hook function
+    return value;
+  },
+  itemProcessFn: (item, index) => {
+    // each chart item can be processed in this hook function
+    item.onClick$.subscribe({
+      next: (event) => {
+        console.log(event, item)
+      }
+    })
+  },
+  valueInterpolationStrategy: 'max' // average - take interpolated points average | max - take interpolated points max
+});
+omakasePlayer.timeline.addTimelineLane(ogChartLane);
+```
 
+## Timeline Lane API
+### Timeline Lane Nodes
+Timeline Lane Nodes can be added to Timeline Lane instances with `addTimelineNode()` API method. Nodes types that can be added are:
+- Image button
+- Text label
+
+In this example, Timeline zoom in and zoom out buttons are added to Scrubber Lane:
+```javascript
+let scrubberLane = omakasePlayer.timeline.getScrubberLane();
+
+// define zoom in button
+let zoomInButton = new omakase.ImageButton({
+  src: `https://my-server.com/images/plus-circle.svg`,
+  width: 30,
+  height: 30,
+  listening: true // set to true if button is interactive
+})
+
+// handle click event
+zoomInButton.onClick$.subscribe({
+  next: (event) => {
+    omakasePlayer.timeline.zoomInEased().subscribe();
+  }
+})
+
+// define zoom out button
+let zoomOutButton = new omakase.ImageButton({
+  src: `https://my-server.com/images/minus-circle.svg`,
+  width: 30,
+  height: 30,
+  listening: true
+})
+
+// handle click event
+zoomOutButton.onClick$.subscribe({
+  next: (event) => {
+    omakasePlayer.timeline.zoomOutEased().subscribe();
+  }
+});
+
+// add buttons to scrubber lane
+[zoomOutButton, zoomInButton].forEach(button => {
+  scrubberLane.addTimelineNode({
+    width: button.config.width,
+    height: button.config.height,
+    justify: 'end',
+    timelineNode: button,
+  })
+});
+```
+
+### Minimize, Maximize
+Timeline Lane in Timeline can be minimized or maximized by calling methods from `TimelineLaneApi`.  
+In this example, Grouping Label Lane is created at specific index on Timeline. *Minimize* and *Maximize* Text Label action buttons are created and added to Timeline Lane left pane.
+```javascript
+// marker lane group
+let markerLaneGroup = new omakase.LabelLane({
+  text: 'Marker Lane Group', // appears in right pane
+  style: {
+    backgroundFill: '#c2b4a6',
+    textFill: '#fbfbfb'
+  }
+});
+
+// add grouping lane before MarkerLane
+omakasePlayer.timeline.addTimelineLaneAtIndex(markerLaneGroup, omakasePlayer.timeline.getTimelineLanes().findIndex(p => p.id === markerLane.id));
+
+// minimize text label
+let textLabelMinimize = new omakase.TextLabel({
+  text: `Minimize`,
+  listening: true,
+  style: {
+    align: 'center',
+    verticalAlign: 'middle',
+    fill: '#ffffff',
+    backgroundFill: '#f45844',
+    backgroundBorderRadius: 3
+  }
+});
+
+// maximize text label
+let textLabelMaximize = new omakase.TextLabel({
+  text: `Maximize`,
+  listening: true,
+  style: {
+    align: 'center',
+    verticalAlign: 'middle',
+    fill: '#ffffff',
+    backgroundFill: '#46454b',
+    backgroundBorderRadius: 3
+  }
+});
+
+// minimize lane on click
+textLabelMinimize.onClick$.subscribe({
+  next: () => {
+    if (!markerLane.isMinimized()) {
+      markerLane.minimizeEased().subscribe()
+    }
+  }
+})
+
+// maximize lane on click
+textLabelMaximize.onClick$.subscribe({
+  next: () => {
+    if (markerLane.isMinimized()) {
+      markerLane.maximizeEased().subscribe()
+    }
+  }
+});
+
+// add text labels to grouping lane left pane
+[textLabelMinimize, textLabelMaximize].forEach(textLabel => {
+  markerLaneGroup.addTimelineNode({
+    width: 60,
+    height: 22,
+    justify: 'start',
+    margin: [0, 5, 0, 0],
+    timelineNode: textLabel
+  });
+})
+```
+
+## Subtitles API
+Complete list of Audio API methods is available in API Reference Docs. 
+
+Omakase Player automatically identifies all available subtitles VTT tracks from stream manifest and makes them available through Subtitles API.
+```javascript
+omakasePlayer.subtitles.onSubtitlesLoaded$.subscribe({
+  next: (event) => {
+    // retrieves all subtitles VTT tracks
+    let subtitlesVttTracks = omakasePlayer.subtitles.getTracks();
+
+    // shows first available VTT track
+    omakasePlayer.subtitles.showTrack(subtitlesVttTracks[0].id)
+  }
+})
+```
+
+Subtitles can be imported from external VTT file:
+```javascript
+// import subtitles from VTT file
+omakasePlayer.subtitles.createVttTrack({
+  id: '0',
+  src: 'https://my-server.com/subtitles.vtt',
+  label: 'English (US)',
+  language: 'en-us',
+  default: true
+}).subscribe({
+  next: (subtitlesVttTrack) => {
+    console.log(`Subtitles successfully created`)
+  }
 })
 ```
 
 ## Development
-
 Player build & build watch
-
-```
+```bash
 npm install ci
-
-./dev.sh
+npm run dev
 ```
 
 ## Production build
 
-```
+```bash
 npm install ci
 npm run prod
 ```
 
 Production artefacts that need to be published to NPM are created in `/dist` folder
-
 ## Known limitations
 
 - Firefox browser is not supported as it doesn't support ```requestVideoFrameCallback``` function
+
+## Notes
+Omakase Player v0.9.x contains breaking API changes comparing to version v0.8.x. Please review API documentation and code samples for migration process. 

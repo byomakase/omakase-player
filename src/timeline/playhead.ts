@@ -1,41 +1,41 @@
-/**
- *       Copyright 2023 ByOmakase, LLC (https://byomakase.org)
+/*
+ * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
- *       Licensed under the Apache License, Version 2.0 (the "License");
- *       you may not use this file except in compliance with the License.
- *       You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *           http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *       Unless required by applicable law or agreed to in writing, software
- *       distributed under the License is distributed on an "AS IS" BASIS,
- *       WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *       See the License for the specific language governing permissions and
- *       limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-import {BaseComponent, ComponentConfig, ComponentConfigStyleComposed, composeConfigAndDefault} from '../common/component';
+import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle} from '../layout/konva-component';
 import Konva from 'konva';
 import {Constants} from '../constants';
 import {OnMeasurementsChange} from '../common/measurement';
 import {Timeline} from './timeline';
 import {BufferedTimespan} from '../video/video-controller';
-import {ShapeUtil} from '../util/shape-util';
-import {takeUntil} from 'rxjs';
+import {filter, takeUntil} from 'rxjs';
 import {VideoControllerApi} from '../video/video-controller-api';
 
 export interface PlayheadStyle {
   visible: boolean;
   fill: string;
   lineWidth: number;
+
   symbolHeight: number;
+  symbolYOffset: number;
+
   scrubberHeight: number;
   backgroundFill: string;
   backgroundOpacity: number;
-
   playProgressFill: string;
   playProgressOpacity: number;
-
   bufferedFill: string;
   bufferedOpacity: number;
 }
@@ -49,7 +49,10 @@ const configDefault: PlayheadConfig = {
     visible: true,
     fill: '#f43530',
     lineWidth: 2,
+
     symbolHeight: 15,
+    symbolYOffset: 0,
+
     scrubberHeight: 15,
     backgroundFill: '#ffffff',
     backgroundOpacity: 0,
@@ -62,42 +65,39 @@ const configDefault: PlayheadConfig = {
   }
 }
 
-export class Playhead extends BaseComponent<PlayheadConfig, PlayheadStyle, Konva.Group> implements OnMeasurementsChange {
-  // region config
+export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, Konva.Group> implements OnMeasurementsChange {
+  private _timeline: Timeline;
+  private _videoController: VideoControllerApi;
 
-  // endregion
+  private _group: Konva.Group;
+  private _bgRect: Konva.Rect;
+  private _playProgressBgRect: Konva.Rect;
 
-  protected timeline: Timeline;
-  protected videoController: VideoControllerApi;
+  private _playheadGroup: Konva.Group;
+  private _playheadLine: Konva.Line;
+  private _playheadSymbol: Konva.Line;
 
-  // region konva
-  protected group: Konva.Group;
-  protected background: Konva.Rect;
+  private _bufferedGroup: Konva.Group;
 
-  protected playProgressBackground: Konva.Rect;
+  constructor(config: Partial<ConfigWithOptionalStyle<PlayheadConfig>>, timeline: Timeline, videoController: VideoControllerApi) {
+    super({
+      ...configDefault,
+      ...config,
+      style: {
+        ...configDefault.style,
+        ...config.style,
+      },
+    });
 
-  protected playheadGroup: Konva.Group;
-  protected playheadLine: Konva.Line;
-  protected playheadSymbol: Konva.Line;
+    this._timeline = timeline;
+    this._videoController = videoController;
 
-  protected bufferedGroup: Konva.Group;
-
-  // endregion
-
-  constructor(config: Partial<ComponentConfigStyleComposed<PlayheadConfig>>, timeline: Timeline, videoController: VideoControllerApi) {
-    super(composeConfigAndDefault(config, configDefault));
-
-    this.timeline = timeline;
-    this.videoController = videoController;
-  }
-
-  protected createCanvasNode(): Konva.Group {
-    this.group = new Konva.Group({
+    this._group = new Konva.Group({
       ...Constants.POSITION_TOP_LEFT,
       listening: false
     });
 
-    this.background = new Konva.Rect({
+    this._bgRect = new Konva.Rect({
       ...Constants.POSITION_TOP_LEFT,
       height: this.style.scrubberHeight,
       fill: this.style.backgroundFill,
@@ -105,7 +105,7 @@ export class Playhead extends BaseComponent<PlayheadConfig, PlayheadStyle, Konva
       listening: false
     });
 
-    this.playProgressBackground = new Konva.Rect({
+    this._playProgressBgRect = new Konva.Rect({
       ...Constants.POSITION_TOP_LEFT,
       height: this.style.scrubberHeight,
       fill: this.style.playProgressFill,
@@ -113,73 +113,70 @@ export class Playhead extends BaseComponent<PlayheadConfig, PlayheadStyle, Konva
       listening: false
     })
 
-    this.playheadGroup = new Konva.Group({
+    this._playheadGroup = new Konva.Group({
       ...Constants.POSITION_TOP_LEFT,
       visible: this.style.visible,
       listening: false
     });
 
-    this.playheadLine = new Konva.Line({
+    this._playheadLine = new Konva.Line({
       points: [0, 0, 0, 0],
       stroke: this.style.fill,
       strokeWidth: this.style.lineWidth,
       listening: false
     })
 
-    this.playheadSymbol = ShapeUtil.createTriangle({
-      ...Constants.POSITION_TOP_LEFT,
+    this._playheadSymbol = this.createSymbol({
       height: this.style.symbolHeight,
-      color: this.style.fill
+      offsetY: this.style.symbolYOffset,
+      color: this.style.fill,
     });
 
-    this.bufferedGroup = new Konva.Group({
+    this._bufferedGroup = new Konva.Group({
       ...Constants.POSITION_TOP_LEFT,
       listening: false
     });
 
-    this.group.add(this.background);
-    this.group.add(this.bufferedGroup);
-    this.group.add(this.playProgressBackground);
+    this._group.add(this._bgRect);
+    this._group.add(this._bufferedGroup);
+    this._group.add(this._playProgressBgRect);
 
-    this.playheadGroup.add(this.playheadLine)
-    this.playheadGroup.add(this.playheadSymbol)
+    this._playheadGroup.add(this._playheadLine)
+    this._playheadGroup.add(this._playheadSymbol)
 
-    this.group.add(this.playheadGroup);
-
-
-    return this.group;
-  }
-
-  protected afterCanvasNodeInit() {
-    this.settleLayout();
+    this._group.add(this._playheadGroup);
 
     // react on timeline zoom
-    this.timeline.onZoom$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+    this._timeline.onZoom$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
       this.settleLayout();
     })
 
-    this.videoController.onVideoLoading$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-      this.group.visible(false);
+    this._videoController.onVideoLoading$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
+      this._group.visible(false);
     })
 
-    this.videoController.onVideoLoaded$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-      this.group.visible(true);
+    this._videoController.onVideoLoaded$.pipe(takeUntil(this._destroyed$)).pipe(filter(p => !!p)).subscribe((event) => {
+      this._group.visible(true);
       this.doPlayProgress()
       this.doBufferingProgress()
     })
 
-    this.videoController.onVideoTimeChange$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+    this._videoController.onVideoTimeChange$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
       this.doPlayProgress()
     })
 
-    this.videoController.onSeeking$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+    this._videoController.onSeeking$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
       this.doPlayProgress()
       this.doBufferingProgress()
     })
 
-    this.videoController.onBuffering$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+    this._videoController.onBuffering$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
       this.doBufferingProgress()
     })
+  }
+
+  protected provideKonvaNode(): Konva.Group {
+    return this._group;
   }
 
   onMeasurementsChange() {
@@ -187,25 +184,25 @@ export class Playhead extends BaseComponent<PlayheadConfig, PlayheadStyle, Konva
   }
 
   getPlayheadPosition(): number {
-    return this.playheadGroup.x();
+    return this._playheadGroup.x();
   }
 
   protected settleLayout() {
-    let timecodedGroupDimension = this.timeline.getTimecodedGroupDimension();
+    let timecodedGroupDimension = this._timeline.getTimecodedFloatingDimension();
 
-    [this.group, this.bufferedGroup, this.playheadGroup].forEach(node => {
+    [this._group, this._bufferedGroup, this._playheadGroup].forEach(node => {
       node.setAttrs({
         ...timecodedGroupDimension
       })
     });
 
-    [this.background].forEach(node => {
+    [this._bgRect].forEach(node => {
       node.setAttrs({
         width: timecodedGroupDimension.width
       })
     })
 
-    this.playheadLine.setAttrs({
+    this._playheadLine.setAttrs({
       points: [0, 0, 0, timecodedGroupDimension.height]
     })
 
@@ -214,26 +211,33 @@ export class Playhead extends BaseComponent<PlayheadConfig, PlayheadStyle, Konva
   }
 
   private doPlayProgress() {
-    let x = this.timeline.timeToTimelinePosition(this.videoController.getCurrentTime());
+    if (!this._videoController.isVideoLoaded()) {
+      return;
+    }
 
-    this.playProgressBackground.width(x);
-    this.playheadGroup.x(x);
+    let x = this._timeline.timeToTimelinePosition(this._videoController.getCurrentTime());
+    this._playProgressBgRect.width(x);
+    this._playheadGroup.x(x);
   }
 
   private doBufferingProgress() {
-    let bufferedTimespans = this.videoController.getBufferedTimespans()
+    if (!this._videoController.isVideoLoaded()) {
+      return;
+    }
+
+    let bufferedTimespans = this._videoController.getBufferedTimespans()
 
     if (bufferedTimespans && bufferedTimespans.length > 0) {
-      if (this.bufferedGroup.hasChildren()) {
+      if (this._bufferedGroup.hasChildren()) {
         let numOfBuffers = bufferedTimespans.length;
-        let previousNumOfBuffers = this.bufferedGroup.getChildren().length;
+        let previousNumOfBuffers = this._bufferedGroup.getChildren().length;
 
         if (numOfBuffers === previousNumOfBuffers) {
           // move and resize buffers
-          this.bufferedGroup.getChildren().forEach((bufferedRect, i) => {
+          this._bufferedGroup.getChildren().forEach((bufferedRect, i) => {
             let bufferedTimespan = bufferedTimespans[i];
-            let startX = this.timeline.timeToTimelinePosition(bufferedTimespan.start);
-            let endX = this.timeline.timeToTimelinePosition(bufferedTimespan.end);
+            let startX = this._timeline.timeToTimelinePosition(bufferedTimespan.start);
+            let endX = this._timeline.timeToTimelinePosition(bufferedTimespan.end);
             bufferedRect.setAttrs({
               x: startX,
               width: endX - startX
@@ -241,7 +245,7 @@ export class Playhead extends BaseComponent<PlayheadConfig, PlayheadStyle, Konva
           })
         } else {
           // remove old and recreate
-          this.bufferedGroup.getChildren().forEach(child => child.destroy());
+          this._bufferedGroup.getChildren().forEach(child => child.destroy());
           this.createBuffers(bufferedTimespans);
         }
       } else {
@@ -252,8 +256,8 @@ export class Playhead extends BaseComponent<PlayheadConfig, PlayheadStyle, Konva
 
   private createBuffers(bufferedTimespans: BufferedTimespan[]) {
     bufferedTimespans.forEach(bufferedTimespan => {
-      let startX = this.timeline.timeToTimelinePosition(bufferedTimespan.start);
-      let endX = this.timeline.timeToTimelinePosition(bufferedTimespan.end);
+      let startX = this._timeline.timeToTimelinePosition(bufferedTimespan.start);
+      let endX = this._timeline.timeToTimelinePosition(bufferedTimespan.end);
 
       let bufferedRect = new Konva.Rect({
         x: startX,
@@ -264,7 +268,30 @@ export class Playhead extends BaseComponent<PlayheadConfig, PlayheadStyle, Konva
         opacity: this.style.bufferedOpacity,
         listening: false
       })
-      this.bufferedGroup.add(bufferedRect)
+      this._bufferedGroup.add(bufferedRect)
+    })
+  }
+
+  private createSymbol(config: {
+    height: number,
+    color: string,
+    offsetY: number
+  }): Konva.Line {
+    let sideLength = 2 * config.height / Math.sqrt(3);
+    let bottom = {x: 0, y: config.height - config.height / 2};
+    let right = { x: sideLength / 2, y: 0 - config.height / 2};
+    let left = { x: -sideLength / 2, y: 0 - config.height / 2};
+
+    return new Konva.Line({
+      points: [
+        bottom.x, bottom.y,
+        right.x, left.y,
+        left.x, left.y,
+      ],
+      fill: config.color,
+      closed: true,
+      listening: false,
+      offsetY: config.offsetY
     })
   }
 

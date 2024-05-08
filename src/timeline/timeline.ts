@@ -1,65 +1,78 @@
-/**
- *       Copyright 2023 ByOmakase, LLC (https://byomakase.org)
+/*
+ * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
- *       Licensed under the Apache License, Version 2.0 (the "License");
- *       you may not use this file except in compliance with the License.
- *       You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *           http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *       Unless required by applicable law or agreed to in writing, software
- *       distributed under the License is distributed on an "AS IS" BASIS,
- *       WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *       See the License for the specific language governing permissions and
- *       limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-import {BaseComponent, ComponentConfig, ComponentConfigStyleComposed, composeConfigAndDefault} from '../common/component';
+import {ConfigWithOptionalStyle} from '../common';
 import Konva from 'konva';
 import Decimal from 'decimal.js';
-import {ScrollableHorizontally, Scrollbar} from './scrollbar';
-import {Dimension, HasRectMeasurement, HorizontalMeasurement, OnMeasurementsChange, Position, RectMeasurement} from '../common/measurement';
+import {ScrollableHorizontally, Scrollbar} from './scrollbar/scrollbar';
+import {Dimension, Horizontals, Position, RectMeasurement} from '../common/measurement';
 import {PlayheadHover} from './playhead-hover';
 import {animate} from '../util/animation-util';
 import {catchError, filter, fromEvent, map, Observable, of, Subject, takeUntil} from 'rxjs';
-import {ThumbnailVttCue, TimelineScrollEvent, TimelineZoomEvent, VideoLoadedEvent} from '../types';
+import {Destroyable, ThumbnailVttCue, TimelineScrollEvent, TimelineZoomEvent, VideoLoadedEvent, VideoLoadingEvent} from '../types';
 import {Playhead} from './playhead';
 import {ThumbnailVttFile} from '../track';
 import {Thumbnail} from './thumbnail/thumbnail';
-import {GenericTimelaneLane} from './timeline-lane';
-import {Constants} from '../constants';
 import {ImageUtil} from '../util/image-util';
-import {ShapeUtil} from '../util/shape-util';
 import {WindowUtil} from '../util/window-util';
-import {ScrubberLane} from './scrubber-lane';
+import {ScrubberLane} from './scrubber';
 import {TimecodeDisplay} from './timecode-display';
-import {TimelineApi} from '../api';
-import {z} from 'zod';
-import {MarkerLane} from './marker';
-import {ThumbnailLane} from './thumbnail';
-import {SubtitlesLane} from './subtitles';
-import {AudioTrackLane} from './audio-track';
-import {MarkerLaneConfig} from './marker/marker-lane';
-import {ThumbnailLaneConfig} from './thumbnail/thumbnail-lane';
-import {SubtitlesLaneConfig} from './subtitles/subtitles-lane';
+import {TimelineApi, TimelineLaneApi} from '../api';
+import {undefined, z} from 'zod';
 import {AxiosRequestConfig} from 'axios';
-import {completeSubjects, nextCompleteVoidSubject, nextCompleteVoidSubjects, unsubscribeSubjects} from '../util/observable-util';
+import {completeUnsubscribeSubjects, nextCompleteVoidSubject, nextCompleteVoidSubjects} from '../util/observable-util';
 import {VideoControllerApi} from '../video/video-controller-api';
-import {DestroyUtil} from '../util/destroy-util';
+import {destroyer, nullifier} from '../util/destroy-util';
+import {KonvaFlexGroup, KonvaFlexItem} from '../layout/konva-flex';
+import {StyleAdapter} from '../common/style-adapter';
+import {FlexNode, FlexSpacingBuilder} from '../layout/flex-node';
+import {MesurmentUtil} from '../util/mesurment-util';
+import {KonvaFactory} from '../factory/konva-factory';
+import {TimelineScrollbar} from './scrollbar';
 
-enum ZoomDirection {
-  IN = 'IN',
-  OUT = 'OUT'
-}
+type ZoomDirection = 'zoom_in' | 'zoom_out';
+
+const MAIN_LAYER_CONTENT_GROUPS: number = 9;
+const SURFACE_LAYER_CONTENT_GROUPS: number = 1;
 
 export interface TimelineStyle {
+  textFontFamily: string;
+  textFontStyle: string;
+
   stageMinWidth: number;
+  stageMinHeight: number;
 
   backgroundFill: string;
+  backgroundOpacity: number;
+
+  headerHeight: number;
+  headerMarginBottom: number;
   headerBackgroundFill: string;
+  headerBackgroundOpacity: number;
+
+  footerHeight: number;
+  footerMarginTop: number;
   footerBackgroundFill: string;
+  footerBackgroundOpacity: number;
+
+  headerTimecodeDisplayTextFontSize: number,
+  headerTimecodeDisplayTextFill: string,
 
   scrollbarHeight: number;
+  scrollbarWidth: number;
   scrollbarBackgroundFill: string;
   scrollbarBackgroundFillOpacity: number;
   scrollbarHandleBarFill: string;
@@ -71,14 +84,11 @@ export interface TimelineStyle {
   thumbnailHoverStrokeWidth: number;
   thumbnailHoverYOffset: number;
 
-  headerHeight: number;
-  footerHeight: number;
-  leftPanelWidth: number;
-  // leftPanelLeftGutterWidth: number;
-  // leftPanelRightGutterWidth: number;
-  rightPanelLeftGutterWidth: number;
-  rightPanelRightGutterWidth: number;
-  timecodedContainerClipPadding: number;
+
+  leftPaneWidth: number;
+  rightPaneMarginLeft: number;
+  rightPaneMarginRight: number;
+  rightPaneClipPadding: number;
 
   // playhead
   playheadVisible: boolean;
@@ -98,36 +108,82 @@ export interface TimelineStyle {
   // playhead hover
   playheadHoverVisible: boolean;
   playheadHoverFill: string;
+  playheadHoverSnappedFill: string;
   playheadHoverLineWidth: number;
   playheadHoverSymbolHeight: number
+  playheadHoverTextFill: string
+  playheadHoverTextYOffset: number;
+  playheadHoverTextFontSize: number;
+
+  scrubberMarginBottom: number,
 }
 
-export interface TimelineConfig extends ComponentConfig<TimelineStyle> {
+export interface TimelineConfig {
+  timelineHTMLElementId: string;
+  style: TimelineStyle;
+
   thumbnailVttUrl?: string;
   thumbnailVttFile?: ThumbnailVttFile;
   axiosConfig?: AxiosRequestConfig;
 
-  timelineHTMLElementId: string;
   playheadHoverSnapArea: number;
+
+  zoomWheelEnabled: boolean;
+
   zoomScale: number;
+  zoomScaleWheel: number;
+
   zoomBaseline: number;
   zoomMax: number;
+
+  layoutEasingDuration: number;
+  zoomEasingDuration: number;
+  scrollEasingDuration: number;
 }
 
 const configDefault: TimelineConfig = {
   timelineHTMLElementId: 'omakase-timeline',
   playheadHoverSnapArea: 5,
-  zoomScale: 1.02,
+
+  zoomWheelEnabled: true,
+
+  zoomScale: 1.70,
+  zoomScaleWheel: 1.05,
+
   zoomBaseline: 100,
-  zoomMax: 1500,
+  zoomMax: 2000,
+
+  layoutEasingDuration: 500,
+  zoomEasingDuration: 800,
+  scrollEasingDuration: 200,
+
   style: {
     stageMinWidth: 700,
+    stageMinHeight: 500,
+
+    textFontFamily: 'Arial',
+    textFontStyle: 'normal',
 
     backgroundFill: '#f5f5f5',
+    backgroundOpacity: 1,
+
+    headerHeight: 0,
+    headerMarginBottom: 10,
+    // headerMarginBottom: 0,
     headerBackgroundFill: '#f5f5f5',
+    headerBackgroundOpacity: 1,
+
+    footerHeight: 50,
+    footerMarginTop: 10,
+    // footerMarginTop: 0,
     footerBackgroundFill: '#f5f5f5',
+    footerBackgroundOpacity: 1,
+
+    headerTimecodeDisplayTextFontSize: 20,
+    headerTimecodeDisplayTextFill: '#9291D2',
 
     scrollbarHeight: 15,
+    scrollbarWidth: 500,
     scrollbarBackgroundFill: '#000000',
     scrollbarBackgroundFillOpacity: 0.3,
     scrollbarHandleBarFill: '#01a6f0',
@@ -139,18 +195,15 @@ const configDefault: TimelineConfig = {
     thumbnailHoverStrokeWidth: 5,
     thumbnailHoverYOffset: 0,
 
-    headerHeight: 50,
-    footerHeight: 50,
-    leftPanelWidth: 200,
-    // leftPanelLeftGutterWidth: 50,
-    // leftPanelRightGutterWidth: 50,
-    rightPanelLeftGutterWidth: 30,
-    rightPanelRightGutterWidth: 30,
-    timecodedContainerClipPadding: 20,
+    leftPaneWidth: 200,
+    rightPaneMarginLeft: 30,
+    rightPaneMarginRight: 30,
+    rightPaneClipPadding: 20,
 
     // playhead
     playheadVisible: true,
     playheadFill: '#f43530',
+    playheadHoverSnappedFill: '#ffd500',
     playheadLineWidth: 2,
     playheadSymbolHeight: 15,
     playheadScrubberHeight: 15,
@@ -168,247 +221,396 @@ const configDefault: TimelineConfig = {
     playheadHoverVisible: false,
     playheadHoverFill: '#737373',
     playheadHoverLineWidth: 2,
-    playheadHoverSymbolHeight: 15
+    playheadHoverSymbolHeight: 15,
+    playheadHoverTextFill: '#ffffff',
+    playheadHoverTextYOffset: 0,
+    playheadHoverTextFontSize: 12,
+
+    scrubberMarginBottom: 15
   }
 }
 
-const SCRUBBER_LANE_ID = 'omakase_scrubber_lane';
+export class Timeline implements Destroyable, ScrollableHorizontally, TimelineApi {
+  readonly onScroll$: Subject<TimelineScrollEvent> = new Subject<TimelineScrollEvent>();
+  readonly onZoom$: Subject<TimelineZoomEvent> = new Subject<TimelineZoomEvent>();
+  readonly onStyleChange$: Subject<TimelineStyle> = new Subject<TimelineStyle>();
 
-// noinspection TypeScriptFieldCanBeMadeReadonly
-export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva.Stage> implements OnMeasurementsChange, HasRectMeasurement, ScrollableHorizontally, TimelineApi {
+  private _config: TimelineConfig;
+  private _styleAdapter: StyleAdapter<TimelineStyle>;
+
   // region config
-  private timelineHTMLElementId: string;
-
-  private _thumbnailVttUrl?: string;
+  private _timelineHTMLElementId: string;
+  private _videoController: VideoControllerApi;
   private _thumbnailVttFile?: ThumbnailVttFile;
-  private _axiosConfig: AxiosRequestConfig;
-
-  private width: number;
-  private zoomScale: number;
-  private zoomBaseline: number;
-  private zoomMax: number;
-  private playheadHoverSnapArea: number;
   // endregion
 
-  private timelineHTMLElement: HTMLElement;
+  private _timelineHTMLElement: HTMLElement;
+  private _timelineLanes: TimelineLaneApi[] = [];
+  private _timelineLanesMap: Map<string, TimelineLaneApi> = new Map<string, TimelineLaneApi>();
 
   // region konva
-  private stage: Konva.Stage;
-  private layer: Konva.Layer;
+  private _konvaStage!: Konva.Stage;
 
-  private layoutGroup: Konva.Group;
-  private layoutBackground: Konva.Rect;
+  private _mainLayer!: Konva.Layer;
 
-  private headerGroup: Konva.Group;
-  private headerBackground: Konva.Rect;
-  private bodyGroup: Konva.Group;
-  private footerGroup: Konva.Group;
-  private footerBackground: Konva.Rect;
-  private bodyContentGroup: Konva.Group;
-  private leftPanel: Konva.Group;
-  private rightPanel: Konva.Group;
+  private _timecodedContainer!: Konva.Group;
+  private _timecodedFloatingGroup!: Konva.Group;
+  private _timecodedFloatingBg!: Konva.Rect
+  private _timecodedFloatingEventCatcher!: Konva.Rect;
+  private _timecodedFloatingContentGroups = new Map<number, Konva.Group>();
 
-  private timecodedContainer: Konva.Group;
-  private timecodedGroup: Konva.Group;
-  private timecodedBaseGroup: Konva.Group;
-  private timecodedThumbnailsGroup: Konva.Group;
-  private timecodedSubtitlesGroup: Konva.Group;
-  private timecodedAudioGroup: Konva.Group;
-  private timecodedChartGroup: Konva.Group;
-  private timecodedMarkersGroup: Konva.Group;
-  private timecodedSurfaceGroup: Konva.Group;
-  private timecodedBackground: Konva.Rect
-  private timecodedEventCatcher: Konva.Rect;
-  private timecodedGroupNodes: Konva.Node[];
+  private _surfaceLayer!: Konva.Layer;
+  private _surfaceLayer_timecodedContainer!: Konva.Group;
+  private _surfaceLayer_timecodedFloatingGroup!: Konva.Group;
+  private _surfaceLayer_timecodedFloatingContentGroups = new Map<number, Konva.Group>();
+
+
+  // endregion
+
+  // bgs
+  private _layoutBg!: Konva.Rect;
+  private _headerBg!: Konva.Rect;
+  private _footerBg!: Konva.Rect;
+
+  // region flex groups
+  private _layoutFlexGroup!: KonvaFlexGroup;
+  private _headerFlexGroup!: KonvaFlexGroup;
+  private _mainFlexGroup!: KonvaFlexGroup;
+  private _mainLeftFlexGroup!: KonvaFlexGroup;
+  private _mainRightFlexGroup!: KonvaFlexGroup;
+
+  private _timelineLaneStaticFlexGroup!: KonvaFlexGroup;
+  private _timecodedWrapperFlexGroup!: KonvaFlexGroup;
+  private _timecodedContainerFlexGroup!: KonvaFlexGroup;
+  private _timecodedContainerStaticFlexGroup!: KonvaFlexGroup;
+
+  private _footerFlexGroup!: KonvaFlexGroup;
   // endregion
 
   // region component declarations
-  private videoController: VideoControllerApi;
-  private scrollbar: Scrollbar;
-  private playheadHover: PlayheadHover;
-  private playhead: Playhead;
-  private timelineLanes: GenericTimelaneLane[];
-  private timelineLanesMap: Map<string, GenericTimelaneLane>;
-  private scrubberLane: ScrubberLane;
-  private thumbnailHover: Thumbnail;
-  private headerTimecodeDisplay: TimecodeDisplay;
+
+  // private _scrollbar!: Scrollbar;
+  private _playheadHover!: PlayheadHover;
+  private _playhead!: Playhead;
+  private _scrubberLane!: ScrubberLane;
+  private _thumbnailHover!: Thumbnail;
+  private _headerTimecodeDisplay!: TimecodeDisplay;
   // endregion
 
-  private maxTimecodedGroupWidth: number;
+  private _maxTimecodedGroupWidth!: number;
 
-  private scrollWithPlayhead = true;
-  private syncTimelineWithPlayheadInProgress = false;
+  private _scrollWithPlayhead = true;
+  private _syncTimelineWithPlayheadInProgress = false;
 
-  private mouseWheelEnabled = false
-  private leftPanelVisible = true;
+  private _descriptionPaneVisible = true;
 
-  private videoEventBreaker$ = new Subject<void>();
+  private _videoEventBreaker$ = new Subject<void>();
+  private readonly _destroyed$ = new Subject<void>();
 
-  // region event declarations
-  readonly onScroll$: Subject<TimelineScrollEvent> = new Subject<TimelineScrollEvent>();
-  readonly onZoom$: Subject<TimelineZoomEvent> = new Subject<TimelineZoomEvent>();
+  constructor(config: Partial<ConfigWithOptionalStyle<TimelineConfig>>, videoController: VideoControllerApi) {
+    this._config = {
+      ...configDefault,
+      ...config,
+      style: {
+        ...configDefault.style,
+        ...config.style,
+      },
+    };
+    this._styleAdapter = new StyleAdapter(this._config.style);
 
-  // endregion
+    this._timelineHTMLElementId = this._config.timelineHTMLElementId;
+    this._timelineHTMLElement = document.getElementById(this._timelineHTMLElementId) as HTMLVideoElement;
 
-  constructor(config: Partial<ComponentConfigStyleComposed<TimelineConfig>>, videoController: VideoControllerApi) {
-    super(composeConfigAndDefault(config, configDefault));
+    if (!this._timelineHTMLElement) {
+      throw new Error(`Could not find HTML element id=${this._timelineHTMLElementId}`)
+    }
 
-    this.timelineHTMLElementId = this.config.timelineHTMLElementId;
-    this._axiosConfig = this.config.axiosConfig;
+    this._videoController = videoController;
 
-    this.playheadHoverSnapArea = this.config.playheadHoverSnapArea;
-    this.zoomScale = this.config.zoomScale;
-    this.zoomBaseline = this.config.zoomBaseline;
-    this.zoomMax = this.config.zoomMax;
+    if (!this._videoController) {
+      throw new Error(`Video conttroller API invalid`)
+    }
 
-    this.timecodedGroupNodes = [];
-    this.timelineLanes = [];
-    this.timelineLanesMap = new Map<string, GenericTimelaneLane>();
+    this.init();
 
-    this.timelineHTMLElement = document.getElementById(this.timelineHTMLElementId) as HTMLVideoElement;
-
-    this.videoController = videoController;
+    this.onZoom$.pipe(takeUntil(this._destroyed$)).subscribe({
+      next: () => {
+        this.playheadHoverMove()
+      }
+    })
   }
 
-  protected createCanvasNode(): Konva.Stage {
+  protected init() {
     let stageDimensions = this.resolveStageDimension();
-    this.width = stageDimensions.width;
 
-    this.stage = new Konva.Stage({
-      container: this.timelineHTMLElementId,
+    this._konvaStage = KonvaFactory.createStage({
+      container: this._timelineHTMLElementId,
       ...stageDimensions
     });
-    this.layer = new Konva.Layer();
-    this.stage.add(this.layer);
 
-    this.layoutGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
+    this._mainLayer = KonvaFactory.createLayer();
+    this._surfaceLayer = KonvaFactory.createLayer();
+
+    this._konvaStage.add(this._mainLayer);
+    this._konvaStage.add(this._surfaceLayer);
+
+
+    // region flex
+
+    this._layoutBg = KonvaFactory.createBgRect({
+      fill: this.style.backgroundFill,
+      opacity: this.style.backgroundOpacity,
     })
 
-    this.layer.add(this.layoutGroup);
-
-    this.layoutBackground = new Konva.Rect({
-      ...Constants.POSITION_TOP_LEFT,
-      fill: this.style.backgroundFill
-    });
-
-    this.headerGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT
+    this._headerBg = KonvaFactory.createBgRect({
+      fill: this.style.headerBackgroundFill,
+      opacity: this.style.headerBackgroundOpacity
     })
 
-    this.headerBackground = new Konva.Rect({
-      ...Constants.POSITION_TOP_LEFT,
-      fill: this.style.headerBackgroundFill
-    });
-
-    this.footerGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT
-    })
-
-    this.footerBackground = new Konva.Rect({
-      ...Constants.POSITION_TOP_LEFT,
+    this._footerBg = KonvaFactory.createBgRect({
       fill: this.style.footerBackgroundFill,
+      opacity: this.style.footerBackgroundOpacity
+    })
+
+    this._layoutFlexGroup = KonvaFlexGroup.of({
+      konvaNode: KonvaFactory.createGroup(),
+      konvaBgNode: this._layoutBg,
+      flexDirection: 'FLEX_DIRECTION_COLUMN',
+      justifyContent: 'JUSTIFY_FLEX_START',
+      width: stageDimensions.width,
+      height: stageDimensions.height,
     });
 
-    this.bodyGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT
+    this._headerFlexGroup = KonvaFlexGroup.of({
+      konvaNode: KonvaFactory.createGroup(),
+      konvaBgNode: this._headerBg,
+      justifyContent: 'JUSTIFY_SPACE_BETWEEN',
+      alignItems: 'ALIGN_CENTER',
+      width: 'auto',
+      height: this.style.headerHeight,
+      margins: FlexSpacingBuilder.instance()
+        .spacing(this.style.headerMarginBottom, 'EDGE_BOTTOM')
+        .build(),
+      paddings:
+        FlexSpacingBuilder.instance()
+          .spacing(20, 'EDGE_START')
+          .spacing(20, 'EDGE_END')
+          .build()
     })
 
-    this.bodyContentGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT
+    this._footerFlexGroup = KonvaFlexGroup.of({
+      konvaNode: KonvaFactory.createGroup(),
+      konvaBgNode: this._footerBg,
+      justifyContent: 'JUSTIFY_FLEX_END',
+      alignItems: 'ALIGN_CENTER',
+      width: 'auto',
+      height: this.style.footerHeight,
+      margins: FlexSpacingBuilder.instance()
+        .spacing(this.style.footerMarginTop, 'EDGE_TOP')
+        .build(),
+      paddings: FlexSpacingBuilder.instance()
+        .spacing(20, 'EDGE_START')
+        .spacing(20, 'EDGE_END')
+        .build()
     })
 
-    this.leftPanel = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT
+    this._mainFlexGroup = KonvaFlexGroup.of({
+      konvaNode: KonvaFactory.createGroup(),
+      flexDirection: 'FLEX_DIRECTION_ROW',
+      justifyContent: 'JUSTIFY_FLEX_START',
     })
 
-    this.rightPanel = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT
+    this._mainLeftFlexGroup = KonvaFlexGroup.of({
+      konvaNode: KonvaFactory.createGroup(),
+      flexDirection: 'FLEX_DIRECTION_COLUMN',
+      justifyContent: 'JUSTIFY_FLEX_START',
+      width: this.style.leftPaneWidth,
     })
 
-    this.timecodedContainer = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
+    this._mainRightFlexGroup = KonvaFlexGroup.of({
+      konvaNode: KonvaFactory.createGroup(),
+      flexDirection: 'FLEX_DIRECTION_COLUMN',
+      justifyContent: 'JUSTIFY_FLEX_START',
+      flexGrow: 1,
     })
 
-    this.timecodedGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
+    // endregion
+
+    this._timecodedContainer = KonvaFactory.createGroup();
+
+    this._timecodedFloatingGroup = KonvaFactory.createGroup({
       draggable: true
     });
-
-    this.timecodedBaseGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
-      name: 'timecodedBaseGroup'
-    });
-
-    this.timecodedThumbnailsGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
-      name: 'timecodedThumbnailsGroup'
-    });
-
-    this.timecodedSubtitlesGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
-      name: 'timecodedSubtitlesGroup'
-    });
-
-    this.timecodedAudioGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
-      name: 'timecodedAudioGroup'
-    });
-
-    this.timecodedChartGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
-      name: 'timecodedChartGroup'
-    });
-
-    this.timecodedMarkersGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
-      name: 'timecodedMarkersGroup'
-    });
-
-    this.timecodedSurfaceGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
-      name: 'timecodedSurfaceGroup'
-    });
-
-    this.timecodedBackground = new Konva.Rect({
-      ...Constants.POSITION_TOP_LEFT,
+    this._timecodedFloatingBg = KonvaFactory.createBgRect({
       fill: 'yellow',
       opacity: 0,
-      listening: false
     });
+    this._timecodedFloatingEventCatcher = KonvaFactory.createEventCatcherRect();
 
-    this.timecodedEventCatcher = ShapeUtil.createEventCatcher();
+    this._timecodedContainer.add(
+      this._timecodedFloatingGroup.add(...[
+        this._timecodedFloatingBg,
+        this._timecodedFloatingEventCatcher,
+      ])
+    );
 
-    this.thumbnailHover = new Thumbnail({
+
+    for (let i = 0; i < MAIN_LAYER_CONTENT_GROUPS; i++) {
+      let contentLayer = KonvaFactory.createGroup();
+      this._timecodedFloatingGroup.add(contentLayer);
+      this._timecodedFloatingContentGroups.set(i, contentLayer);
+    }
+
+    this._surfaceLayer_timecodedContainer = KonvaFactory.createGroup();
+    this._surfaceLayer_timecodedFloatingGroup = KonvaFactory.createGroup();
+    this._surfaceLayer_timecodedContainer.add(
+      this._surfaceLayer_timecodedFloatingGroup
+    );
+    for (let i = 0; i < SURFACE_LAYER_CONTENT_GROUPS; i++) {
+      let contentLayer = KonvaFactory.createGroup();
+      this._surfaceLayer_timecodedFloatingGroup.add(contentLayer);
+      this._surfaceLayer_timecodedFloatingContentGroups.set(i, contentLayer);
+    }
+
+    this._surfaceLayer.add(...[
+      this._surfaceLayer_timecodedContainer
+    ]);
+
+    this._playhead = new Playhead({
+      style: {
+        visible: this.style.playheadVisible,
+        fill: this.style.playheadFill,
+        lineWidth: this.style.playheadLineWidth,
+
+        symbolHeight: this.style.playheadSymbolHeight,
+        symbolYOffset: -this.style.playheadScrubberHeight / 2,
+
+        backgroundFill: this.style.playheadBackgroundFill,
+        backgroundOpacity: this.style.playheadBackgroundOpacity,
+        scrubberHeight: this.style.playheadScrubberHeight,
+        playProgressFill: this.style.playheadPlayProgressFill,
+        playProgressOpacity: this.style.playheadPlayProgressOpacity,
+        bufferedFill: this.style.playheadBufferedFill,
+        bufferedOpacity: this.style.playheadBufferedOpacity,
+      }
+    }, this, this._videoController)
+
+    this._playheadHover = new PlayheadHover({
+      style: {
+        visible: this.style.playheadHoverVisible,
+        fill: this.style.playheadHoverFill,
+        snappedFill: this.style.playheadHoverSnappedFill,
+        textSnappedFill: this.style.playheadHoverSnappedFill,
+        lineWidth: this.style.playheadHoverLineWidth,
+        symbolHeight: this.style.playheadHoverSymbolHeight,
+        symbolYOffset: -this.style.playheadScrubberHeight / 2,
+        textFill: this.style.playheadHoverTextFill,
+        textFontSize: this.style.playheadHoverTextFontSize,
+        textYOffset: this.style.playheadHoverTextYOffset
+      }
+    }, this);
+
+    this._thumbnailHover = new Thumbnail({
       style: {
         visible: false,
         stroke: this.style.thumbnailHoverStroke,
         strokeWidth: this.style.thumbnailHoverStrokeWidth
       }
-    })
-
-    this.layoutGroup.add(this.layoutBackground)
-    this.layoutGroup.add(this.headerGroup);
-    this.layoutGroup.add(this.footerGroup);
-    this.layoutGroup.add(this.bodyGroup);
-
-    this.headerGroup.add(this.headerBackground);
-    this.footerGroup.add(this.footerBackground);
-
-    this.bodyGroup.add(this.bodyContentGroup);
-    this.bodyGroup.add(this.leftPanel);
-    this.bodyGroup.add(this.rightPanel);
-
-    this.rightPanel.add(this.timecodedContainer);
-    this.timecodedContainer.add(this.timecodedGroup);
-    [this.timecodedBackground, this.timecodedEventCatcher,
-      this.timecodedBaseGroup, this.timecodedThumbnailsGroup, this.timecodedSubtitlesGroup, this.timecodedAudioGroup, this.timecodedChartGroup, this.timecodedMarkersGroup, this.timecodedSurfaceGroup
-    ].forEach(node => {
-      this.timecodedGroupNodes.push(node);
-      this.timecodedGroup.add(node);
     });
 
-    this.scrollbar = new Scrollbar({
+    for (const component of [this._playhead, this._playheadHover, this._thumbnailHover]) {
+      this.addToSurfaceLayerTimecodedFloatingContent(component.konvaNode)
+    }
+
+    this._headerTimecodeDisplay = new TimecodeDisplay({
+      style: {
+        visible: false,
+        fontSize: this.style.headerTimecodeDisplayTextFontSize,
+        fill: this.style.headerTimecodeDisplayTextFill
+      },
+    }, this, this._videoController);
+
+    let headerTimecodeFlexGroup = KonvaFlexGroup.of({
+      konvaNode: KonvaFactory.createGroup(),
+      width: this._headerTimecodeDisplay.style.width,
+      height: this._headerTimecodeDisplay.style.height
+    })
+
+    let timecodeDisplayFlexItem = KonvaFlexItem.of({
+      width: this._headerTimecodeDisplay.style.width,
+      height: this._headerTimecodeDisplay.style.height
+    }, this._headerTimecodeDisplay.konvaNode)
+
+    this._timecodedWrapperFlexGroup = KonvaFlexGroup.of({
+      konvaNode: KonvaFactory.createGroup(),
+      konvaBgNode: new Konva.Rect({
+        fill: 'yellow',
+        opacity: 0,
+      }),
+      positionType: 'POSITION_TYPE_ABSOLUTE',
+      width: '100%',
+      height: '100%',
+      paddings: FlexSpacingBuilder.instance()
+        .spacing(this.style.rightPaneMarginLeft, 'EDGE_START')
+        .spacing(this.style.rightPaneMarginRight, 'EDGE_END')
+        .build()
+    })
+
+    this._timecodedContainerFlexGroup = KonvaFlexGroup.of({
+      konvaNode: this._timecodedContainer,
+      konvaBgNode: new Konva.Rect({
+        fill: 'teal',
+        opacity: 0,
+      }),
+      flexGrow: 1,
+      height: '100%'
+    })
+
+    this._timecodedContainerStaticFlexGroup = KonvaFlexGroup.of({
+      konvaNode: KonvaFactory.createGroup(),
+      konvaBgNode: new Konva.Rect({
+        fill: 'teal',
+        opacity: 0,
+      }),
+      flexGrow: 1,
+      height: '100%'
+    })
+
+    this._timelineLaneStaticFlexGroup = KonvaFlexGroup.of({
+      konvaNode: KonvaFactory.createGroup(),
+      konvaBgNode: new Konva.Rect({
+        fill: 'yellow',
+        opacity: 0,
+      }),
+      positionType: 'POSITION_TYPE_ABSOLUTE',
+      flexDirection: 'FLEX_DIRECTION_COLUMN',
+      width: '100%',
+      height: '100%',
+    });
+
+    this._layoutFlexGroup
+      .addChild(this._headerFlexGroup
+        .addChild(headerTimecodeFlexGroup
+          .addChild(timecodeDisplayFlexItem)
+        )
+      )
+      .addChild(this._mainFlexGroup
+        .addChild(this._mainLeftFlexGroup)
+        .addChild(this._mainRightFlexGroup
+          .addChild(this._timelineLaneStaticFlexGroup)
+          .addChild(this._timecodedWrapperFlexGroup
+            .addChild(this._timecodedContainerFlexGroup
+              .addChild(this._timecodedContainerStaticFlexGroup)
+            )
+          )
+        )
+      )
+      .addChild(this._footerFlexGroup);
+
+    this._footerFlexGroup.addChild(new TimelineScrollbar({
+      height: this.style.scrollbarHeight,
+      width: 500,
+    }, new Scrollbar({
       style: {
         height: this.style.scrollbarHeight,
         backgroundFill: this.style.scrollbarBackgroundFill,
@@ -417,439 +619,309 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
         handleBarOpacity: this.style.scrollbarHandleBarOpacity,
         handleOpacity: this.style.scrollbarHandleOpacity,
       }
+    }), this));
+
+    // adding flex groups to layer
+    this._mainLayer.add(...[
+      this._layoutFlexGroup.contentNode.konvaNode
+    ]);
+
+    this._scrubberLane = new ScrubberLane({
+      style: {
+        marginBottom: this.style.scrubberMarginBottom
+      }
     });
 
-    this.rightPanel.add(this.scrollbar.initCanvasNode())
+    this._maxTimecodedGroupWidth = this.calculateTimecodedWidthFromZoomRatioPercent(this._config.zoomMax);
 
-    this.playhead = new Playhead({
-      style: {
-        visible: this.style.playheadVisible,
-        fill: this.style.playheadFill,
-        lineWidth: this.style.playheadLineWidth,
-        symbolHeight: this.style.playheadSymbolHeight,
-        backgroundFill: this.style.playheadBackgroundFill,
-        backgroundOpacity: this.style.playheadBackgroundOpacity,
-        scrubberHeight: this.style.playheadScrubberHeight,
-        playProgressFill: this.style.playheadPlayProgressFill,
-        playProgressOpacity: this.style.playheadPlayProgressOpacity,
-        bufferedFill: this.style.playheadBufferedFill,
-        bufferedOpacity: this.style.playheadBufferedOpacity
-      }
-    }, this, this.videoController)
-    this.playheadHover = new PlayheadHover({
-      style: {
-        visible: this.style.playheadHoverVisible,
-        fill: this.style.playheadHoverFill,
-        lineWidth: this.style.playheadHoverLineWidth,
-        symbolHeight: this.style.playheadHoverSymbolHeight,
-      }
-    }, this);
-
-    [this.playhead, this.playheadHover].forEach(component => {
-      this.addToTimecodedSurfaceGroup(component.initCanvasNode())
-    });
-
-    this.headerTimecodeDisplay = new TimecodeDisplay({
-      style: {
-        x: 10,
-        y: 10,
-        visible: false
-      }
-    }, this.videoController);
-    this.headerGroup.add(this.headerTimecodeDisplay.initCanvasNode())
-
-    this.settleLayout();
-
-    this.addToTimecodedSurfaceGroup(this.thumbnailHover.initCanvasNode())
-
-    this.scrubberLane = new ScrubberLane({
-      id: SCRUBBER_LANE_ID,
-      description: ''
-    }, this.videoController);
-
-    this.addLanes([
-      this.scrubberLane
+    this.addTimelineLanes([
+      this._scrubberLane
     ])
 
-    return this.stage;
-  }
-
-  protected afterCanvasNodeInit() {
-    this.videoController.onVideoLoading$.pipe(filter(p => !!p), takeUntil(this.onDestroy$)).subscribe((event) => {
-      this.clearContent();
+    this._videoController.onVideoLoading$.pipe(filter(p => !!p), takeUntil(this._destroyed$)).subscribe((event) => {
+      this.onVideoLoadingEvent(event!);
     })
 
-    this.videoController.onVideoLoaded$.pipe(filter(p => !!p), takeUntil(this.onDestroy$)).subscribe((event) => {
-      this.onVideoLoadedEvent(event);
+    this._videoController.onVideoLoaded$.pipe(filter(p => !!p), takeUntil(this._destroyed$)).subscribe((event) => {
+      this.onVideoLoadedEvent(event!);
     })
 
-    fromEvent(window, 'resize').pipe(takeUntil(this.onDestroy$)).subscribe((event: UIEvent) => {
-      // setTimeout is needed because window resize event fires a bit late
-      setTimeout(() => {
+    fromEvent(window, 'resize').pipe(takeUntil(this._destroyed$)).subscribe({
+      next: (event) => {
         this.onWindowResize(event);
-      }, 200)
-
-    })
-
-    this.timecodedGroup.on('mouseenter', (event) => {
-      this.playheadHover.toggleVisible(this.videoController.isVideoLoaded());
-    })
-
-    this.timecodedGroup.on('mouseleave', (event) => {
-      this.playheadHover.toggleVisible(false);
-    })
-
-    this.timecodedGroup.on('mousemove', (event) => {
-      if (!this.videoController.isVideoLoaded()) {
-        return;
       }
+    });
 
-      let x = this.timecodedGroup.getRelativePointerPosition().x;
-      this.playheadHoverMove(x);
+    this._timecodedContainer.on('mouseenter', (event) => {
+      this._playheadHover.toggleVisible(this._videoController.isVideoLoaded());
     })
 
-    this.timecodedMarkersGroup.on('mousemove', (event) => {
-      if (!this.videoController.isVideoLoaded()) {
-        return;
-      }
+    this._timecodedContainer.on('mouseleave', (event) => {
+      this._playheadHover.toggleVisible(false);
+    });
 
-      let x = this.timecodedGroup.getRelativePointerPosition().x;
-      this.playheadHoverMove(x);
-    })
-
-    /*this.timecodedGroup.on('wheel', (konvaEvent) => {
-      if (!this.videoController.isVideoLoaded()) {
-        return;
-      }
-
-      if (this.mouseWheelEnabled) {
-        let event = konvaEvent.evt;
-        event.preventDefault();
-
-        let direction = event.deltaY > 0 ? ZoomDirection.IN : ZoomDirection.OUT;
-        if (event.ctrlKey) {
-          direction = direction === ZoomDirection.IN ? ZoomDirection.OUT : ZoomDirection.IN;
+    [this._timecodedContainer].forEach(group => {
+      group.on('mousemove', (event) => {
+        if (!this._videoController.isVideoLoaded()) {
+          return;
         }
 
-        this.zoomStep(direction, this.timecodedGroup.getRelativePointerPosition().x);
-        this.updateScrollWithPlayhead();
-      }
+        this.playheadHoverMove();
+      })
+    });
 
-      let x = this.timecodedGroup.getRelativePointerPosition().x;
-      this.playheadHoverMove(x);
-    })
-*/
-    this.timecodedGroup.on('dragstart dragmove dragend', (event) => {
-      if (!this.videoController.isVideoLoaded()) {
-        this.timecodedGroup.setAttrs({
-          ...Constants.POSITION_TOP_LEFT
-        })
+    if (this._config.zoomWheelEnabled) {
+      this._timecodedContainer.on('wheel', (konvaEvent) => {
+
+        if (!this._videoController.isVideoLoaded()) {
+          return;
+        }
+
+        let pointerPosition = this._timecodedContainer.getRelativePointerPosition();
+        let scrubberRect = this._scrubberLane.getTimecodedRect();
+
+        if (MesurmentUtil.isPositionInRect(pointerPosition, scrubberRect)) {
+          let event = konvaEvent.evt;
+          event.preventDefault();
+
+          let direction: ZoomDirection = event.deltaY > 0 ? 'zoom_in' : 'zoom_out';
+          if (event.ctrlKey) {
+            direction = direction === 'zoom_in' ? 'zoom_out' : 'zoom_in';
+          }
+
+          this.zoomByStep(direction, this._config.zoomScaleWheel, this._timecodedContainer.getRelativePointerPosition().x);
+
+          this.updateScrollWithPlayhead();
+        }
+
+        this.playheadHoverMove();
+      })
+    }
+
+    this._timecodedContainer.on('dragstart', (event) => {
+      if (!this._videoController.isVideoLoaded()) {
+        event.target.stopDrag();
         return;
       }
-
-      if (event.target === this.timecodedGroup) {
-        let newPosition = this.timecodedGroup.getPosition();
-        this.timecodedGroup.setAttrs({
-          x: this.getConstrainedTimelineX(newPosition.x),
-          y: 0
-        })
-
-        this.onScroll$.next(this.createScrollEvent())
-
-        this.scrollbar.updateScrollHandle(this);
-      }
-      this.updateScrollWithPlayhead();
     })
 
-    this.timecodedGroup.on('dragmove', (event) => {
+    this._timecodedContainer.on('dragmove dragend', (event) => {
+      // @ts-ignore
+      if (event.target === this._timecodedFloatingGroup) {
+        let newPosition = (this._timecodedFloatingGroup as Konva.Group).getPosition();
+
+        (this._timecodedFloatingGroup as Konva.Group).setAttrs({
+          x: this.getConstrainedTimelineX(newPosition.x),
+          y: 0 // ensures that dragging is only on x-axis
+        });
+
+        this.onScroll$.next(this.createScrollEvent())
+      } else {
+        // update playheadHover if something else is dragged
+        this.playheadHoverMove();
+      }
+      this.updateScrollWithPlayhead();
+      this.layersSync();
+    })
+
+    this._timecodedContainer.on('dragmove', (event) => {
       WindowUtil.cursor('grabbing')
     })
 
-    this.timecodedGroup.on('dragend', (event) => {
+    this._timecodedContainer.on('dragend', (event) => {
       WindowUtil.cursor('default')
     })
 
-    this.scrubberLane.onMouseMove$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-      if (!this.videoController.isVideoLoaded()) {
+    this._scrubberLane.onMouseMove$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
+      if (!this._videoController.isVideoLoaded()) {
         return;
       }
-      this.mouseWheelEnabled = true;
-      let x = this.timecodedGroup.getRelativePointerPosition().x;
-      let time = this.timelinePositionToTime(x);
       if (this._thumbnailVttFile) {
+        let x = this._timecodedFloatingGroup.getRelativePointerPosition().x;
+        let time = this.timelinePositionToTime(x);
         let thumbnailVttCue = this._thumbnailVttFile.findCue(time);
-        this.showThumbnailHover(thumbnailVttCue);
+        if (thumbnailVttCue) {
+          this.showThumbnailHover(thumbnailVttCue);
+        }
       }
     });
 
-    this.scrubberLane.onMouseEnter$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-      this.mouseWheelEnabled = true;
-    });
-
-    this.scrubberLane.onMouseLeave$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
+    this._scrubberLane.onMouseLeave$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
       this.hideThumbnailHover();
-      this.mouseWheelEnabled = false;
     });
 
-        this.timecodedBaseGroup.on('touchstart', () => {
-            let x = this.timecodedGroup.getRelativePointerPosition().x;
-            this.playheadHoverMove(x);
-            this.playheadHover.toggleVisible(this.videoController.isVideoLoaded());
-            if (this._thumbnailVttFile) {
-                let time = this.timelinePositionToTime(x);
-                let thumbnailVttCue = this._thumbnailVttFile.findCue(time);
-                this.showThumbnailHover(thumbnailVttCue);
-            }
-        });
-
-        this.timecodedGroup.on('touchcancel', () => {
-            this.playheadHover.toggleVisible(false);
-            if (this._thumbnailVttFile) {
-                this.hideThumbnailHover();
-            }
-        });
-
-        this.canvasNode.on('touchend', () => {
-            this.playheadHover.toggleVisible(false);
-            if (this._thumbnailVttFile) {
-                this.hideThumbnailHover();
-            }
-        });
-
-    this.scrubberLane.onClick$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-      if (!this.videoController.isVideoLoaded()) {
+    this._scrubberLane.onClick$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
+      if (!this._videoController.isVideoLoaded()) {
         return;
       }
 
       this.updateScrollWithPlayhead();
 
-      let x = this.timecodedGroup.getRelativePointerPosition().x;
-      this.playheadHoverMove(x);
-      if (this.videoController.isVideoLoaded()) {
-        this.videoController.seekToTimestamp(this.timelinePositionToTime(x)).subscribe(() => {
-        })
-      }
+      let x = this._timecodedFloatingGroup.getRelativePointerPosition().x;
+      this._videoController.seekToTime(this.timelinePositionToTime(x)).subscribe();
+
+      this.playheadHoverMove();
     });
 
-    this.scrollbar.onScroll$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-      if (!this.videoController.isVideoLoaded()) {
-        return;
-      }
-
-      this.setHorizontalScrollPercent(this.scrollbar.getScrollHandlePercent()) // we should not use timeline easing scrolling here
-
-      this.updateScrollWithPlayhead();
-
-      this.onScroll$.next(this.createScrollEvent())
-    })
-
-    this.scrollbar.onZoom$.pipe(takeUntil(this.onDestroy$)).subscribe((event) => {
-      if (!this.videoController.isVideoLoaded()) {
-        return;
-      }
-
-      this.zoomByPercent(event.zoomPercent, false);
-      this.updateScrollWithPlayhead();
-    })
-
-    if (this.config.thumbnailVttFile) {
-      this._thumbnailVttFile = this.config.thumbnailVttFile;
-    } else if (this.config.thumbnailVttUrl) {
-      this.loadThumbnailVttFile(this.config.thumbnailVttUrl).subscribe()
+    if (this._config.thumbnailVttFile) {
+      this._thumbnailVttFile = this._config.thumbnailVttFile;
+    } else if (this._config.thumbnailVttUrl) {
+      this.loadThumbnailVttFile(this._config.thumbnailVttUrl).subscribe()
     }
+
+    this.settleLayout();
   }
 
-  private settleLayout() {
-    this.stage.setAttrs({
-      ...this.resolveStageDimension()
+  settleLayout(): void {
+    this._layoutFlexGroup.refreshLayout(); // make sure all child layouts are refreshed (ie. timeline lane layouts)
+
+    let stageDimensions = this.resolveStageDimension();
+
+    this._konvaStage.setAttrs({
+      ...stageDimensions
     })
 
-    let heights = this.calculateHeights();
+    this._layoutFlexGroup.setDimension(stageDimensions.width, stageDimensions.height);
 
-    this.headerGroup.setAttrs({
-      width: this.width,
-      height: this.style.headerHeight
-    })
+    this.settleTimecodedGroups();
 
-    this.bodyGroup.setAttrs({
-      y: this.headerGroup.y() + this.headerGroup.height(),
-      width: this.layoutGroup.width(),
-      height: heights.bodyHeight
-    });
+    this._maxTimecodedGroupWidth = this.calculateTimecodedWidthFromZoomRatioPercent(this._config.zoomMax);
 
-    this.footerGroup.setAttrs({
-      y: this.bodyGroup.y() + this.bodyGroup.height(),
-      width: this.width,
-      height: this.style.footerHeight
-    })
-
-    this.layoutGroup.setAttrs({
-      width: this.width,
-      height: heights.layoutHeight
-    })
-
-    this.layoutBackground.setAttrs({
-      ...this.layoutGroup.getSize()
-    });
-
-    this.headerBackground.setAttrs({
-      ...this.headerGroup.getSize()
-    });
-
-    this.footerBackground.setAttrs({
-      ...this.footerGroup.getSize()
-    });
-
-    [this.bodyContentGroup].forEach(node => {
-      node.setAttrs({
-        ...this.bodyGroup.getSize()
-      })
-    });
-
-    [this.leftPanel, this.rightPanel].forEach(node => {
-      node.setAttrs({
-        height: this.bodyGroup.getSize().height
-      })
-    });
-
-    this.leftPanel.setAttrs({
-      width: this.leftPanelVisible ? this.style.leftPanelWidth : 0,
-      visible: this.leftPanelVisible
-    });
-
-    this.rightPanel.setAttrs({
-      x: this.leftPanel.x() + this.leftPanel.width() + this.style.rightPanelLeftGutterWidth,
-      width: this.layoutGroup.width() - (this.leftPanel.width() + this.style.rightPanelLeftGutterWidth + this.style.rightPanelRightGutterWidth)
-    });
-
-    [this.timecodedContainer, this.timecodedGroup, ...this.timecodedGroupNodes].forEach(node => {
-      node.setAttrs({
-        ...this.rightPanel.getSize()
-      })
-    });
-
-    this.timecodedContainer.clipFunc((ctx) => {
-      ctx.rect(-this.style.timecodedContainerClipPadding, -500, this.timecodedContainer.width() + 2 * this.style.timecodedContainerClipPadding, this.timecodedContainer.height() + 500)
-      // ctx.rect(0, -500, this.timecodedContainer.width() , this.timecodedContainer.height() + 500)
-    })
-
-    this.timecodedThumbnailsGroup.clipFunc((ctx) => {
-      ctx.rect(0, 0, this.timecodedThumbnailsGroup.width(), this.timecodedThumbnailsGroup.height())
-    })
-
-    this.scrollbar.setPosition({
-      ...this.scrollbar.getPosition(),
-      y: this.leftPanel.getSize().height
-    })
-    this.scrollbar.setWidth(this.timecodedContainer.width());
-    this.scrollbar.updateScrollHandle(this);
-
-    this.maxTimecodedGroupWidth = this.calculateWidthFromZoomRatioPercent(this.zoomMax);
-
-    this.playheadHover.style = {
-      height: this.timecodedContainer.height()
+    this._playheadHover.style = {
+      height: this._timecodedContainer.height()
     }
 
-    this.timelineLanes.forEach(timelineLane => {
+    this._timelineLanes.forEach(timelineLane => {
       timelineLane.onMeasurementsChange();
     })
-    this.playhead.onMeasurementsChange();
+
+    this._playhead.onMeasurementsChange();
   }
 
-  onMeasurementsChange() {
-    this.settleLayout();
+  private settleTimecodedGroups() {
+    let timecodedFlexGroupLayout = this._timecodedContainerFlexGroup.getLayout();
 
-    let timecodedGroupDimension = this.getTimecodedGroupDimension();
+    let newTimecodedWidth = this.calculateTimecodedWidthFromZoomRatioPercent(this.getZoomPercent());
 
-    this.timelineLanes.forEach(timelineLane => {
-      timelineLane.onMeasurementsChange()
+    [this._timecodedFloatingGroup, ...this._timecodedFloatingGroup.getChildren()].forEach(node => {
+      node.setAttrs({
+        width: newTimecodedWidth,
+        height: timecodedFlexGroupLayout.height
+      })
     });
 
-    this.zoomByWidth(timecodedGroupDimension.width, this.resolveZoomFocus());
+    this._timecodedContainer.clipFunc((ctx) => {
+      ctx.rect(-this.style.rightPaneClipPadding, -500, this._timecodedContainer.width() + 2 * this.style.rightPaneClipPadding, this._timecodedContainer.height() + 500)
+    });
 
-    // scrollbar
-    this.scrollbar.updateScrollHandle(this);
+    this.layersSync();
   }
 
-  private onWindowResize(event: UIEvent) {
-    let dimensions = this.resolveStageDimension();
-    this.width = dimensions.width;
-    this.onMeasurementsChange();
+  private layersSync() {
+    [this._surfaceLayer_timecodedContainer].forEach(timecodedContainer => {
+      timecodedContainer.setAttrs({
+        ...this._timecodedContainer.absolutePosition(),
+        ...this._timecodedContainer.size(),
+      });
+
+      timecodedContainer.clipFunc((ctx) => {
+        ctx.rect(-this.style.rightPaneClipPadding, -500, timecodedContainer.width() + 2 * this.style.rightPaneClipPadding, timecodedContainer.height() + 500)
+      });
+    });
+
+    [this._surfaceLayer_timecodedFloatingGroup].forEach(timecodedGroup => {
+      timecodedGroup.setAttrs({
+        ...this._timecodedFloatingGroup.position(),
+        ...this._timecodedFloatingGroup.size(),
+      });
+
+      [...timecodedGroup.getChildren()].forEach(node => {
+        node.setAttrs({
+          ...this._timecodedFloatingGroup.size(),
+        })
+      });
+    })
   }
 
-  private calculateHeights(): {
-    bodyHeight: number,
-    layoutHeight: number
-  } {
-    let timelineLanesHeight = this.getLanes()
-      .map(p => p.getDimension().height)
-      .reduce((acc, current) => acc + current, 0);
-
-    let bodyHeight = timelineLanesHeight;
-
-    return {
-      bodyHeight: bodyHeight,
-      layoutHeight: this.style.headerHeight + bodyHeight + this.style.footerHeight
-    }
+  private onWindowResize(event: Event) {
+    this.settleLayout();
+    this.zoomByWidth(this.getTimecodedFloatingDimension().width, this.resolveTimelineContainerZoomFocusPosition());
   }
 
   private resolveStageDimension(): Dimension {
     let divElementRect = this.getTimelineHTMLElementRect();
-    let heights = this.calculateHeights();
+
+    let header = this.style.headerHeight + this.style.headerMarginBottom;
+
+    let lanes = this.getTimelineLanes()
+      .map(p => {
+        let layout = p.mainRightFlexGroup.getLayout();
+        return layout.height + layout.bottom
+      })
+      .reduce((acc, current) => acc + current, 0);
+
+    let footer = this.style.footerHeight + this.style.footerMarginTop;
+
+    let layout = header + lanes + footer;
+
     return {
       width: divElementRect.width >= this.style.stageMinWidth ? divElementRect.width : this.style.stageMinWidth,
-      height: heights.layoutHeight
+      height: layout >= this.style.stageMinHeight ? layout : this.style.stageMinHeight,
     }
   }
 
   private getTimelineHTMLElementRect(): RectMeasurement {
     return {
-      x: this.timelineHTMLElement.offsetLeft,
-      y: this.timelineHTMLElement.offsetTop,
-      width: this.timelineHTMLElement.offsetWidth,
-      height: this.timelineHTMLElement.offsetHeight
+      x: this._timelineHTMLElement.offsetLeft,
+      y: this._timelineHTMLElement.offsetTop,
+      width: this._timelineHTMLElement.offsetWidth,
+      height: this._timelineHTMLElement.offsetHeight
     }
   }
 
-
   private showThumbnailHover(thumbnailVttCue: ThumbnailVttCue) {
-    if (thumbnailVttCue) {
-      this.thumbnailHover.setVisible(true);
-      if (this.thumbnailHover.getThumbnailVttCue() === thumbnailVttCue) {
-        this.thumbnailHover.setThumbnailVttCue(thumbnailVttCue);
-        let position = this.resolveThumbnailPosition(this.thumbnailHover);
-        this.thumbnailHover.setPosition(position)
-        this.thumbnailHover.getCanvasNode().moveToTop();
-      } else {
-        ImageUtil.createKonvaImageSizedByWidth(thumbnailVttCue.url, this.style.thumbnailHoverWidth).subscribe(image => {
-          this.thumbnailHover.setThumbnailVttCue(thumbnailVttCue);
-          this.thumbnailHover.setDimension(image.getSize());
-          this.thumbnailHover.setImage(image);
-          this.thumbnailHover.setPosition(this.resolveThumbnailPosition(this.thumbnailHover))
-          this.thumbnailHover.getCanvasNode().moveToTop();
-        })
-      }
+    this._thumbnailHover.setVisible(true);
+    if (this._thumbnailHover.cue === thumbnailVttCue) {
+      this._thumbnailHover.cue = thumbnailVttCue;
+      let position = this.resolveThumbnailPosition(this._thumbnailHover);
+      this._thumbnailHover.setPosition(position)
+      this._thumbnailHover.konvaNode.moveToTop();
+    } else {
+      ImageUtil.createKonvaImageSizedByWidth(thumbnailVttCue.url, this.style.thumbnailHoverWidth).pipe(takeUntil(this._destroyed$)).subscribe({
+        next: (image) => {
+          this._thumbnailHover.cue = thumbnailVttCue;
+          this._thumbnailHover.setDimension(image.getSize());
+          this._thumbnailHover.setImage(image);
+          this._thumbnailHover.setPosition(this.resolveThumbnailPosition(this._thumbnailHover))
+          this._thumbnailHover.konvaNode.moveToTop();
+        },
+        error: (err) => {
+          console.error(err)
+        }
+      })
     }
   }
 
   private hideThumbnailHover() {
-    if (this.thumbnailHover) {
-      this.thumbnailHover.setVisible(false);
+    if (this._thumbnailHover) {
+      this._thumbnailHover.setVisible(false);
     }
   }
 
   private resolveThumbnailPosition(thumbnail: Thumbnail): Position {
-    let pointerPosition = this.timecodedGroup.getRelativePointerPosition();
-    let timecodedGroupDimension = this.getTimecodedGroupDimension();
-    let imageSize = thumbnail.getImage().getSize();
+    let pointerPosition = this._timecodedFloatingGroup.getRelativePointerPosition();
+    let timecodedGroupDimension = this.getTimecodedFloatingDimension();
+    let imageSize = thumbnail.image!.getSize();
     let x = pointerPosition.x - imageSize.width / 2; // center thumbnail
     let halfStroke = thumbnail.style.strokeWidth > 0 ? thumbnail.style.strokeWidth / 2 : 0;
     let xWithStroke = x - halfStroke;
     x = xWithStroke < 0 ? halfStroke : (x + imageSize.width + halfStroke) > timecodedGroupDimension.width ? (timecodedGroupDimension.width - imageSize.width - halfStroke) : x;
-    let scrubberLaneRect = this.scrubberLane.getRect();
+
+    let timecodedRect = this._scrubberLane.getTimecodedRect();
+
     return {
       x: x,
-      y: scrubberLaneRect.y + scrubberLaneRect.height + thumbnail.style.strokeWidth / 2 + this.style.thumbnailHoverYOffset
+      y: timecodedRect.y + timecodedRect.height + thumbnail.style.strokeWidth / 2 + this.style.thumbnailHoverYOffset
     }
   }
 
@@ -872,39 +944,39 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
     } else if (this.isSnappedEnd()) {
       return 100;
     } else {
-      let maxScroll = new Decimal(this.getTimecodedContainerDimension().width - this.getTimecodedGroupDimension().width).abs();
-      let scrollPercent = new Decimal(this.getTimecodedGroupPosition().x).abs().mul(100).div(maxScroll).toNumber();
+      let maxScroll = new Decimal(this.getTimecodedContainerDimension().width - this.getTimecodedFloatingDimension().width).abs();
+      let scrollPercent = new Decimal(this.getTimecodedFloatingPosition().x).abs().mul(100).div(maxScroll).toNumber();
       return scrollPercent;
     }
   }
 
-  setHorizontalScrollPercent(percent: number) {
+  scrollHorizontally(percent: number) {
     this.setTimelinePosition(this.calculateTimelineXFromScrollPercent(percent));
+    this.updateScrollWithPlayhead();
+    this.onScroll$.next(this.createScrollEvent());
   }
 
-  getScrollHandleHorizontalMeasurement(scrollbarWidth: number): HorizontalMeasurement {
-    let timelineWidth = this.getTimecodedGroupDimension().width;
-    let timelineX = this.getTimecodedGroupPosition().x;
+  getScrollHandleHorizontals(scrollbarWidth: number): Horizontals {
+    let timecodedFloatingDimension = this.getTimecodedFloatingDimension();
+    let timecodedContainerDimension = this.getTimecodedContainerDimension();
+    let timecodedFloatingPosition = this.getTimecodedFloatingPosition();
 
-    let measurement: HorizontalMeasurement;
-
-    if (timelineWidth <= scrollbarWidth) {
-      measurement = {
-        width: scrollbarWidth,
+    if (!scrollbarWidth || !timecodedContainerDimension || !timecodedFloatingDimension || timecodedFloatingDimension.width < 1) {
+      return {
+        width: 0,
         x: 0
-      }
-    } else {
-      let scrollHandleWidthDecimal = new Decimal(scrollbarWidth).mul(scrollbarWidth).div(timelineWidth).round();
-      measurement = {
-        width: scrollHandleWidthDecimal.toNumber(),
-        x: new Decimal(timelineX).abs().mul(scrollbarWidth).div(timelineWidth).toNumber()
       }
     }
 
-    return measurement;
+    let scrollHandleWidth = new Decimal(scrollbarWidth).mul(timecodedContainerDimension.width).div(timecodedFloatingDimension.width).round().toNumber();
+
+    return {
+      width: scrollHandleWidth,
+      x: new Decimal(timecodedFloatingPosition.x).abs().mul(scrollbarWidth).div(timecodedFloatingDimension.width).toNumber()
+    }
   }
 
-  scrollTo(percent: number): Observable<number> {
+  scrollToEased(percent: number): Observable<number> {
     percent = z.coerce.number()
       .min(0)
       .max(100)
@@ -913,9 +985,9 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
     return this.scrollToPercentEased(percent);
   }
 
-  scrollToPlayhead(): Observable<number> {
-    let newTimelineX = -this.playhead.getPlayheadPosition() + this.getTimecodedContainerDimension().width / 2;
-    return this.scrollToEased(newTimelineX);
+  scrollToPlayheadEased(): Observable<number> {
+    let newTimelineX = -this._playhead.getPlayheadPosition() + this.getTimecodedContainerDimension().width / 2;
+    return this.scrollToPositionEased(newTimelineX);
   }
 
   private scrollToPercent(percent: number) {
@@ -925,17 +997,16 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
 
   private scrollToPercentEased(percent: number): Observable<number> {
     let newTimelineX = this.calculateTimelineXFromScrollPercent(percent);
-    return this.scrollToEased(newTimelineX);
+    return this.scrollToPositionEased(newTimelineX);
   }
 
-  private scrollToEased(newTimelineX: number): Observable<number> {
+  private scrollToPositionEased(newTimelineX: number): Observable<number> {
     return new Observable<number>(o$ => {
-      let currentTimelineX = this.getTimecodedGroupPosition().x;
+      let currentTimelineX = this.getTimecodedFloatingPosition().x;
       animate({
-        layer: this.timecodedGroup.getLayer(),
-        duration: Constants.TIMELINE_SCROLL_EASED_DURATION_MS,
-        from: currentTimelineX,
-        to: newTimelineX,
+        duration: this._config.scrollEasingDuration,
+        startValue: currentTimelineX,
+        endValue: newTimelineX,
         onUpdateHandler: (frame, value) => {
           this.scrollTimeline(value)
         },
@@ -948,23 +1019,23 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
   }
 
   private isPlayheadInTimecodedView(): boolean {
-    return this.isInVisiblePositionRange(this.playhead.getPlayheadPosition());
+    return this.isInVisiblePositionRange(this._playhead.getPlayheadPosition());
   }
 
   private updateScrollWithPlayhead() {
-    let playheadPosition = this.playhead.getPlayheadPosition();
+    let playheadPosition = this._playhead.getPlayheadPosition();
     let isInBeforeTimecodedView = playheadPosition < this.getVisiblePositionRange().start;
     let isInVisiblePositionRange = this.isInVisiblePositionRange(playheadPosition);
-    this.scrollWithPlayhead = isInVisiblePositionRange && !isInBeforeTimecodedView; // we scroll with playhead only if playhed slips to right of timecoded view
+    this._scrollWithPlayhead = isInVisiblePositionRange && !isInBeforeTimecodedView; // we scroll with playhead only if playhed slips to right of timecoded view
   }
 
-  /***
+  /**
    * Scrolls timecoded group so that playhead is at left most position
    * @private
    */
   private syncTimelineWithPlayhead(): Observable<number> {
     return new Observable<number>(o$ => {
-      this.scrollToEased(-this.playhead.getPlayheadPosition()).pipe(map(result => {
+      this.scrollToPositionEased(-this._playhead.getPlayheadPosition()).pipe(map(result => {
         o$.next(this.getHorizontalScrollPercent());
         o$.complete();
       })).subscribe()
@@ -973,16 +1044,15 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
 
   private setTimelinePosition(x: number) {
     let newX = this.getConstrainedTimelineX(x);
-    this.timecodedGroup.x(newX);
+    this._timecodedFloatingGroup.x(newX);
+    this.layersSync();
   }
 
   private scrollTimeline(x: number) {
-    let currentX = this.getTimecodedGroupPosition().x;
+    let currentX = this.getTimecodedFloatingPosition().x;
     this.setTimelinePosition(x);
-    let newX = this.getTimecodedGroupPosition().x
+    let newX = this.getTimecodedFloatingPosition().x
     if (newX !== currentX) {
-      this.scrollbar.updateScrollHandle(this);
-      this.setHorizontalScrollPercent(this.scrollbar.getScrollHandlePercent()) // we should not use timeline easing scrolling here
       this.onScroll$.next(this.createScrollEvent())
     }
   }
@@ -990,7 +1060,7 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
   private calculateTimelineXFromScrollPercent(percent: number): number {
     percent = this.getConstrainedScrollPercent(percent);
 
-    let timecodedGroupDimension = this.getTimecodedGroupDimension();
+    let timecodedGroupDimension = this.getTimecodedFloatingDimension();
     let containerDimension = this.getTimecodedContainerDimension();
 
     if (timecodedGroupDimension.width > containerDimension.width) {
@@ -1006,175 +1076,189 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
   // region zoom
 
   getZoomPercent(): number {
-    let timecodedGroupDimension = this.getTimecodedGroupDimension();
+    let floatingDimension = this.getTimecodedFloatingDimension();
     let containerDimension = this.getTimecodedContainerDimension();
 
-    if (timecodedGroupDimension.width > containerDimension.width) {
-      return new Decimal(timecodedGroupDimension.width).mul(100).div(containerDimension.width).round().toNumber();
+    if (floatingDimension.width > containerDimension.width) {
+      return new Decimal(floatingDimension.width).mul(100).div(containerDimension.width).round().toNumber();
     } else {
-      return this.zoomBaseline;
+      return this._config.zoomBaseline;
     }
   }
 
-  zoomTo(percent: number): Observable<number> {
-    percent = z.coerce.number()
-      .min(this.getZoomBaseline())
-      .max(this.getZoomMax())
-      .parse(percent);
+  zoomTo(percent: number, zoomFocusPercent: number | undefined = void 0): number {
+    let percentSafeParsed = z.coerce.number()
+      .min(this._config.zoomBaseline)
+      .max(this._config.zoomMax)
+      .safeParse(percent);
 
-    return this.zoomToEased(percent);
-  }
+    if (percentSafeParsed.success) {
+      percent = this.getConstrainedZoomPercent(percentSafeParsed.data);
+      let newTimecodedWidth = this.calculateTimecodedWidthFromZoomRatioPercent(percent);
+      let timecodedContainerFocus = zoomFocusPercent ? this.resolveTimecodedFloatingPosition(zoomFocusPercent) : this.resolveTimelineContainerZoomFocusPosition();
+      this.zoomByWidth(newTimecodedWidth, timecodedContainerFocus);
+    }
 
-  zoomIn(): Observable<number> {
-    return new Observable<number>(o$ => {
-      this.zoomStep(ZoomDirection.IN, this.resolveZoomFocus());
-      o$.next(this.getZoomPercent());
-      o$.complete();
-    })
-  }
-
-  zoomOut(): Observable<number> {
-    return new Observable<number>(o$ => {
-      this.zoomStep(ZoomDirection.OUT, this.resolveZoomFocus());
-      o$.next(this.getZoomPercent());
-      o$.complete();
-    })
-  }
-
-  zoomToMax(): Observable<number> {
-    return this.zoomTo(this.zoomMax);
-  }
-
-  private zoomToEased(percent: number): Observable<number> {
-    return new Observable<number>(o$ => {
-      percent = this.getConstrainedZoomPercent(percent);
-      let currentWidth = this.getTimecodedGroupDimension().width;
-      let newWidth = this.calculateWidthFromZoomRatioPercent(percent);
-      animate({
-        layer: this.timecodedGroup.getLayer(),
-        duration: Constants.TIMELINE_ZOOM_EASED_DURATION_MS,
-        from: currentWidth,
-        to: newWidth,
-        onUpdateHandler: (frame, value) => {
-          this.zoomByWidth(value, this.resolveZoomFocus());
-        },
-        onCompleteHandler: (frame, value) => {
-          o$.next(this.getZoomPercent());
-          o$.complete();
-        }
-      })
-    })
-  }
-
-  private zoomStep(direction: ZoomDirection, zoomFocus: number) {
-    let currentWidthDecimal = new Decimal(this.getTimecodedGroupDimension().width);
-    let newWidth = (direction === ZoomDirection.IN ? currentWidthDecimal.mul(this.zoomScale) : currentWidthDecimal.div(this.zoomScale)).round().toNumber();
-    this.zoomByWidth(newWidth, zoomFocus);
-  }
-
-  private zoomByPercent(percent: number, updateScrollbar = true): number {
-    percent = this.getConstrainedZoomPercent(percent);
-    let newWidth = this.calculateWidthFromZoomRatioPercent(percent);
-    this.zoomByWidth(newWidth, this.resolveZoomFocus(), updateScrollbar);
     return this.getZoomPercent();
   }
 
-  private zoomByWidth(newWidth: number, zoomFocus: number, updateScrollbar = true) {
-    let currentX = this.getTimecodedGroupPosition().x;
-    let currentWidth = this.getTimecodedGroupDimension().width;
+  zoomToEased(percent: number, zoomFocusPercent: number | undefined = void 0): Observable<number> {
+    let percentSafeParsed = z.coerce.number()
+      .min(this._config.zoomBaseline)
+      .max(this._config.zoomMax)
+      .safeParse(percent);
 
-    newWidth = this.getConstrainedWidth(newWidth);
-    let newX = this.calculateNewPosition(newWidth, zoomFocus);
+    if (percentSafeParsed.success) {
+      let timecodedContainerFocus = zoomFocusPercent ? this.resolveTimecodedFloatingPosition(zoomFocusPercent) : this.resolveTimelineContainerZoomFocusPosition();
+      return this.zoomByPercentEased(percentSafeParsed.data, timecodedContainerFocus);
+    } else {
+      return of(this.getZoomPercent());
+    }
+  }
+
+  private resolveTimecodedFloatingPosition(percent: number): number {
+    let floatingDimension = this.getTimecodedFloatingDimension();
+    return new Decimal(floatingDimension.width).mul(percent).div(100).toNumber()
+  }
+
+  zoomInEased(): Observable<number> {
+    return this.zoomByStepEased('zoom_in', this._config.zoomScale, this.resolveTimelineContainerZoomFocusPosition());
+  }
+
+  zoomOutEased(): Observable<number> {
+    return this.zoomByStepEased('zoom_out', this._config.zoomScale, this.resolveTimelineContainerZoomFocusPosition());
+  }
+
+  zoomToMaxEased(): Observable<number> {
+    return this.zoomByPercentEased(this._config.zoomMax, this.resolveTimelineContainerZoomFocusPosition());
+  }
+
+  private zoomByStep(direction: ZoomDirection, zoomScale: number, timecodedContainerFocus: number) {
+    if ((direction === 'zoom_in' && this.getZoomPercent() === this._config.zoomMax) || (direction === 'zoom_out' && this.getZoomPercent() === 100)) {
+      return;
+    }
+
+    let currentWidthDecimal = new Decimal(this.getTimecodedFloatingDimension().width);
+    let newWidth = (direction === 'zoom_in' ? currentWidthDecimal.mul(zoomScale) : currentWidthDecimal.div(zoomScale)).round().toNumber();
+    this.zoomByWidth(newWidth, timecodedContainerFocus);
+  }
+
+  private zoomByPercent(percent: number, timelineContainerFocusPosition: number): number {
+    percent = this.getConstrainedZoomPercent(percent);
+    let newWidth = this.calculateTimecodedWidthFromZoomRatioPercent(percent);
+    this.zoomByWidth(newWidth, timelineContainerFocusPosition);
+    return this.getZoomPercent();
+  }
+
+  private zoomByWidth(newTimecodedWidth: number, timecodedContainerFocus: number) {
+    let currentTimecodedX = this.getTimecodedFloatingPosition().x;
+    let currentTimecodedWidth = this.getTimecodedFloatingDimension().width;
+    let containerRect = this.getTimecodedContainerRect();
+
+    newTimecodedWidth = this.getConstrainedTimecodedWidth(newTimecodedWidth);
+    let newTimecodedX: number;
+
+    if (newTimecodedWidth === containerRect.width) {
+      newTimecodedX = 0; // snap start
+    } else if (newTimecodedWidth === currentTimecodedWidth) {
+      newTimecodedX = currentTimecodedX;
+    } else {
+      newTimecodedX = new Decimal(Math.abs(currentTimecodedX) + timecodedContainerFocus).mul(newTimecodedWidth).div(currentTimecodedWidth).mul(-1).plus(timecodedContainerFocus).toNumber();
+    }
+
+    if (newTimecodedX > 0) {
+      newTimecodedX = 0;  // snap start
+    } else if ((newTimecodedX + newTimecodedWidth) <= (containerRect.width)) {
+      newTimecodedX = containerRect.width - newTimecodedWidth; // snap end
+    }
 
     this.hideThumbnailHover();
-    this.timecodedGroup.setAttrs({
-      width: newWidth,
-      x: newX
+
+    this.settleTimecodedFloating({
+      width: newTimecodedWidth,
+      x: newTimecodedX
     })
 
-    this.timecodedGroupNodes.forEach(node => {
-      node.width(newWidth);
-    })
-
-    let timecodedGroupDimension = this.getTimecodedGroupDimension();
-    if (timecodedGroupDimension.width !== currentWidth || this.getTimecodedGroupPosition().x !== currentX) {
-      // scrollbar
-      if (updateScrollbar) {
-        this.scrollbar.updateScrollHandle(this);
-      } else {
-        // zoom action is most likely coming from scrollbar itself
-        this.playheadHover.toggleVisible(false)
-      }
-      // scroll
-      this.setHorizontalScrollPercent(this.scrollbar.getScrollHandlePercent()) // we should not use timeline easing scrolling here
-
+    if (newTimecodedWidth !== currentTimecodedWidth || newTimecodedX !== currentTimecodedX) {
       this.onZoom$.next(this.createZoomEvent())
       this.onScroll$.next(this.createScrollEvent())
     }
   }
 
-  /***
-   * Move group proportionally to reposition focus
-   *
-   * @param newWidth
-   * @param repositionFocus
-   * @private
-   */
-  private calculateNewPosition(newWidth: number, repositionFocus: number = 0): number {
-    let currentX = this.getTimecodedGroupPosition().x;
-    let currentWidth = this.getTimecodedGroupDimension().width;
-    let containerRect = this.getTimecodedContainerRect();
+  private settleTimecodedFloating(horizontals: Horizontals) {
+    this._timecodedFloatingGroup.setAttrs({
+      width: horizontals.width,
+      x: horizontals.x
+    });
 
-    let zoomDirection = newWidth > currentWidth ? ZoomDirection.IN : ZoomDirection.OUT;
+    this._timecodedFloatingGroup.getChildren().forEach((node) => {
+      node.setAttrs({
+        width: horizontals.width // just width is enough
+      })
+    })
 
-    // move group proportionally to zoom focus
-    let newX = currentX;
-
-    // snap start or end if needed
-    if (newWidth === containerRect.width) {
-      newX = 0; // snap start
-    } else if (newWidth > containerRect.width) {
-      if (repositionFocus > 0) {
-        let zoomFocusRationDecimal = new Decimal(repositionFocus).div(currentWidth);
-        if (zoomFocusRationDecimal.greaterThanOrEqualTo(0) && zoomFocusRationDecimal.lessThanOrEqualTo(1)) {
-          let totalDelta = newWidth - currentWidth;
-          let leftSideDelta = zoomFocusRationDecimal.mul(totalDelta).abs().round().toNumber();
-          let x = currentX + leftSideDelta * (zoomDirection === ZoomDirection.IN ? -1 : 1)
-          newX = x < 0 ? x : 0;
-        }
-      }
-
-      if (newWidth > containerRect.width) {
-        let containerX2 = containerRect.x + containerRect.width;
-        let newX2 = newX + newWidth;
-        if (newX2 <= containerX2) { // snap end
-          newX = containerRect.width - newWidth; // snap end
-        }
-      }
-    }
-
-    return newX;
+    this.layersSync()
   }
 
-  private resolveZoomFocus(): number {
-    if (this.videoController.isVideoLoaded()) {
-      return this.resolvePlayheadSyncPosition();
+  private zoomByStepEased(direction: ZoomDirection, zoomScale: number, timecodedContainerFocus: number): Observable<number> {
+    let currentWidthDecimal = new Decimal(this.getTimecodedFloatingDimension().width);
+    let newWidth = (direction === 'zoom_in' ? currentWidthDecimal.mul(zoomScale) : currentWidthDecimal.div(zoomScale)).round().toNumber();
+    return this.zoomByWidthEased(newWidth, timecodedContainerFocus);
+  }
+
+  private zoomByPercentEased(percent: number, timecodedContainerFocus: number): Observable<number> {
+    percent = this.getConstrainedZoomPercent(percent);
+    let newTimecodedWidth = this.calculateTimecodedWidthFromZoomRatioPercent(percent);
+    return this.zoomByWidthEased(newTimecodedWidth, timecodedContainerFocus);
+  }
+
+  private zoomByWidthEased(newTimecodedWidth: number, timecodedContainerFocus: number): Observable<number> {
+    return new Observable<number>(o$ => {
+      let currentWidth = this.getTimecodedFloatingDimension().width;
+
+      if (currentWidth !== newTimecodedWidth) {
+        animate({
+          duration: this._config.zoomEasingDuration,
+          startValue: currentWidth,
+          endValue: newTimecodedWidth,
+          onUpdateHandler: (frame, value) => {
+            this.zoomByWidth(value, timecodedContainerFocus);
+          },
+          onCompleteHandler: (frame, value) => {
+            o$.next(this.getZoomPercent());
+            o$.complete();
+          }
+        })
+      } else {
+        o$.next(this.getZoomPercent());
+        o$.complete();
+      }
+    })
+  }
+
+  private resolveTimelineContainerZoomFocusPosition(): number {
+    if (this._videoController.isVideoLoaded() && this.isPlayheadInTimecodedView()) {
+      return this._playhead.getPlayheadPosition() + this.getTimecodedFloatingPosition().x;
     } else {
-      return this.isSnappedStart() ? 0 : this.isSnappedEnd() ? this.getTimecodedGroupDimension().width : this.getTimecodedGroupDimension().width / 2;
+      return this.isSnappedStart() ? 0 : this.isSnappedEnd() ? this.getTimecodedContainerDimension().width : this.getTimecodedContainerDimension().width / 2;
     }
   }
 
-  private calculateWidthFromZoomRatioPercent(zoomRatioPercent): number {
+  private calculateTimecodedWidthFromZoomRatioPercent(zoomRatioPercent: number): number {
     return new Decimal(this.getTimecodedContainerDimension().width).mul(zoomRatioPercent).div(100).round().toNumber();
   }
 
-  private getConstrainedWidth(newWidth: number): number {
+  private getConstrainedTimecodedWidth(newWidth: number): number {
     let containerDimension = this.getTimecodedContainerDimension();
-    return newWidth >= containerDimension.width ? newWidth <= this.maxTimecodedGroupWidth ? newWidth : this.maxTimecodedGroupWidth : containerDimension.width;
+    if (newWidth >= containerDimension.width) {
+      return newWidth <= this._maxTimecodedGroupWidth ? newWidth : this._maxTimecodedGroupWidth;
+    } else {
+      return containerDimension.width;
+    }
   }
 
   private getConstrainedZoomPercent(percent: number): number {
-    return percent < this.zoomBaseline ? this.zoomBaseline : percent > this.zoomMax ? this.zoomMax : percent;
+    return percent < this._config.zoomBaseline ? this._config.zoomBaseline : percent > this._config.zoomMax ? this._config.zoomMax : percent;
   }
 
   private getConstrainedScrollPercent(scrollPercent: number): number {
@@ -1185,30 +1269,34 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
 
   // region playhead
 
-  private playheadHoverMove(x: number) {
-    if (this.videoController.isVideoLoaded() && this.playheadHover) {
+  private playheadHoverMove() {
+    if (this._videoController.isVideoLoaded() && this._playheadHover) {
       let isSnapped = false;
 
-      if (!this.videoController.isPlaying()) {
-        // check if we need to snap playheadHover to playhead
-        let playheadPosition = this.resolvePlayheadSyncPosition();
-        if (x > (playheadPosition - this.playheadHoverSnapArea) && x < (playheadPosition + this.playheadHoverSnapArea)) {
-          x = playheadPosition;
-          isSnapped = true;
+      if (this._timecodedFloatingGroup.getRelativePointerPosition()) {
+        let pointerPosition = this._timecodedFloatingGroup.getRelativePointerPosition().x;
+
+        if (!this._videoController.isPlaying()) {
+          // check if we need to snap playheadHover to playhead
+          let playheadPosition = this.timeToTimelinePosition(this._videoController.getCurrentTime());
+          if (pointerPosition > (playheadPosition - this._config.playheadHoverSnapArea) && pointerPosition < (playheadPosition + this._config.playheadHoverSnapArea)) {
+            pointerPosition = playheadPosition;
+            isSnapped = true;
+          }
         }
+
+        this._playheadHover.sync(pointerPosition, isSnapped);
       }
-
-      this.playheadHover.sync(x, isSnapped);
     }
-  }
-
-  private resolvePlayheadSyncPosition(): number {
-    return this.timeToTimelinePosition(this.videoController.getCurrentTime());
   }
 
   // endregion
 
   // region video
+
+  private onVideoLoadingEvent(event: VideoLoadingEvent) {
+    this.clearContent();
+  }
 
   private onVideoLoadedEvent(event: VideoLoadedEvent) {
     this.fireVideoEventBreaker();
@@ -1218,30 +1306,26 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
 
     this.syncVideoMetadata();
 
-    this.videoController.onVideoTimeChange$.pipe(takeUntil(this.videoEventBreaker$)).subscribe((event) => {
+    this._videoController.onVideoTimeChange$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
       this.syncVideoMetadata();
     })
 
-    this.videoController.onPlay$.pipe(takeUntil(this.videoEventBreaker$)).subscribe((event) => {
+    this._videoController.onPlay$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
       this.updateScrollWithPlayhead();
     })
   }
 
   private fireVideoEventBreaker() {
-    nextCompleteVoidSubject(this.videoEventBreaker$);
-    this.videoEventBreaker$ = new Subject<void>();
-  }
-
-  getThumbnailVttFile(): ThumbnailVttFile {
-    return this._thumbnailVttFile;
+    nextCompleteVoidSubject(this._videoEventBreaker$);
+    this._videoEventBreaker$ = new Subject<void>();
   }
 
   private syncVideoMetadata() {
     // follows playhead and scrolls playhead to left if playhead moves out of view
-    if (this.scrollWithPlayhead && !this.isPlayheadInTimecodedView() && !this.syncTimelineWithPlayheadInProgress) {
-      this.syncTimelineWithPlayheadInProgress = true;
+    if (this._scrollWithPlayhead && !this.isPlayheadInTimecodedView() && !this._syncTimelineWithPlayheadInProgress) {
+      this._syncTimelineWithPlayheadInProgress = true;
       this.syncTimelineWithPlayhead().subscribe(result => {
-        this.syncTimelineWithPlayheadInProgress = false;
+        this._syncTimelineWithPlayheadInProgress = false;
       })
     }
   }
@@ -1249,187 +1333,139 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
   // endregion
 
   // region API
-  addLane(timelaneLane: GenericTimelaneLane): void {
-    if (this.timelineLanesMap.has(timelaneLane.getId())) {
-      throw new Error(`TimelineLane with id=${timelaneLane.getId()} already exist`)
+  addTimelineLane(timelineLane: TimelineLaneApi): TimelineLaneApi {
+    return this.addTimelineLaneAtIndex(timelineLane, this._timelineLanes.length);
+  }
+
+  addTimelineLaneAtIndex(timelineLane: TimelineLaneApi, index: number): TimelineLaneApi {
+    if (this._timelineLanesMap.has(timelineLane.id)) {
+      throw new Error(`TimelineLane with id=${timelineLane.id} already exist`)
     }
 
-    let isFirstLane = this.timelineLanes.length < 1;
-    let position: Position = {
-      ...Constants.POSITION_TOP_LEFT
+    if (index < 0 || index > this._timelineLanes.length) {
+      throw new Error(`TimelineLane index must be ${0} >= index <= ${this._timelineLanes.length}, provided ${index}`);
     }
 
-    if (!isFirstLane) {
-      position.y = this.timelineLanes
-        .map(p => p.getRect().height)
-        .reduce((partialSum, height) => partialSum + height, 0);
-    }
+    this._timelineLanes.splice(index, 0, timelineLane);
+    this._timelineLanesMap.set(timelineLane.id, timelineLane);
 
-    timelaneLane.setTimeline(this);
-    timelaneLane.setVideoController(this.videoController);
+    timelineLane.prepareForTimeline(this, this._videoController);
 
-    timelaneLane.setTimelinePosition(position)
-    timelaneLane.initCanvasNode();
-
-    this.timelineLanes.push(timelaneLane);
-    this.timelineLanesMap.set(timelaneLane.getId(), timelaneLane);
-
-    this.bodyContentGroup.add(timelaneLane.getCanvasNode());
+    this._mainLeftFlexGroup
+      .addChild(timelineLane.mainLeftFlexGroup, index)
+    this._timelineLaneStaticFlexGroup
+      .addChild(timelineLane.mainRightFlexGroup, index)
 
     this.settleLayout();
+
+    return timelineLane;
   }
 
-  removeLane(id: string) {
-    if (!this.timelineLanesMap.has(id)) {
-      throw new Error(`TimelineLane with id=${id} doesn't exist`)
+  removeTimelineLane(id: string): void {
+    if (!this._timelineLanesMap.has(id)) {
+      console.debug(`TimelineLane with id=${id} doesn't exist`);
+      return;
     }
 
-    let timelineLane = this.timelineLanesMap.get(id);
+    let timelineLane = this._timelineLanesMap.get(id);
 
-    this.timelineLanes.splice(this.timelineLanes.findIndex(p => p.getId() === id), 1);
-    this.timelineLanesMap.delete(id);
-    timelineLane.clearContent();
-    timelineLane.destroy();
+    if (timelineLane) {
+      this._mainLeftFlexGroup
+        .removeChild(timelineLane!.mainLeftFlexGroup)
+      this._timelineLaneStaticFlexGroup
+        .removeChild(timelineLane!.mainRightFlexGroup)
 
-    // reposition
-    let position: Position = {
-      ...Constants.POSITION_TOP_LEFT
+      this._timelineLanes.splice(this._timelineLanes.findIndex(p => p.id === id), 1);
+      this._timelineLanesMap.delete(id);
+      timelineLane!.destroy();
+
+      this.settleLayout();
     }
-
-    this.timelineLanes.forEach(timelineLane => {
-      timelineLane.setTimelinePosition({
-        ...position
-      })
-      position.y = position.y + timelineLane.getRect().height;
-    })
-
-    this.timelineLanes.forEach(timelineLane => {
-      timelineLane.onMeasurementsChange()
-    })
-
-    this.settleLayout();
   }
 
-  getScrollbar(): Scrollbar {
-    return this.scrollbar;
+  addTimelineLanes(timelineLanes: TimelineLaneApi[]): void {
+    timelineLanes.forEach(p => this.addTimelineLane(p));
   }
 
-  addLanes(timelaneLanes: GenericTimelaneLane[]): void {
-    timelaneLanes.forEach(p => this.addLane(p));
+  getTimelineLanes(): TimelineLaneApi[] {
+    return [...this._timelineLanesMap.values()];
   }
 
-  getLanes(): GenericTimelaneLane[] {
-    return [...this.timelineLanesMap.values()];
-  }
-
-  getLane(id: string): GenericTimelaneLane {
-    return this.timelineLanesMap.get(id);
+  getTimelineLane<T extends TimelineLaneApi>(id: string): T | undefined {
+    let timelineLane = this._timelineLanesMap.get(id);
+    return timelineLane ? timelineLane as T : void 0;
   }
 
   getScrubberLane(): ScrubberLane {
-    return this.getLane(SCRUBBER_LANE_ID) as ScrubberLane;
-  }
-
-  getMarkerLane(id: string): MarkerLane {
-    let lane = this.getLane(id);
-    return lane instanceof MarkerLane ? lane : void 0;
-  }
-
-  getThumbnailLane(id: string): ThumbnailLane {
-    let lane = this.getLane(id);
-    return lane instanceof ThumbnailLane ? lane : void 0;
-  }
-
-  getSubtitlesLane(id: string): SubtitlesLane {
-    let lane = this.getLane(id);
-    return lane instanceof SubtitlesLane ? lane : void 0;
-  }
-
-  getAudioTrackLane(id: string): AudioTrackLane {
-    let lane = this.getLane(id);
-    return lane instanceof AudioTrackLane ? lane : void 0;
-  }
-
-  createMarkerLane(config: MarkerLaneConfig): MarkerLane {
-    let lane = new MarkerLane(config);
-    this.addLane(lane);
-    return lane;
-  }
-
-  createThumbnailLane(config: ThumbnailLaneConfig): ThumbnailLane {
-    let lane = new ThumbnailLane(config);
-    this.addLane(lane);
-    return lane;
-  }
-
-  createSubtitlesLane(config: SubtitlesLaneConfig): SubtitlesLane {
-    let lane = new SubtitlesLane(config);
-    this.addLane(lane);
-    return lane;
+    return this.getTimelineLanes().find(p => p instanceof ScrubberLane)! as ScrubberLane;
   }
 
   // endregion
 
   isTimelineReady(): boolean {
-    return this.videoController.isVideoLoaded();
+    return this._videoController.isVideoLoaded();
   }
 
-  addToTimecodedBaseGroup(node: Konva.Group | Konva.Shape) {
-    this.timecodedBaseGroup.add(node);
+  addToTimecodedFloatingContent(node: Konva.Group | Konva.Shape, zIndex: number = 0) {
+    if (this._timecodedFloatingContentGroups.has(zIndex)) {
+      this._timecodedFloatingContentGroups.get(zIndex)!.add(node);
+    } else {
+      console.error(`Main content group with zIndex: ${zIndex} does not exist`);
+    }
   }
 
-  addToTimecodedSurfaceGroup(node: Konva.Group | Konva.Shape) {
-    this.timecodedSurfaceGroup.add(node);
+  addToTimecodedStaticContent(node: Konva.Group | Konva.Shape, zIndex: number = 0) {
+    this._timecodedContainerStaticFlexGroup.contentNode.konvaNode.add(node);
   }
 
-  addToTimecodedMarkersGroup(node: Konva.Group | Konva.Shape) {
-    this.timecodedMarkersGroup.add(node);
+  addToSurfaceLayerTimecodedFloatingContent(node: Konva.Group | Konva.Shape, zIndex: number = 0) {
+    if (this._surfaceLayer_timecodedFloatingContentGroups.has(zIndex)) {
+      this._surfaceLayer_timecodedFloatingContentGroups.get(zIndex)!.add(node);
+    } else {
+      console.error(`Surface content group with zIndex: ${zIndex} does not exist`);
+    }
   }
 
-  addToTimecodedThumbnailsGroup(node: Konva.Group | Konva.Shape) {
-    this.timecodedThumbnailsGroup.add(node);
-  }
-
-  addToTimecodedSubtitlesGroup(node: Konva.Group | Konva.Shape) {
-    this.timecodedSubtitlesGroup.add(node);
-  }
-
-  addToTimecodedAudioGroup(node: Konva.Group | Konva.Shape) {
-    this.timecodedAudioGroup.add(node);
-  }
-
-  addToTimecodedChartGroup(node: Konva.Group | Konva.Shape) {
-    this.timecodedChartGroup.add(node);
+  addToFooterFlexGroup(flexNode: FlexNode<any>) {
+    this._footerFlexGroup.addChild(flexNode);
   }
 
   constrainTimelinePosition(x: number): number {
-    let timecodedGroupDimension = this.getTimecodedGroupDimension();
+    let timecodedGroupDimension = this.getTimecodedFloatingDimension();
     return x < 0 ? 0 : x > timecodedGroupDimension.width ? timecodedGroupDimension.width : x;
   }
 
   timelinePositionToTime(xOnTimeline: number): number {
-    let constrainedX = this.constrainTimelinePosition(xOnTimeline);
-    return this.videoController.isVideoLoaded() ? new Decimal(constrainedX).mul(this.videoController.getDuration()).div(this.getTimecodedGroupDimension().width).toNumber() : 0;
+    return this.convertPositionOnTimelineToTime(xOnTimeline, this.getTimecodedFloatingDimension().width);
   }
 
-  timelinePositionToTimeRelativeToTimecoded(xOnTimeline: number): number {
-    return this.timelinePositionToTime(Math.abs(this.getTimecodedGroupHorizontalMeasurement().x) + xOnTimeline);
+  timelineContainerPositionToTime(xOnTimeline: number): number {
+    return this.timelinePositionToTime(Math.abs(this.getTimecodedFloatingHorizontals().x) + xOnTimeline);
   }
 
   timelinePositionToTimeFormatted(x: number): string {
-    return this.videoController.isVideoLoaded() ? this.videoController.formatTimestamp(this.timelinePositionToTime(x)) : '';
+    return this._videoController.isVideoLoaded() ? this._videoController.formatToTimecode(this.timelinePositionToTime(x)) : '';
   }
 
   timelinePositionToFrame(x: number): number {
-    return this.videoController.isVideoLoaded() ? this.videoController.calculateTimeToFrame(this.timelinePositionToTime(x)) : 0;
+    return this._videoController.isVideoLoaded() ? this._videoController.calculateTimeToFrame(this.timelinePositionToTime(x)) : 0;
   }
 
   timeToTimelinePosition(time: number): number {
-    return new Decimal(time).mul(this.getTimecodedGroupDimension().width).div(this.videoController.getDuration()).toNumber();
+    return this.convertTimeToTimelinePosition(time, this.getTimecodedFloatingDimension().width);
+  }
+
+  private convertTimeToTimelinePosition(time: number, timecodedWidth: number): number {
+    return new Decimal(time).mul(timecodedWidth).div(this._videoController.getDuration()).toNumber();
+  }
+
+  private convertPositionOnTimelineToTime(xOnTimeline: number, timecodedWidth: number): number {
+    let constrainedX = this.constrainTimelinePosition(xOnTimeline);
+    return this._videoController.isVideoLoaded() ? new Decimal(constrainedX).mul(this._videoController.getDuration()).div(timecodedWidth).toNumber() : 0;
   }
 
   private getConstrainedTimelineX(x: number): number {
-    let timecodedGroupDimension = this.getTimecodedGroupDimension();
+    let timecodedGroupDimension = this.getTimecodedFloatingDimension();
     let containerDimension = this.getTimecodedContainerDimension();
     if (timecodedGroupDimension.width <= containerDimension.width) {
       return 0;
@@ -1439,37 +1475,12 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
     }
   }
 
-  getBodyGroupRect(): RectMeasurement {
-    return {
-      ...this.bodyGroup.getPosition(),
-      ...this.bodyGroup.getSize()
-    };
-  }
-
-  getLeftPanelRect(): RectMeasurement {
-    return {
-      ...this.leftPanel.getPosition(),
-      ...this.leftPanel.getSize()
-    };
-  }
-
-  getLeftPanelVisible(): boolean {
-    return this.leftPanelVisible;
-  }
-
-  getRightPanelRect(): RectMeasurement {
-    return {
-      ...this.rightPanel.getSize(),
-      ...this.rightPanel.getPosition()
-    };
-  }
-
   getTimecodedContainerDimension(): Dimension {
-    return this.timecodedContainer.getSize()
+    return this._timecodedContainer.getSize()
   }
 
   getTimecodedContainerPosition(): Position {
-    return this.timecodedContainer.getPosition()
+    return this._timecodedContainer.getPosition()
   }
 
   getTimecodedContainerRect(): RectMeasurement {
@@ -1479,64 +1490,45 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
     }
   }
 
-  getTimecodedGroupDimension(): Dimension {
-    return this.timecodedGroup.getSize()
+  getTimecodedFloatingDimension(): Dimension {
+    return this._timecodedFloatingGroup.getSize()
   }
 
-  getTimecodedGroupPosition(): Position {
-    return this.timecodedGroup.getPosition()
+  getTimecodedFloatingPosition(): Position {
+    return this._timecodedFloatingGroup.getPosition()
   }
 
-  getTimecodedGroupRect(): RectMeasurement {
+  getTimecodedFloatingRect(): RectMeasurement {
     return {
-      ...this.timecodedGroup.getPosition(),
-      ...this.timecodedGroup.getSize()
+      ...this._timecodedFloatingGroup.getPosition(),
+      ...this._timecodedFloatingGroup.getSize()
     };
   }
 
-  getTimecodedGroupHorizontalMeasurement(): HorizontalMeasurement {
+  getTimecodedFloatingHorizontals(): Horizontals {
     return {
-      x: this.timecodedGroup.x(),
-      width: this.timecodedGroup.width()
+      x: this._timecodedFloatingGroup.x(),
+      width: this._timecodedFloatingGroup.width()
     }
   }
 
-  getRelativePointerPosition(): Position {
-    return this.timecodedGroup.getRelativePointerPosition();
-  }
-
-  getLayoutGroupDimension(): Dimension {
-    return this.layoutGroup.getSize();
-  }
-
-  getLayoutGroupPosition(): Position {
-    return this.layoutGroup.getPosition();
-  }
-
-  getRect(): RectMeasurement {
-    return {
-      ...this.getLayoutGroupDimension(),
-      ...this.getLayoutGroupPosition()
-    }
-  }
-
-  getVisiblePositionRange(): { start: number, end: number } {
-    let start = Math.abs(this.timecodedGroup.x());
-    let end = start + this.timecodedContainer.width();
+  private getVisiblePositionRange(): { start: number, end: number } {
+    let start = Math.abs(this._timecodedFloatingGroup.x());
+    let end = start + this._timecodedContainer.width();
     return {start, end};
   }
 
-  isInVisiblePositionRange(x: number): boolean {
+  private isInVisiblePositionRange(x: number): boolean {
     let visiblePosition = this.getVisiblePositionRange();
     return x >= visiblePosition.start && x <= visiblePosition.end;
   }
 
-  isSnappedStart(): boolean {
-    return this.getTimecodedGroupPosition().x === 0;
+  private isSnappedStart(): boolean {
+    return this.getTimecodedFloatingPosition().x === 0;
   }
 
-  isSnappedEnd(): boolean {
-    return (this.getTimecodedContainerDimension().width - this.getTimecodedGroupDimension().width) === this.getTimecodedGroupPosition().x;
+  private isSnappedEnd(): boolean {
+    return (this.getTimecodedContainerDimension().width - this.getTimecodedFloatingDimension().width) === this.getTimecodedFloatingPosition().x;
   }
 
   getVisibleTimeRange(): { start: number, end: number } {
@@ -1546,17 +1538,8 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
     return {start, end}
   }
 
-  private getZoomBaseline(): number {
-    return this.zoomBaseline;
-  }
-
-  private getZoomMax(): number {
-    return this.zoomMax;
-  }
-
   private loadThumbnailVttFile(thumbnailVttUrl: string): Observable<boolean> {
-    return ThumbnailVttFile.create(thumbnailVttUrl, this._axiosConfig).pipe(map(thumbnailVttFile => {
-      this._thumbnailVttUrl = thumbnailVttUrl;
+    return ThumbnailVttFile.create(thumbnailVttUrl, this._config.axiosConfig).pipe(map(thumbnailVttFile => {
       this._thumbnailVttFile = thumbnailVttFile;
       return true;
     }), catchError(err => {
@@ -1572,38 +1555,86 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
     }
   }
 
-  toggleLeftPanelVisible(visible: boolean) {
-    this.leftPanelVisible = visible;
-    this.leftPanel.visible(visible);
+  setDescriptionPaneVisible(visible: boolean): void {
+    this._mainLeftFlexGroup.setWidth(visible ? this.style.leftPaneWidth : 0)
     this.settleLayout();
-    this.timelineLanes.forEach(timelineLane => {
+    this._timelineLanes.forEach(timelineLane => {
       timelineLane.onMeasurementsChange();
     })
-    this.headerTimecodeDisplay.setVisible(!visible);
+
+    this._descriptionPaneVisible = visible;
+    this._headerTimecodeDisplay.setVisible(!visible);
   }
 
-  clearContent() {
-    this._thumbnailVttFile = void 0;
-    this.timelineLanes.forEach(timelineLane => {
-      timelineLane.clearContent();
+  toggleDescriptionPaneVisible(): void {
+    this.setDescriptionPaneVisible(!this._descriptionPaneVisible)
+  }
+
+  setDescriptionPaneVisibleEased(visible: boolean): Observable<void> {
+    return new Observable(o$ => {
+      animate({
+        duration: this._config.layoutEasingDuration,
+        startValue: visible ? 0 : this._mainLeftFlexGroup.getLayout().width,
+        endValue: visible ? this.style.leftPaneWidth : 0,
+        onUpdateHandler: (frame, value) => {
+          this._mainLeftFlexGroup.setWidth(Math.round(value))
+
+          this.settleTimecodedGroups();
+
+          this._timelineLanes.forEach(timelineLane => {
+            timelineLane.onMeasurementsChange();
+          })
+
+        },
+        onCompleteHandler: (frame, value) => {
+          this.setDescriptionPaneVisible(visible);
+          o$.next();
+          o$.complete();
+        }
+      })
     })
-    this.zoomByPercent(this.zoomBaseline);
   }
 
-  destroy() {
-    nextCompleteVoidSubjects(this.videoEventBreaker$);
+  toggleDescriptionPaneVisibleEased(): Observable<void> {
+    return this.setDescriptionPaneVisibleEased(!this._descriptionPaneVisible);
+  }
 
-    let subjects = [this.onScroll$, this.onZoom$];
-    completeSubjects(...subjects)
-    unsubscribeSubjects(...subjects);
+  get thumbnailVttFile(): ThumbnailVttFile | undefined {
+    return this._thumbnailVttFile;
+  }
 
-    DestroyUtil.destroy(this.scrollbar, this.playheadHover, this.playhead, ...this.timelineLanes, this.thumbnailHover, this.headerTimecodeDisplay);
+  get style(): TimelineStyle {
+    return this._styleAdapter.style;
+  }
 
-    this.timelineHTMLElement = void 0;
-    this.videoController = void 0;
+  set style(value: Partial<TimelineStyle>) {
+    this._styleAdapter.style = value;
+    this.onStyleChange$.next(this.style);
+  }
+
+  private clearContent() {
     this._thumbnailVttFile = void 0;
+    this.zoomByPercent(this._config.zoomBaseline, this.resolveTimelineContainerZoomFocusPosition());
+  }
 
-    super.destroy();
+  destroy(): void {
+    nextCompleteVoidSubjects(this._videoEventBreaker$);
+
+    completeUnsubscribeSubjects(
+      this.onScroll$,
+      this.onZoom$,
+      this.onStyleChange$
+    );
+
+    destroyer(this._layoutFlexGroup);
+
+    destroyer(this._playheadHover, this._playhead, ...this._timelineLanes, this._thumbnailHover, this._headerTimecodeDisplay);
+
+    nullifier(
+      this._timelineHTMLElement,
+      this._videoController,
+      this._thumbnailVttFile
+    );
   }
 
 }

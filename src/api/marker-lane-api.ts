@@ -1,81 +1,92 @@
-/**
- *       Copyright 2023 ByOmakase, LLC (https://byomakase.org)
+/*
+ * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
- *       Licensed under the Apache License, Version 2.0 (the "License");
- *       you may not use this file except in compliance with the License.
- *       You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *           http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *       Unless required by applicable law or agreed to in writing, software
- *       distributed under the License is distributed on an "AS IS" BASIS,
- *       WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *       See the License for the specific language governing permissions and
- *       limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 import {Api} from './api';
-import {GenericMarker} from '../timeline/marker/marker';
 import {MomentMarker, MomentMarkerConfig} from '../timeline/marker/moment-marker';
 import {PeriodMarker, PeriodMarkerConfig} from '../timeline/marker/period-marker';
-import {Subject} from 'rxjs';
+import {Observable} from 'rxjs';
 import {MarkerFocusEvent} from '../types';
-import {ComponentConfigStyleComposed} from '../common/component';
+import {ConfigWithOptionalStyle} from '../common';
+import {Marker} from '../timeline';
+import {MarkerVttFile} from '../track/marker-vtt-file';
+import {AxiosRequestConfig} from 'axios';
 
 export interface MarkerLaneApi extends Api {
-  /***
+  /**
    *  Fires on marker focus
+   *  @readonly
    */
-  onMarkerFocus$: Subject<MarkerFocusEvent>;
+  onMarkerFocus$: Observable<MarkerFocusEvent>;
 
-  /***
+  /**
+   * Loads data from VTT file
+   *
+   * @param vttUrl
+   * @param axiosConfig
+   */
+  loadVtt(vttUrl: string, axiosConfig?: AxiosRequestConfig): Observable<MarkerVttFile | undefined>;
+
+  /**
    * Creates new MomentMarker instance and adds it to MarkerLane
    * @param config MomentMarker configuration
    */
-  createMomentMarker(config: ComponentConfigStyleComposed<MomentMarkerConfig>): MomentMarker;
+  createMomentMarker(config: ConfigWithOptionalStyle<MomentMarkerConfig>): MomentMarker;
 
-  /***
+  /**
    * Creates new PeriodMarker instance and adds it to MarkerLane
    * @param config PeriodMarkern configuration
    */
-  createPeriodMarker(config: ComponentConfigStyleComposed<PeriodMarkerConfig>): PeriodMarker;
+  createPeriodMarker(config: ConfigWithOptionalStyle<PeriodMarkerConfig>): PeriodMarker;
 
-  /***
+  /**
    * Adds Marker to MarkerLane
    * @param marker Marker instance
    */
-  addMarker(marker: GenericMarker): GenericMarker;
+  addMarker(marker: Marker): Marker;
 
-  /***
-   * Returns Marker by ID
+  /**
+   * @returns Marker by ID
    * @param id Marker ID
    */
-  getMarker(id: string): GenericMarker;
+  getMarker(id: string): Marker | undefined;
 
-  /***
-   * Returns all Marker's
+  /**
+   * @returns all Marker's
    */
-  getMarkers(): GenericMarker[];
+  getMarkers(): Marker[];
 
-  /***
+  /**
    * Removes Marker by ID
    * @param id Marker ID
    */
   removeMarker(id: string): void;
 
-  /***
+  /**
    * Removes all Marker's
    */
   removeAllMarkers(): void;
 
-  /***
+  /**
    * Focuses Marker by ID
    * @param id Marker ID
    */
   focusMarker(id: string): void;
 
-  /***
-   * Returns Marker in focus
+  /**
+   * @returns Marker in focus
    */
-  getMarkerInFocus(): GenericMarker;
+  getMarkerInFocus(): Marker | undefined;
 }

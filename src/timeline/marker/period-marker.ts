@@ -1,35 +1,35 @@
-/**
- *       Copyright 2023 ByOmakase, LLC (https://byomakase.org)
+/*
+ * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
- *       Licensed under the Apache License, Version 2.0 (the "License");
- *       you may not use this file except in compliance with the License.
- *       You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *           http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *       Unless required by applicable law or agreed to in writing, software
- *       distributed under the License is distributed on an "AS IS" BASIS,
- *       WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *       See the License for the specific language governing permissions and
- *       limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 import Konva from 'konva';
-import {BaseMarker, MARKER_STYLE_DEFAULT, MarkerConfig, MarkerStyle} from './marker';
+import {BaseMarker, MarkerConfig} from './marker';
 import {PeriodMarkerChangeEvent, PeriodObservation} from '../../types';
-import {BaseMarkerHandle, MARKER_HANDLE_STYLE_DEFAULT, MarkerHandleConfig, MarkerHandleStyle} from './marker-handle';
-import Decimal from 'decimal.js';
-import {VerticalMeasurement} from '../../common/measurement';
+import {BaseMarkerHandle, MarkerHandleConfig} from './marker-handle';
+import {Position, Verticals} from '../../common/measurement';
 import {Timeline} from '../timeline';
 import {MarkerLane} from './marker-lane';
 import {takeUntil} from 'rxjs';
-import {ComponentConfigStyleComposed} from '../../common/component';
+import {ConfigWithOptionalStyle} from '../../common';
 import {z} from 'zod';
 import {isNullOrUndefined} from '../../util/object-util';
+import {MarkerUtil} from './marker-util';
+import {MARKER_STYLE_DEFAULT, MarkerHandleStyle, MarkerStyle} from './marker-types';
 
 // region marker handle
 export interface PeriodMarkerHandleStyle extends MarkerHandleStyle {
-  markerSymbolSize: number
   periodMarkerHandleType: 'start' | 'end';
 }
 
@@ -37,63 +37,19 @@ export interface PeriodMarkerHandleConfig extends MarkerHandleConfig<PeriodMarke
 
 }
 
-const markerHandleConfigDefault: Partial<PeriodMarkerHandleConfig> = {
-  editable: true,
-  style: {
-    ...MARKER_HANDLE_STYLE_DEFAULT,
-    markerSymbolSize: 20,
-    periodMarkerHandleType: 'start'
-  }
-}
-
 export class PeriodMarkerHandle extends BaseMarkerHandle<PeriodMarkerHandleConfig, PeriodMarkerHandleStyle> {
 
-  constructor(config: ComponentConfigStyleComposed<PeriodMarkerHandleConfig>, markerLane: MarkerLane, timeline: Timeline) {
-    super({
-      ...markerHandleConfigDefault,
-      ...config,
-      style: {
-        ...markerHandleConfigDefault.style,
-        ...config.style,
-      },
-    }, markerLane, timeline);
+  constructor(config: PeriodMarkerHandleConfig) {
+    super(config);
   }
 
   protected createSymbol(): Konva.Shape {
-    switch (this.style.markerSymbolType) {
-      case 'triangle':
-        let diagonal = Decimal.sqrt(2).mul(this.style.markerSymbolSize).toNumber();
-        let halfDiagonal = diagonal / 2;
-        return new Konva.Line({
-          points: this.style.periodMarkerHandleType === 'start' ? [-halfDiagonal, 0, 0, 0, 0, halfDiagonal] : [0, 0, halfDiagonal, 0, 0, halfDiagonal],
-          fill: this.style.color,
-          closed: true,
-          offsetY: halfDiagonal / 2,
-        })
-      case 'circle':
-        return new Konva.Arc({
-          fill: this.style.color,
-          innerRadius: 0,
-          outerRadius: this.style.markerSymbolSize / 2,
-          angle: 180,
-          rotation: this.style.periodMarkerHandleType === 'start' ? 90 : -90
-        })
-      case 'square':
-        return new Konva.Line({
-          points: [
-            0, 0,
-            this.style.markerSymbolSize, 0,
-            this.style.markerSymbolSize, this.style.markerSymbolSize
-          ],
-          fill: this.style.color,
-          closed: true,
-          rotation: this.style.periodMarkerHandleType === 'start' ? 225 : 45,
-          offsetX: this.style.markerSymbolSize / 2,
-          offsetY: this.style.markerSymbolSize / 2,
-        })
-      default:
-        throw Error('Unknown type');
-    }
+    return MarkerUtil.createPeriodSymbol({
+      handleType: this.style.periodMarkerHandleType,
+      color: this.style.color,
+      symbolSize: this.style.symbolSize,
+      symbolType: this.style.symbolType
+    })
   }
 }
 
@@ -108,8 +64,8 @@ export interface PeriodMarkerConfig extends MarkerConfig<PeriodObservation, Peri
 
 }
 
-const markerConfigDefault: Partial<PeriodMarkerConfig> = {
-  editable: true,
+const markerConfigDefault: Omit<PeriodMarkerConfig, 'timeObservation'> = {
+  editable: false,
   style: {
     ...MARKER_STYLE_DEFAULT,
     selectedAreaOpacity: 0.2,
@@ -118,16 +74,13 @@ const markerConfigDefault: Partial<PeriodMarkerConfig> = {
 }
 
 export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConfig, PeriodMarkerStyle, PeriodMarkerChangeEvent> {
-  private startMarkerHandle: PeriodMarkerHandle;
-  private endMarkerHandle: PeriodMarkerHandle;
+  private _startMarkerHandle?: PeriodMarkerHandle;
+  private _endMarkerHandle?: PeriodMarkerHandle;
 
-  // region konva
-  private selectedAreaRect: Konva.Rect;
-  private markerHandleRect: Konva.Rect;
+  private _selectedAreaRect?: Konva.Rect;
+  private _markerHandleRect?: Konva.Rect;
 
-  // endregion
-
-  constructor(config: ComponentConfigStyleComposed<PeriodMarkerConfig>) {
+  constructor(config: ConfigWithOptionalStyle<PeriodMarkerConfig>) {
     super({
       ...markerConfigDefault,
       ...config,
@@ -137,289 +90,296 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
       },
     });
 
-    this.observation.start = z.coerce.number()
+    this._timeObservation.start = z.coerce.number()
       .min(0)
-      .optional()
       .nullable()
-      .parse(this.observation.start);
+      .optional()
+      .parse(this._timeObservation.start);
 
-    this.observation.end = z.coerce.number()
+    this._timeObservation.end = z.coerce.number()
       .min(0)
-      .optional()
       .nullable()
-      .parse(this.observation.end);
+      .optional()
+      .parse(this._timeObservation.end);
 
-    if (!isNullOrUndefined(this.observation.end) && !isNullOrUndefined(this.observation.start)) {
-      this.observation.start = z.coerce.number()
-        .lte(this.observation.end)
-        .parse(this.observation.start);
+    if (!isNullOrUndefined(this._timeObservation.start) && !isNullOrUndefined(this._timeObservation.end)) {
+      this._timeObservation.start = z.coerce.number()
+        .lte(this._timeObservation.end!)
+        .parse(this._timeObservation.start);
+    }
+  }
+
+  override attachToTimeline(timeline: Timeline, markerLane: MarkerLane) {
+    super.attachToTimeline(timeline, markerLane);
+
+    this._styleAdapter.onChange$.pipe(takeUntil(this._destroyed$)).subscribe((style) => {
+      this.initAll();
+    })
+
+    this.initAll();
+  }
+
+  private initAll() {
+    if (this.hasTimeObservationStart()) {
+      this.initStartMarkerHandle();
     }
 
+    if (this.hasTimeObservationEnd()) {
+      this.initEndMarkerHandle()
+    }
+
+    if (this.hasTimeObservationStart() && this.hasTimeObservationEnd()) {
+      this.initSelectedAreaRect();
+    }
+
+    this.refreshTimelinePosition();
   }
 
-  protected createCanvasNode(): Konva.Group {
-    super.createCanvasNode();
-
-    this.initStartMarkerHandle();
-    this.initEndMarkerHandle();
-    this.initSelectedAreaRect();
-
-    return this.group;
-  }
-
-  onChange() {
-    this.settlePosition()
+  onObservationChange() {
+    this.refreshTimelinePosition()
     let event: PeriodMarkerChangeEvent = {
-      timeObservation: this.observation
+      timeObservation: this.timeObservation
     }
     this.onChange$.next(event)
   }
 
-  onMeasurementsChange() {
-    super.onMeasurementsChange();
-
-    if (this.hasStart() && this.hasEnd()) {
-      let verticalMeasurement = this.startMarkerHandle.getVerticalMeasurement();
-
-      this.selectedAreaRect.setAttrs({
-        y: verticalMeasurement.y,
-        height: verticalMeasurement.height,
-      });
-
-      let markerHandleVerticalMeasurement: VerticalMeasurement = {
-        y: this.startMarkerHandle.getHandleGroup().y(),
-        height: this.startMarkerHandle.getHandleGroup().getClientRect().height
-      }
-
-      this.markerHandleRect.setAttrs({
-        y: verticalMeasurement.y + markerHandleVerticalMeasurement.y - markerHandleVerticalMeasurement.height / 2,
-        height: markerHandleVerticalMeasurement.height,
-      });
+  private initStartMarkerHandle() {
+    if (this._startMarkerHandle) {
+      this._startMarkerHandle.destroy();
     }
 
-    this.settlePosition();
-  }
-
-  private initSelectedAreaRect() {
-    if (this.selectedAreaRect) {
-      this.selectedAreaRect.destroy();
-    }
-
-    if (this.markerHandleRect) {
-      this.markerHandleRect.destroy();
-    }
-
-    if (!this.hasStart() || !this.hasEnd()) {
+    if (!this.hasTimeObservationStart()) {
       return;
     }
 
-    let verticalMeasurement = this.startMarkerHandle.getVerticalMeasurement();
-    let startX = this.timeline.timeToTimelinePosition(this.observation.start);
-    let endX = this.timeline.timeToTimelinePosition(this.observation.end);
-
-    this.selectedAreaRect = new Konva.Rect({
+    let startX = this._timeline!.timeToTimelinePosition(this.timeObservation.start!);
+    this._startMarkerHandle = new PeriodMarkerHandle({
       x: startX,
-      y: verticalMeasurement.y,
-      width: endX - startX,
-      height: verticalMeasurement.height,
+      editable: this.editable,
+      verticalsProviderFn: () => {
+        return this.getMarkerHandleVerticals()
+      },
+      dragPositionConstrainerFn: (newPosition: Position) => {
+        return this.onDragMove(newPosition)
+      },
+      style: {
+        periodMarkerHandleType: 'start',
+        color: this.style.color,
+        symbolType: this.style.symbolType,
+        symbolSize: this.style.symbolSize,
+        lineStrokeWidth: this.style.lineStrokeWidth,
+        lineOpacity: this.style.lineOpacity
+      }
+    });
+
+    this._startMarkerHandle.onDrag = (markerHandleGroup) => {
+      if (this.editable) {
+        if (this._endMarkerHandle) {
+          if (markerHandleGroup.x() > this._endMarkerHandle.getPosition().x) {
+            markerHandleGroup.x(this._endMarkerHandle.getPosition().x);
+          }
+        }
+        this.settleAreaHorizontals()
+        if (this._markerHandleRect) {
+          this._markerHandleRect.opacity(1);
+        }
+      }
+    }
+
+    this._startMarkerHandle.onDragEnd = (markerHandleGroup) => {
+      if (this.editable) {
+        let newTime = this._timeline!.timelinePositionToTime(markerHandleGroup.x());
+        this.timeObservation = {
+          ...this.timeObservation,
+          start: newTime
+        }
+        if (this._markerHandleRect) {
+          this._markerHandleRect.opacity(this.style.markerHandleAreaOpacity);
+        }
+      }
+    }
+
+    this._group.add(this._startMarkerHandle.konvaNode);
+  }
+
+  private initEndMarkerHandle() {
+    if (this._endMarkerHandle) {
+      this._endMarkerHandle.destroy();
+    }
+
+    if (!this.hasTimeObservationEnd()) {
+      return;
+    }
+
+    let endX = this._timeline!.timeToTimelinePosition(this.timeObservation.end!);
+    this._endMarkerHandle = new PeriodMarkerHandle({
+      x: endX,
+      editable: this.editable,
+      verticalsProviderFn: () => {
+        return this.getMarkerHandleVerticals()
+      },
+      dragPositionConstrainerFn: (newPosition: Position) => {
+        return this.onDragMove(newPosition)
+      },
+      style: {
+        periodMarkerHandleType: 'end',
+        color: this.style.color,
+        symbolType: this.style.symbolType,
+        symbolSize: this.style.symbolSize,
+        lineStrokeWidth: this.style.lineStrokeWidth,
+        lineOpacity: this.style.lineOpacity
+      }
+    });
+
+    this._endMarkerHandle.onDrag = (markerHandleGroup) => {
+      if (this.editable) {
+        if (this._startMarkerHandle) {
+          if (markerHandleGroup.x() < this._startMarkerHandle.getPosition().x) {
+            markerHandleGroup.x(this._startMarkerHandle.getPosition().x);
+          }
+        }
+        this.settleAreaHorizontals()
+        if (this._markerHandleRect) {
+          this._markerHandleRect.opacity(1);
+        }
+      }
+    }
+
+    this._endMarkerHandle.onDragEnd = (markerHandleGroup) => {
+      if (this.editable) {
+        let newTime = this._timeline!.timelinePositionToTime(markerHandleGroup.x());
+        this.timeObservation = {
+          ...this.timeObservation,
+          end: newTime
+        }
+        if (this._markerHandleRect) {
+          this._markerHandleRect.opacity(this.style.markerHandleAreaOpacity);
+        }
+      }
+    }
+
+    this._group.add(this._endMarkerHandle.konvaNode);
+  }
+
+  private initSelectedAreaRect() {
+    if (this._selectedAreaRect) {
+      this._selectedAreaRect.destroy();
+    }
+
+    if (this._markerHandleRect) {
+      this._markerHandleRect.destroy();
+    }
+
+    if (!this._startMarkerHandle || !this._endMarkerHandle) {
+      return;
+    }
+
+    this._selectedAreaRect = new Konva.Rect({
       listening: false,
       fill: this.style.color,
       opacity: this.style.selectedAreaOpacity
     })
 
-    let markerHandleVerticalMeasurement: VerticalMeasurement = {
-      y: this.startMarkerHandle.getHandleGroup().y(),
-      height: this.startMarkerHandle.getHandleGroup().getClientRect().height
-    }
-
-    this.markerHandleRect = new Konva.Rect({
-      x: startX,
-      y: verticalMeasurement.y + markerHandleVerticalMeasurement.y - markerHandleVerticalMeasurement.height / 2,
-      width: endX - startX,
-      height: markerHandleVerticalMeasurement.height,
+    this._markerHandleRect = new Konva.Rect({
       listening: false,
       fill: this.style.color,
       opacity: this.style.markerHandleAreaOpacity
     })
 
-    this.group.add(this.selectedAreaRect);
-    this.group.add(this.markerHandleRect);
+    this._group.add(this._selectedAreaRect);
+    this._group.add(this._markerHandleRect);
   }
 
-  private initStartMarkerHandle() {
-    if (this.startMarkerHandle) {
-      this.startMarkerHandle.destroy();
-      this.startMarkerHandle = void 0;
-    }
+  refreshTimelinePosition() {
+    this._startMarkerHandle?.setPosition({
+      ...this._startMarkerHandle.getPosition(),
+      x: this._timeline!.timeToTimelinePosition(this.timeObservation.start!)
+    })
 
-    if (!this.hasStart()) {
-      return;
-    }
+    this._endMarkerHandle?.setPosition({
+      ...this._endMarkerHandle.getPosition(),
+      x: this._timeline!.timeToTimelinePosition(this.timeObservation.end!)
+    })
 
-    let startX = this.timeline.timeToTimelinePosition(this.observation.start);
-    this.startMarkerHandle = new PeriodMarkerHandle({
-      x: startX,
-      editable: this.editable,
-      style: {
-        color: this.style.color,
-        markerRenderType: this.style.renderType,
-        markerSymbolType: this.style.symbolType,
-        periodMarkerHandleType: 'start',
-      }
-    }, this.markerLane, this.timeline);
-
-    this.startMarkerHandle.onDrag = (markerHandleGroup) => {
-      if (this.editable) {
-        if (this.hasEnd()) {
-          if (markerHandleGroup.x() > this.endMarkerHandle.getPosition().x) {
-            markerHandleGroup.x(this.endMarkerHandle.getPosition().x);
-          }
-        }
-        this.settleMeasurements()
-        if (this.hasStart() && this.hasEnd()) {
-          this.markerHandleRect.opacity(1);
-        }
-      }
-    }
-
-    this.startMarkerHandle.onDragEnd = (markerHandleGroup) => {
-      if (this.editable) {
-        let newTime = this.timeline.timelinePositionToTime(markerHandleGroup.x());
-        this.setTimeObservation({
-          ...this.observation,
-          start: newTime
-        })
-        if (this.hasStart() && this.hasEnd()) {
-          this.markerHandleRect.opacity(this.style.markerHandleAreaOpacity);
-        }
-      }
-    }
-
-    this.group.add(this.startMarkerHandle.initCanvasNode());
+    this.settleAreaVerticals();
+    this.settleAreaHorizontals();
   }
 
-  private initEndMarkerHandle() {
-    if (this.endMarkerHandle) {
-      this.endMarkerHandle.destroy();
-      this.endMarkerHandle = void 0;
-    }
+  private settleAreaVerticals() {
+    this._selectedAreaRect?.setAttrs({
+      ...this.getMarkerHandleVerticals().area
+    });
 
-    if (!this.hasEnd()) {
-      return;
-    }
-
-    let endX = this.hasEnd() ? this.timeline.timeToTimelinePosition(this.observation.end) : void 0;
-    this.endMarkerHandle = new PeriodMarkerHandle({
-      x: endX,
-      editable: this.editable,
-      style: {
-        periodMarkerHandleType: 'end',
-        color: this.style.color,
-        markerRenderType: this.style.renderType,
-        markerSymbolType: this.style.symbolType
-      }
-    }, this.markerLane, this.timeline);
-
-    this.endMarkerHandle.onDrag = (markerHandleGroup) => {
-      if (this.editable) {
-        if (this.hasStart()) {
-          if (markerHandleGroup.x() < this.startMarkerHandle.getPosition().x) {
-            markerHandleGroup.x(this.startMarkerHandle.getPosition().x);
-          }
-        }
-        this.settleMeasurements()
-        if (this.hasStart() && this.hasEnd()) {
-          this.markerHandleRect.opacity(1);
-        }
-      }
-    }
-
-    this.endMarkerHandle.onDragEnd = (markerHandleGroup) => {
-      if (this.editable) {
-        let newTime = this.timeline.timelinePositionToTime(markerHandleGroup.x());
-        this.setTimeObservation({
-          ...this.observation,
-          end: newTime
-        })
-        if (this.hasStart() && this.hasEnd()) {
-          this.markerHandleRect.opacity(this.style.markerHandleAreaOpacity);
-        }
-      }
-    }
-
-    this.group.add(this.endMarkerHandle.initCanvasNode());
+    this._markerHandleRect?.setAttrs({
+      ...this.getMarkerHandleRectVerticals()
+    });
   }
 
-  private settlePosition() {
-    if (this.hasStart()) {
-      this.startMarkerHandle.setPosition({
-        ...this.startMarkerHandle.getPosition(),
-        x: this.timeline.timeToTimelinePosition(this.observation.start)
+  private settleAreaHorizontals() {
+    if (this._startMarkerHandle && this._endMarkerHandle) {
+      this._selectedAreaRect?.setAttrs({
+        x: this._startMarkerHandle.getPosition().x,
+        width: this._endMarkerHandle.getPosition().x - this._startMarkerHandle.getPosition().x
       })
-    }
 
-    if (this.hasEnd()) {
-      this.endMarkerHandle.setPosition({
-        ...this.endMarkerHandle.getPosition(),
-        x: this.timeline.timeToTimelinePosition(this.observation.end)
-      })
-    }
-
-    this.settleMeasurements();
-  }
-
-  private settleMeasurements() {
-    if (this.hasStart() && this.hasEnd()) {
-      this.selectedAreaRect.setAttrs({
-        x: this.startMarkerHandle.getPosition().x,
-        width: this.endMarkerHandle.getPosition().x - this.startMarkerHandle.getPosition().x
-      })
-      this.markerHandleRect.setAttrs({
-        x: this.startMarkerHandle.getPosition().x,
-        width: this.endMarkerHandle.getPosition().x - this.startMarkerHandle.getPosition().x
+      this._markerHandleRect?.setAttrs({
+        x: this._startMarkerHandle.getPosition().x,
+        width: this._endMarkerHandle.getPosition().x - this._startMarkerHandle.getPosition().x
       })
     }
   }
 
-  setTimeObservation(timeObservation: PeriodObservation) {
+  private getMarkerHandleRectVerticals(): Verticals {
+    if (this._startMarkerHandle) {
+      let markerHandleVerticals = this.getMarkerHandleVerticals();
+      let handleGroupClientRect = this._startMarkerHandle.getHandleGroup().getClientRect();
+      return {
+        y: markerHandleVerticals.area.y + this.getMarkerHandleVerticals().handle.y - (handleGroupClientRect.height / 2),
+        height: handleGroupClientRect.height,
+      }
+    } else {
+      return {
+        y: 0,
+        height: 0
+      }
+    }
+  }
+
+  private hasTimeObservationStart() {
+    return this.timeObservation && !isNullOrUndefined(this.timeObservation.start);
+  }
+
+  private hasTimeObservationEnd() {
+    return this.timeObservation && !isNullOrUndefined(this.timeObservation.end);
+  }
+
+  override set timeObservation(value: PeriodObservation) {
     if (this.editable) {
-      this.observation = timeObservation;
+      this._timeObservation = value;
 
       this.initStartMarkerHandle();
       this.initEndMarkerHandle();
       this.initSelectedAreaRect();
 
-      this.onChange();
+      this.onObservationChange();
     }
   }
 
-  setEditable(editable: boolean) {
-    super.setEditable(editable);
+  override get timeObservation(): PeriodObservation {
+    return super.timeObservation;
   }
 
-  protected afterCanvasNodeInit() {
-    super.afterCanvasNodeInit();
-
-    this.styleAdapter.onChange$.pipe(takeUntil(this.onDestroy$)).subscribe((style) => {
-      if (this.hasStart()) {
-        this.initStartMarkerHandle();
-      }
-
-      if (this.hasEnd()) {
-        this.initEndMarkerHandle()
-      }
-
-      if (this.hasStart() && this.hasEnd()) {
-        this.initSelectedAreaRect();
-      }
-    })
+  override set editable(value: boolean) {
+    super.editable = value;
+    if (this._startMarkerHandle) {
+      this._startMarkerHandle.editable = value;
+    }
+    if (this._endMarkerHandle) {
+      this._endMarkerHandle.editable = value;
+    }
   }
 
-  private hasStart() {
-    return this.observation && !isNullOrUndefined(this.observation.start);
-  }
-
-  private hasEnd() {
-    return this.observation && !isNullOrUndefined(this.observation.end);
+  override get editable(): boolean {
+    return super.editable;
   }
 }

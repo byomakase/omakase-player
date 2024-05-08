@@ -1,175 +1,174 @@
-/**
- *       Copyright 2023 ByOmakase, LLC (https://byomakase.org)
+/*
+ * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
- *       Licensed under the Apache License, Version 2.0 (the "License");
- *       you may not use this file except in compliance with the License.
- *       You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *           http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *       Unless required by applicable law or agreed to in writing, software
- *       distributed under the License is distributed on an "AS IS" BASIS,
- *       WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *       See the License for the specific language governing permissions and
- *       limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 import {Api} from './api';
 import {Observable} from 'rxjs';
 import {TimelineScrollEvent, TimelineZoomEvent} from '../types';
-import {AudioTrackLane, MarkerLane, SubtitlesLane, ThumbnailLane} from '../timeline';
-import {GenericTimelaneLane} from '../timeline/timeline-lane';
-import {TimelineStyle} from '../timeline';
-import {MarkerLaneConfig} from '../timeline/marker/marker-lane';
-import {ThumbnailLaneConfig} from '../timeline/thumbnail/thumbnail-lane';
-import {SubtitlesLaneConfig} from '../timeline/subtitles/subtitles-lane';
-import {ScrubberLane} from '../timeline/scrubber-lane';
-import {Scrollbar} from '../timeline/scrollbar';
-import {ThumbnailVttFile} from '../track/thumbnail-vtt-file';
+import {ScrubberLane, TimelineStyle} from '../timeline';
+import {ThumbnailVttFile} from '../track';
+import {TimelineLaneApi} from './timeline-lane-api';
 
 export interface TimelineApi extends Api {
-  /***
+  /**
    *  Fires on Timeline scroll
+   *  @readonly
    */
   onScroll$: Observable<TimelineScrollEvent>;
 
-  /***
+  /**
    *  Fires on Timeline zoom
+   *  @readonly
    */
   onZoom$: Observable<TimelineZoomEvent>;
 
-  get style(): TimelineStyle;
+  /**
+   *  Fires on Timeline style change
+   *  @readonly
+   */
+  onStyleChange$: Observable<TimelineStyle>;
 
-  /***
+  /**
+   * Style getter / setter
+   */
+  style: TimelineStyle;
+
+  /**
+   * Thumbnail VTT file
+   * @readonly
+   */
+  get thumbnailVttFile(): ThumbnailVttFile | undefined;
+
+  /**
    * Timeline zoom
    * @param percent number between 100 and TimelineConfig.zoomMax
+   * @param zoomFocusPercent in range from 0 - timeline start or first timestamp, to 100 - timeline end or last timestamop
    */
-  zoomTo(percent: number): Observable<number>;
+  zoomTo(percent: number, zoomFocusPercent: number | undefined): number;
 
-  /***
+  /**
+   * Timeline zoom
+   * @param percent number between 100 and TimelineConfig.zoomMax
+   * @param zoomFocusPercent in range from 0 - timeline start or first timestamp, to 100 - timeline end or last timestamop
+   */
+  zoomToEased(percent: number, zoomFocusPercent: number | undefined): Observable<number>;
+
+  /**
    * Zoom in. Zoom scale in single method call is defined with TimelineConfig.zoomScale
    */
-  zoomIn(): Observable<number>;
+  zoomInEased(): Observable<number>;
 
-  /***
+  /**
    * Zoom out. Zoom scale in single method call is defined with TimelineConfig.zoomScale
    */
-  zoomOut(): Observable<number>;
+  zoomOutEased(): Observable<number>;
 
   /**
    * Zoom to max resolution
    */
-  zoomToMax(): Observable<number>;
+  zoomToMaxEased(): Observable<number>;
 
-  /***
-   * Returns current zoom perent
+  /**
+   * @returns current zoom perent
    */
   getZoomPercent(): number;
 
-  /***
+  /**
    * Scrolls timeline
    * @param percent in range from 0 - timeline start or first timestamp, to 100 - timeline end or last timestamop
    */
-  scrollTo(percent: number): Observable<number>;
+  scrollToEased(percent: number): Observable<number>;
 
-  /***
+  /**
    * Scrolls timeline to playhead position
    */
-  scrollToPlayhead(): Observable<number>;
+  scrollToPlayheadEased(): Observable<number>;
 
-  getScrollbar(): Scrollbar;
-
-  /***
+  /**
    * Adds instantiated TimelineLane to timeline
    * @param timelineLane
    */
-  addLane(timelineLane: GenericTimelaneLane): void;
+  addTimelineLane(timelineLane: TimelineLaneApi): TimelineLaneApi;
 
-  /***
+  /**
+   * Adds instantiated TimelineLane to timeline
+   * @param timelineLane
+   * @param index
+   */
+  addTimelineLaneAtIndex(timelineLane: TimelineLaneApi, index: number): TimelineLaneApi;
+
+  /**
    * Removes TimelineLane by id
    * @param id
    */
-  removeLane(id: string);
+  removeTimelineLane(id: string): void;
 
-  /***
+  /**
    * Adds multiple instantiated TimelineLane-s to timeline
    * @param timelineLanes
    */
-  addLanes(timelineLanes: GenericTimelaneLane[]): void;
+  addTimelineLanes(timelineLanes: TimelineLaneApi[]): void;
 
-  /***
-   * Returns all TimelineLane-s
+  /**
+   * @returns all TimelineLane-s
    */
-  getLanes(): GenericTimelaneLane[];
+  getTimelineLanes(): TimelineLaneApi[];
 
-  /***
-   * Returns single TimelineLane
+  /**
+   * @returns single TimelineLane
    * @param id TimelineLane.id
    */
-  getLane(id: string): GenericTimelaneLane;
+  getTimelineLane<T extends TimelineLaneApi>(id: string): T | undefined;
 
-  /***
-   * Returns ScrubberLane instance
+  /**
+   * @returns ScrubberLane instance
    */
   getScrubberLane(): ScrubberLane;
 
-  /***
-   * Returns MarkerLane instance
-   * @param id MarkerLane ID
+  /**
+   * Shows or hides Timeline description pane
    */
-  getMarkerLane(id: string): MarkerLane;
-
-  /***
-   * Returns ThumbnailLane instance
-   * @param id ThumbnailLane ID
-   */
-  getThumbnailLane(id: string): ThumbnailLane
-
-  /***
-   * Returns SubtitlesLane instance
-   * @param id SubtitlesLane ID
-   */
-  getSubtitlesLane(id: string): SubtitlesLane;
-
-  /***
-   * Returns AudioTrackLane instance
-   * @param id AudioTrackLane ID
-   */
-  getAudioTrackLane(id: string): AudioTrackLane;
-
-  /***
-   * Creates new MarkerLane and adds it to Timeline
-   * @param config MarkerLane config
-   */
-  createMarkerLane(config: MarkerLaneConfig): MarkerLane;
-
-  /***
-   * Creates new ThumbnailLane and adds it to Timeline
-   * @param config ThumbnailLane config
-   */
-  createThumbnailLane(config: ThumbnailLaneConfig): ThumbnailLane;
-
-  /***
-   * Creates new SubtitlesLane and adds it to Timeline
-   * @param config SubtitlesLane config
-   */
-  createSubtitlesLane(config: SubtitlesLaneConfig): SubtitlesLane;
-
-  /***
-   * Shows or hides Timeline left panel
-   * @param visible
-   */
-  toggleLeftPanelVisible(visible: boolean): void;
+  setDescriptionPaneVisible(visible: boolean): void;
 
   /**
-   * Return ThumbnailVttFile if set
+   * Toggles Timeline description pane
    */
-  getThumbnailVttFile(): ThumbnailVttFile;
+  toggleDescriptionPaneVisible(): void;
+
+  /**
+   * Shows or hides Timeline description pane
+   */
+  setDescriptionPaneVisibleEased(visible: boolean): Observable<void>;
+
+  /**
+   * Toggles Timeline description pane
+   */
+  toggleDescriptionPaneVisibleEased(): Observable<void>;
 
   /**
    * Load ThumbnailVttFile by url
    */
   loadThumbnailsFromUrl(thumbnailVttUrl: string): Observable<boolean>;
 
-  destroy();
+  /**
+   * Recalculates and settles layout, called on window resize event
+   */
+  settleLayout(): void;
+
+  /**
+   * Destroys Timeline and it's dependencies
+   */
+  destroy(): void;
 }

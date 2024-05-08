@@ -1,3 +1,19 @@
+/*
+ * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 import {AudioTrackLane, MarkerLane, MomentMarker, OmakasePlayer, PeriodMarker, SubtitlesLane, ThumbnailLane} from "../src";
 import {RandomUtil} from "../src/util/random-util";
 import {ColorUtil} from "../src/util/color-util";
@@ -84,7 +100,7 @@ window.addEventListener('load', () => {
         // console.log(`video.timeChangeEvent$`, event)
         document.getElementById('inputFrameSeek').value = event.frame;
         document.getElementById('inputTimestamp').value = event.currentTime;
-        document.getElementById('inputTimestampFormatted').value = omakasePlayer.video.formatTimestamp(event.currentTime);
+        document.getElementById('inputTimestampFormatted').value = omakasePlayer.video.formatToTimecode(event.currentTime);
 
         // let hls = omakasePlayer.video.getHls();
         // console.log(hls.levels[hls.currentLevel].details)
@@ -107,10 +123,6 @@ window.addEventListener('load', () => {
           })
         })
       }
-
-      omakasePlayer.on(omakasePlayer.EVENTS.OMAKASE_SUBTITLES_CREATE, (event) => {
-        console.log('Subtitles loaded', event)
-      })
 
       let audioTracks = omakasePlayer.audio.getAudioTracks()
       // console.log('Audio tracks', omakasePlayer.video.getAudioTracks())
@@ -161,7 +173,7 @@ window.addEventListener('load', () => {
         let thumbnailLane = new ThumbnailLane({
           id: thumbnails.id,
           description: thumbnails.description,
-          thumbnailVttUrl: thumbnails.url,
+          vttUrl: thumbnails.url,
           style: {
             backgroundFill: '#0078ef',
             height: 60,
@@ -171,11 +183,11 @@ window.addEventListener('load', () => {
         });
 
         thumbnailLane.onClick$.subscribe((event) => {
-          omakasePlayer.video.seekToTimestamp(event.thumbnail.getThumbnailVttCue().startTime).subscribe(() => {
+          omakasePlayer.video.seekToTime(event.thumbnail.cue.startTime).subscribe(() => {
           })
         })
 
-        timeline.addLane(thumbnailLane);
+        timeline.addTimelineLane(thumbnailLane);
       })
     }
 
@@ -185,7 +197,7 @@ window.addEventListener('load', () => {
         let subtitlesLane = new SubtitlesLane({
           id: subtitle.id,
           description: subtitle.description,
-          subtitlesVttUrl: subtitle.url,
+          vttUrl: subtitle.url,
           style: {
             backgroundFill: "#eaeaea",
             paddingTop: 5,
@@ -193,7 +205,7 @@ window.addEventListener('load', () => {
           }
         });
 
-        timeline.addLane(subtitlesLane);
+        timeline.addTimelineLane(subtitlesLane);
       })
     }
 
@@ -203,7 +215,7 @@ window.addEventListener('load', () => {
         let audioTrackLane = new AudioTrackLane({
           id: audio.id,
           description: audio.name,
-          audioVttFileUrl: audio.url,
+          vttUrl: audio.url,
           style: {
             backgroundFill: "#ffffff",
             paddingTop: 5,
@@ -217,7 +229,7 @@ window.addEventListener('load', () => {
           }
         });
 
-        timeline.addLane(audioTrackLane);
+        timeline.addTimelineLane(audioTrackLane);
       })
     }
 
@@ -244,8 +256,8 @@ window.addEventListener('load', () => {
     }
 
 
-    let inAndOutMarkersLane = timeline.getLane('marker_lane_inout_1');
-    let inAndOutMarkersLane2 = timeline.getLane('marker_lane_inout_2');
+    let inAndOutMarkersLane = timeline.getTimelineLane('marker_lane_inout_1');
+    let inAndOutMarkersLane2 = timeline.getTimelineLane('marker_lane_inout_2');
 
     if (!inAndOutMarkersLane) {
       inAndOutMarkersLane = new MarkerLane({
@@ -256,7 +268,7 @@ window.addEventListener('load', () => {
         }
       });
 
-      timeline.addLane(inAndOutMarkersLane);
+      timeline.addTimelineLane(inAndOutMarkersLane);
     }
 
     if (!inAndOutMarkersLane2) {
@@ -268,7 +280,7 @@ window.addEventListener('load', () => {
         }
       });
 
-      timeline.addLane(inAndOutMarkersLane2);
+      timeline.addTimelineLane(inAndOutMarkersLane2);
     }
 
 
@@ -309,7 +321,7 @@ window.addEventListener('load', () => {
     let createDebugMarkers = (markerLane) => {
       markerLane.createMomentMarker({
         id: "moment_marker_lane1",
-        observation: {
+        timeObservation: {
           time: 50
         },
         editable: false,
@@ -322,7 +334,7 @@ window.addEventListener('load', () => {
 
       markerLane.addMarker(new MomentMarker({
         id: "moment_marker_spanning1",
-        observation: {
+        timeObservation: {
           time: 100
         },
         style: {
@@ -334,7 +346,7 @@ window.addEventListener('load', () => {
 
       markerLane.createPeriodMarker({
         id: "testmarker2",
-        observation: {
+        timeObservation: {
           start: 150,
           end: 200
         },
@@ -347,7 +359,7 @@ window.addEventListener('load', () => {
 
       markerLane.addMarker(new PeriodMarker({
         id: "testmarker4",
-        observation: {
+        timeObservation: {
           start: 250,
           end: 300
         },
@@ -361,7 +373,7 @@ window.addEventListener('load', () => {
 
       markerLane.addMarker(new PeriodMarker({
         id: "testmarker5",
-        observation: {
+        timeObservation: {
           start: 1250,
           end: 1250
         },
@@ -385,21 +397,21 @@ window.addEventListener('load', () => {
   let buttonZoomTo = document.getElementById('buttonZoomTo');
   buttonZoomTo.onclick = function () {
     let percent = document.getElementById('inputZoomTo').value;
-    omakasePlayer.timeline.zoomTo(percent).subscribe((result) => {
+    omakasePlayer.timeline.zoomToEased(percent).subscribe((result) => {
       console.log(`Zoom to ${result}% completed`);
     });
   }
 
   let buttonZoom100 = document.getElementById('buttonZoom100');
   buttonZoom100.onclick = function () {
-    omakasePlayer.timeline.zoomTo(100).subscribe(result => {
+    omakasePlayer.timeline.zoomToEased(100).subscribe(result => {
       console.log(`Zoom to ${result}% completed`);
     });
   }
 
   let buttonZoom1500 = document.getElementById('buttonZoom1500');
   buttonZoom1500.onclick = function () {
-    omakasePlayer.timeline.zoomTo(1500).subscribe(result => {
+    omakasePlayer.timeline.zoomToEased(1500).subscribe(result => {
       console.log(`Zoom to ${result}% completed`);
     });
   }
@@ -407,28 +419,28 @@ window.addEventListener('load', () => {
   let buttonScrollTo = document.getElementById('buttonScrollTo');
   buttonScrollTo.onclick = function () {
     let percent = document.getElementById('inputScrollTo').value;
-    omakasePlayer.timeline.scrollTo(percent).subscribe((result) => {
+    omakasePlayer.timeline.scrollToEased(percent).subscribe((result) => {
       console.log(`Scroll to ${result}% completed`);
     });
   }
 
   let buttonScroll0 = document.getElementById('buttonScroll0');
   buttonScroll0.onclick = function () {
-    omakasePlayer.timeline.scrollTo(0).subscribe((result) => {
+    omakasePlayer.timeline.scrollToEased(0).subscribe((result) => {
       console.log(`Scroll to ${result}% completed`);
     });
   }
 
   let buttonScroll100 = document.getElementById('buttonScroll100');
   buttonScroll100.onclick = function () {
-    omakasePlayer.timeline.scrollTo(100).subscribe((result) => {
+    omakasePlayer.timeline.scrollToEased(100).subscribe((result) => {
       console.log(`Scroll to ${result}% completed`);
     });
   }
 
   let buttonScrollToPlayhead = document.getElementById('buttonScrollToPlayhead');
   buttonScrollToPlayhead.onclick = function () {
-    omakasePlayer.timeline.scrollToPlayhead().subscribe(result => {
+    omakasePlayer.timeline.scrollToPlayheadEased().subscribe(result => {
       console.log(`Scroll to ${result}% completed`);
     });
   }
@@ -478,7 +490,7 @@ window.addEventListener('load', () => {
   let buttonTimestampSeek = document.getElementById('buttonTimestampSeek');
   buttonTimestampSeek.onclick = function () {
     let timestamp = document.getElementById('inputTimestamp').value;
-    omakasePlayer.video.seekToTimestamp(timestamp).subscribe(() => {
+    omakasePlayer.video.seekToTime(timestamp).subscribe(() => {
     });
   }
 
@@ -521,7 +533,7 @@ window.addEventListener('load', () => {
     }
   })
 
-  omakasePlayer.video.addHelpMenuGroup({
+  omakasePlayer.video.appendHelpMenuGroup({
     name: 'Keyboard shortcuts',
     items: [
       {

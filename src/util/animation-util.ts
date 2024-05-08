@@ -1,57 +1,58 @@
-/**
- *       Copyright 2023 ByOmakase, LLC (https://byomakase.org)
+/*
+ * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
- *       Licensed under the Apache License, Version 2.0 (the "License");
- *       you may not use this file except in compliance with the License.
- *       You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *           http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *       Unless required by applicable law or agreed to in writing, software
- *       distributed under the License is distributed on an "AS IS" BASIS,
- *       WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *       See the License for the specific language governing permissions and
- *       limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 import Konva from 'konva';
 import {IFrame} from 'konva/lib/types';
 
-export interface AnimateConf {
-  layer: Konva.Layer,
+export interface AnimateConfig {
+  layer?: Konva.Layer,
   duration: number,
-  from: number,
-  to: number,
+  startValue: number,
+  endValue: number,
   onUpdateHandler: (frame: IFrame, value: number) => void,
   onCompleteHandler?: (frame: IFrame, value: number) => void
 }
 
-export function animate(conf: AnimateConf) {
-  if (conf.from === conf.to) {
+export function animate(config: AnimateConfig) {
+  if (config.startValue === config.endValue) {
     return;
   }
 
-  let isRising = conf.from < conf.to;
+  let isRising = config.startValue < config.endValue;
 
   // we will always animate from 0 to maxValue
-  let maxValue = isRising ? (conf.to - conf.from) : (conf.from - conf.to);
+  let maxValue = isRising ? (config.endValue - config.startValue) : (config.startValue - config.endValue);
 
   let animation = new Konva.Animation((frame) => {
-    let newValue = Konva.Easings.StrongEaseInOut(frame.time, 0, maxValue, conf.duration);
-
-    if (newValue >= maxValue) {
-      conf.onUpdateHandler(frame, conf.to); // trigger update on last possible value, which is conf.to
-      animation.stop();
-      if (conf.onCompleteHandler) {
-        conf.onCompleteHandler(frame, conf.to);
-        animation = null;
+    if (frame) {
+      let interpolatedValue = Konva.Easings.StrongEaseInOut(frame.time, 0, maxValue, config.duration);
+      if (interpolatedValue >= maxValue) {
+        config.onUpdateHandler(frame, config.endValue); // trigger update on last possible value, which is conf.to
+        animation.stop();
+        if (config.onCompleteHandler) {
+          config.onCompleteHandler(frame, config.endValue);
+        }
+      } else {
+        let updatedValue = config.startValue + interpolatedValue * (isRising ? 1 : -1);
+        config.onUpdateHandler(frame, updatedValue);
       }
     } else {
-      let updatedValue = conf.from + newValue * (isRising ? 1 : -1);
-      conf.onUpdateHandler(frame, updatedValue);
+      animation.stop();
     }
-
-  }, conf.layer);
+  }, config.layer);
 
   animation.start();
 }

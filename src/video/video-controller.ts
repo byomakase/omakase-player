@@ -1,33 +1,33 @@
-/**
- *       Copyright 2023 ByOmakase, LLC (https://byomakase.org)
+/*
+ * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
- *       Licensed under the Apache License, Version 2.0 (the "License");
- *       you may not use this file except in compliance with the License.
- *       You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *           http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *       Unless required by applicable law or agreed to in writing, software
- *       distributed under the License is distributed on an "AS IS" BASIS,
- *       WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *       See the License for the specific language governing permissions and
- *       limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
-
 import Decimal from 'decimal.js';
-import {AudioEvent, Destroyable, HelpMenuGroup, OmakaseTextTrack, OmakaseTextTrackCue, VideoBufferingEvent, VideoEndedEvent, VideoErrorEvent, VideoLoadedEvent, VideoLoadingEvent, VideoPlayEvent, VideoSeekedEvent, VideoSeekingEvent, VideoTimeChangeEvent} from '../types';
+import {AudioEvent, Destroyable, HelpMenuGroup, OmakaseTextTrack, OmakaseTextTrackCue, VideoBufferingEvent, VideoEndedEvent, VideoErrorEvent, VideoLoadedEvent, VideoLoadingEvent, VideoPlayEvent, VideoSeekedEvent, VideoSeekingEvent, VideoTimeChangeEvent, VideoVolumeEvent} from '../types';
 import {BehaviorSubject, catchError, delay, first, fromEvent, interval, map, Observable, of, Subject, take, takeUntil, throwError} from 'rxjs';
 import {FrameUtil} from '../util/frame-util';
-import {completeSubjects, nextCompleteVoidSubject, nextCompleteVoidSubjects, unsubscribeSubjects} from '../util/observable-util';
+import {completeSubjects, completeUnsubscribeSubjects, nextCompleteVoidSubject, nextCompleteVoidSubjects} from '../util/observable-util';
 import {z} from 'zod';
-import {TimestampUtil} from '../util/timestamp-util';
-import {Video} from './video';
+import {TimecodeUtil} from '../util/timecode-util';
 import {VideoDomController} from './video-dom-controller';
-import {PlaybackState, PlaybackStateMachine} from './playback-state';
 import Hls from 'hls.js';
 import {Validators} from '../validators';
 import {parseErrorMessage, zodErrorMapOverload} from '../util/error-util';
 import {VideoControllerApi} from './video-controller-api';
+import {destroyer, nullifier} from '../util/destroy-util';
+import {SubtitlesVttTrack} from '../track';
+import {PlaybackState, PlaybackStateMachine, Video, VideoLoadOptions} from './model';
 
 export const HTMLVideoElementEventKeys = {
   PAUSE: 'pause',
@@ -36,10 +36,12 @@ export const HTMLVideoElementEventKeys = {
   TIMEUPDATE: 'timeupdate',
   SEEKING: 'seeking',
   SEEKED: 'seeked',
+  LOAD: 'load',
   LOADEDDATA: 'loadeddata',
   LOADEDMETEDATA: 'loadedmetadata',
   ENDED: 'ended',
-  PROGRESS: 'progress'
+  PROGRESS: 'progress',
+  VOLUMECHANGE: 'volumechange'
 }
 
 export interface BufferedTimespan {
@@ -77,42 +79,8 @@ export const VIDEO_CONTROLLER_CONFIG_DEFAULT: VideoControllerConfig = {
 }
 
 
-export abstract class VideoController implements VideoControllerApi, Destroyable {
-  protected videoDomController: VideoDomController;
-  protected helpMenuGroups: HelpMenuGroup[] = [];
-
-  protected video: Video;
-  protected _isVideoLoaded = false;
-  protected playbackStateMachine: PlaybackStateMachine;
-
-  protected frameRateDecimal: Decimal;
-  protected frameDurationSpillOverCorrection: number = 0.001;
-  protected syncStepCurrentTimeMediaTime: number;
-  protected syncLoopMaxIterations = 20;
-  protected videoFrameCallbackHandle: number;
-
-  protected seekInProgress: boolean = false;
-
-  protected videoStalledCheckIntervalMs = 700;
-  protected videoStalledCheckLastCurrentTime: number;
-
-  // region internal events
-  /***
-   * Stream of data provided by videoElement.requestVideoFrameCallback()
-   * @protected
-   */
-  protected readonly videoFrameCallback$ = new BehaviorSubject<VideoFrameCallbackData>(null);
-  protected videoEventBreaker$ = new Subject<void>();
-  protected onDestroy$ = new Subject<void>();
-  /***
-   * Cancels previous unfinished seek operation if new seek is requested
-   * @protected
-   */
-  protected seekBreaker$ = new Subject<void>();
-
-  // endregion
-
-  public readonly onVideoLoaded$: Subject<VideoLoadedEvent> = new BehaviorSubject<VideoLoadedEvent>(void 0);
+export abstract class VideoController<C extends VideoControllerConfig> implements VideoControllerApi, Destroyable {
+  public readonly onVideoLoaded$: Subject<VideoLoadedEvent | undefined> = new BehaviorSubject<VideoLoadedEvent | undefined>(void 0);
   public readonly onVideoLoading$: Subject<VideoLoadingEvent> = new Subject<VideoLoadingEvent>();
   public readonly onPlay$: Subject<VideoPlayEvent> = new Subject<VideoPlayEvent>();
   public readonly onPause$: Subject<VideoPlayEvent> = new Subject<VideoPlayEvent>();
@@ -125,17 +93,54 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
   public readonly onPlaybackState$: Subject<PlaybackState> = new Subject<PlaybackState>();
   public readonly onHelpMenuChange$: Subject<void> = new BehaviorSubject<void>(void 0);
   public readonly onVideoError$: Subject<VideoErrorEvent> = new Subject<VideoErrorEvent>();
+  public readonly onVolumeChange$: Subject<VideoVolumeEvent> = new Subject<VideoVolumeEvent>();
 
-  protected constructor(config: VideoControllerConfig) {
-    this.videoDomController = new VideoDomController(config.playerHTMLElementId, config.crossorigin, this);
+  protected _config: C;
 
-    if (!this.videoDomController.videoElement) {
+  protected _subtitlesVttTracks: SubtitlesVttTrack[] | undefined;
+  protected _videoDomController: VideoDomController;
+  protected _helpMenuGroups: HelpMenuGroup[] = [];
+
+  protected _video?: Video;
+  protected _ffom?: number; // video time offset
+  protected _playbackStateMachine?: PlaybackStateMachine;
+  protected _frameRateDecimal?: Decimal;
+  protected _frameDurationSpillOverCorrection: number = 0.001;
+  protected _syncStepCurrentTimeMediaTime: number = 0;
+  protected _syncLoopMaxIterations = 20;
+  protected _videoFrameCallbackHandle?: number;
+
+  protected _seekInProgress: boolean = false;
+
+  protected _videoStalledCheckIntervalMs = 700;
+  protected _videoStalledCheckLastCurrentTime?: number;
+
+  private _isVideoLoaded = false;
+
+  /**
+   * Stream of data provided by videoElement.requestVideoFrameCallback()
+   * @protected
+   */
+  protected readonly _videoFrameCallback$: Subject<VideoFrameCallbackData | undefined> = new BehaviorSubject<VideoFrameCallbackData | undefined>(void 0);
+  protected _videoEventBreaker$ = new Subject<void>();
+  protected _destroyed$ = new Subject<void>();
+  /**
+   * Cancels previous unfinished seek operation if new seek is requested
+   * @protected
+   */
+  protected _seekBreaker$ = new Subject<void>();
+
+  protected constructor(config: C) {
+    this._config = config;
+    this._videoDomController = new VideoDomController(this._config.playerHTMLElementId, this._config.crossorigin, this);
+
+    if (!this._videoDomController.videoElement) {
       throw new Error('VideoController element not set');
     }
 
-    this.videoFrameCallback$.pipe(takeUntil(this.onDestroy$)).subscribe(videoFrameCallbackData => {
+    this._videoFrameCallback$.pipe(takeUntil(this._destroyed$)).subscribe(videoFrameCallbackData => {
       if (videoFrameCallbackData) {
-        if (!this.seekInProgress) {
+        if (!this._seekInProgress) {
           if (this.isPlaying()) {
             this.videoTimeChangeHandlerExecutor();
           } else if (this.isPaused()) {
@@ -146,8 +151,24 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
     })
   }
 
-  loadVideo(sourceUrl: string, frameRate: number, duration: number): Observable<Video> {
+  loadVideo(sourceUrl: string, frameRate: number, options?: VideoLoadOptions): Observable<Video> {
     try {
+      this.detachVideoEventListeners();
+      this._isVideoLoaded = false;
+      this._video = void 0;
+
+      if (options?.ffom) {
+        this._ffom = z.coerce.number()
+          .min(0)
+          .parse(options.ffom, zodErrorMapOverload('Invalid ffom'));
+      }
+
+      if (options?.duration) {
+        this._ffom = z.coerce.number()
+          .min(0)
+          .parse(options.duration, zodErrorMapOverload('Invalid duration'));
+      }
+
       sourceUrl = Validators.url()(sourceUrl);
 
       frameRate = z.coerce.number()
@@ -161,21 +182,16 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
         frameRate: frameRate
       });
 
-      this._isVideoLoaded = false;
-      this.video = void 0;
+      return this.loadVideoInternal(sourceUrl, frameRate, options).pipe(map(video => {
+        this._video = video;
 
-      this.detachVideoEventListeners();
+        this._frameRateDecimal = new Decimal(this._video.frameRate);
 
-      return this.videoLoad(sourceUrl, frameRate, duration).pipe(map(video => {
-        this.video = video;
+        //TODO: This change might cause a frame miss but prevents video frame flickering
+        // this.syncStepCurrentTimeMediaTime = new Decimal(this.video.frameDuration).div(10).toNumber();
+        this._syncStepCurrentTimeMediaTime = 0;
 
-        this.frameRateDecimal = new Decimal(this.video.frameRate);
-
-        //TODO: This change might cause a frame miss
-        //this.syncStepCurrentTimeMediaTime = new Decimal(this.video.frameDuration).div(10).toNumber();
-        this.syncStepCurrentTimeMediaTime = 0;
-
-        this.playbackStateMachine = new PlaybackStateMachine();
+        this._playbackStateMachine = new PlaybackStateMachine();
 
         this.initEventHandlers();
         this.startVideoFrameCallback();
@@ -183,25 +199,7 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
         this._isVideoLoaded = true;
 
         this.onVideoLoaded$.next({
-          video: this.video
-        });
-
-        let durationInThreeDigits = Number.parseFloat(this.getDuration().toFixed(3));
-
-        if (Number.isInteger(Number.parseFloat(((this.getDuration()) * this.video.frameRate).toFixed(1)))) {
-          durationInThreeDigits = Number.parseFloat((durationInThreeDigits - this.frameDurationSpillOverCorrection).toFixed(3));
-          this.video.setCorrectedDuration(durationInThreeDigits);
-        }
-
-        this.getHls().on(Hls.Events.FRAG_LOADED, (event, data) => {
-          if (data.frag.endList) {
-            if (data.frag.type == 'main' && (this.getCorrectedDuration()) > (data.frag.start + data.frag.duration)) {
-              /**
-               * if we land on exact time of the frame start at the end of video, there is the chance that we won't load the frame
-               */
-              this.video.setCorrectedDuration(Number.isInteger(data.frag.start + data.frag.duration * this.video.frameRate) ? data.frag.start + data.frag.duration - this.frameDurationSpillOverCorrection : data.frag.start + data.frag.duration);
-            }
-          }
+          video: this._video
         });
 
         return video;
@@ -223,111 +221,106 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
     }
   }
 
-  protected abstract videoLoad(sourceUrl: string, frameRate: number, duration: number): Observable<Video>;
+  protected abstract loadVideoInternal(sourceUrl: string, frameRate: number, options?: VideoLoadOptions): Observable<Video>;
 
   get videoElement(): HTMLVideoElement {
-    return this.videoDomController.videoElement;
+    return this._videoDomController.videoElement;
   }
 
   protected initEventHandlers() {
-    fromEvent(this.videoElement, HTMLVideoElementEventKeys.PAUSE).pipe(takeUntil(this.videoEventBreaker$)).subscribe((event) => {
-      /*if (this.browserProvider.isSafari ) {
-          // if native video is loaded in Safari, we search one control frame forward, because image in video element and currentTime / mediaTime are not in sync
-          let currentTimePlusOneFrame = this.getCurrentTime() + this.video.frameDuration;
-          this._seekTimeAndSyncNoEmitEvents(currentTimePlusOneFrame).subscribe(result => {
-              this.videoTimeChangeHandlerExecutor();
-              this.onPause$.next({})
-          })
-      } else {*/
-      let a = this.getCurrentTime() >= this.getCorrectedDuration() ? this.getTotalFrames() : this.getCurrentFrame();
-      if (this.getCurrentTime() < this.getCorrectedDuration()) {
-        this.seekToFrame(this.getCurrentTime() >= this.getCorrectedDuration() ? this.getTotalFrames() : this.getCurrentFrame()).subscribe(result => {
+    fromEvent(this.videoElement, HTMLVideoElementEventKeys.PAUSE).pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
+      if (this._video!.correctedDuration && (this.getCurrentTime() < this._video!.correctedDuration)) {
+        this.seekToFrame(this.getCurrentTime() >= this._video!.correctedDuration ? this.getTotalFrames() : this.getCurrentFrame()).subscribe(result => {
           this.videoTimeChangeHandlerExecutor();
-          this.onPause$.next({})
+          this.onPause$.next({
+            currentTime: this.getCurrentTime()
+          })
         })
       } else {
         this.syncVideoFrames({}).subscribe(result => {
           this.videoTimeChangeHandlerExecutor();
-          this.onPause$.next({})
+          this.onPause$.next({
+            currentTime: this.getCurrentTime()
+          })
         })
       }
       //  }
     })
 
-    fromEvent(this.videoElement, HTMLVideoElementEventKeys.WAITING).pipe(takeUntil(this.videoEventBreaker$)).subscribe((event) => {
-      this.playbackStateMachine.waiting = true;
+    fromEvent(this.videoElement, HTMLVideoElementEventKeys.WAITING).pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
+      this._playbackStateMachine!.waiting = true;
     })
 
-    fromEvent(this.videoElement, HTMLVideoElementEventKeys.PLAYING).pipe(takeUntil(this.videoEventBreaker$)).subscribe((event) => {
-      this.playbackStateMachine.setPlaying()
-      this.videoStalledCheckLastCurrentTime = void 0;
+    fromEvent(this.videoElement, HTMLVideoElementEventKeys.PLAYING).pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
+      this._playbackStateMachine!.setPlaying()
+      this._videoStalledCheckLastCurrentTime = void 0;
     })
 
-    fromEvent(this.videoElement, HTMLVideoElementEventKeys.PAUSE).pipe(takeUntil(this.videoEventBreaker$)).subscribe((event) => {
-      this.playbackStateMachine.setPaused()
-      this.videoStalledCheckLastCurrentTime = void 0;
+    fromEvent(this.videoElement, HTMLVideoElementEventKeys.PAUSE).pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
+      this._playbackStateMachine!.setPaused()
+      this._videoStalledCheckLastCurrentTime = void 0;
     })
 
-    // https://developer.mozilla.org/en-US/docs/Web/Guide/Audio_and_video_delivery/buffering_seeking_time_ranges
-    // fromEvent(this.videoElement, HTMLVideoElementEventKeys.TIMEUPDATE).pipe(takeUntil(this.videoEventBreaker$)).subscribe((event) => {
-    // this.videoPlaybackStateHolder.setPlaying()
-    // this.lastVideoTime = void 0;
-    // })
-
-    fromEvent(this.videoElement, HTMLVideoElementEventKeys.PROGRESS).pipe(takeUntil(this.videoEventBreaker$)).subscribe((event) => {
+    fromEvent(this.videoElement, HTMLVideoElementEventKeys.PROGRESS).pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
       this.onBuffering$.next({
         bufferedTimespans: this.getBufferedTimespans()
       })
     })
 
-    fromEvent(this.videoElement, HTMLVideoElementEventKeys.ENDED).pipe(takeUntil(this.videoEventBreaker$)).subscribe((event) => {
+    fromEvent(this.videoElement, HTMLVideoElementEventKeys.ENDED).pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
       this.onEnded$.next({})
     })
 
-    this.playbackStateMachine.onChange$.pipe(takeUntil(this.videoEventBreaker$)).subscribe((event) => {
+    fromEvent(this.videoElement, HTMLVideoElementEventKeys.VOLUMECHANGE).pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
+      this.onVolumeChange$.next({
+        volume: this.getVolume()
+      })
+    })
+
+    this._playbackStateMachine!.onChange$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
       this.onPlaybackState$.next(event);
     })
 
-    this.onPlay$.pipe(takeUntil(this.videoEventBreaker$)).subscribe((event) => {
-      this.playbackStateMachine.setPlaying()
-      this.videoStalledCheckLastCurrentTime = void 0;
+    this.onPlay$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
+      this._playbackStateMachine!.setPlaying()
+      this._videoStalledCheckLastCurrentTime = void 0;
     })
 
-    this.onPause$.pipe(takeUntil(this.videoEventBreaker$)).subscribe((event) => {
-      this.playbackStateMachine.setPaused()
-      this.videoStalledCheckLastCurrentTime = void 0;
+    this.onPause$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
+      this._playbackStateMachine!.setPaused()
+      this._videoStalledCheckLastCurrentTime = void 0;
     })
 
-    this.onSeeking$.pipe(takeUntil(this.videoEventBreaker$)).subscribe((event) => {
-      this.playbackStateMachine.seeking = true;
+    this.onSeeking$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
+      this._playbackStateMachine!.seeking = true;
     })
 
-    this.onSeeked$.pipe(takeUntil(this.videoEventBreaker$)).subscribe((event) => {
-      this.playbackStateMachine.seeking = false;
+    this.onSeeked$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
+      this._playbackStateMachine!.seeking = false;
     })
 
-    this.onEnded$.pipe(takeUntil(this.videoEventBreaker$)).subscribe((event) => {
-      this.playbackStateMachine.setEnded()
-      this.videoStalledCheckLastCurrentTime = void 0;
+    this.onEnded$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
+      this._playbackStateMachine!.setEnded()
+      this._videoStalledCheckLastCurrentTime = void 0;
     })
 
-    interval(this.videoStalledCheckIntervalMs).pipe(takeUntil(this.videoEventBreaker$)).subscribe((value) => {
+    interval(this._videoStalledCheckIntervalMs).pipe(takeUntil(this._videoEventBreaker$)).subscribe((value) => {
       let currentTime = this.getCurrentTime();
 
-      if (!this.videoStalledCheckLastCurrentTime) {
-        this.videoStalledCheckLastCurrentTime = currentTime;
+      if (!this._videoStalledCheckLastCurrentTime) {
+        this._videoStalledCheckLastCurrentTime = currentTime;
         return;
       }
 
-      if (this.playbackStateMachine.state.playing) {
-        let timeOffset = ((this.videoStalledCheckIntervalMs * 0.8) / 1000) * this.getPlaybackRate(); // in seconds
-        let comparisonTime = this.videoStalledCheckLastCurrentTime + timeOffset;
+      if (this._playbackStateMachine && this._playbackStateMachine.state.playing) {
+        let timeOffset = ((this._videoStalledCheckIntervalMs * 0.8) / 1000) * this.getPlaybackRate(); // in seconds
+        let comparisonTime = this._videoStalledCheckLastCurrentTime + timeOffset;
 
         let isWaiting = currentTime < comparisonTime;
 
-        this.playbackStateMachine.waiting = isWaiting;
+        this._playbackStateMachine.waiting = isWaiting;
 
-        this.videoStalledCheckLastCurrentTime = currentTime
+        this._videoStalledCheckLastCurrentTime = currentTime
       }
     })
   }
@@ -351,7 +344,7 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
   protected startVideoFrameCallback() {
     let nextVideoFrameCallback = () => {
       if (this.videoElement) {
-        this.videoFrameCallbackHandle = this.videoElement.requestVideoFrameCallback((now, metadata) => {
+        this._videoFrameCallbackHandle = this.videoElement.requestVideoFrameCallback((now, metadata) => {
           onVideoFrameCallback({
             now: now,
             metadata: metadata
@@ -363,7 +356,7 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
     }
 
     let onVideoFrameCallback = (videoFrameCallbackData: VideoFrameCallbackData) => {
-      this.videoFrameCallback$.next(videoFrameCallbackData);
+      this._videoFrameCallback$.next(videoFrameCallbackData);
       nextVideoFrameCallback();
     }
 
@@ -371,11 +364,11 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
   }
 
   private detachVideoEventListeners() {
-    nextCompleteVoidSubject(this.videoEventBreaker$);
-    this.videoEventBreaker$ = new Subject<void>();
+    nextCompleteVoidSubject(this._videoEventBreaker$);
+    this._videoEventBreaker$ = new Subject<void>();
 
-    if (this.videoElement && this.videoFrameCallbackHandle) {
-      this.videoElement.cancelVideoFrameCallback(this.videoFrameCallbackHandle);
+    if (this.videoElement && this._videoFrameCallbackHandle) {
+      this.videoElement.cancelVideoFrameCallback(this._videoFrameCallbackHandle);
     }
   }
 
@@ -384,9 +377,9 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
     return new Observable<boolean>(o$ => {
       let syncBreaker$ = new BehaviorSubject<boolean>(false);
       let syncLoopVideoCallbackBreaker$ = new Subject<void>();
-      let syncLoopIterationsLeft = this.syncLoopMaxIterations;
+      let syncLoopIterationsLeft = this._syncLoopMaxIterations;
 
-      this.seekBreaker$.pipe(takeUntil(syncLoopVideoCallbackBreaker$)).subscribe(() => {
+      this._seekBreaker$.pipe(takeUntil(syncLoopVideoCallbackBreaker$)).subscribe(() => {
         console.debug(`%csyncFrames - seek breaker triggered`, 'color: gray')
         syncBreaker$.next(true);
         completeSync();
@@ -399,7 +392,7 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
         console.debug(`%csyncFrames - END`, 'color: gray')
       }
 
-      let seek = (time) => {
+      let seek = (time: number) => {
         syncBreaker$.pipe(take(1)).subscribe((syncBreak) => {
           if (syncBreak) {
             console.debug(`%csyncFrames - seek skipped, breaker already triggered`, 'color: gray')
@@ -412,11 +405,11 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
       if (this.isPlaying()) {
         console.debug(`%csyncFrames - SKIPPED: video is playing`, 'color: gray')
         completeSync();
-      } else if (this.getCorrectedDuration() <= this.getCurrentTime()) {
+      } else if (this._video!.correctedDuration && (this._video!.correctedDuration <= this.getCurrentTime())) {
         console.debug(`%csyncFrames - SKIPPED: video exceeded duration`, 'color: magenta')
         completeSync();
       } else {
-        let checkIfDone = (videoFrameCallbackData: VideoFrameCallbackData) => {
+        let checkIfDone = (videoFrameCallbackData?: VideoFrameCallbackData) => {
           let currentTime = this.getCurrentTime();
           let currentTimeFrame = this.calculateTimeToFrame(currentTime);
           let mediaTime = videoFrameCallbackData ? videoFrameCallbackData.metadata.mediaTime : void 0;
@@ -449,10 +442,10 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
           return false;
         }
 
-        let seekToFrameTimeBaseline;
+        let seekToFrameTimeBaseline: number;
 
-        let syncLoop = (videoFrameCallbackData: VideoFrameCallbackData) => {
-          let syncLoopIteration = this.syncLoopMaxIterations - syncLoopIterationsLeft;
+        let syncLoop = (videoFrameCallbackData?: VideoFrameCallbackData) => {
+          let syncLoopIteration = this._syncLoopMaxIterations - syncLoopIterationsLeft;
           console.debug(`syncFrames.syncLoop - START (${syncLoopIteration})`, {
             syncConditions: syncConditions,
             videoFrameCallbackData: videoFrameCallbackData,
@@ -480,7 +473,7 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
             return;
           }
 
-          console.debug(`syncFrames - currentTime[${currentTime}|${this.formatTimestamp(currentTime)}], mediaTime[${mediaTime}|${this.formatTimestamp(mediaTime)}], currentTimeFrame[${currentTimeFrame}], mediaTimeFrame[${mediaTimeFrame}], `)
+          console.debug(`syncFrames - currentTime[${currentTime}|${this.formatToTimecode(currentTime)}], mediaTime[${mediaTime}|${mediaTime ? this.formatToTimecode(mediaTime) : void 0}], currentTimeFrame[${currentTimeFrame}], mediaTimeFrame[${mediaTimeFrame}], `)
 
           if (syncConditions.seekToFrame) {
 
@@ -498,7 +491,7 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
                 let frameDiff = Math.abs(currentTimeFrame - mediaTimeFrame);
                 console.debug(`%csyncFrames - frameDiff: ${frameDiff}`, 'color: orange');
 
-                let frameCorrectionTime = this.syncStepCurrentTimeMediaTime * (currentTimeFrame > mediaTimeFrame ? 1 : -1);
+                let frameCorrectionTime = this._syncStepCurrentTimeMediaTime * (currentTimeFrame > mediaTimeFrame ? 1 : -1);
 
                 seek(Decimal.add(currentTime, frameCorrectionTime).toNumber())
               }
@@ -506,7 +499,7 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
               console.debug(`%csyncFrames - CORRECTION SEEK TO FRAME; syncConditions.seekToFrame[${syncConditions.seekToFrame}] !== currentTimeFrame[${currentTimeFrame}] | seekToFrameTimeBaseline=${seekToFrameTimeBaseline}`, 'color: red');
 
               let frameDiff = Math.abs(syncConditions.seekToFrame - currentTimeFrame);
-              let frameCorrectionTime = (frameDiff) * this.video.frameDuration;
+              let frameCorrectionTime = (frameDiff) * this._video!.frameDuration;
 
               let seekToDecimal = syncConditions.seekToFrame >= currentTimeFrame ? Decimal.add(seekToFrameTimeBaseline, frameCorrectionTime) : Decimal.sub(seekToFrameTimeBaseline, frameCorrectionTime);
               let seekTo = seekToDecimal.toNumber();
@@ -531,9 +524,9 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
                 seek(currentTime)
               } else {
                 if (currentTimeFrame > mediaTimeFrame) {
-                  seek(Decimal.add(currentTime, this.syncStepCurrentTimeMediaTime).toNumber())
-                } else {
-                  seek(mediaTime + this.syncStepCurrentTimeMediaTime)
+                  seek(Decimal.add(currentTime, this._syncStepCurrentTimeMediaTime).toNumber())
+                } else if (mediaTime) {
+                  seek(mediaTime + this._syncStepCurrentTimeMediaTime)
                 }
               }
             }
@@ -541,7 +534,7 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
 
           console.debug('syncFrames.syncLoop - END');
         }
-        this.videoFrameCallback$.pipe(delay(syncConditions.seekToFrame ? 0 : 0), takeUntil(syncLoopVideoCallbackBreaker$)).subscribe(videoFrameCallbackData => {
+        this._videoFrameCallback$.pipe(delay(syncConditions.seekToFrame ? 0 : 0), takeUntil(syncLoopVideoCallbackBreaker$)).subscribe(videoFrameCallbackData => {
           console.debug('syncFrames.syncLoop - videoFrameCallback$ trigger', videoFrameCallbackData);
           syncLoop(videoFrameCallbackData);
         })
@@ -552,34 +545,34 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
   private seekTimeAndSync(newTime: number, syncConditions: SyncConditions = {}): Observable<boolean> {
     return new Observable<boolean>(o$ => {
       // do we have seek already in progress
-      if (this.seekInProgress) {
-        nextCompleteVoidSubject(this.seekBreaker$);
-        this.seekBreaker$ = new Subject<void>();
+      if (this._seekInProgress) {
+        nextCompleteVoidSubject(this._seekBreaker$);
+        this._seekBreaker$ = new Subject<void>();
       }
-      this.seekInProgress = true;
+      this._seekInProgress = true;
 
       if (!isNaN(newTime)) {
         newTime = newTime < 0 ? 0 : newTime > this.getDuration() ? this.getDuration() : newTime;
 
-        fromEvent(this.videoElement, HTMLVideoElementEventKeys.SEEKING).pipe(takeUntil(this.seekBreaker$), take(1)).subscribe((event) => {
+        fromEvent(this.videoElement, HTMLVideoElementEventKeys.SEEKING).pipe(takeUntil(this._seekBreaker$), take(1)).subscribe((event) => {
           this.onSeeking$.next({
             newTime: newTime,
             currentTime: this.getCurrentTime()
           })
         })
 
-        fromEvent(this.videoElement, HTMLVideoElementEventKeys.SEEKED).pipe(takeUntil(this.seekBreaker$), take(1)).subscribe((event) => {
+        fromEvent(this.videoElement, HTMLVideoElementEventKeys.SEEKED).pipe(takeUntil(this._seekBreaker$), take(1)).subscribe((event) => {
           this.syncVideoFrames(syncConditions).subscribe(result => {
 
-            if (this.getCorrectedDuration() > this.videoElement.duration) {
+            if (this._video!.correctedDuration && (this._video!.correctedDuration > this.videoElement.duration)) {
               /**
                * If we land on exact time of the frame start at the end of video, there is the chance that we won't load the frame
                */
-              this.video.setCorrectedDuration(Number.isInteger(this.videoElement.duration * this.video.frameRate) ? this.videoElement.duration - this.frameDurationSpillOverCorrection : this.videoElement.duration);
+              this._video!.correctedDuration = Number.isInteger(this.videoElement.duration * this._video!.frameRate) ? this.videoElement.duration - this._frameDurationSpillOverCorrection : this.videoElement.duration;
             }
 
             let finalizeSeek = () => {
-              this.seekInProgress = false;
+              this._seekInProgress = false;
 
               o$.next(true);
               o$.complete();
@@ -588,8 +581,8 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
             }
 
             //Seeking to end of video stream if currentTime exceeded corrected duration
-            if (this.getCurrentTime() > this.getCorrectedDuration()) {
-              this.seekTimeWithoutSync(this.getCorrectedDuration()).pipe(takeUntil(this.seekBreaker$), take(1)).subscribe(() => {
+            if (this._video!.correctedDuration && (this.getCurrentTime() > this._video!.correctedDuration)) {
+              this.seekTimeWithoutSync(this._video!.correctedDuration).pipe(takeUntil(this._seekBreaker$), take(1)).subscribe(() => {
                 this.onEnded$.next({})
                 finalizeSeek();
               });
@@ -602,7 +595,7 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
           })
         })
 
-        console.debug(`Seeking to timestamp: ${newTime} \t ${this.formatTimestamp(newTime)}`)
+        console.debug(`Seeking to timestamp: ${newTime} \t ${this.formatToTimecode(newTime)}`)
         this.setCurrentTime(newTime);
       }
     });
@@ -611,28 +604,28 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
   private seekTimeWithoutSync(newTime: number): Observable<boolean> {
     return new Observable<boolean>(o$ => {
       // do we have seek already in progress
-      if (this.seekInProgress) {
-        nextCompleteVoidSubject(this.seekBreaker$);
-        this.seekBreaker$ = new Subject<void>();
+      if (this._seekInProgress) {
+        nextCompleteVoidSubject(this._seekBreaker$);
+        this._seekBreaker$ = new Subject<void>();
       }
-      this.seekInProgress = true;
+      this._seekInProgress = true;
 
       if (!isNaN(newTime)) {
         newTime = newTime < 0 ? 0 : newTime > this.getDuration() ? this.getDuration() : newTime;
 
-        fromEvent(this.videoElement, HTMLVideoElementEventKeys.SEEKING).pipe(takeUntil(this.seekBreaker$), take(1)).subscribe((event) => {
+        fromEvent(this.videoElement, HTMLVideoElementEventKeys.SEEKING).pipe(takeUntil(this._seekBreaker$), take(1)).subscribe((event) => {
           this.onSeeking$.next({
             newTime: newTime,
             currentTime: this.getCurrentTime()
           })
         })
 
-        fromEvent(this.videoElement, HTMLVideoElementEventKeys.SEEKED).pipe(takeUntil(this.seekBreaker$), take(1)).subscribe((event) => {
+        fromEvent(this.videoElement, HTMLVideoElementEventKeys.SEEKED).pipe(takeUntil(this._seekBreaker$), take(1)).subscribe((event) => {
           this.onSeeked$.next({
             currentTime: this.getCurrentTime()
           })
 
-          this.seekInProgress = false;
+          this._seekInProgress = false;
 
           o$.next(true);
           o$.complete();
@@ -640,7 +633,7 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
           this.videoTimeChangeHandlerExecutor();
         })
 
-        console.debug(`Seeking to timestamp: ${newTime} \t ${this.formatTimestamp(newTime)}`)
+        console.debug(`Seeking to timestamp: ${newTime} \t ${this.formatToTimecode(newTime)}`)
 
         this.setCurrentTime(newTime);
       }
@@ -682,9 +675,10 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
     }
   }
 
-  /***
+  /**
    *
    * @param timeOffset Time offset in seconds
+   * @param syncConditions
    */
   private seekFromCurrentTimeAndSync(timeOffset: number, syncConditions: SyncConditions = {}): Observable<boolean> {
     let currentTime = this.getCurrentTime();
@@ -713,20 +707,16 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
     this.videoElement.currentTime = time;
   }
 
-  getFrameRateDecimal(): Decimal {
-    return this.frameRateDecimal;
-  }
-
   private _seekToFrame(frame: number): Observable<boolean> {
     if (!this.isPlaying() && !isNaN(frame)) {
       console.debug(`Seeking to frame: ${frame}`)
       if (frame <= 0) {
         return this.seekTimeAndSync(0, {});
       } else {
-        let newTime = this.calculateFrameToTime(frame) + new Decimal(this.frameDurationSpillOverCorrection).toNumber();
+        let newTime = this.calculateFrameToTime(frame) + new Decimal(this._frameDurationSpillOverCorrection).toNumber();
         let frameNumberCheck = this.calculateTimeToFrame(newTime);
 
-        if (frameNumberCheck !== frame && frame != this.getCorrectedDuration() * this.getFrameRate()) {
+        if (this._video!.correctedDuration && (frameNumberCheck !== frame && frame != this._video!.correctedDuration * this.getFrameRate())) {
           console.error(`Frame numbers don't match. Wanted: ${frame}, calculated: ${frameNumberCheck}`)
           return of(false);
         } else {
@@ -744,7 +734,7 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
     }
   }
 
-  /***
+  /**
    *
    * @param framesCount Positive or negative number of frames. If positive - seek forward, if negative - seek backward.
    */
@@ -757,13 +747,13 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
     if (currentFrame !== seekToFrame) {
       if (seekToFrame <= 0) {
         return this._seekToFrame(0);
-      } else if (seekToFrame >= this.getTotalFrames() || seekToFrame >= this.getCorrectedDuration() * this.getFrameRate() && !this.playbackStateMachine.state.ended) {
-        return this._seekToFrame(this.getCorrectedDuration() * this.getFrameRate());
-      } else if (seekToFrame >= this.getTotalFrames() || seekToFrame >= this.getCorrectedDuration() * this.getFrameRate() && this.playbackStateMachine.state.ended) {
+      } else if (this._video!.correctedDuration && (seekToFrame >= this.getTotalFrames() || seekToFrame >= this._video!.correctedDuration * this.getFrameRate() && !this._playbackStateMachine!.state.ended)) {
+        return this._seekToFrame(this._video!.correctedDuration * this.getFrameRate());
+      } else if (this._video!.correctedDuration && (seekToFrame >= this.getTotalFrames() || seekToFrame >= this._video!.correctedDuration * this.getFrameRate() && this._playbackStateMachine!.state.ended)) {
         return of(false);
       } else {
         let timeOffset = this.calculateFrameToTime(framesCount);
-        let currentTime = currentFrame / this.getFrameRate() + this.frameDurationSpillOverCorrection;
+        let currentTime = currentFrame / this.getFrameRate() + this._frameDurationSpillOverCorrection;
         return this.seekFromCurrentTimeAndSync(timeOffset, {
           seekToFrame: seekToFrame,
           currentTime: currentTime,
@@ -787,14 +777,14 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
     });
   }
 
-  getPlaybackState(): PlaybackState {
-    return this.playbackStateMachine.state;
+  getPlaybackState(): PlaybackState | undefined {
+    return this._playbackStateMachine?.state;
   }
 
   // region VideoController API
 
-  getVideo(): Video {
-    return this.isVideoLoaded() ? this.video : void 0;
+  getVideo(): Video | undefined {
+    return this._video;
   }
 
   getHTMLVideoElement(): HTMLVideoElement {
@@ -802,18 +792,28 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
   }
 
   calculateTimeToFrame(time: number): number {
-    return FrameUtil.timeToFrame(time, this.getFrameRateDecimal());
+    if (!this.isVideoLoaded()) {
+      throw new Error('Video not loaded');
+    }
+
+    return FrameUtil.timeToFrame(time, this._frameRateDecimal!);
   }
 
   calculateFrameToTime(frameNumber: number): number {
-    return FrameUtil.frameToTime(frameNumber, this.getFrameRateDecimal());
+    if (!this.isVideoLoaded()) {
+      throw new Error('Video not loaded');
+    }
+
+    return FrameUtil.frameToTime(frameNumber, this._frameRateDecimal!);
   }
 
   play() {
     if (this.isVideoLoaded() && !this.isPlaying()) {
       // first start request video frame callback cycle
       this.videoElement.play().then(() => {
-        this.onPlay$.next({})
+        this.onPlay$.next({
+          currentTime: this.getCurrentTime()
+        })
       });
     }
   }
@@ -848,7 +848,7 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
   }
 
   isSeeking(): boolean {
-    return this.seekInProgress;
+    return this._seekInProgress;
   }
 
   getCurrentTime(): number {
@@ -859,7 +859,7 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
     return this.isVideoLoaded() ? this.videoElement.playbackRate : 0;
   }
 
-  setPlaybackRate(playbackRate: number) {
+  setPlaybackRate(playbackRate: number): void {
     if (!this.isVideoLoaded()) {
       return;
     }
@@ -867,7 +867,7 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
     try {
       playbackRate = z.coerce.number()
         .min(0.1)
-        .max(32)
+        .max(16)
         .default(1)
         .parse(playbackRate);
     } catch (e) {
@@ -895,27 +895,35 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
 
       this.videoElement.volume = volume;
     } catch (e) {
-      console.error(e);
+      // nop
     }
   }
 
-  /***
+  /**
    * return Video duration in seconds
    */
   getDuration(): number {
-    return this.isVideoLoaded() ? this.video.duration : 0;
-  }
+    if (!this.isVideoLoaded()) {
+      throw new Error('Video not loaded');
+    }
 
-  getCorrectedDuration(): number {
-    return this.isVideoLoaded() ? this.video.correctedDuration : 0;
+    return this._video!.duration;
   }
 
   getFrameRate(): number {
-    return this.isVideoLoaded() ? this.video.frameRate : 0;
+    if (!this.isVideoLoaded()) {
+      throw new Error('Video not loaded');
+    }
+
+    return this._video!.frameRate;
   }
 
   getTotalFrames(): number {
-    return this.isVideoLoaded() ? this.video.totalFrames : 0;
+    if (!this.isVideoLoaded()) {
+      throw new Error('Video not loaded');
+    }
+
+    return this._video!.totalFrames;
   }
 
   getCurrentFrame(): number {
@@ -923,12 +931,16 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
   }
 
   seekToFrame(frame: number): Observable<boolean> {
+    if (!this.isVideoLoaded()) {
+      throw new Error('Video not loaded');
+    }
+
     frame = z.coerce.number()
       .min(0)
       .max(this.getTotalFrames())
       .parse(frame);
 
-    if (!this.isVideoLoaded() || this.playbackStateMachine.state.ended && frame >= this.getCurrentFrame()) {
+    if (!this.isVideoLoaded() || this._playbackStateMachine!.state.ended && frame >= this.getCurrentFrame()) {
       return of(false);
     }
 
@@ -937,7 +949,7 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
 
   seekFromCurrentFrame(framesCount: number): Observable<boolean> {
     if (!this.isVideoLoaded()) {
-      return of(false);
+      throw new Error('Video not loaded');
     }
 
     framesCount = z.coerce.number()
@@ -946,30 +958,45 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
     return this._seekFromCurrentFrame(framesCount);
   }
 
+  seekFromCurrentTime(timeAmount: number): Observable<boolean> {
+    if (!this.isVideoLoaded()) {
+      throw new Error('Video not loaded');
+    }
+
+    timeAmount = z.coerce.number()
+      .parse(timeAmount);
+
+    return this.seekToTime(this.getCurrentTime() + timeAmount);
+  }
+
   seekPreviousFrame(): Observable<boolean> {
     if (!this.isVideoLoaded()) {
-      return of(false);
+      throw new Error('Video not loaded');
     }
     return this.seekFromCurrentFrame(-1);
   }
 
   seekNextFrame(): Observable<boolean> {
     if (!this.isVideoLoaded()) {
-      return of(false);
+      throw new Error('Video not loaded');
     }
     return this.seekFromCurrentFrame(1);
   }
 
-  seekToTimestamp(time: number): Observable<boolean> {
-    if (!this.isVideoLoaded() || this.playbackStateMachine.state.ended && time >= this.getCorrectedDuration()) {
+  seekToTime(time: number): Observable<boolean> {
+    if (!this.isVideoLoaded()) {
+      throw new Error('Video not loaded');
+    }
+
+    if (this._video!.correctedDuration && (!this.isVideoLoaded() || this._playbackStateMachine!.state.ended && time >= this._video!.correctedDuration)) {
       return of(false);
     }
 
     time = z.coerce.number()
       .parse(time);
 
-    if (time > this.getCorrectedDuration()) {
-      time = this.getCorrectedDuration();
+    if (this._video!.correctedDuration && (time > this._video!.correctedDuration)) {
+      time = this._video!.correctedDuration;
     }
 
     return this.seekTimeAndSync(time, {
@@ -978,44 +1005,63 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
     });
   }
 
-  seekToFormattedTimestamp(timestamp: string): Observable<boolean> {
-    return this.seekToFrame(this.parseTimestampToFrame(timestamp));
+  seekToTimecode(timestamp: string): Observable<boolean> {
+    return this.seekToFrame(this.parseTimecodeToFrame(timestamp));
   }
 
   seekToPercent(percent: number): Observable<boolean> {
-    percent = z.coerce.number()
-      .min(0)
-      .max(100)
-      .parse(percent);
-
-    if (!this.isVideoLoaded() || this.playbackStateMachine.state.ended) {
-      return of(false);
+    if (!this.isVideoLoaded()) {
+      throw new Error('Video not loaded');
     }
 
-    let frame = new Decimal(this.getTotalFrames()).mul(percent / 100).round().toNumber();
+    let percentSafeParsed = z.coerce.number()
+      .min(0)
+      .max(100)
+      .safeParse(percent);
 
-    return this._seekToFrame(frame);
+    if (percentSafeParsed.success) {
+      let timeToSeek: number;
+
+      if (percent === 0) {
+        timeToSeek = 0;
+      } else if (percent === 100) {
+        timeToSeek = this.getDuration();
+      } else {
+        timeToSeek = new Decimal(this.getDuration()).mul(percent / 100).round().toNumber()
+      }
+
+      return this.seekToTime(timeToSeek);
+    } else {
+      return of(false);
+    }
   }
 
-  formatTimestamp(time: number): string {
+  formatToTimecode(time: number): string {
     if (!this.isVideoLoaded()) {
-      return TimestampUtil.HOUR_MINUTE_SECOND_FRAME_FORMATTED_ZERO;
+      return TimecodeUtil.HOUR_MINUTE_SECOND_FRAME_FORMATTED_ZERO;
     }
 
     time = z.coerce.number()
       .min(0)
-      // .max(this.getDuration())
       .parse(time);
 
-    return TimestampUtil.formatHourMinuteSecondFrame(time, this.getFrameRateDecimal());
+    return TimecodeUtil.formatToTimecode(time, this._frameRateDecimal!, this._ffom);
   }
 
-  parseTimestampToFrame(timestamp: string): number {
-    return TimestampUtil.parseHourMinuteSecondFrameFormattedToFrame(timestamp, this.frameRateDecimal)
+  parseTimecodeToFrame(timestamp: string): number {
+    if (!this.isVideoLoaded()) {
+      throw new Error('Video not loaded');
+    }
+
+    return TimecodeUtil.parseTimecodeToFrame(timestamp, this._frameRateDecimal!, this._ffom)
   }
 
-  parseTimestamp(timestamp: string): number {
-    return new Decimal(this.parseTimestampToFrame(timestamp)).div(this.frameRateDecimal).toNumber()
+  parseTimecodeToTime(timestamp: string): number {
+    if (!this.isVideoLoaded()) {
+      throw new Error('Video not loaded');
+    }
+
+    return new Decimal(this.parseTimecodeToFrame(timestamp)).div(this._frameRateDecimal!).toNumber();
   }
 
   mute() {
@@ -1055,7 +1101,7 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
       return false;
     }
 
-    return this.videoDomController.isFullscreen();
+    return this._videoDomController.isFullscreen();
   }
 
   toggleFullscreen() {
@@ -1063,7 +1109,7 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
       return;
     }
 
-    this.videoDomController.toggleFullscreen();
+    this._videoDomController.toggleFullscreen();
   }
 
   getAudioTracks(): any[] {
@@ -1074,7 +1120,7 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
     throw new Error('unsupported')
   }
 
-  setAudioTrack(audioTrackId: number) {
+  setAudioTrack(audioTrackId: number): void {
     throw new Error('unsupported')
   }
 
@@ -1086,51 +1132,61 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
     throw new Error('Unsupported or video not loaded with Hls.js')
   }
 
-  addHelpMenuGroup(helpMenuGroup: HelpMenuGroup) {
-    this.helpMenuGroups.push(helpMenuGroup);
+  appendHelpMenuGroup(helpMenuGroup: HelpMenuGroup) {
+    this._helpMenuGroups = [...this.getHelpMenuGroups(), helpMenuGroup]
+    this.onHelpMenuChange$.next();
+  }
+
+  prependHelpMenuGroup(helpMenuGroup: HelpMenuGroup) {
+    this._helpMenuGroups = [helpMenuGroup, ...this.getHelpMenuGroups()]
     this.onHelpMenuChange$.next();
   }
 
   getHelpMenuGroups(): HelpMenuGroup[] {
-    return this.helpMenuGroups;
+    return this._helpMenuGroups;
   }
 
   // endregion
 
   destroy() {
-    nextCompleteVoidSubjects(this.videoEventBreaker$, this.seekBreaker$);
-    completeSubjects(this.videoFrameCallback$);
+    nextCompleteVoidSubjects(this._videoEventBreaker$, this._seekBreaker$);
+    completeSubjects(this._videoFrameCallback$);
 
-    let subjects = [this.onVideoLoaded$, this.onVideoLoading$, this.onPlay$, this.onPause$, this.onVideoTimeChange$, this.onSeeking$, this.onSeeked$, this.onBuffering$, this.onEnded$, this.onAudioSwitched$, this.onPlaybackState$, this.onHelpMenuChange$, this.onVideoError$];
-    completeSubjects(...subjects);
-    unsubscribeSubjects(...subjects);
+    completeUnsubscribeSubjects(
+      this.onVideoLoaded$,
+      this.onVideoLoading$,
+      this.onPlay$,
+      this.onPause$,
+      this.onVideoTimeChange$,
+      this.onSeeking$,
+      this.onSeeked$,
+      this.onBuffering$,
+      this.onEnded$,
+      this.onAudioSwitched$,
+      this.onPlaybackState$,
+      this.onHelpMenuChange$,
+      this.onVideoError$
+    )
 
-    try {
-      if (this.getHls()) {
-        this.getHls().removeAllListeners();
-        this.getHls().destroy();
-      }
-    } catch (e) {
-      console.error(e);
-    }
+    nextCompleteVoidSubject(this._destroyed$);
 
-    nextCompleteVoidSubject(this.onDestroy$);
+    destroyer(
+      this._videoDomController
+    )
 
-    this.videoDomController.destroy();
-    this.videoDomController = void 0;
-
-    this._isVideoLoaded = false;
-    this.playbackStateMachine = null;
+    nullifier(
+      this._videoDomController,
+      this._playbackStateMachine,
+      this._helpMenuGroups,
+      this._video
+    )
   }
 
   addSafeZone(options: {
-    topPercent: number,
-    bottomPercent: number,
-    leftPercent: number,
-    rightPercent: number;
+    topRightBottomLeftPercent: number[],
     htmlClass?: string
   }): string {
-    return this.videoDomController.addSafeZone(options);
+    return this._videoDomController.addSafeZone(options);
   }
 
   addSafeZoneWithAspectRatio(options: {
@@ -1138,32 +1194,35 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
     scalePercent?: number,
     htmlClass?: string
   }): string {
-    return this.videoDomController.addSafeZoneWithAspectRatio(options);
+    return this._videoDomController.addSafeZoneWithAspectRatio(options);
   }
 
   removeSafeZone(id: string) {
-    this.videoDomController.removeSafeZone(id);
+    this._videoDomController.removeSafeZone(id);
   }
 
   clearSafeZones() {
-    this.videoDomController.clearSafeZones();
+    this._videoDomController.clearSafeZones();
   }
 
-  appendHTMLTrackElement(omakaseTextTrack: OmakaseTextTrack<OmakaseTextTrackCue>): Observable<HTMLTrackElement> {
-    return this.videoDomController.appendHTMLTrackElement(omakaseTextTrack);
+  appendHTMLTrackElement(omakaseTextTrack: OmakaseTextTrack<OmakaseTextTrackCue>): Observable<HTMLTrackElement | undefined> {
+    return this._videoDomController.appendHTMLTrackElement(omakaseTextTrack);
   }
 
   getTextTrackById(id: string): TextTrack | undefined {
-    return this.videoDomController.getTextTrackById(id);
+    return this._videoDomController.getTextTrackById(id);
   }
 
   getTextTrackList(): TextTrackList | undefined {
-    return this.videoDomController.getTextTrackList();
+    return this._videoDomController.getTextTrackList();
   }
 
   removeTextTrackById(id: string): boolean {
-    return this.videoDomController.removeTextTrackById(id);
+    return this._videoDomController.removeTextTrackById(id);
   }
 
+  getSubtitlesVttTracks(): SubtitlesVttTrack[] | undefined {
+    return this._subtitlesVttTracks;
+  }
 
 }

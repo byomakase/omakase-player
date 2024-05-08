@@ -1,26 +1,27 @@
-/**
- *       Copyright 2023 ByOmakase, LLC (https://byomakase.org)
+/*
+ * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
- *       Licensed under the Apache License, Version 2.0 (the "License");
- *       you may not use this file except in compliance with the License.
- *       You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *           http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *       Unless required by applicable law or agreed to in writing, software
- *       distributed under the License is distributed on an "AS IS" BASIS,
- *       WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *       See the License for the specific language governing permissions and
- *       limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-import {BaseComponent, ComponentConfig, ComponentConfigStyleComposed} from '../../common/component';
+import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle} from '../../layout/konva-component';
 import Konva from 'konva';
 import {Dimension, HasRectMeasurement, Position, RectMeasurement} from '../../common/measurement';
 import {AudioVttCue, WithOptionalPartial} from '../../types';
 import Decimal from 'decimal.js';
 import {Constants} from '../../constants';
 import {ColorUtil} from '../../util/color-util';
+import {nullifier} from '../../util/destroy-util';
 
 export interface AudioTrackLaneItemStyle {
   height: number;
@@ -35,10 +36,11 @@ export interface AudioTrackLaneItemConfig extends ComponentConfig<AudioTrackLane
   audioVttCue: AudioVttCue;
   x: number;
   width: number;
+
   listening?: boolean;
 }
 
-const configDefault: Partial<AudioTrackLaneItemConfig> = {
+const configDefault: Omit<AudioTrackLaneItemConfig, 'audioVttCue' | 'x' | 'width'> = {
   listening: false,
   style: {
     height: 20,
@@ -50,20 +52,14 @@ const configDefault: Partial<AudioTrackLaneItemConfig> = {
   }
 }
 
-export class AudioTrackLaneItem extends BaseComponent<AudioTrackLaneItemConfig, AudioTrackLaneItemStyle, Konva.Group> implements HasRectMeasurement {
-  private x: number;
-  private width: number;
-  private listening: boolean;
+export class AudioTrackLaneItem extends BaseKonvaComponent<AudioTrackLaneItemConfig, AudioTrackLaneItemStyle, Konva.Group> implements HasRectMeasurement {
+  private _group: Konva.Group;
+  private _maxSampleBar: Konva.Rect;
+  private _minSampleBar: Konva.Rect;
 
-  // region konva
-  private group: Konva.Group;
-  private maxSampleBar: Konva.Rect;
-  private minSampleBar: Konva.Rect;
-  // endregion
+  private _vttCue: AudioVttCue;
 
-  private audioVttCue: AudioVttCue;
-
-  constructor(config: ComponentConfigStyleComposed<AudioTrackLaneItemConfig>) {
+  constructor(config: ConfigWithOptionalStyle<AudioTrackLaneItemConfig>) {
     super({
       ...configDefault,
       ...config,
@@ -73,29 +69,24 @@ export class AudioTrackLaneItem extends BaseComponent<AudioTrackLaneItemConfig, 
       },
     });
 
-    this.audioVttCue = this.config.audioVttCue;
-    this.x = this.config.x;
-    this.width = this.config.width;
-    this.listening = this.config.listening;
-  }
+    this._vttCue = this.config.audioVttCue;
 
-  protected createCanvasNode(): Konva.Group {
-    this.group = new Konva.Group({
-      x: this.x,
+    this._group = new Konva.Group({
+      x: this.config.x,
       y: 0,
-      width: this.width,
+      width: this.config.width,
       height: this.style.height,
       visible: this.style.visible,
-      listening: this.listening
+      listening: this.config.listening
     });
 
     let barMaxHeight = this.style.height / 2;
     let maxSampleBarHeight = this.resolveMaxSampleBarHeight();
     let minSampleBarHeight = this.resolveMinSampleBarHeight();
 
-    this.maxSampleBar = new Konva.Rect({
+    this._maxSampleBar = new Konva.Rect({
       x: 0,
-      width: this.group.width(),
+      width: this._group.width(),
       y: barMaxHeight - maxSampleBarHeight,
       height: maxSampleBarHeight,
       opacity: this.style.opacity,
@@ -108,9 +99,9 @@ export class AudioTrackLaneItem extends BaseComponent<AudioTrackLaneItemConfig, 
       hitStrokeWidth: 0
     })
 
-    this.minSampleBar = new Konva.Rect({
+    this._minSampleBar = new Konva.Rect({
       x: 0,
-      width: this.group.width(),
+      width: this._group.width(),
       y: barMaxHeight,
       height: minSampleBarHeight,
       opacity: this.style.opacity,
@@ -123,36 +114,35 @@ export class AudioTrackLaneItem extends BaseComponent<AudioTrackLaneItemConfig, 
       hitStrokeWidth: 0
     })
 
-    this.group.add(this.maxSampleBar)
-    this.group.add(this.minSampleBar)
+    this._group.add(this._maxSampleBar)
+    this._group.add(this._minSampleBar)
+  }
 
-    return this.group;
+  protected provideKonvaNode(): Konva.Group {
+    return this._group;
   }
 
   private resolveMaxSampleBarHeight() {
-    return new Decimal(this.audioVttCue.maxSample).mul(this.style.height / 2).toDecimalPlaces(2).toNumber()
+    return new Decimal(this._vttCue.maxSample).mul(this.style.height / 2).toDecimalPlaces(2).toNumber()
   }
 
   private resolveMinSampleBarHeight() {
-    return new Decimal(this.audioVttCue.minSample).abs().mul(this.style.height / 2).toDecimalPlaces(2).toNumber()
+    return new Decimal(this._vttCue.minSample).abs().mul(this.style.height / 2).toDecimalPlaces(2).toNumber()
   }
 
   setPosition(position: WithOptionalPartial<Position, 'y'>) {
-    this.x = position.x;
-    if (this.isInitialized()) {
-      this.group.position({
-        x: this.x,
-        y: 0
-      })
-    }
+    this._group.position({
+      x: position.x,
+      y: 0
+    })
   }
 
   getPosition(): Position {
-    return this.group.getPosition();
+    return this._group?.getPosition();
   }
 
   getDimension(): Dimension {
-    return this.group.getSize();
+    return this._group?.getSize();
   }
 
   getRect(): RectMeasurement {
@@ -163,11 +153,14 @@ export class AudioTrackLaneItem extends BaseComponent<AudioTrackLaneItemConfig, 
   }
 
   getAudioVttCue(): AudioVttCue {
-    return this.audioVttCue;
+    return this._vttCue;
   }
 
-  destroy() {
-    this.audioVttCue = void 0;
+  override destroy() {
     super.destroy();
+
+    nullifier(
+      this._vttCue
+    )
   }
 }

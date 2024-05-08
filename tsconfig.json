@@ -10,10 +10,20 @@
     "outDir": "./dist/lib/es6",
     "moduleResolution": "node",
     "allowJs": false,
-    "isolatedModules": true
     // https://github.com/evanw/esbuild/issues/314
+    "isolatedModules": true,
+    // yoga-layout import: https://stackoverflow.com/questions/58729856/how-to-solve-can-only-be-default-imported-using-the-esmoduleinterop-flag-in
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "importHelpers": true
   },
   "include": [
     "src/**/*"
-  ]
+  ],
 }
