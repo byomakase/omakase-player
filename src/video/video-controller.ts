@@ -739,6 +739,8 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
           }));
         }
       }
+    } else {
+      return of(false);
     }
   }
 
@@ -865,7 +867,7 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
     try {
       playbackRate = z.coerce.number()
         .min(0.1)
-        .max(16)
+        .max(32)
         .default(1)
         .parse(playbackRate);
     } catch (e) {
@@ -890,11 +892,11 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
         .max(1)
         .default(1)
         .parse(volume);
-    } catch (e) {
-      volume = 1;
-    }
 
-    this.videoElement.volume = volume;
+      this.videoElement.volume = volume;
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   /***
@@ -921,14 +923,14 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
   }
 
   seekToFrame(frame: number): Observable<boolean> {
-    if (!this.isVideoLoaded() || this.playbackStateMachine.state.ended && frame >= this.getCurrentFrame()) {
-      return of(false);
-    }
-
     frame = z.coerce.number()
       .min(0)
       .max(this.getTotalFrames())
       .parse(frame);
+
+    if (!this.isVideoLoaded() || this.playbackStateMachine.state.ended && frame >= this.getCurrentFrame()) {
+      return of(false);
+    }
 
     return this._seekToFrame(frame);
   }
@@ -977,7 +979,22 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
   }
 
   seekToFormattedTimestamp(timestamp: string): Observable<boolean> {
-    return this.seekToFrame(this.convertTimestampToFrame(timestamp));
+    return this.seekToFrame(this.parseTimestampToFrame(timestamp));
+  }
+
+  seekToPercent(percent: number): Observable<boolean> {
+    percent = z.coerce.number()
+      .min(0)
+      .max(100)
+      .parse(percent);
+
+    if (!this.isVideoLoaded() || this.playbackStateMachine.state.ended) {
+      return of(false);
+    }
+
+    let frame = new Decimal(this.getTotalFrames()).mul(percent / 100).round().toNumber();
+
+    return this._seekToFrame(frame);
   }
 
   formatTimestamp(time: number): string {
@@ -993,8 +1010,12 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
     return TimestampUtil.formatHourMinuteSecondFrame(time, this.getFrameRateDecimal());
   }
 
-  convertTimestampToFrame(timestamp: string): number {
-    return TimestampUtil.calculateFramesFromHourMinuteSecondFrameFormatted(timestamp, this.frameRateDecimal)
+  parseTimestampToFrame(timestamp: string): number {
+    return TimestampUtil.parseHourMinuteSecondFrameFormattedToFrame(timestamp, this.frameRateDecimal)
+  }
+
+  parseTimestamp(timestamp: string): number {
+    return new Decimal(this.parseTimestampToFrame(timestamp)).div(this.frameRateDecimal).toNumber()
   }
 
   mute() {
@@ -1011,6 +1032,22 @@ export abstract class VideoController implements VideoControllerApi, Destroyable
     }
 
     this.videoElement.muted = false;
+  }
+
+  isMuted(): boolean {
+    return !!this.videoElement && this.videoElement.muted;
+  }
+
+  toggleMuteUnmute() {
+    if (!this.isVideoLoaded()) {
+      return;
+    }
+
+    if (this.isMuted()) {
+      this.unmute();
+    } else {
+      this.mute();
+    }
   }
 
   isFullscreen(): boolean {

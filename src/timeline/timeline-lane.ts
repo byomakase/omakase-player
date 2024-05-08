@@ -57,6 +57,8 @@ export interface TimelaneLane<C extends TimelaneLaneConfig<S>, S extends Timelin
 
   getDescription(): string;
 
+  setDescription(value: string): void;
+
   getRect(): RectMeasurement;
 
   getPosition(): Position;
@@ -269,6 +271,11 @@ export abstract class BaseTimelineLane<C extends TimelaneLaneConfig<S>, S extend
 
   getDescription(): string {
     return this.description;
+  }
+
+  setDescription(value: string) {
+    this.description = Validators.description()(value);
+    this.leftPanelText.setText(value)
   }
 
   setTimelinePosition(position: Position) {

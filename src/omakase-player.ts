@@ -14,7 +14,7 @@
  *       limitations under the License.
  */
 
-import {Timeline, TimelineConfig} from './timeline/timeline';
+import {Timeline, TimelineConfig} from './timeline';
 import {filter, first, Observable, Subject, takeUntil} from 'rxjs';
 import {OmakasePlayerApi} from './api/omakase-player-api';
 import {VIDEO_HLS_CONTROLLER_CONFIG_DEFAULT, VideoHlsController} from './video/video-hls-controller';
@@ -30,7 +30,6 @@ import {AudioApi} from './api/audio-api';
 import {StyleAdapter} from './common/style-adapter';
 import {StylesProvider} from './common/styles-provider';
 import {ComponentConfigStyleComposed} from './common/component';
-import {WithOptionalPartial} from './types';
 // needed for styles compilation
 import './../style/omakase-player.scss'
 import {nextCompleteVoidSubject} from './util/observable-util';
@@ -50,10 +49,8 @@ export const OMAKASE_PLAYER_STYLE_DEFAULT: OmakasePlayerStyle = {
 export interface OmakasePlayerConfig {
   playerHTMLElementId: string;
   crossorigin: 'anonymous' | 'use-credentials',
-
   hls: Partial<HlsConfig>,
-
-  style: OmakasePlayerStyle
+  style: Partial<OmakasePlayerStyle>
 }
 
 const configDefault: OmakasePlayerConfig = {
@@ -78,7 +75,6 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
   private subtitlesController: SubtitlesController;
 
   private readonly config: OmakasePlayerConfig;
-  private readonly playerHTMLElementId: string;
 
   private eventEmitter = new EventEmitter();
   private onDestroy$ = new Subject<void>();
@@ -86,14 +82,10 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
   private styleAdapter: StyleAdapter<OmakasePlayerStyle>;
   private _timeline: Timeline;
 
-  constructor(config: WithOptionalPartial<OmakasePlayerConfig, 'style'>) {
+  constructor(config: Partial<OmakasePlayerConfig> = {}) {
     this.config = {
       ...configDefault,
-      ...config,
-      style: {
-        ...configDefault.style,
-        ...config.style,
-      }
+      ...config
     };
 
     this.styleAdapter = new StyleAdapter<OmakasePlayerStyle>({
@@ -141,7 +133,6 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
   createTimeline(config: Partial<ComponentConfigStyleComposed<TimelineConfig>>): Observable<Timeline> {
     return new Observable<Timeline>(o$ => {
       let createTimeline = () => {
-        console.debug('Creating timeline')
 
         this._timeline = new Timeline(config, this.videoController);
 
@@ -309,7 +300,7 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
   }
 
   destroy() {
-    DestroyUtil.destroy(this._timeline, this.videoController, this.audioController, this.subtitlesController);
+    DestroyUtil.destroy(this._timeline, this.subtitlesController, this.audioController, this.videoController);
 
     this.eventEmitter.removeAllListeners();
 

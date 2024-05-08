@@ -73,15 +73,15 @@ export interface SubtitlesApi extends Api {
   showTrack();
 
   /***
+   * Hides active VTT track
+   */
+  hideTrack();
+
+  /***
    * Shows VTT track by ID
    * @param id VTT track ID
    */
   showTrack(id: string);
-
-  /***
-   * Hides active VTT track
-   */
-  hideTrack();
 
   /***
    * Hides VTT track by ID

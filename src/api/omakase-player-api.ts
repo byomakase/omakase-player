@@ -15,7 +15,7 @@
  */
 
 import {Api} from './api';
-import {Timeline, TimelineConfig} from '../timeline/timeline';
+import {Timeline, TimelineConfig} from '../timeline';
 import {Observable} from 'rxjs';
 import {SubtitlesApi} from './subtitles-api';
 import {VideoApi} from './video-api';
@@ -25,7 +25,7 @@ import {OmakasePlayerEventMap, OmakasePlayerEventsType} from '../types';
 import {AudioApi} from './audio-api';
 import {TimelineApi} from './timeline-api';
 import {OmakasePlayerStyle} from '../omakase-player';
-import {ComponentConfigStyleComposed} from '../common/component';
+import {ComponentConfigStyleComposed} from '../common';
 
 export interface OmakasePlayerApi extends Api, OmakaseEventEmitter<OmakasePlayerEventMap> {
 

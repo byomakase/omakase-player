@@ -24,7 +24,7 @@ import {animate} from '../util/animation-util';
 import {catchError, filter, fromEvent, map, Observable, of, Subject, takeUntil} from 'rxjs';
 import {ThumbnailVttCue, TimelineScrollEvent, TimelineZoomEvent, VideoLoadedEvent} from '../types';
 import {Playhead} from './playhead';
-import {ThumbnailVttFile} from '../track/thumbnail-vtt-file';
+import {ThumbnailVttFile} from '../track';
 import {Thumbnail} from './thumbnail/thumbnail';
 import {GenericTimelaneLane} from './timeline-lane';
 import {Constants} from '../constants';
@@ -33,7 +33,7 @@ import {ShapeUtil} from '../util/shape-util';
 import {WindowUtil} from '../util/window-util';
 import {ScrubberLane} from './scrubber-lane';
 import {TimecodeDisplay} from './timecode-display';
-import {TimelineApi} from '../api/timeline-api';
+import {TimelineApi} from '../api';
 import {z} from 'zod';
 import {MarkerLane} from './marker';
 import {ThumbnailLane} from './thumbnail';
@@ -104,7 +104,9 @@ export interface TimelineStyle {
 
 export interface TimelineConfig extends ComponentConfig<TimelineStyle> {
   thumbnailVttUrl?: string;
+  thumbnailVttFile?: ThumbnailVttFile;
   axiosConfig?: AxiosRequestConfig;
+
   timelineHTMLElementId: string;
   playheadHoverSnapArea: number;
   zoomScale: number;
@@ -176,8 +178,11 @@ const SCRUBBER_LANE_ID = 'omakase_scrubber_lane';
 export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva.Stage> implements OnMeasurementsChange, HasRectMeasurement, ScrollableHorizontally, TimelineApi {
   // region config
   private timelineHTMLElementId: string;
-  private thumbnailVttUrl: string;
-  private axiosConfig: AxiosRequestConfig;
+
+  private _thumbnailVttUrl?: string;
+  private _thumbnailVttFile?: ThumbnailVttFile;
+  private _axiosConfig: AxiosRequestConfig;
+
   private width: number;
   private zoomScale: number;
   private zoomBaseline: number;
@@ -230,7 +235,6 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
   // endregion
 
   private maxTimecodedGroupWidth: number;
-  private thumbnailVttFile: ThumbnailVttFile;
 
   private scrollWithPlayhead = true;
   private syncTimelineWithPlayheadInProgress = false;
@@ -250,8 +254,7 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
     super(composeConfigAndDefault(config, configDefault));
 
     this.timelineHTMLElementId = this.config.timelineHTMLElementId;
-    this.thumbnailVttUrl = this.config.thumbnailVttUrl;
-    this.axiosConfig = this.config.axiosConfig;
+    this._axiosConfig = this.config.axiosConfig;
 
     this.playheadHoverSnapArea = this.config.playheadHoverSnapArea;
     this.zoomScale = this.config.zoomScale;
@@ -573,8 +576,8 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
       this.mouseWheelEnabled = true;
       let x = this.timecodedGroup.getRelativePointerPosition().x;
       let time = this.timelinePositionToTime(x);
-      if (this.thumbnailVttFile) {
-        let thumbnailVttCue = this.thumbnailVttFile.findCue(time);
+      if (this._thumbnailVttFile) {
+        let thumbnailVttCue = this._thumbnailVttFile.findCue(time);
         this.showThumbnailHover(thumbnailVttCue);
       }
     });
@@ -592,23 +595,23 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
             let x = this.timecodedGroup.getRelativePointerPosition().x;
             this.playheadHoverMove(x);
             this.playheadHover.toggleVisible(this.videoController.isVideoLoaded());
-            if (this.thumbnailVttFile) {
+            if (this._thumbnailVttFile) {
                 let time = this.timelinePositionToTime(x);
-                let thumbnailVttCue = this.thumbnailVttFile.findCue(time);
+                let thumbnailVttCue = this._thumbnailVttFile.findCue(time);
                 this.showThumbnailHover(thumbnailVttCue);
             }
         });
 
         this.timecodedGroup.on('touchcancel', () => {
             this.playheadHover.toggleVisible(false);
-            if (this.thumbnailVttFile) {
+            if (this._thumbnailVttFile) {
                 this.hideThumbnailHover();
             }
         });
 
         this.canvasNode.on('touchend', () => {
             this.playheadHover.toggleVisible(false);
-            if (this.thumbnailVttFile) {
+            if (this._thumbnailVttFile) {
                 this.hideThumbnailHover();
             }
         });
@@ -649,8 +652,10 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
       this.updateScrollWithPlayhead();
     })
 
-    if (this.thumbnailVttUrl) {
-      this.fetchThumbnailVttFile().subscribe()
+    if (this.config.thumbnailVttFile) {
+      this._thumbnailVttFile = this.config.thumbnailVttFile;
+    } else if (this.config.thumbnailVttUrl) {
+      this.loadThumbnailVttFile(this.config.thumbnailVttUrl).subscribe()
     }
   }
 
@@ -1022,7 +1027,7 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
 
   zoomIn(): Observable<number> {
     return new Observable<number>(o$ => {
-      this.zoomStep(ZoomDirection.IN, this.timecodedGroup.getRelativePointerPosition().x);
+      this.zoomStep(ZoomDirection.IN, this.resolveZoomFocus());
       o$.next(this.getZoomPercent());
       o$.complete();
     })
@@ -1030,7 +1035,7 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
 
   zoomOut(): Observable<number> {
     return new Observable<number>(o$ => {
-      this.zoomStep(ZoomDirection.OUT, this.timecodedGroup.getRelativePointerPosition().x);
+      this.zoomStep(ZoomDirection.OUT, this.resolveZoomFocus());
       o$.next(this.getZoomPercent());
       o$.complete();
     })
@@ -1227,12 +1232,8 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
     this.videoEventBreaker$ = new Subject<void>();
   }
 
-  setThumbnailVttFile(thumbnailVttFile: ThumbnailVttFile) {
-    this.thumbnailVttFile = thumbnailVttFile;
-  }
-
   getThumbnailVttFile(): ThumbnailVttFile {
-    return this.thumbnailVttFile;
+    return this._thumbnailVttFile;
   }
 
   private syncVideoMetadata() {
@@ -1553,16 +1554,21 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
     return this.zoomMax;
   }
 
-  private fetchThumbnailVttFile(): Observable<ThumbnailVttFile> {
-    if (this.thumbnailVttUrl) {
-      return ThumbnailVttFile.create(this.thumbnailVttUrl, this.axiosConfig).pipe(map(thumbnailVttFile => {
-        this.thumbnailVttFile = thumbnailVttFile;
-        return thumbnailVttFile;
-      }), catchError((err, caught) => {
-        return of(void 0);
-      }))
+  private loadThumbnailVttFile(thumbnailVttUrl: string): Observable<boolean> {
+    return ThumbnailVttFile.create(thumbnailVttUrl, this._axiosConfig).pipe(map(thumbnailVttFile => {
+      this._thumbnailVttUrl = thumbnailVttUrl;
+      this._thumbnailVttFile = thumbnailVttFile;
+      return true;
+    }), catchError(err => {
+      return of(false);
+    }))
+  }
+
+  loadThumbnailsFromUrl(thumbnailVttUrl: string): Observable<boolean> {
+    if (thumbnailVttUrl) {
+      return this.loadThumbnailVttFile(thumbnailVttUrl);
     } else {
-      return of(void 0);
+      return of(false);
     }
   }
 
@@ -1577,7 +1583,7 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
   }
 
   clearContent() {
-    this.setThumbnailVttFile(void 0);
+    this._thumbnailVttFile = void 0;
     this.timelineLanes.forEach(timelineLane => {
       timelineLane.clearContent();
     })
@@ -1585,10 +1591,6 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
   }
 
   destroy() {
-    this.timelineHTMLElement = void 0;
-    this.videoController = void 0;
-    this.thumbnailVttFile = void 0;
-
     nextCompleteVoidSubjects(this.videoEventBreaker$);
 
     let subjects = [this.onScroll$, this.onZoom$];
@@ -1596,6 +1598,10 @@ export class Timeline extends BaseComponent<TimelineConfig, TimelineStyle, Konva
     unsubscribeSubjects(...subjects);
 
     DestroyUtil.destroy(this.scrollbar, this.playheadHover, this.playhead, ...this.timelineLanes, this.thumbnailHover, this.headerTimecodeDisplay);
+
+    this.timelineHTMLElement = void 0;
+    this.videoController = void 0;
+    this._thumbnailVttFile = void 0;
 
     super.destroy();
   }

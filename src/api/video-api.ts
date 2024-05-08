@@ -198,6 +198,13 @@ export interface VideoApi extends Api {
    */
   seekToFormattedTimestamp(timestamp: string): Observable<boolean>;
 
+  /**
+   * Seeks to timeline location
+   *
+   * @param percent
+   */
+  seekToPercent(percent: number): Observable<boolean>
+
   /***
    * Formats video timestamp to HH:MM:SS:FF
    * @param time Video timestamp in seconds
@@ -208,7 +215,13 @@ export interface VideoApi extends Api {
    * Converts timestamp in format HH:MM:SS:FF to frame
    * @param timestamp
    */
-  convertTimestampToFrame(timestamp: string): number
+  parseTimestampToFrame(timestamp: string): number
+
+  /**
+   * Converts timestamp in format HH:MM:SS:FF to time in seconds
+   * @param timestamp
+   */
+  parseTimestamp(timestamp: string): number
 
   /***
    * Returns video frame number
@@ -231,6 +244,16 @@ export interface VideoApi extends Api {
    * Video unmute
    */
   unmute();
+
+  /***
+   * Returns is video muted
+   */
+  isMuted(): boolean;
+
+  /**
+   * Toggles mute / unmute
+   */
+  toggleMuteUnmute(): void;
 
   /***
    * Indicates if video is in fullscreen mode

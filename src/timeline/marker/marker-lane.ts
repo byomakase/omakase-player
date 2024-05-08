@@ -108,11 +108,11 @@ export class MarkerLane extends BaseTimelineLane<MarkerLaneConfig, MarkerLaneSty
     this.markersGroup.destroyChildren();
   }
 
-  createMomentMarker(config: MomentMarkerConfig): MomentMarker {
+  createMomentMarker(config: ComponentConfigStyleComposed<MomentMarkerConfig>): MomentMarker {
     return this.addMarker(new MomentMarker(config)) as MomentMarker;
   }
 
-  createPeriodMarker(config: PeriodMarkerConfig): PeriodMarker {
+  createPeriodMarker(config: ComponentConfigStyleComposed<PeriodMarkerConfig>): PeriodMarker {
     return this.addMarker(new PeriodMarker(config)) as PeriodMarker;
   }
 

@@ -18,7 +18,7 @@
 import Konva from 'konva';
 import {map, Observable, of, Subject} from 'rxjs';
 import {StyleAdapter} from './style-adapter';
-import {WithOptionalPartial} from '../types/types';
+import {WithOptionalPartial} from '../types';
 import {Destroyable} from '../types';
 import {nextCompleteVoidSubject} from '../util/observable-util';
 

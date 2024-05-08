@@ -41,7 +41,7 @@ export interface VttFileParsed {
 
 export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements OmakaseVttFile<T> {
   protected url: string;
-  protected axiosConfig: AxiosRequestConfig;
+  protected axiosConfig?: AxiosRequestConfig;
   protected cues: Map<number, T> = new Map<number, T>();
   protected cuesKeysSorted: number[] = [];
 

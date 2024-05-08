@@ -14,7 +14,16 @@
  *       limitations under the License.
  */
 
+export * from './api'
+export * from './common'
+export * from './track'
+export * from './types'
+
+// TODO consolidate in next major version
 export * from './timeline/marker'
 export * from './timeline'
+// TODO consolidate in next major version
+
 export * from './omakase-player'
+
 

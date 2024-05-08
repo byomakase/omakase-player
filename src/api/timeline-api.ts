@@ -19,7 +19,7 @@ import {Observable} from 'rxjs';
 import {TimelineScrollEvent, TimelineZoomEvent} from '../types';
 import {AudioTrackLane, MarkerLane, SubtitlesLane, ThumbnailLane} from '../timeline';
 import {GenericTimelaneLane} from '../timeline/timeline-lane';
-import {TimelineStyle} from '../timeline/timeline';
+import {TimelineStyle} from '../timeline';
 import {MarkerLaneConfig} from '../timeline/marker/marker-lane';
 import {ThumbnailLaneConfig} from '../timeline/thumbnail/thumbnail-lane';
 import {SubtitlesLaneConfig} from '../timeline/subtitles/subtitles-lane';
@@ -165,4 +165,11 @@ export interface TimelineApi extends Api {
    * Return ThumbnailVttFile if set
    */
   getThumbnailVttFile(): ThumbnailVttFile;
+
+  /**
+   * Load ThumbnailVttFile by url
+   */
+  loadThumbnailsFromUrl(thumbnailVttUrl: string): Observable<boolean>;
+
+  destroy();
 }

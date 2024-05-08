@@ -20,6 +20,7 @@ import {MomentMarker, MomentMarkerConfig} from '../timeline/marker/moment-marker
 import {PeriodMarker, PeriodMarkerConfig} from '../timeline/marker/period-marker';
 import {Subject} from 'rxjs';
 import {MarkerFocusEvent} from '../types';
+import {ComponentConfigStyleComposed} from '../common/component';
 
 export interface MarkerLaneApi extends Api {
   /***
@@ -31,13 +32,13 @@ export interface MarkerLaneApi extends Api {
    * Creates new MomentMarker instance and adds it to MarkerLane
    * @param config MomentMarker configuration
    */
-  createMomentMarker(config: MomentMarkerConfig): MomentMarker;
+  createMomentMarker(config: ComponentConfigStyleComposed<MomentMarkerConfig>): MomentMarker;
 
   /***
    * Creates new PeriodMarker instance and adds it to MarkerLane
    * @param config PeriodMarkern configuration
    */
-  createPeriodMarker(config: PeriodMarkerConfig): PeriodMarker;
+  createPeriodMarker(config: ComponentConfigStyleComposed<PeriodMarkerConfig>): PeriodMarker;
 
   /***
    * Adds Marker to MarkerLane

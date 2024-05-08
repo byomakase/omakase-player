@@ -57,12 +57,13 @@ export class SubtitlesController implements SubtitlesApi, Destroyable {
           track.element = element;
 
           this.subtitlesTracks.set(track.id, track);
-          this.onCreate$.next({
-            textTrack: track
-          });
 
           let textTrack = this.videoController.getTextTrackById(track.id);
           textTrack.mode = 'hidden';
+
+          this.onCreate$.next({
+            textTrack: track
+          });
 
           o$.next(track);
           o$.complete();

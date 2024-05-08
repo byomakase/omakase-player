@@ -18,12 +18,12 @@ import Konva from 'konva';
 import {Thumbnail} from './thumbnail';
 import {catchError, debounceTime, map, Observable, of, Subject, switchMap, take, takeUntil} from 'rxjs';
 import {BaseTimelineLane, TimelaneLaneConfig, TIMELINE_LANE_STYLE_DEFAULT, TimelineLaneStyle} from '../timeline-lane';
-import {ThumbnailVttFile} from '../../track/thumbnail-vtt-file';
+import {ThumbnailVttFile} from '../../track';
 import {ImageUtil} from '../../util/image-util';
-import {Position} from '../../common/measurement';
+import {Dimension, Position} from '../../common/measurement';
 import {ThumbnailEvent, ThumbnailVttCue} from '../../types';
 import {ShapeUtil} from '../../util/shape-util';
-import {ComponentConfigStyleComposed} from '../../common/component';
+import {ComponentConfigStyleComposed} from '../../common';
 import {AxiosRequestConfig} from 'axios';
 import {nextCompleteVoidSubject} from '../../util/observable-util';
 
@@ -49,14 +49,16 @@ const styleDefault: ThumbnailLaneStyle = {
 }
 
 export interface ThumbnailLaneConfig extends TimelaneLaneConfig<ThumbnailLaneStyle> {
-  thumbnailVttUrl: string;
-  axiosConfig: AxiosRequestConfig;
+  thumbnailVttUrl?: string;
+  thumbnailVttFile?: ThumbnailVttFile;
+  axiosConfig?: AxiosRequestConfig;
 }
 
 export class ThumbnailLane extends BaseTimelineLane<ThumbnailLaneConfig, ThumbnailLaneStyle> {
   // region config
-  private _thumbnailVttUrl: string;
-  private _axiosConfig: AxiosRequestConfig;
+  private _thumbnailVttUrl?: string;
+  private _thumbnailVttFile?: ThumbnailVttFile;
+  private _axiosConfig?: AxiosRequestConfig;
   // endregion
 
   // region components
@@ -72,8 +74,7 @@ export class ThumbnailLane extends BaseTimelineLane<ThumbnailLaneConfig, Thumbna
   protected thumbnailsGroup: Konva.Group;
   // endregion
 
-  private thumbnailVttFile: ThumbnailVttFile;
-  private thumbnailWidth: number;
+  private _thumbnailWidth: number;
 
   private readonly onSettleLayout$: Subject<void> = new Subject<void>();
   private eventStreamBreaker$ = new Subject<void>();
@@ -89,7 +90,6 @@ export class ThumbnailLane extends BaseTimelineLane<ThumbnailLaneConfig, Thumbna
       }
     });
 
-    this._thumbnailVttUrl = this.config.thumbnailVttUrl;
     this._axiosConfig = this.config.axiosConfig;
   }
 
@@ -150,7 +150,11 @@ export class ThumbnailLane extends BaseTimelineLane<ThumbnailLaneConfig, Thumbna
   protected afterCanvasNodeInit() {
     super.afterCanvasNodeInit();
 
-    this.fetchAndCreateThumbnails();
+    if (this.config.thumbnailVttFile) {
+      this.createThumbnailsFromFile(this.config.thumbnailVttFile).subscribe()
+    } else if (this.config.thumbnailVttUrl) {
+      this.createThumbnailsFromUrl(this.config.thumbnailVttUrl).subscribe()
+    }
 
     this.onSettleLayout$.pipe(takeUntil(this.onDestroy$)).subscribe(() => {
       this.hideThumbnailHover();
@@ -182,12 +186,6 @@ export class ThumbnailLane extends BaseTimelineLane<ThumbnailLaneConfig, Thumbna
 
   clearContent() {
     this.fireEventStreamBreaker();
-
-    this.thumbnailVttFile = void 0;
-    this.clearItems();
-  }
-
-  private clearItems() {
     this.thumbnailsMap.forEach(p => p.destroy())
     this.thumbnailsMap.clear()
     this.thumbnailsVisibleSet.clear()
@@ -205,7 +203,7 @@ export class ThumbnailLane extends BaseTimelineLane<ThumbnailLaneConfig, Thumbna
     }
 
     this.resolveVisibleTimestamps();
-    this.thumbnailVttFile.getCues().forEach(cue => {
+    this._thumbnailVttFile.getCues().forEach(cue => {
       let x = this.timeline.timeToTimelinePosition(cue.startTime);
       let visible = this.thumbnailsVisibleSet.has(cue.startTime);
       if (this.timeline.constrainTimelinePosition(x) === x) { // exclude thumbnails that don't fit on timeline, maybe timestamps are incorrect
@@ -249,13 +247,13 @@ export class ThumbnailLane extends BaseTimelineLane<ThumbnailLaneConfig, Thumbna
 
   private resolveVisibleTimestamps() {
     let lastThumbnailBoundary;
-    let cues = this.thumbnailVttFile.getCues();
+    let cues = this._thumbnailVttFile.getCues();
     cues.forEach(cue => {
       let x = this.timeline.timeToTimelinePosition(cue.startTime);
       if (this.timeline.constrainTimelinePosition(x) === x) { // exclude thumbnails that don't fit on timeline, maybe timestamps are incorrect
         let visible = lastThumbnailBoundary ? x >= (lastThumbnailBoundary) : true;
         if (visible) {
-          lastThumbnailBoundary = x + this.thumbnailWidth;
+          lastThumbnailBoundary = x + this._thumbnailWidth;
           this.thumbnailsVisibleSet.add(cue.startTime);
         } else {
           this.thumbnailsVisibleSet.delete(cue.startTime);
@@ -345,25 +343,26 @@ export class ThumbnailLane extends BaseTimelineLane<ThumbnailLaneConfig, Thumbna
     return {x, y}
   }
 
-
-  private fetchAndCreateThumbnails() {
-    this.fetchThumbnailVttFile(this._thumbnailVttUrl, this._axiosConfig, this.style.thumbnailHeight).pipe(take(1)).subscribe((result) => {
-      if (result) {
-        this.thumbnailVttFile = result.thumbnailVttFile;
-        this.thumbnailWidth = result.thumbnailWidth;
-        this.createAndAdjustThumbnails();
-      }
-    })
+  isVttLoaded(): boolean {
+    return !!this._thumbnailVttFile && !!this._thumbnailWidth;
   }
 
-  private fetchThumbnailVttFile(url: string, axiosConfig: AxiosRequestConfig, thumbnailHeight: number): Observable<{
+  getThumbnailVttFile(): ThumbnailVttFile {
+    return this._thumbnailVttFile;
+  }
+
+  get thumbnailVttUrl(): string {
+    return this._thumbnailVttUrl;
+  }
+
+  private fetchThumbnailVttFile(): Observable<{
     thumbnailVttFile: ThumbnailVttFile,
     thumbnailWidth: number
   }> {
-    if (url) {
-      return ThumbnailVttFile.create(url, axiosConfig).pipe(switchMap(thumbnailVttFile => {
+    if (this._thumbnailVttUrl) {
+      return ThumbnailVttFile.create(this._thumbnailVttUrl, this._axiosConfig).pipe(switchMap(thumbnailVttFile => {
         let firstCue: ThumbnailVttCue = thumbnailVttFile.getCues()[0];
-        return ImageUtil.createKonvaImageSizedByHeight(firstCue.url, thumbnailHeight).pipe(map(image => {
+        return ImageUtil.createKonvaImageSizedByHeight(firstCue.url, this.style.thumbnailHeight).pipe(map(image => {
           let thumbnailWidth = image.getSize().width;
           return {
             thumbnailVttFile: thumbnailVttFile,
@@ -378,21 +377,61 @@ export class ThumbnailLane extends BaseTimelineLane<ThumbnailLaneConfig, Thumbna
     }
   }
 
-  isVttLoaded(): boolean {
-    return !!this.thumbnailVttFile && !!this.thumbnailWidth;
+  createThumbnailsFromUrl(thumbnailVttUrl: string): Observable<boolean> {
+    if (thumbnailVttUrl) {
+      return ThumbnailVttFile.create(thumbnailVttUrl, this._axiosConfig).pipe(switchMap(thumbnailVttFile => {
+        return this.createThumbnailsFromFile(thumbnailVttFile).pipe(map(result => {
+          if (result) {
+            this._thumbnailVttUrl = thumbnailVttUrl;
+            return true;
+          } else {
+            return false;
+          }
+        }));
+      }), catchError(err => {
+        return of(false);
+      }))
+    } else {
+      return of(false);
+    }
   }
 
-  getThumbnailVttFile(): ThumbnailVttFile {
-    return this.thumbnailVttFile;
-  }
-
-  get thumbnailVttUrl(): string {
-    return this._thumbnailVttUrl;
-  }
-
-  set thumbnailVttUrl(value: string) {
-    this._thumbnailVttUrl = value;
+  createThumbnailsFromFile(thumbnailVttFile: ThumbnailVttFile): Observable<boolean> {
     this.clearContent();
-    this.fetchAndCreateThumbnails();
+
+    return this.resolveThumbnailDimension(thumbnailVttFile).pipe(map(dimension => {
+      this._thumbnailVttFile = thumbnailVttFile;
+      this._thumbnailWidth = dimension.width;
+      this.createAndAdjustThumbnails();
+      return true;
+    }), catchError(err => {
+      return of(false);
+    }))
+  }
+
+  private resolveThumbnailDimension(thumbnailVttFile: ThumbnailVttFile): Observable<Dimension | undefined> {
+    return new Observable<Dimension | undefined>(o$ => {
+      if (thumbnailVttFile) {
+        // create thumbnails by file
+        let firstCue: ThumbnailVttCue = thumbnailVttFile.getCues()[0];
+        ImageUtil.createKonvaImageSizedByHeight(firstCue.url, this.style.thumbnailHeight).subscribe({
+          next: (image) => {
+            o$.next({
+              width: image.getSize().width,
+              height: this.style.thumbnailHeight
+            });
+            o$.complete();
+          },
+          error: err => {
+            console.error(err);
+            o$.next(void 0);
+            o$.complete();
+          }
+        })
+      } else {
+        o$.next(void 0);
+        o$.complete();
+      }
+    })
   }
 }

@@ -14,10 +14,12 @@
  *       limitations under the License.
  */
 
-export type {TimelaneLane} from './timeline-lane';
+export type {TimelaneLane, TimelineLaneStyle, TimelaneLaneConfig} from './timeline-lane';
+export * from './scrubber-lane';
 export * from './marker';
 export * from './subtitles';
 export * from './thumbnail';
 export * from './audio-track';
 export * from './chart-track';
+export * from './timeline';
 

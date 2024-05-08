@@ -52,6 +52,8 @@ export interface Marker<T extends TimeObservation, C extends MarkerConfig<T, S>,
   onClick$: Subject<MarkerEvent>;
   onMouseEnter$: Subject<MarkerEvent>;
   onMouseLeave$: Subject<MarkerEvent>;
+  onMouseOver$: Subject<MarkerEvent>;
+  onMouseOut$: Subject<MarkerEvent>;
 
   get style(): S;
 
@@ -89,6 +91,8 @@ export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConf
   public readonly onClick$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
   public readonly onMouseEnter$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
   public readonly onMouseLeave$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
+  public readonly onMouseOver$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
+  public readonly onMouseOut$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
 
   protected constructor(config: C) {
     super(config);
@@ -126,6 +130,14 @@ export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConf
 
     this.group.on('mouseleave', (event) => {
       this.onMouseLeave$.next({})
+    })
+
+    this.group.on('mouseover', (event) => {
+      this.onMouseOver$.next({})
+    })
+
+    this.group.on('mouseout', (event) => {
+      this.onMouseOut$.next({})
     })
   }
 
