@@ -14,25 +14,25 @@ let omakasePlayer;
 
 let urls = [
     {
-        video: 'https://demo.player.byomakase.org/data/op/sdr-ts/meridian_sdr.m3u8',
-        thumbnails: 'https://demo.player.byomakase.org/data/op/thumbnails/timeline.vtt',
-        bitrate: 'https://demo.player.byomakase.org/data/op/analysis/bitrate_2-SEC.vtt',
-        blacks: 'https://demo.player.byomakase.org/data/op/events/black-segments.vtt',
-        poi: 'https://demo.player.byomakase.org/data/op/events/points-of-interest.vtt',
-        ebur128: 'https://demo.player.byomakase.org/data/op/analysis/ebur128_M_2-SEC.vtt',
-        rms: 'https://demo.player.byomakase.org/data/op/analysis/overall_RMS_level_2-SEC.vtt',
+        video: 'https://demo.player.byomakase.org/data/sdr-ts/meridian_sdr.m3u8',
+        thumbnails: 'https://demo.player.byomakase.org/data/thumbnails/timeline.vtt',
+        bitrate: 'https://demo.player.byomakase.org/data/analysis/bitrate_2-SEC.vtt',
+        blacks: 'https://demo.player.byomakase.org/data/events/black-segments.vtt',
+        poi: 'https://demo.player.byomakase.org/data/events/points-of-interest.vtt',
+        ebur128: 'https://demo.player.byomakase.org/data/analysis/ebur128_M_2-SEC.vtt',
+        rms: 'https://demo.player.byomakase.org/data/analysis/overall_RMS_level_2-SEC.vtt',
         enCaption: 'https://demo.player.byomakase.org/data/subtitles/meridian_en_cc_11m58s.vtt',
-        dkSubtitle: 'https://demo.player.byomakase.org/data/op/subtitles/meridian_sdr_DN.vtt',
-        audioLvl20: 'https://demo.player.byomakase.org/data/op/waveforms/meridian_english_aud20t1c1-2-1-SEC-2_0.vtt',
-        audioLvl20L: 'https://demo.player.byomakase.org/data/op/waveforms/meridian_english_aud20t1c1-2-1-SEC-2_0-L.vtt',
-        audioLvl20R: 'https://demo.player.byomakase.org/data/op/waveforms/meridian_english_aud20t1c1-2-1-SEC-2_0-R.vtt',
-        audioLvl51: 'https://demo.player.byomakase.org/data/op/waveforms/meridian_english_aud51t1c1-6-1-SEC-5_1.vtt',
-        audioLvl51L: 'https://demo.player.byomakase.org/data/op/waveforms/meridian_english_aud51t1c1-6-1-SEC-5_1-L.vtt',
-        audioLvl51R: 'https://demo.player.byomakase.org/data/op/waveforms/meridian_english_aud51t1c1-6-1-SEC-5_1-R.vtt',
-        audioLvl51C: 'https://demo.player.byomakase.org/data/op/waveforms/meridian_english_aud51t1c1-6-1-SEC-5_1-C.vtt',
-        audioLvl51LFE: 'https://demo.player.byomakase.org/data/op/waveforms/meridian_english_aud51t1c1-6-1-SEC-5_1-LFE.vtt',
-        audioLvl51SR: 'https://demo.player.byomakase.org/data/op/waveforms/meridian_english_aud51t1c1-6-1-SEC-5_1-RS.vtt',
-        audioLvl51SL: 'https://demo.player.byomakase.org/data/op/waveforms/meridian_english_aud51t1c1-6-1-SEC-5_1-LS.vtt'
+        dkSubtitle: 'https://demo.player.byomakase.org/data/subtitles/meridian_sdr_DN.vtt',
+        audioLvl20: 'https://demo.player.byomakase.org/data/waveforms/meridian_english_aud20t1c1-2-1-SEC-2_0.vtt',
+        audioLvl20L: 'https://demo.player.byomakase.org/data/waveforms/meridian_english_aud20t1c1-2-1-SEC-2_0-L.vtt',
+        audioLvl20R: 'https://demo.player.byomakase.org/data/waveforms/meridian_english_aud20t1c1-2-1-SEC-2_0-R.vtt',
+        audioLvl51: 'https://demo.player.byomakase.org/data/waveforms/meridian_english_aud51t1c1-6-1-SEC-5_1.vtt',
+        audioLvl51L: 'https://demo.player.byomakase.org/data/waveforms/meridian_english_aud51t1c1-6-1-SEC-5_1-L.vtt',
+        audioLvl51R: 'https://demo.player.byomakase.org/data/waveforms/meridian_english_aud51t1c1-6-1-SEC-5_1-R.vtt',
+        audioLvl51C: 'https://demo.player.byomakase.org/data/waveforms/meridian_english_aud51t1c1-6-1-SEC-5_1-C.vtt',
+        audioLvl51LFE: 'https://demo.player.byomakase.org/data/waveforms/meridian_english_aud51t1c1-6-1-SEC-5_1-LFE.vtt',
+        audioLvl51SR: 'https://demo.player.byomakase.org/data/waveforms/meridian_english_aud51t1c1-6-1-SEC-5_1-RS.vtt',
+        audioLvl51SL: 'https://demo.player.byomakase.org/data/waveforms/meridian_english_aud51t1c1-6-1-SEC-5_1-LS.vtt'
     }];
 
 
@@ -465,7 +465,7 @@ window.addEventListener('load', () => {
             justify: 'end',
             margin: [0, 5, 0, 0],
             timelineNode: new omakase.ImageButton({
-                src: `https://demo.player.byomakase.org/new-demo/images/volume-off.svg`,
+                src: `https://demo.player.byomakase.org/images/volume-off.svg`,
                 width: 30,
                 height: 30,
                 listening: false
@@ -473,7 +473,7 @@ window.addEventListener('load', () => {
         });
 
         let iconMinimize20 = new omakase.ImageButton({
-            src: `https://demo.player.byomakase.org/new-demo/images/chevron-right.svg`,
+            src: `https://demo.player.byomakase.org/images/chevron-right.svg`,
             width: 20,
             height: 20,
             listening: true
@@ -489,13 +489,13 @@ window.addEventListener('load', () => {
                 stereoOveralRmsOgChartLane.toggleMinimizeMaximize();
 
                 let imageConfigExpanded = {
-                    src: `https://demo.player.byomakase.org/new-demo/images/chevron-down.svg`,
+                    src: `https://demo.player.byomakase.org/images/chevron-down.svg`,
                     width: 20,
                     height: 20,
                     listening: true
                 }
                 let imageConfigCollapsed = {
-                    src: `https://demo.player.byomakase.org/new-demo/images/chevron-right.svg`,
+                    src: `https://demo.player.byomakase.org/images/chevron-right.svg`,
                     width: 20,
                     height: 20,
                     listening: true
@@ -585,7 +585,7 @@ window.addEventListener('load', () => {
             justify: 'end',
             margin: [0, 5, 0, 0],
             timelineNode: new omakase.ImageButton({
-                src: `https://demo.player.byomakase.org/new-demo/images/volume-off.svg`,
+                src: `https://demo.player.byomakase.org/images/volume-off.svg`,
                 width: 30,
                 height: 30,
                 listening: false
@@ -593,7 +593,7 @@ window.addEventListener('load', () => {
         });
 
         let iconMinimize51 = new omakase.ImageButton({
-            src: `https://demo.player.byomakase.org/new-demo/images/chevron-right.svg`,
+            src: `https://demo.player.byomakase.org/images/chevron-right.svg`,
             width: 20,
             height: 20,
             listening: true
@@ -611,13 +611,13 @@ window.addEventListener('load', () => {
                 surroundAudioTrackLaneSR.toggleMinimizeMaximize();
 
                 let imageConfigExpanded = {
-                    src: `https://demo.player.byomakase.org/new-demo/images/chevron-down.svg`,
+                    src: `https://demo.player.byomakase.org/images/chevron-down.svg`,
                     width: 20,
                     height: 20,
                     listening: true
                 }
                 let imageConfigCollapsed = {
-                    src: `https://demo.player.byomakase.org/new-demo/images/chevron-right.svg`,
+                    src: `https://demo.player.byomakase.org/images/chevron-right.svg`,
                     width: 20,
                     height: 20,
                     listening: true
@@ -1416,7 +1416,7 @@ function addZoomButtons() {
 
     // define zoom in button
     let zoomInButton = new omakase.ImageButton({
-        src: `https://demo.player.byomakase.org/new-demo/images/plus-circle.svg`,
+        src: `https://demo.player.byomakase.org/images/plus-circle.svg`,
         width: 20,
         height: 20,
         listening: true // set to true if button is interactive
@@ -1431,7 +1431,7 @@ function addZoomButtons() {
 
     // define zoom out button
     let zoomOutButton = new omakase.ImageButton({
-        src: `https://demo.player.byomakase.org/new-demo/images/minus-circle.svg`,
+        src: `https://demo.player.byomakase.org/images/minus-circle.svg`,
         width: 20,
         height: 20,
         listening: true

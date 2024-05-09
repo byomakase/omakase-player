@@ -16,6 +16,8 @@
 
 * {
   font-family: Arial;
+  margin: 0;
+  padding: 0;
 }
 
 body {
@@ -119,7 +121,7 @@ body {
 
 .controls {
   background-color: #235067;
-  width: 610px;
+  width: 650px;
   height: 30px;
   margin-top: 0px;
   margin-bottom: 40px;
@@ -188,6 +190,31 @@ body {
   width: 700px;
   height: 394px;
 
+  .omakase-video-safe-zone-wrapper {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    overflow: hidden;
+
+    .omakase-video-safe-zone {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 0;
+
+      outline: 2px solid #6AC7F6;
+      box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.85);
+      -webkit-box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.85);
+      -moz-box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.85);
+    }
+  }
+}
+
+.omakase-player-div {
+  height: 394px;
 }
 
 .omakase-player .omakase-player-wrapper .omakase-video {
@@ -300,4 +327,28 @@ body {
   -webkit-user-select: none;
   -ms-user-select: none;
   user-select: none;
+}
+
+.header {
+  height: 50px;
+  background-color: #235067;
+  margin-bottom: 10px;
+  padding-right: 20px;
+
+}
+
+.header span {
+  position: relative;
+  float: right;
+  padding-top: 8px;
+  color: white;
+  font-size: 32px;
+}
+
+.content {
+  margin: 10px;
+}
+
+.timeline {
+  height: 1800px;
 }
