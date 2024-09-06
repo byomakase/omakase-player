@@ -1,0 +1,24 @@
+<!--
+  - Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+  -
+  - Licensed under the Apache License, Version 2.0 (the "License");
+  - you may not use this file except in compliance with the License.
+  - You may obtain a copy of the License at
+  -
+  -     http://www.apache.org/licenses/LICENSE-2.0
+  -
+  - Unless required by applicable law or agreed to in writing, software
+  - distributed under the License is distributed on an "AS IS" BASIS,
+  - WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  - See the License for the specific language governing permissions and
+  - limitations under the License.
+  -->
+
+<svg width="106" height="106" viewBox="0 0 106 106" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path
+    d="M53.0001 0.320007C23.9526 0.320007 0.320068 23.9525 0.320068 53C0.320068 82.0475 23.9526 105.68 53.0001 105.68C82.0476 105.68 105.68 82.0475 105.68 53C105.68 23.9525 82.0476 0.320007 53.0001 0.320007ZM53.0001 103.18C25.3301 103.18 2.82007 80.67 2.82007 53C2.82007 25.33 25.3301 2.82001 53.0001 2.82001C80.6701 2.82001 103.18 25.33 103.18 53C103.18 80.67 80.6701 103.18 53.0001 103.18Z"
+    fill="white"/>
+  <path
+    d="M77.9476 51.9175L39.6801 29.825C39.2926 29.6025 38.8176 29.6025 38.4301 29.825C38.0426 30.0475 37.8051 30.46 37.8051 30.9075V75.0925C37.8051 75.54 38.0426 75.9525 38.4301 76.175C38.6226 76.2875 38.8401 76.3425 39.0551 76.3425C39.2701 76.3425 39.4876 76.2875 39.6801 76.175L77.9451 54.0825C78.3326 53.86 78.5701 53.4475 78.5701 53C78.5701 52.5525 78.3326 52.14 77.9476 51.9175ZM40.3051 72.9275V33.0725L74.8226 53L40.3051 72.9275Z"
+    fill="white"/>
+</svg>

@@ -1,0 +1,26 @@
+<!--
+  - Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+  -
+  - Licensed under the Apache License, Version 2.0 (the "License");
+  - you may not use this file except in compliance with the License.
+  - You may obtain a copy of the License at
+  -
+  -     http://www.apache.org/licenses/LICENSE-2.0
+  -
+  - Unless required by applicable law or agreed to in writing, software
+  - distributed under the License is distributed on an "AS IS" BASIS,
+  - WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  - See the License for the specific language governing permissions and
+  - limitations under the License.
+  -->
+
+<svg fill="none" viewBox="0 0 17 14" xmlns="http://www.w3.org/2000/svg">
+  <g fill="none">
+    <path
+      d="m8.43 8.84s0.03 0.08 0.03 0.13001c0 0.44-0.33 0.76999-0.77 0.76999h-0.16l-2.56 2.56h0.39c0.18 0 0.36 0.08 0.49 0.18l1.36 1.15c0.56 0.49 1.41 0.49 2 0l1.36-1.15c0.13-0.13 0.31-0.18 0.49-0.18h2.28c1.69 0 3.08-1.38 3.08-3.08v-6.14c0-0.62-0.19-1.21-0.51-1.69l-7.46 7.46-0.02-0.01001zm5.15 0.9h-2.82c-0.44 0-0.77003-0.32999-0.77003-0.76999 0-0.44001 0.33003-0.77001 0.77003-0.77001h2.82c0.44 0 0.77 0.33 0.77 0.77001 0 0.44-0.33 0.76999-0.77 0.76999zm0-3.08h-1.03c-0.44 0-0.77-0.33-0.77-0.77s0.33-0.77 0.77-0.77h1.03c0.44 0 0.77 0.33 0.77 0.77s-0.33 0.77-0.77 0.77z"
+      fill="#fff"/>
+    <path
+      d="m5.41 9.1s-0.03-0.08-0.03-0.13c0-0.44 0.33-0.77 0.77-0.77h0.16l1.54-1.54h-5.03c-0.44 0-0.77-0.33-0.77-0.77s0.33-0.77 0.77-0.77h6.56l4.95-4.94c-0.32-0.11-0.65-0.18-1-0.18h-10.25c-1.7 0-3.08 1.38-3.08 3.08v6.15c0 1.43 0.99 2.63 2.31 2.97l3.1-3.1zm-2.59-0.9h0.26c0.44 0 0.77 0.33 0.77 0.77s-0.33 0.77-0.77 0.77h-0.26c-0.44 0-0.77-0.33-0.77-0.77s0.33-0.77 0.77-0.77z"
+      fill="#fff"/>
+  </g>
+</svg>

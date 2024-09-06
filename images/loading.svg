@@ -1,0 +1,46 @@
+<!--
+  - Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+  -
+  - Licensed under the Apache License, Version 2.0 (the "License");
+  - you may not use this file except in compliance with the License.
+  - You may obtain a copy of the License at
+  -
+  -     http://www.apache.org/licenses/LICENSE-2.0
+  -
+  - Unless required by applicable law or agreed to in writing, software
+  - distributed under the License is distributed on an "AS IS" BASIS,
+  - WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  - See the License for the specific language governing permissions and
+  - limitations under the License.
+  -->
+
+<svg width="108" height="108" viewBox="0 0 108 108" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g clip-path="url(#clip0_2835_3418)">
+    <path
+      d="M56.4546 0C53.7434 0 51.5454 2.19797 51.5454 4.90915V24.5455C51.5454 27.2567 53.7434 29.4547 56.4546 29.4547C59.1657 29.4547 61.3637 27.2567 61.3637 24.5455V4.90915C61.3637 2.19797 59.1657 0 56.4546 0Z"
+      fill="white" />
+    <path
+      d="M56.4548 78.5454C53.7436 78.5454 51.5457 80.7434 51.5457 83.4546V103.091C51.5457 105.802 53.7436 108 56.4548 108C59.166 108 61.364 105.802 61.364 103.091V83.4546C61.364 80.7434 59.166 78.5454 56.4548 78.5454Z"
+      fill="white" fill-opacity="0.7" />
+    <path
+      d="M39.0982 29.7017L25.213 15.8161C23.2965 13.8989 20.1881 13.8989 18.2707 15.8161C16.3535 17.7333 16.3535 20.8415 18.2707 22.7585L32.1558 36.6441C33.1143 37.6026 34.3709 38.082 35.6268 38.082C36.883 38.082 38.1397 37.6026 39.0978 36.6441C41.0154 34.7268 41.0154 31.6189 39.0982 29.7017Z"
+      fill="white" />
+    <path
+      d="M100.636 49.0908H90.8183C88.1071 49.0908 85.9092 51.2888 85.9092 54C85.9092 56.7111 88.1071 58.9091 90.8183 58.9091H100.636C103.348 58.9091 105.546 56.7111 105.546 54C105.546 51.2888 103.348 49.0908 100.636 49.0908Z"
+      fill="white" fill-opacity="0.4" />
+    <path
+      d="M80.7532 71.3565C78.8364 69.4392 75.728 69.4397 73.8108 71.3565C71.8936 73.2737 71.894 76.3816 73.8108 78.2988L87.6964 92.1838C88.6549 93.1423 89.9114 93.6215 91.1678 93.6215C92.4241 93.6215 93.6807 93.1421 94.6388 92.1838C96.556 90.2666 96.556 87.1584 94.6388 85.2414L80.7532 71.3565Z"
+      fill="white" fill-opacity="0.4" />
+    <path
+      d="M31.9093 54C31.9093 51.2888 29.7113 49.0908 27.0001 49.0908H7.36374C4.65256 49.0908 2.45459 51.2888 2.45459 54C2.45459 56.7111 4.65256 58.9091 7.36374 58.9091H27.0001C29.7113 58.9091 31.9093 56.7111 31.9093 54Z"
+      fill="white" />
+    <path
+      d="M39.0983 71.3566C37.1815 69.4394 34.0729 69.4394 32.1559 71.3566L18.2709 85.2416C16.3537 87.1584 16.3537 90.2669 18.2709 92.1839C19.2294 93.1424 20.486 93.6217 21.7423 93.6217C22.9987 93.6217 24.2552 93.1427 25.2133 92.1839L39.0983 78.299C41.0155 76.3822 41.0155 73.2738 39.0983 71.3566Z"
+      fill="white" fill-opacity="0.7" />
+  </g>
+  <defs>
+    <clipPath id="clip0_2835_3418">
+      <rect width="108" height="108" fill="white" />
+    </clipPath>
+  </defs>
+</svg>

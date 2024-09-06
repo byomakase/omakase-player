@@ -1,0 +1,43 @@
+<!--
+  - Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+  -
+  - Licensed under the Apache License, Version 2.0 (the "License");
+  - you may not use this file except in compliance with the License.
+  - You may obtain a copy of the License at
+  -
+  -     http://www.apache.org/licenses/LICENSE-2.0
+  -
+  - Unless required by applicable law or agreed to in writing, software
+  - distributed under the License is distributed on an "AS IS" BASIS,
+  - WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  - See the License for the specific language governing permissions and
+  - limitations under the License.
+  -->
+
+<svg width="105" height="113" viewBox="0 0 105 113" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g filter="url(#filter0_d_280_117)">
+    <g clip-path="url(#clip0_280_117)">
+      <path
+        d="M4.11453 53.448C3.64226 60.3193 4.63823 67.1041 7.07672 73.6176C9.41468 79.867 12.938 85.45 17.5461 90.2148C21.9976 94.8159 27.251 98.4444 33.159 100.997C45.3327 106.258 58.7713 106.335 70.9988 101.21C94.0885 91.5357 106.017 65.3366 98.1565 41.5689C93.9926 28.9813 85.1107 18.8954 73.1521 13.1674C67.3469 10.3875 61.163 8.80709 54.7687 8.47042C48.15 8.12207 41.6247 9.13207 35.3754 11.47C32.0835 12.7021 28.9109 14.3036 25.951 16.2301L24.2724 17.3219L27.7817 1.48928C27.8518 1.16898 27.7957 0.84167 27.6203 0.565791C27.445 0.289912 27.1715 0.0981992 26.8512 0.0280605C26.1965 -0.114555 25.5419 0.301602 25.3946 0.958568L21.0858 20.4151C20.9922 20.8335 21.0741 21.2567 21.3149 21.6097C21.558 21.9651 21.9298 22.1966 22.3576 22.2597L42.0736 25.1447C42.7399 25.2429 43.3595 24.78 43.4577 24.1137C43.5068 23.7911 43.4249 23.4684 43.2309 23.2066C43.0345 22.9424 42.7493 22.7717 42.4243 22.725L24.574 20.1181L26.2947 18.9351C29.3832 16.8099 32.7264 15.0681 36.231 13.7589C47.9956 9.35651 60.7352 9.92697 72.0976 15.3697C83.4531 20.8078 91.8814 30.3818 95.8349 42.3311C103.298 64.897 91.9726 89.7706 70.0519 98.9564C64.3286 101.355 58.3224 102.555 52.3209 102.555C46.151 102.555 39.9881 101.287 34.1292 98.7577C22.5633 93.7591 13.768 84.5265 9.36324 72.7619C7.04165 66.557 6.09711 60.0949 6.55535 53.5509C6.57873 53.2096 6.45716 52.8729 6.21869 52.6228C5.98489 52.3773 5.67161 52.244 5.3326 52.244C5.32325 52.244 5.31156 52.244 5.30221 52.244C4.67797 52.2557 4.15661 52.7841 4.11453 53.4457V53.448Z"
+        fill="white"/>
+      <path
+        d="M75.5812 57.1701L39.7941 36.5095C39.4317 36.3015 38.9875 36.3015 38.6251 36.5095C38.2628 36.7176 38.0406 37.1034 38.0406 37.5219V78.8429C38.0406 79.2614 38.2628 79.6472 38.6251 79.8553C38.8052 79.9605 39.0086 80.0119 39.2096 80.0119C39.4107 80.0119 39.6141 79.9605 39.7941 79.8553L75.5789 59.1947C75.9413 58.9867 76.1634 58.6009 76.1634 58.1824C76.1634 57.7639 75.9413 57.3782 75.5812 57.1701ZM40.3786 76.8183V39.5465L72.6588 58.1824L40.3786 76.8183Z"
+        fill="white"/>
+    </g>
+  </g>
+  <defs>
+    <filter id="filter0_d_280_117" x="0" y="0" width="104.567" height="113" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="4"/>
+      <feGaussianBlur stdDeviation="2"/>
+      <feComposite in2="hardAlpha" operator="out"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.65 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_280_117"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_280_117" result="shape"/>
+    </filter>
+    <clipPath id="clip0_280_117">
+      <rect width="96.567" height="105" fill="white" transform="translate(4)"/>
+    </clipPath>
+  </defs>
+</svg>

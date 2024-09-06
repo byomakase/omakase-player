@@ -1,0 +1,21 @@
+<!--
+  - Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+  -
+  - Licensed under the Apache License, Version 2.0 (the "License");
+  - you may not use this file except in compliance with the License.
+  - You may obtain a copy of the License at
+  -
+  -     http://www.apache.org/licenses/LICENSE-2.0
+  -
+  - Unless required by applicable law or agreed to in writing, software
+  - distributed under the License is distributed on an "AS IS" BASIS,
+  - WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  - See the License for the specific language governing permissions and
+  - limitations under the License.
+  -->
+
+<svg width="13" height="14" viewBox="0 0 13 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path
+    d="M7.25454 11.909V8.25441H10.9091C11.6182 8.25441 12.1091 7.70895 12.1091 7.05441C12.1091 6.34531 11.5636 5.8544 10.9091 5.8544H7.25454V2.14531C7.25454 1.49077 6.70909 0.945312 6.05455 0.945312C5.34545 0.945312 4.85454 1.49077 4.85454 2.14531V5.8544H1.2C0.490909 5.8544 0 6.39986 0 7.05441C0 7.70895 0.545455 8.25441 1.2 8.25441H4.85454V11.909C4.85454 12.5635 5.4 13.109 6.05455 13.109C6.70909 13.109 7.25454 12.5635 7.25454 11.909Z"
+    fill="#fff"/>
+</svg>

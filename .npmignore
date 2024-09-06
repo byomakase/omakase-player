@@ -1,0 +1,10 @@
+# Exclude everything but the contents of the dist directory.
+**/*
+!dist/**
+!dist/*.js
+!style/**
+!LICENSE
+!README.md
+!package.json
+dist/mocks
+dist/images/error.svg

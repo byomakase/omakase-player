@@ -1,0 +1,120 @@
+<!--
+  ~ Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Omakase Player demo</title>
+  <link rel="stylesheet" href="css/player.css">
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@0.9.2-SNAPSHOT.1725315674/dist/omakase-player.umd.min.js"></script>
+  <script src="https://esonderegger.github.io/web-audio-peak-meter/web-audio-peak-meter-2.1.0.min.js"></script>
+  <script src="js/index.js"></script>
+</head>
+
+<body>
+<div class="header"><span><a href="https://player.byomakase.org/"><img alt="omakaseplayer" src="images/logo.png" height="35"></a></span></div>
+<div class="content">
+  <div id="video-container" class="video-container">
+    <div id="omakase-player" class="omakase-player-div"></div>
+    <div id="controls" class="controls prevent-select">
+      <span id="ff-back" class="icon"><img src="images/ff-back.svg" alt="" height="12"/></span>
+      <span id="back" class="icon"><img src="images/back.svg" alt="" height="12"/></span>
+      <span id="buttonPlay" class="icon">
+                    <img id="playImage" src="images/play.svg" alt="" height="12"/>
+                </span>
+      <span id="buttonPause" class="icon" style="display: none;">
+                    <img id="pauseImage" src="images/pause.svg" alt="" height="12"/>
+                </span>
+      <span id="buttonReplay" class="icon" style="display: none;">
+                    <img id="replayImage" src="images/replay.svg" alt="" height="12"/>
+                </span>
+      <span id="forward" class="icon"><img src="images/forward.svg" alt="" height="12"/></span>
+      <span id="ff-forward" class="icon"><img src="images/ff-forward.svg" alt="" height="12"/></span>
+      <span id="playback" class="toggle">Speed: 1x</span>
+      <span id="mute" class="icon"><img src="images/volume.svg" alt="" height="12"/></span>
+      <span id="audio" class="toggle">5.1</span>
+      <span id="sub" class="icon"><img src="images/sub.svg" alt="" height="12"/></span>
+      <span id="caption" class="toggle">EN</span>
+      <span id="playhead-to-in" class="icon"><img src="images/playhead-to-in.svg" alt="" height="12"/></span>
+      <span id="playhead-to-out" class="icon"><img src="images/playhead-to-out.svg" alt="" height="12"/></span>
+      <span id="in-to-playhead" class="icon"><img src="images/in-to-playhead.svg" alt="" height="12"/></span>
+      <span id="out-to-playhead" class="icon"><img src="images/out-to-playhead.svg" alt="" height="12"/></span>
+      <span id="safe-zone-off" class="icon"><img src="images/safe-zone-off.svg" alt="" height="12"/></span>
+      <span id="safe-zone-on" class="icon" style="display: none;"><img src="images/safe-zone-on.svg" alt="" height="12"/></span>
+      <span id="full-screen" class="icon"><img src="images/full-screen.svg" alt="" height="12"/></span>
+    </div>
+  </div>
+  <div id="meter" class="meter">
+    <div id="peak-meter" class="peak-meter"></div>
+    <div id="vu-meter-labels" class="vu-meter-labels">
+      <span class="vu-label">L</span>
+      <span class="vu-label">R</span>
+      <span id="vu-label-surround" class="vu-label-surround">
+                    <span class="vu-label">C</span>
+                    <span class="vu-label">LFE</span>
+                    <span class="vu-label">Ls</span>
+                    <span class="vu-label">Rs</span>
+                </span>
+    </div>
+  </div>
+  <div id="player-stats" class="player-stats">
+    <div id="inner-stats" class="inner-stats">
+      <div id="markers" class="markers">
+        <div class="markers-title">
+          <span style="display: inline-block; width: 277px;">IN AND OUT MARKERS</span>
+          <span id="addMarker" style="cursor: pointer;">
+                        <img src="images/add.svg" style="height: 12px;padding-left: 15px;"/>
+                    </span>
+        </div>
+        <div id="marker1"
+             style="opacity: 0.7; padding-left: 0px; border-left: 5px solid #6AC7F6; height: 45px; border-bottom: 2px solid #235067; border-right: 2px solid #235067">
+          <div class="marker-image">
+            <img id="predefined-image" src="https://demo.player.byomakase.org/data/thumbnails/thumbnail.0000001.jpg" height="46px"/>
+          </div>
+          <div class="marker-details">
+            <div>
+              <span style="display: inline-block; width: 150px;font-weight: bold">Predefined Marker</span>
+            </div>
+            <div>
+              <span style="display: inline-block; width: 35px; font-weight: bold">IN:</span>
+              <span id="markerStart">00:00:00:00</span></div>
+            <div>
+              <span style="display: inline-block; width: 35px;font-weight: bold">OUT:</span>
+              <span id="markerEnd">00:00:30:00</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="player-time">
+        <span>TC: </span><span id="inputTimestampFormatted" style="display: inline-block; width: 75px;">00:00:00:00</span>
+        <span> | Frame: </span><span id="inputFrameSeek" style="display: inline-block; width: 43px;">0</span>
+        <span> | Time: </span><span id="inputTimestamp" style="display: inline-block; width: 35px;">0.000   </span>
+      </div>
+      <br>
+    </div>
+  </div>
+</div>
+<div style="margin:10px">
+  <div id="omakase-timeline"></div>
+</div>
+</body>
+
+</html>

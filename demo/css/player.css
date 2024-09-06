@@ -1,0 +1,452 @@
+/*
+ * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+* {
+  font-family: Arial;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-width: 1385px;
+}
+
+.video {
+  width: 800px;
+  height: 450px;
+}
+
+.video-container {
+  width: 700px;
+  height: 394px;
+  float: left;
+  background-color: #000;
+}
+
+.meter {
+  width: 200px;
+  height: 394px;
+  float: left;
+  background-color: #EEEFEE;
+}
+
+.peak-meter {
+  width: 200px;
+  height: 394px;
+  background-color: #EEEFEE;
+}
+
+.vu-meter-labels {
+  padding-left: 27px;
+  font-size: 10pt;
+}
+
+.vu-label {
+  width: 25px;
+  display: inline-block;
+  text-align: center;
+}
+
+.vu-label-surround {
+  display: inline-block;
+}
+
+
+.player-stats {
+  width: 360px;
+  height: 465px;
+  display: inline-block;
+  font-size: 14px;
+  padding-left: 100px;
+}
+
+.markers {
+}
+
+.marker-image {
+  float: left;
+  height: 45px;
+  cursor: pointer;
+}
+
+.marker-details {
+  padding-left: 90px;
+  font-size: 10pt;
+  cursor: pointer;
+}
+
+.markers-title {
+  background-color: #235067;
+  color: white;
+  height: 26px;
+  line-height: 29px;
+  padding-left: 10px;
+  border-top-left-radius: 5px;
+  border-top-right-radius: 5px;
+}
+
+.player-time {
+  background-color: rgba(255, 255, 255, 0.8);
+  color: black;
+  height: 24px;
+  line-height: 26px;
+  padding-left: 10px;
+  border-bottom: 2px solid #235067;
+  border-left: 2px solid #235067;
+  border-right: 2px solid #235067;
+  #border-bottom-left-radius: 5px;
+  #border-bottom-right-radius: 5px;
+}
+
+.inner-stats {
+  /* border: 1px solid darkgrey;
+   border-radius: 5px;
+   background-color: rgba(248, 250, 251, 0.766);*/
+  padding-left: 30px;
+  right: 30px;
+}
+
+.controls {
+  background-color: #235067;
+  width: 650px;
+  height: 30px;
+  margin-top: 0px;
+  margin-bottom: 40px;
+  border-bottom-left-radius: 5px;
+  border-bottom-right-radius: 5px;
+  float: left;
+  cursor: default;
+}
+
+.icon {
+  padding: 10px;
+  line-height: 32px;
+  cursor: pointer;
+}
+
+.toggle {
+  cursor: pointer;
+}
+
+#playback {
+  color: white;
+  width: 95px;
+  display: inline-block;
+  padding-left: 10px;
+}
+
+#audio {
+  display: inline-block;
+  color: white;
+  width: 24px;
+  padding-right: 10px;
+}
+
+#caption {
+  display: inline-block;
+  color: white;
+  width: 24px;
+  padding-right: 10px;
+}
+
+
+/** Player CSS **/
+.omakase-player {
+  display: block
+}
+
+.omakase-player .d-none {
+  display: none
+}
+
+.omakase-player .d-block {
+  display: block
+}
+
+.omakase-player .float-start {
+  float: left !important
+}
+
+.omakase-player .float-end {
+  float: right !important
+}
+
+.omakase-player .omakase-player-wrapper {
+  display: block;
+  position: relative;
+  width: 700px;
+  height: 394px;
+
+  .omakase-video-safe-zone-wrapper {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    overflow: hidden;
+
+    .omakase-video-safe-zone {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 0;
+
+      outline: 2px solid #6AC7F6;
+      box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.85);
+      -webkit-box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.85);
+      -moz-box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.85);
+    }
+  }
+}
+
+.omakase-player-div {
+  height: 394px;
+}
+
+.omakase-player .omakase-player-wrapper .omakase-video {
+  display: block;
+  width: 100%;
+  opacity: 100%
+}
+
+.omakase-player .omakase-player-wrapper .omakase-video-controls .omakase-overlay-buttons .omakase-video-overlay-button {
+  background-repeat: no-repeat;
+  width: 30%;
+  height: 30%;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  margin: auto;
+  background-size: contain;
+  background-position: center
+}
+
+.omakase-player .omakase-player-wrapper .omakase-video-controls .omakase-overlay-buttons .omakase-button-play {
+  background-image: url(../images/o-play.svg)
+}
+
+.omakase-player .omakase-player-wrapper .omakase-video-controls .omakase-overlay-buttons .omakase-button-pause {
+  background-image: url(../images/o-pause.svg)
+}
+
+.omakase-player .omakase-player-wrapper .omakase-video-controls .omakase-overlay-buttons .omakase-button-replay {
+  background-image: url(../images/o-replay.svg)
+}
+
+.omakase-player .omakase-player-wrapper .omakase-video-controls .omakase-overlay-buttons .omakase-button-loading {
+  background-image: url(../images/o-loading.svg);
+  animation: loading 3s linear infinite
+}
+
+@keyframes loading {
+  0% {
+    transform: rotate(0)
+  }
+
+  to {
+    transform: rotate(360deg)
+  }
+}
+
+.omakase-player .omakase-player-wrapper .omakase-help {
+  font-size: 13px;
+  position: absolute;
+  right: 20px;
+  top: 20px
+}
+
+.omakase-player .omakase-player-wrapper .omakase-help .omakase-help-dropdown {
+  position: absolute;
+  right: 0;
+  top: 0
+}
+
+.omakase-player .omakase-player-wrapper .omakase-help .omakase-help-dropdown .omakase-help-button {
+  background-color: transparent;
+  background-image: url(/images/help.svg);
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+  border: 0;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  margin: 0 0 5px
+}
+
+.omakase-player .omakase-player-wrapper .omakase-help .omakase-help-dropdown .omakase-help-menu {
+  z-index: 100;
+  position: absolute;
+  right: 0;
+  width: 400px
+}
+
+.omakase-player .omakase-player-wrapper .omakase-help .omakase-help-dropdown .omakase-help-menu .omakase-help-group-title {
+  background: rgb(2, 171, 141);
+  display: block;
+  padding: 5px 10px;
+  color: #fff;
+  font-weight: 700;
+  text-align: left
+}
+
+.omakase-player .omakase-player-wrapper .omakase-help .omakase-help-dropdown .omakase-help-menu .omakase-help-group {
+  overflow-y: scroll;
+  display: block;
+  height: 200px;
+  background: rgba(2, 171, 141, .2)
+}
+
+.omakase-player .omakase-player-wrapper .omakase-help .omakase-help-dropdown .omakase-help-menu .omakase-help-group .omakase-help-item {
+  display: list-item;
+  padding: 5px 10px;
+  color: #fff
+}
+
+.omakase-player .omakase-player-wrapper .omakase-help .omakase-help-dropdown .omakase-help-menu .omakase-help-group .omakase-help-item:hover {
+  background-color: #a93232
+}
+
+.prevent-select {
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+.header {
+  height: 50px;
+  background-color: #235067;
+  margin-bottom: 10px;
+  padding-right: 20px;
+
+}
+
+.header span {
+  position: relative;
+  float: right;
+  padding-top: 8px;
+  color: white;
+  font-size: 32px;
+}
+
+.content {
+  margin: 10px;
+}
+
+.timeline {
+  height: 1800px;
+}
+
+.omakase-player-alerts {
+  position: absolute;
+  top: 26px;
+  left: 20px;
+  z-index: 100;
+}
+
+.omakase-player-alerts .omakase-alert {
+  display: flex;
+  width: 400px;
+  max-height: 44px;
+  background-color: rgba(58, 61, 75, 0.7);
+  border: 1px solid #3A3D4B;
+  border-radius: 5px;
+  padding: 10px;
+  margin-bottom: 10px;
+  position: relative;
+}
+
+.omakase-player-alerts .omakase-alert .omakase-alert-icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  background-repeat: no-repeat;
+}
+
+.omakase-player-alerts .omakase-alert .omakase-alert-icon.icon-close {
+  background-image: url(/images/alert-close.svg);
+  cursor: pointer;
+}
+
+.omakase-player-alerts .omakase-alert .omakase-alert-icon.icon-warning {
+  background-image: url(/images/alert-warning.svg);
+}
+
+.omakase-player-alerts .omakase-alert .omakase-alert-icon.icon-info {
+  background-image: url(/images/alert-info.svg);
+}
+
+.omakase-player-alerts .omakase-alert .omakase-alert-icon.icon-error {
+  background-image: url(/images/alert-error.svg);
+}
+
+.omakase-player-alerts .omakase-alert.warning {
+  color: #FDF5AD;
+}
+
+.omakase-player-alerts .omakase-alert.info {
+  color: #CACFEA;
+}
+
+.omakase-player-alerts .omakase-alert.error {
+  color: #ff0000;
+}
+
+.omakase-player-alerts .omakase-alert.alert-stack {
+  position: absolute;
+}
+
+.omakase-player-alerts .omakase-alert.alert-stack .icon-close {
+  display: none;
+}
+
+.omakase-player-alerts .omakase-alert.alert-stack .alert-text,
+.omakase-player-alerts .omakase-alert.alert-stack .omakase-alert-icon {
+  filter: blur(2px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.omakase-player-alerts .omakase-alert.alert-hide {
+  display: none;
+}
+
+.omakase-player-alerts .omakase-alert .alert-text {
+  flex-grow: 1;
+  padding: 0 5px;
+  line-height: 24px;
+}
+
+.omakase-player-alerts .omakase-alert .alert-close {
+  cursor: pointer;
+}
+
+.omakase-timeline-overlay {
+  position: absolute;
+  z-index: 100;
+}
+
+.omakase-timeline-overlay .omakase-timeline-timecode {
+  position: absolute;
+  padding-left: 10px;
+  padding-top: 10px;
+  overflow: hidden;
+}
+
