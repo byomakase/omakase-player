@@ -14,22 +14,75 @@
  * limitations under the License.
  */
 
-import {BaseOmakaseRemoteVttFile} from './vtt-file';
 import {AudioVttCue, OmakaseVttCueExtension} from '../types';
 import {map, Observable} from 'rxjs';
 import {z} from 'zod';
 import Decimal from 'decimal.js';
-import {AxiosRequestConfig} from 'axios';
 import {VttCueParsed} from './model';
+import {DownsampleStrategy, VttLoadOptions} from '../api/vtt-aware-api';
+import {DownsampledVttFile} from './downsampled-vtt-file';
 
-export class AudioVttFile extends BaseOmakaseRemoteVttFile<AudioVttCue> {
+export class AudioVttFile extends DownsampledVttFile<AudioVttCue> {
 
-  protected constructor(url: string, axiosConfig?: AxiosRequestConfig) {
-    super(url, axiosConfig);
+  protected override _supportedDownsampleStrategies: DownsampleStrategy[] = ['none', 'avg', 'max', 'min', 'drop'];
+
+  protected constructor(url: string, options: VttLoadOptions) {
+    super(url, options);
   }
 
-  static create(url: string, axiosConfig?: AxiosRequestConfig): Observable<AudioVttFile> {
-    let instance = new AudioVttFile(url, axiosConfig);
+  protected override resolveDownsampledCue(index: number, startTime: number, endTime: number, cues: AudioVttCue[]): AudioVttCue {
+    const [maxSample, minSample] = this.getMaxMinSample(cues);
+    return {
+      index: index,
+      id: `SAMPLED_${index}`,
+      startTime: startTime,
+      endTime: endTime,
+      text: `SAMPLED`,
+      minSample: minSample,
+      maxSample: maxSample,
+      extension: {
+        rows: [
+          {
+            measurement: 'min',
+            value: `${minSample}`,
+            comment: 'SAMPLED'
+          },
+          {
+            measurement: 'max',
+            value: `${maxSample}`,
+            comment: 'SAMPLED'
+          }
+        ]
+      }
+    }
+  }
+
+  private getMaxMinSample(cues: AudioVttCue[]): [number, number] {
+    let maxSample, minSample;
+    switch (this._downsampleConfig?.downsampleStrategy) {
+      case 'max':
+        maxSample = cues.reduce((max, obj) => Math.max(max, obj.maxSample), cues[0].maxSample);
+        minSample = cues.reduce((max, obj) => Math.min(max, obj.minSample), cues[0].minSample);
+        return [maxSample, minSample];
+      case 'min':
+        maxSample = cues.reduce((max, obj) => Math.min(max, obj.maxSample), cues[0].maxSample);
+        minSample = cues.reduce((max, obj) => Math.max(max, obj.minSample), cues[0].minSample);
+        return [maxSample, minSample];
+      case 'avg':
+        maxSample = cues.reduce((sum, obj) => sum + obj.maxSample, 0) / cues.length;
+        minSample = cues.reduce((sum, obj) => sum + obj.minSample, 0) / cues.length;
+        return [maxSample, minSample];
+      case 'drop':
+        maxSample = cues[0].maxSample;
+        minSample = cues[0].minSample;
+        return [maxSample, minSample];
+      default:
+        throw new Error('Usupported downsampling strategy: ' + this._downsampleConfig?.downsampleStrategy);
+    }
+  }
+
+  static create(url: string, options: VttLoadOptions): Observable<AudioVttFile> {
+    let instance = new AudioVttFile(url, options);
     return instance.fetch().pipe(map(result => {
       return instance;
     }))

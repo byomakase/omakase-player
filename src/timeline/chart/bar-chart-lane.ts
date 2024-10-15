@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle} from '../timeline-lane';
+import {TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle, VTT_DOWNSAMPLE_CONFIG_DEFAULT} from '../timeline-lane';
 import Konva from 'konva';
 import {Constants} from '../../constants';
 import {debounceTime, distinctUntilChanged, filter, Subject, take, takeUntil} from 'rxjs';
@@ -30,9 +30,9 @@ import {isNullOrUndefined} from '../../util/object-util';
 import {VideoControllerApi} from '../../video/video-controller-api';
 import {BarChartLaneApi} from '../../api';
 import {VttAdapter, VttAdapterConfig} from '../../common/vtt-adapter';
-import {VttTimelineLane} from '../vtt-timeline-lane';
+import {VttTimelineLane, VttTimelineLaneConfig} from '../vtt-timeline-lane';
 
-export interface BarChartLaneConfig extends TimelineLaneConfig<BarChartLaneStyle>, VttAdapterConfig<BarChartVttFile> {
+export interface BarChartLaneConfig extends VttTimelineLaneConfig<BarChartLaneStyle>, VttAdapterConfig<BarChartVttFile> {
   axiosConfig?: AxiosRequestConfig;
 
   valueMin?: number;
@@ -55,6 +55,8 @@ export interface BarChartLaneStyle extends TimelineLaneStyle {
 
 const configDefault: BarChartLaneConfig = {
   ...TIMELINE_LANE_CONFIG_DEFAULT,
+  ...VTT_DOWNSAMPLE_CONFIG_DEFAULT,
+  downsampleStrategy: 'avg',
   style: {
     ...TIMELINE_LANE_CONFIG_DEFAULT.style,
     height: 40,
@@ -107,10 +109,9 @@ export class BarChartLane extends VttTimelineLane<BarChartLaneConfig, BarChartLa
     });
 
     this._itemsGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
-      y: this.style.paddingTop,
+      y: this._config.style.paddingTop,
       width: this._timecodedGroup.width(),
-      height: this._timecodedGroup.height() - (this.style.paddingTop + this.style.paddingBottom)
+      height: this._config.style.height - (this._config.style.paddingTop + this._config.style.paddingBottom)
     });
 
     this._timecodedGroup.add(this._timecodedEventCatcher);
@@ -145,7 +146,7 @@ export class BarChartLane extends VttTimelineLane<BarChartLaneConfig, BarChartLa
     })
 
     if (this.vttUrl) {
-      this.loadVtt(this.vttUrl, this._config.axiosConfig).subscribe();
+      this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig)).subscribe();
     }
   }
 
@@ -159,6 +160,10 @@ export class BarChartLane extends VttTimelineLane<BarChartLaneConfig, BarChartLa
     }
 
     this.clearItems();
+
+    if (this.vttFile.cues.length < 1) {
+      return;
+    }
 
     let visibleTimeRange = this._timeline!.getVisibleTimeRange();
     let cues = this.vttFile.findCues(visibleTimeRange.start, visibleTimeRange.end);

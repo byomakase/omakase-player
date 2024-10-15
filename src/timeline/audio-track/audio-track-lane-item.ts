@@ -72,7 +72,7 @@ export class AudioTrackLaneItem extends BaseKonvaComponent<AudioTrackLaneItemCon
 
     this._vttCue = this.config.audioVttCue;
 
-    this._group = new Konva.Group({
+    this._group = KonvaFactory.createGroup({
       x: this.config.x,
       y: 0,
       width: this.config.width,
@@ -139,11 +139,11 @@ export class AudioTrackLaneItem extends BaseKonvaComponent<AudioTrackLaneItemCon
   }
 
   getPosition(): Position {
-    return this._group?.getPosition();
+    return this._group.getPosition();
   }
 
   getDimension(): Dimension {
-    return this._group?.getSize();
+    return this._group.getSize();
   }
 
   getRect(): RectMeasurement {

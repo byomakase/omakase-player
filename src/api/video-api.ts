@@ -315,9 +315,9 @@ export interface VideoApi extends Api {
   setAudioTrack(audioTrackId: number): void;
 
   /**
-   * @returns Hls (hls.js) instance
+   * @returns Hls (hls.js) instance if video is loaded, otherwise undefined
    */
-  getHls(): Hls;
+  getHls(): Hls | undefined;
 
   /**
    * Appends new HelpMenuGroup to video context menu

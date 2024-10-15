@@ -74,7 +74,7 @@ export class ScrollbarLane extends BaseTimelineLane<ScrollbarLaneConfig, Scrollb
     this._contentFlexGroup = KonvaFlexGroup.of({
       konvaNode: KonvaFactory.createGroup(),
       width: timecodedContainerDimension.width,
-      height: timecodedContainerDimension.height,
+      height: this._config.minimized ? 0 : this._config.style.height,
       flexDirection: 'FLEX_DIRECTION_ROW_REVERSE',
       alignItems: 'ALIGN_CENTER',
     })
@@ -100,6 +100,13 @@ export class ScrollbarLane extends BaseTimelineLane<ScrollbarLaneConfig, Scrollb
       }),
       height: this.style.scrollbarHeight,
     }, new KonvaComponentFlexContentNode(this._scrollbar))
+
+    // clipping when minimized
+    this._contentFlexGroup.contentNode.konvaNode.clipFunc((ctx) => {
+      let padding = this._timeline!.style.rightPaneClipPadding;
+      let layout = this._contentFlexGroup!.getLayout();
+      ctx.rect(-padding, 0, layout.width + 2 * padding, layout.height)
+    })
 
     this._contentFlexGroup
       .addChild(scrollbarFlexItem);

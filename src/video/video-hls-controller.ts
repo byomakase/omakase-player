@@ -23,7 +23,7 @@ import {VttUtil} from '../vtt/vtt-util';
 import {AuthUtil} from '../util/auth-util';
 import {SubtitlesVttTrack} from '../track';
 import {UuidUtil} from '../util/uuid-util';
-import {BasicAuthenticationData, BearerAuthenticationData, Video, VideoLoadOptions} from './model';
+import {BasicAuthenticationData, BearerAuthenticationData, CustomAuthenticationData, Video, VideoLoadOptions} from './model';
 import {isNullOrUndefined} from '../util/object-util';
 import {BlobUtil} from '../util/blob-util';
 import Decimal from 'decimal.js';
@@ -44,7 +44,7 @@ export const VIDEO_HLS_CONTROLLER_CONFIG_DEFAULT: VideoHlsControllerConfig = {
 }
 
 export class VideoHlsController extends VideoController<VideoHlsControllerConfig> {
-  protected _hls: Hls;
+  protected _hls: Hls | undefined;
 
   constructor(config: Partial<VideoHlsControllerConfig>) {
     super({
@@ -57,22 +57,31 @@ export class VideoHlsController extends VideoController<VideoHlsControllerConfig
     } else {
       console.error('hls is not supported through MediaSource extensions')
     }
-
-    this._hls = new Hls({
-      ...config.hls
-    });
   }
 
   loadVideoInternal(sourceUrl: string, frameRate: number, options?: VideoLoadOptions): Observable<Video> {
     return new Observable<Video>(o$ => {
 
+      this.destroyHls();
+
+      this._hls = new Hls({
+        ...this._config.hls
+      });
+
+      this.overrideHlsMethods();
+
       if (options?.authentication) {
-        this._hls.config.xhrSetup = (xhr: XMLHttpRequest) => {
+        this._hls.config.xhrSetup = (xhr: XMLHttpRequest, url: string) => {
           if (options.authentication!.type === 'basic') {
             const token = btoa(`${(options.authentication as BasicAuthenticationData)!.username}:${(options.authentication as BasicAuthenticationData)!.password}`);
             xhr.setRequestHeader('Authorization', `Basic ${token}`);
           } else if (options.authentication!.type === 'bearer') {
             xhr.setRequestHeader('Authorization', `Bearer ${(options.authentication as BearerAuthenticationData)!.token}`);
+          } else {
+            const authenticationData = (options.authentication as CustomAuthenticationData)!.headers(url);
+            for (const header in authenticationData.headers) {
+              xhr.setRequestHeader(header, authenticationData.headers[header]);
+            }
           }
         }
       }
@@ -95,7 +104,7 @@ export class VideoHlsController extends VideoController<VideoHlsControllerConfig
 
       let hlsMediaAttached$ = new Observable<boolean>(o$ => {
         // MEDIA_ATTACHED event is fired by hls object once MediaSource is ready
-        this._hls.once(Hls.Events.MEDIA_ATTACHED, function (event, data) {
+        this._hls!.once(Hls.Events.MEDIA_ATTACHED, function (event, data) {
           console.debug('video element and hls.js are now bound together');
           o$.next(true);
           o$.complete();
@@ -104,7 +113,7 @@ export class VideoHlsController extends VideoController<VideoHlsControllerConfig
 
       let audioOnly = false;
       let hlsManifestParsed$ = new Observable<boolean>(o$ => {
-        this._hls.once(Hls.Events.MANIFEST_PARSED, function (event, data) {
+        this._hls!.once(Hls.Events.MANIFEST_PARSED, function (event, data) {
           console.debug(`manifest loaded, found ${data.levels.length} quality level`, data);
 
           let firstLevelIndex = data.firstLevel;
@@ -118,7 +127,7 @@ export class VideoHlsController extends VideoController<VideoHlsControllerConfig
 
       let hasInitSegment = false;
       let hlsFragParsingInitSegment$ = new Observable<boolean>(o$ => {
-        this._hls.once(Hls.Events.FRAG_PARSING_INIT_SEGMENT, function (event, data) {
+        this._hls!.once(Hls.Events.FRAG_PARSING_INIT_SEGMENT, function (event, data) {
           if ((data as FragLoadedData).frag.sn === 'initSegment' && (data as FragLoadedData).frag.data) {
             hasInitSegment = true;
           }
@@ -144,7 +153,7 @@ export class VideoHlsController extends VideoController<VideoHlsControllerConfig
 
         let video = new Video(sourceUrl, frameRate, dropFrame, duration, audioOnly, initSegmentTimeOffset);
 
-        this._hls.on(Hls.Events.FRAG_LOADED, (event, data) => {
+        this._hls!.on(Hls.Events.FRAG_LOADED, (event, data) => {
           if (data.frag.endList && data.frag.type == 'main' && video.correctedDuration && (video.correctedDuration > (data.frag.start + data.frag.duration))) {
             /**
              * if we land on exact time of the frame start at the end of video, there is the chance that we won't load the frame
@@ -159,19 +168,15 @@ export class VideoHlsController extends VideoController<VideoHlsControllerConfig
           video.correctedDuration = durationFractionThree;
         }
 
-        this._hls.subtitleDisplay = this._config.subtitleDisplay;
+        this._hls!.subtitleDisplay = this._config.subtitleDisplay;
         if (!this._config.subtitleDisplay) {
-          this._hls.subtitleTrack = -1;
+          this._hls!.subtitleTrack = -1;
         }
-        if (this._config.fetchManifestSubtitleTracks && this._hls.allSubtitleTracks && this._hls.allSubtitleTracks.length > 0) {
+        if (this._config.fetchManifestSubtitleTracks && this._hls!.allSubtitleTracks && this._hls!.allSubtitleTracks.length > 0) {
           this._subtitlesVttTracks = [];
 
-          let os$ = this._hls.allSubtitleTracks.map(subtitleTrack => {
-            let axiosConfig;
-            if (options?.authentication) {
-              axiosConfig = AuthUtil.getAuthorizedAxiosConfig(options.authentication);
-            }
-            return VttUtil.fetchFromM3u8SegmentedConcat(subtitleTrack.url, axiosConfig).pipe(map(webvttText => {
+          let os$ = this._hls!.allSubtitleTracks.map(subtitleTrack => {
+            return VttUtil.fetchFromM3u8SegmentedConcat(subtitleTrack.url, undefined, options?.authentication).pipe(map(webvttText => {
               return {
                 subtitleTrack: subtitleTrack,
                 webvttText: webvttText
@@ -209,39 +214,75 @@ export class VideoHlsController extends VideoController<VideoHlsControllerConfig
 
       this._hls.loadSource(sourceUrl)
       this._hls.attachMedia(this.videoElement);
+
+      this._hls.on(Hls.Events.ERROR, function (event, data) {
+        let errorType = data.type;
+        let errorDetails = data.details;
+        let errorFatal = data.fatal;
+
+        console.error(event, data);
+
+        if (data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR
+          || data.details === Hls.ErrorDetails.BUFFER_APPEND_ERROR
+          || data.details === Hls.ErrorDetails.BUFFER_APPENDING_ERROR) {
+        }
+      });
     })
   }
 
-  protected override initEventHandlers() {
-    super.initEventHandlers();
+  /**
+   * @internal
+   * @private
+   */
+  private overrideHlsMethods() {
+    // unsafe, working on HLS version 1.5.8
+    // see https://github.com/video-dev/hls.js/blob/master/src/controller/subtitle-track-controller.ts
+    // @ts-ignore
+    let hlsSubtitleTrackController = this._hls.subtitleTrackController;
 
-    this._hls.on(Hls.Events.ERROR, function (event, data) {
-      let errorType = data.type;
-      let errorDetails = data.details;
-      let errorFatal = data.fatal;
-
-      console.error(event, data);
-
-      if (data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR
-        || data.details === Hls.ErrorDetails.BUFFER_APPEND_ERROR
-        || data.details === Hls.ErrorDetails.BUFFER_APPENDING_ERROR) {
+    if (hlsSubtitleTrackController) {
+      if (hlsSubtitleTrackController.pollTrackChange) {
+        hlsSubtitleTrackController.pollTrackChange = (timeout: number) => {
+          // overriden to prevent HLS polling & toggling already shown / hidden subtitles
+        }
       }
-    });
+
+      if (hlsSubtitleTrackController.asyncPollTrackChange) {
+        hlsSubtitleTrackController.asyncPollTrackChange = () => {
+          // overriden to prevent HLS polling & toggling already shown / hidden subtitles
+        }
+      }
+    }
+  }
+
+  private destroyHls() {
+    try {
+      if (this._hls) {
+        this._hls.detachMedia();
+        this._hls.removeAllListeners();
+        this._hls.destroy();
+      }
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   override getAudioTracks(): MediaPlaylist[] {
-    if (!this.isVideoLoaded) {
+    if (!this.isVideoLoaded || !this._hls) {
       return [];
     }
     return this._hls.audioTracks;
   }
 
   override getCurrentAudioTrack(): any {
+    if (!this.isVideoLoaded || !this._hls) {
+      return void 0;
+    }
     return this.getAudioTracks()[this._hls.audioTrack];
   }
 
   override setAudioTrack(audioTrackId: number) {
-    if (!this.isVideoLoaded) {
+    if (!this.isVideoLoaded || !this._hls) {
       return;
     }
 
@@ -256,20 +297,13 @@ export class VideoHlsController extends VideoController<VideoHlsControllerConfig
     }
   }
 
-  override getHls(): Hls {
+  override getHls(): Hls | undefined {
     return this._hls;
   }
 
   override destroy() {
     super.destroy();
 
-    try {
-      if (this._hls) {
-        this._hls.removeAllListeners();
-        this._hls.destroy();
-      }
-    } catch (e) {
-      console.error(e);
-    }
+    this.destroyHls()
   }
 }

@@ -75,20 +75,8 @@ window.addEventListener('load', () => {
   let activeStreamData = testStreams.find(p => p.id === 'omakase_player_demo1')
 
   let omakasePlayer = new OmakasePlayer({
-    playerHTMLElementId: 'omakase-player1',
-    style: {
-      fontFamily: 'Arial'
-    }
+    playerHTMLElementId: 'omakase-player1'
   });
-
-  let hlsInstance = omakasePlayer.video.getHls();
-  hlsInstance.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
-    console.log('Hls event MANIFEST_PARSED', data);
-  })
-
-  hlsInstance.on(Hls.Events.LOAD, (event, data) => {
-    console.log('Hls event MANIFEST_PARSED', data);
-  })
 
   omakasePlayer.video.onVideoError$.subscribe(event => {
     console.log(event)
@@ -144,31 +132,31 @@ window.addEventListener('load', () => {
 
       }
 
+      omakasePlayer.createTimeline({
+        thumbnailVttUrl: activeStreamData.thumbs_vtt
+      }).subscribe((timeline) => {
+        // console.log('Timeline created')
+
+        timeline.onScroll$.subscribe((event) => {
+          // eventProcessor('timeline.scrollEvent$', event);
+          document.getElementById('inputScrollTo').value = event.scrollPercent;
+        });
+
+        timeline.onZoom$.subscribe((event) => {
+          // eventProcessor('timeline.zoomEvent$', event);
+          document.getElementById('inputZoomTo').value = event.zoomPercent;
+        });
+
+        attachButtonHandlers(timeline);
+        createTimelineLanes(timeline);
+      })
+
     },
     error: (error) => {
       console.log('Caught error: ');
       console.error(error);
     }
   });
-
-  omakasePlayer.createTimeline({
-    thumbnailVttUrl: activeStreamData.thumbs_vtt
-  }).subscribe((timeline) => {
-    // console.log('Timeline created')
-
-    timeline.onScroll$.subscribe((event) => {
-      // eventProcessor('timeline.scrollEvent$', event);
-      document.getElementById('inputScrollTo').value = event.scrollPercent;
-    });
-
-    timeline.onZoom$.subscribe((event) => {
-      // eventProcessor('timeline.zoomEvent$', event);
-      document.getElementById('inputZoomTo').value = event.zoomPercent;
-    });
-
-    attachButtonHandlers(timeline);
-    createTimelineLanes(timeline);
-  })
 
 
   let createTimelineLanes = (timeline) => {

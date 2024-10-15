@@ -24,6 +24,9 @@ import {M3u8File} from '../m3u8/m3u8-file';
 import {OmakaseVttCueExtension, OmakaseWebVttExtensionVersion, VttCueExtensionRow} from '../types';
 import {StringUtil} from '../util/string-util';
 import {VttCueParsed, VttFileParsed} from './index';
+import {AuthenticationData} from '../video/model';
+import {AuthUtil} from '../util/auth-util';
+import {UrlUtil} from '../util/url-util';
 
 const webvttParseOptions = {strict: true, meta: true};
 
@@ -38,28 +41,34 @@ export class VttUtil {
     return vttFileParsed;
   }
 
-  static fetchFromM3u8SegmentedConcat(m3u8Url: string, axiosConfig?: AxiosRequestConfig): Observable<string | undefined> {
-    return M3u8File.create(m3u8Url, axiosConfig).pipe(switchMap(m3u8File => {
-      return VttUtil.fetchFromM3u8FileSegmentedConcat(m3u8File, axiosConfig);
+  static fetchFromM3u8SegmentedConcat(m3u8Url: string, axiosConfig?: AxiosRequestConfig, authentication?: AuthenticationData): Observable<string | undefined> {
+    return M3u8File.create(m3u8Url, axiosConfig, authentication).pipe(switchMap(m3u8File => {
+      return VttUtil.fetchFromM3u8FileSegmentedConcat(m3u8File, axiosConfig, authentication);
     }))
   }
 
-  static fetchFromM3u8FileSegmentedConcat(m3u8File: M3u8File, axiosConfig?: AxiosRequestConfig): Observable<string | undefined> {
+  static fetchFromM3u8FileSegmentedConcat(m3u8File: M3u8File, axiosConfig?: AxiosRequestConfig, authentication?: AuthenticationData): Observable<string | undefined> {
     if (m3u8File.m3u8Parsed) {
       let vttRootUrl = m3u8File.url.substring(0, m3u8File.url.lastIndexOf('/'));
 
       let vttUrls = m3u8File.m3u8Parsed.lines
         .filter(p => p.type === 'URI')
-        .map(p => `${vttRootUrl}/${p.content}`)
+        .map(p => UrlUtil.isUrlAbsolute(p.content) ? p.content : `${vttRootUrl}/${p.content}`)
 
-      return VttUtil.fetchSegmentedConcat(vttUrls, axiosConfig)
+      return VttUtil.fetchSegmentedConcat(vttUrls, axiosConfig, authentication)
     } else {
       return of(void 0);
     }
   }
 
-  static fetchSegmentedConcat(urls: string[], axiosConfig?: AxiosRequestConfig): Observable<string | undefined> {
-    let vttTexts$ = urls.map(url => from(httpGet<string, AxiosRequestConfig>(url, axiosConfig)).pipe(map(result => result.data)))
+  static fetchSegmentedConcat(urls: string[], axiosConfig?: AxiosRequestConfig, authentication?: AuthenticationData): Observable<string | undefined> {
+    let vttTexts$ = urls.map(url => {
+      let authAxiosConfig: AxiosRequestConfig | undefined = undefined;
+      if (!axiosConfig && authentication) {
+        authAxiosConfig = AuthUtil.getAuthorizedAxiosConfig(url, authentication);
+      }
+      return from(httpGet<string, AxiosRequestConfig>(url, axiosConfig ?? authAxiosConfig)).pipe(map(result => result.data))
+    })
     return forkJoin(vttTexts$).pipe(map(vttTexts => {
       return VttUtil.concatSegmented(vttTexts);
     }))

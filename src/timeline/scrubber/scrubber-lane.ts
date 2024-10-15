@@ -94,7 +94,7 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
 
     this._ticksGroup = KonvaFactory.createGroup({
       width: this._timecodedGroup.width(),
-      height: this._timecodedGroup.height()
+      height: this._config.style.height
     });
 
     this._timecodedGroup.add(this._timecodedEventCatcher);

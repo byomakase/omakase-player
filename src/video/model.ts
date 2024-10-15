@@ -274,6 +274,13 @@ export interface BearerAuthenticationData {
   token: string;
 }
 
+export interface CustomAuthenticationData {
+  type: 'custom';
+  headers: (url: string) => { headers: { [header: string]: string } };
+}
+
+export type AuthenticationData = BasicAuthenticationData | BearerAuthenticationData | CustomAuthenticationData;
+
 export interface VideoLoadOptions {
   /**
    * Set video duration explicitly
@@ -293,7 +300,7 @@ export interface VideoLoadOptions {
   /**
    * Authentication data for requests made by hls.js (supports basic or bearer token authentication)
    */
-  authentication?: BasicAuthenticationData | BearerAuthenticationData
+  authentication?: AuthenticationData
 }
 
 export interface FrameRateModel {

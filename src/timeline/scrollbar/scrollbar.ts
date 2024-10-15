@@ -90,12 +90,12 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
       },
     });
 
-    this._group = new Konva.Group({
+    this._group = KonvaFactory.createGroup({
       x: this.config.x,
       y: this.config.y,
       width: this.config.width,
       height: this.style.height
-    })
+    });
 
     this._bgRect = KonvaFactory.createRect({
       ...Constants.POSITION_TOP_LEFT,
@@ -105,7 +105,7 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
       opacity: this.style.backgroundFillOpacity
     });
 
-    this._handleGroup = new Konva.Group({
+    this._handleGroup = KonvaFactory.createGroup({
       ...Constants.POSITION_TOP_LEFT,
       width: this._group.width(),
       height: this.style.height,

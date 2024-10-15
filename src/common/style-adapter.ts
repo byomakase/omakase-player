@@ -22,7 +22,9 @@ export class StyleAdapter<T> {
   private _style!: T;
 
   constructor(style: T) {
-    this.style = style;
+    this.style = {
+      ...style
+    };
   }
 
   get style(): T {
@@ -30,10 +32,13 @@ export class StyleAdapter<T> {
   }
 
   set style(value: Partial<T>) {
+    let oldStringified = JSON.stringify(this._style);
     this._style = {
       ...this._style,
       ...value
     };
-    this.onChange$.next(this._style);
+    if (oldStringified !== JSON.stringify(this._style)) {
+      this.onChange$.next(this._style);
+    }
   }
 }

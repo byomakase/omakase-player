@@ -2,9 +2,10 @@ import { AxiosRequestConfig } from 'axios';
 import {Destroyable, OmakaseVttCue, OmakaseVttFile} from '../types';
 import { catchError, map, Observable, of, Subject, take } from 'rxjs';
 import {nullifier} from '../util/destroy-util';
+import { VttLoadOptions } from '../api/vtt-aware-api';
 
 export interface VttFileFactory<T extends OmakaseVttFile<OmakaseVttCue>> {
-  create(url: string, axiosConfig?: AxiosRequestConfig): Observable<T>;
+  create(url: string, options: VttLoadOptions): Observable<T>;
 }
 
 export interface VttAdapterConfig<T extends OmakaseVttFile<OmakaseVttCue>> {
@@ -44,13 +45,13 @@ export class VttAdapter<T extends OmakaseVttFile<OmakaseVttCue>> implements Dest
     this._vttFile = config.vttFile;
   }
 
-  loadVtt(vttUrl: string, axiosConfig?: AxiosRequestConfig): Observable<T | undefined> {
+  loadVtt(vttUrl: string, options: VttLoadOptions): Observable<T | undefined> {
     this._vttUrl = vttUrl;
-    return this.fetchVttFile(this._vttUrl, axiosConfig).pipe(take(1));
+    return this.fetchVttFile(this._vttUrl, options).pipe(take(1));
   }
 
-  private fetchVttFile(vttUrl: string, axiosConfig?: AxiosRequestConfig): Observable<T | undefined> {
-    return this._vttFactory.create(vttUrl, axiosConfig).pipe(
+  private fetchVttFile(vttUrl: string, options: VttLoadOptions): Observable<T | undefined> {
+    return this._vttFactory.create(vttUrl, options).pipe(
       map((vttFile: T) => {
         this._vttFile = vttFile;
         this.vttFileLoaded$.next(this._vttFile);

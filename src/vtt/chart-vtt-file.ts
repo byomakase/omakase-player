@@ -14,22 +14,77 @@
  * limitations under the License.
  */
 
-import {BaseOmakaseRemoteVttFile} from './vtt-file';
 import {BarChartVttCue, LineChartVttCue, OgChartVttCue, OmakaseVttCueExtension} from '../types';
 import {map, Observable} from 'rxjs';
 import {z} from 'zod';
 import Decimal from 'decimal.js';
-import {AxiosRequestConfig} from 'axios';
 import {VttCueParsed} from './model';
+import {DownsampleStrategy, VttLoadOptions} from '../api/vtt-aware-api';
+import {DownsampledVttFile} from './downsampled-vtt-file';
 
-export class LineChartVttFile extends BaseOmakaseRemoteVttFile<LineChartVttCue> {
+export abstract class ChartVttFile<T extends LineChartVttCue | BarChartVttCue | OgChartVttCue> extends DownsampledVttFile<T> {
 
-  protected constructor(url: string, axiosConfig?: AxiosRequestConfig) {
-    super(url, axiosConfig);
+  protected override _supportedDownsampleStrategies: DownsampleStrategy[] = ['none', 'avg', 'max', 'min', 'drop'];
+
+  protected override resolveDownsampledCue(index: number, startTime: number, endTime: number, cues: T[]): T {
+    const measurements: { [measurement: string]: number[] } = cues.reduce((measurements, cue) => {
+      if (cue.extension?.rows) {
+        for (const row of cue.extension.rows) {
+          if (!row.measurement || !row.value) {
+            continue;
+          }
+          if (measurements[row.measurement]) {
+            measurements[row.measurement].push(parseFloat(row.value));
+          } else {
+            measurements[row.measurement] = [parseFloat(row.value)];
+          }
+        }
+        return measurements;
+      }
+    }, {} as any);
+    
+    return {
+      index: index,
+      id: `SAMPLED_${index}`,
+      startTime: startTime,
+      endTime: endTime,
+      text: `SAMPLED`,
+      value: this.getAggregateValue(cues.map(cue => cue.value)),
+      extension: {
+        rows: Object.keys(measurements).map(measurement => ({
+          measurement,
+          value: this.getAggregateValue(measurements[measurement]),
+          comment: 'SAMPLE'
+        }))
+      }
+    } as any;
   }
 
-  static create(url: string, axiosConfig?: AxiosRequestConfig): Observable<LineChartVttFile> {
-    let instance = new LineChartVttFile(url, axiosConfig);
+  private getAggregateValue(values: number[]): number {
+    switch (this._downsampleConfig?.downsampleStrategy) {
+      case 'max':
+        return Math.max(...values);
+      case 'min':
+        return Math.min(...values);
+      case 'avg':
+        return values.reduce((sum, val) => sum + val, 0) / values.length;
+      case 'drop':
+        return values[0];
+      default:
+        throw new Error('Usupported downsampling strategy: ' + this._downsampleConfig?.downsampleStrategy);
+    }
+  }
+
+}
+
+export class LineChartVttFile extends ChartVttFile<LineChartVttCue> {
+
+  protected constructor(url: string, options: VttLoadOptions) {
+    super(url, options);
+  }
+
+  static create(url: string, options: VttLoadOptions): Observable<LineChartVttFile> {
+    let instance = new LineChartVttFile(url, options);
     return instance.fetch().pipe(map(result => {
       return instance;
     }))
@@ -51,14 +106,14 @@ export class LineChartVttFile extends BaseOmakaseRemoteVttFile<LineChartVttCue> 
 
 }
 
-export class BarChartVttFile extends BaseOmakaseRemoteVttFile<BarChartVttCue> {
+export class BarChartVttFile extends ChartVttFile<BarChartVttCue> {
 
-  protected constructor(url: string, axiosConfig?: AxiosRequestConfig) {
-    super(url, axiosConfig);
+  protected constructor(url: string, options: VttLoadOptions) {
+    super(url, options);
   }
 
-  static create(url: string, axiosConfig?: AxiosRequestConfig): Observable<BarChartVttFile> {
-    let instance = new BarChartVttFile(url, axiosConfig);
+  static create(url: string, options: VttLoadOptions): Observable<BarChartVttFile> {
+    let instance = new BarChartVttFile(url, options);
     return instance.fetch().pipe(map(result => {
       return instance;
     }))
@@ -80,14 +135,14 @@ export class BarChartVttFile extends BaseOmakaseRemoteVttFile<BarChartVttCue> {
 
 }
 
-export class OgChartVttFile extends BaseOmakaseRemoteVttFile<OgChartVttCue> {
+export class OgChartVttFile extends ChartVttFile<OgChartVttCue> {
 
-  protected constructor(url: string, axiosConfig?: AxiosRequestConfig) {
-    super(url, axiosConfig);
+  protected constructor(url: string, options: VttLoadOptions) {
+    super(url, options);
   }
 
-  static create(url: string, axiosConfig?: AxiosRequestConfig): Observable<OgChartVttFile> {
-    let instance = new OgChartVttFile(url, axiosConfig);
+  static create(url: string, options: VttLoadOptions): Observable<OgChartVttFile> {
+    let instance = new OgChartVttFile(url, options);
     return instance.fetch().pipe(map(result => {
       return instance;
     }))

@@ -21,9 +21,10 @@ import {AxiosRequestConfig} from 'axios';
 import {VttCueParsed, VttFileParsed} from './model';
 import {VttUtil} from './vtt-util';
 import {StringUtil} from '../util/string-util';
+import {VttLoadOptions} from '../api/vtt-aware-api';
 
 export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements OmakaseVttFile<T> {
-  private _extensionVersion?: OmakaseWebVttExtensionVersion;
+  protected _extensionVersion?: OmakaseWebVttExtensionVersion;
   protected _cues: T[] = [];
   protected _cuesByStartTime: Map<number, T[]> = new Map<number, T[]>();
   protected _cuesStartTimesSorted: number[] = [];
@@ -40,10 +41,10 @@ export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements Oma
 
       this._extensionVersion = this.resolveExtensionVersion(vttFileParsed);
 
-      vttFileParsed.cues.forEach((parsedCue, index) => {
+      this.downsampleCues(vttFileParsed.cues.map((parsedCue, index) => {
         let cueExtension = this._extensionVersion ? VttUtil.parseVttCueExtension(parsedCue, this._extensionVersion) : void 0;
-        let cue = this.mapCue(parsedCue, cueExtension, index);
-
+        return this.mapCue(parsedCue, cueExtension, index);
+      })).forEach(cue => {
         this._cues.push(cue);
         this._cuesStartTimesSorted.push(cue.startTime);
 
@@ -51,7 +52,7 @@ export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements Oma
         cuesWithStartTime = cuesWithStartTime ? cuesWithStartTime.concat(cue) : [cue];
 
         this._cuesByStartTime.set(cue.startTime, cuesWithStartTime);
-      });
+      })
 
       this.refreshSorted();
 
@@ -72,6 +73,16 @@ export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements Oma
       }
     }
     return void 0;
+  }
+
+  /**
+   * Prevents cues (and memory) ddos
+   *
+   * @param cues
+   * @protected
+   */
+  protected downsampleCues(cues: T[]): T[] {
+    return cues;
   }
 
   get cues(): T[] {
@@ -153,10 +164,10 @@ export abstract class BaseOmakaseRemoteVttFile<T extends OmakaseVttCue> extends 
   private _url: string;
   private _axiosConfig?: AxiosRequestConfig;
 
-  protected constructor(url: string, axiosConfig?: AxiosRequestConfig) {
+  protected constructor(url: string, options: VttLoadOptions) {
     super();
     this._url = url;
-    this._axiosConfig = axiosConfig;
+    this._axiosConfig = options.axiosConfig;
   }
 
   fetch(): Observable<boolean> {

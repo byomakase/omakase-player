@@ -47,14 +47,11 @@ const configDefault: Omit<LabelLaneConfig, 'text'> = {
 }
 
 export class LabelLane extends BaseTimelineLane<LabelLaneConfig, LabelLaneStyle> {
-  protected _contentGroup?: Konva.Group;
   protected _contentFlexGroup?: KonvaFlexGroup;
   protected _textLabel?: TextLabel;
 
   constructor(config: TimelineLaneConfigDefaultsExcluded<LabelLaneConfig>) {
     super(timelineLaneComposeConfig(configDefault, config));
-
-    this._contentGroup = KonvaFactory.createGroup();
   }
 
   override prepareForTimeline(timeline: Timeline, videoController: VideoControllerApi) {
@@ -65,7 +62,7 @@ export class LabelLane extends BaseTimelineLane<LabelLaneConfig, LabelLaneStyle>
     this._contentFlexGroup = KonvaFlexGroup.of({
       konvaNode: KonvaFactory.createGroup(),
       width: timecodedContainerDimension.width,
-      height: timecodedContainerDimension.height,
+      height: this._config.minimized ? 0 : this._config.style.height,
       flexDirection: 'FLEX_DIRECTION_ROW',
       alignItems: 'ALIGN_CENTER',
       margins: FlexSpacingBuilder.instance().topRightBottomLeft([0, 0, 0, 10]).build()
@@ -92,10 +89,14 @@ export class LabelLane extends BaseTimelineLane<LabelLaneConfig, LabelLaneStyle>
       height: '100%'
     }, new KonvaComponentFlexContentNode(this._textLabel))
 
-    this._contentFlexGroup
-      .addChild(textLabelFlexItem)
+    // clipping when minimized
+    this._contentFlexGroup.contentNode.konvaNode.clipFunc((ctx) => {
+      let layout = this._contentFlexGroup!.getLayout();
+      ctx.rect(0, 0, layout.width, layout.height)
+    })
 
-    ;
+    this._contentFlexGroup
+      .addChild(textLabelFlexItem);
   }
 
   override onStyleChange() {

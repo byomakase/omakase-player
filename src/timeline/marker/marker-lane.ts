@@ -15,7 +15,7 @@
  */
 
 import Konva from 'konva';
-import {TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle} from '../timeline-lane';
+import {TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle, VTT_DOWNSAMPLE_CONFIG_DEFAULT} from '../timeline-lane';
 import {MarkerLaneApi} from '../../api';
 import {ConfigWithOptionalStyle} from '../../common';
 import {PeriodMarker, PeriodMarkerConfig} from './period-marker';
@@ -31,10 +31,10 @@ import Decimal from 'decimal.js';
 import {MARKER_STYLE_DEFAULT, MarkerStyle} from './marker-types';
 import {VideoControllerApi} from '../../video/video-controller-api';
 import {VttAdapter, VttAdapterConfig} from '../../common/vtt-adapter';
-import {VttTimelineLane} from '../vtt-timeline-lane';
+import {VttTimelineLane, VttTimelineLaneConfig} from '../vtt-timeline-lane';
 import {KonvaFactory} from '../../factory/konva-factory';
 
-export interface MarkerLaneConfig extends TimelineLaneConfig<MarkerLaneStyle>, VttAdapterConfig<MarkerVttFile> {
+export interface MarkerLaneConfig extends VttTimelineLaneConfig<MarkerLaneStyle>, VttAdapterConfig<MarkerVttFile> {
   axiosConfig?: AxiosRequestConfig;
   markerCreateFn?: (marker: MarkerVttCue, index: number) => Marker;
   markerProcessFn?: (marker: Marker, index: number) => void;
@@ -46,6 +46,7 @@ export interface MarkerLaneStyle extends TimelineLaneStyle {
 
 const configDefault: MarkerLaneConfig = {
   ...TIMELINE_LANE_CONFIG_DEFAULT,
+  ...VTT_DOWNSAMPLE_CONFIG_DEFAULT,
   style: {
     ...TIMELINE_LANE_CONFIG_DEFAULT.style,
     markerStyle: MARKER_STYLE_DEFAULT
@@ -102,7 +103,7 @@ export class MarkerLane extends VttTimelineLane<MarkerLaneConfig, MarkerLaneStyl
     })
 
     if (this.vttUrl) {
-      this.loadVtt(this.vttUrl, this._config.axiosConfig).subscribe();
+      this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig)).subscribe();
     }
   }
 

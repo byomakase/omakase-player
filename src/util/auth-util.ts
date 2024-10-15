@@ -14,20 +14,20 @@
  * limitations under the License.
  */
 import { AxiosRequestConfig } from 'axios';
-import { BasicAuthenticationData, BearerAuthenticationData } from '../video/model';
+import { AuthenticationData, BasicAuthenticationData, BearerAuthenticationData, CustomAuthenticationData } from '../video/model';
 
 export class AuthUtil {
-  static _authentication?: BasicAuthenticationData | BearerAuthenticationData;
+  static _authentication?: AuthenticationData;
 
-  static set authentication(authentication: BasicAuthenticationData | BearerAuthenticationData | undefined) {
+  static set authentication(authentication: AuthenticationData | undefined) {
     this._authentication = authentication;
   }
 
-  static get authentication(): BasicAuthenticationData | BearerAuthenticationData | undefined {
+  static get authentication(): AuthenticationData | undefined {
     return this._authentication;
   }
 
-  static getAuthorizedAxiosConfig(authentication: BasicAuthenticationData | BearerAuthenticationData): AxiosRequestConfig {
+  static getAuthorizedAxiosConfig(url: string, authentication: AuthenticationData): AxiosRequestConfig {
     if (authentication.type === 'basic') {
       const token = btoa(`${(authentication as BasicAuthenticationData).username}:${(authentication as BasicAuthenticationData).password}`);
       return {
@@ -35,12 +35,14 @@ export class AuthUtil {
           Authorization: `Basic ${token}`,
         },
       };
-    } else {
+    } else if (authentication.type === 'bearer') {
       return {
         headers: {
           Authorization: `Bearer ${(authentication as BearerAuthenticationData).token}`,
         },
       };
+    } else {
+      return (authentication as CustomAuthenticationData).headers(url);
     }
   }
 }

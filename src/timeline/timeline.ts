@@ -32,7 +32,7 @@ import {z} from 'zod';
 import {AxiosRequestConfig} from 'axios';
 import {completeUnsubscribeSubjects, nextCompleteVoidSubject, nextCompleteVoidSubjects} from '../util/observable-util';
 import {VideoControllerApi} from '../video/video-controller-api';
-import {destroyer} from '../util/destroy-util';
+import {destroyer, nullifier} from '../util/destroy-util';
 import {KonvaFlexGroup} from '../layout/konva-flex';
 import {StyleAdapter} from '../common/style-adapter';
 import {FlexNode, FlexSpacingBuilder} from '../layout/flex-node';
@@ -650,9 +650,7 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
       }
     });
 
-    this.addTimelineLanes([
-      this._scrubberLane
-    ])
+    this.addTimelineLane(this._scrubberLane);
 
     this._videoController.onVideoLoading$.pipe(filter(p => !!p), takeUntil(this._destroyed$)).subscribe((event) => {
       this.onVideoLoadingEvent(event!);
@@ -1496,10 +1494,18 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
 
   // region API
   addTimelineLane(timelineLane: TimelineLaneApi): TimelineLaneApi {
-    return this.addTimelineLaneAtIndex(timelineLane, this._timelineLanes.length);
+    return this._addTimelineLane(timelineLane, true);
+  }
+
+  private _addTimelineLane(timelineLane: TimelineLaneApi, settleLayout: boolean): TimelineLaneApi {
+    return this._addTimelineLaneAtIndex(timelineLane, this._timelineLanes.length, settleLayout);
   }
 
   addTimelineLaneAtIndex(timelineLane: TimelineLaneApi, index: number): TimelineLaneApi {
+    return this._addTimelineLaneAtIndex(timelineLane, index, true);
+  }
+
+  private _addTimelineLaneAtIndex(timelineLane: TimelineLaneApi, index: number, settleLayout: boolean): TimelineLaneApi {
     if (this._timelineLanesMap.has(timelineLane.id)) {
       throw new Error(`TimelineLane with id=${timelineLane.id} already exist`)
     }
@@ -1518,7 +1524,9 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
     this._timelineLaneStaticFlexGroup
       .addChild(timelineLane.mainRightFlexGroup, index)
 
-    this.settleLayout();
+    if (settleLayout) {
+      this.settleLayout();
+    }
 
     return timelineLane;
   }
@@ -1573,8 +1581,10 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
     return false;
   }
 
-  addTimelineLanes(timelineLanes: TimelineLaneApi[]): void {
-    timelineLanes.forEach(p => this.addTimelineLane(p));
+  addTimelineLanes(timelineLanes: TimelineLaneApi[]): TimelineLaneApi[] {
+    timelineLanes.forEach(p => this._addTimelineLane(p, false));
+    this.settleLayout();
+    return timelineLanes;
   }
 
   getTimelineLanes(): TimelineLaneApi[] {
@@ -1723,7 +1733,9 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
   }
 
   loadThumbnailVttFileFromUrl(vttUrl: string): Observable<ThumbnailVttFile | undefined> {
-    return this._vttAdapter.loadVtt(vttUrl, this._config.axiosConfig);
+    return this._vttAdapter.loadVtt(vttUrl, {
+      axiosConfig: this._config.axiosConfig
+    });
   }
 
   setDescriptionPaneVisible(visible: boolean): void {
@@ -1800,7 +1812,15 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
       this._surfaceLayer_timecodedContainer, this._surfaceLayer_timecodedFloatingGroup
     )
 
-    destroyer(this._layoutFlexGroup, this._scrubber, this._playhead, ...this._timelineLanes, this._thumbnailHover);
+    this.getTimelineLanes().forEach(p => p.destroy())
+
+    destroyer(this._layoutFlexGroup, this._scrubber, this._playhead, ...this._timelineLanes, this._thumbnailHover, this._vttAdapter);
+    destroyer(this._timelineDomController);
+
+    nullifier(
+      this._config,
+      this._styleAdapter
+    )
   }
 
 }

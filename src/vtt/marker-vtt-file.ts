@@ -18,17 +18,17 @@ import {BaseOmakaseRemoteVttFile} from './vtt-file';
 import {MarkerVttCue, OmakaseVttCueExtension} from '../types';
 import {map, Observable} from 'rxjs';
 import Decimal from 'decimal.js';
-import {AxiosRequestConfig} from 'axios';
 import {VttCueParsed} from './model';
+import { VttLoadOptions } from '../api/vtt-aware-api';
 
 export class MarkerVttFile extends BaseOmakaseRemoteVttFile<MarkerVttCue> {
 
-  protected constructor(url: string, axiosConfig?: AxiosRequestConfig) {
-    super(url, axiosConfig);
+  protected constructor(url: string, options: VttLoadOptions) {
+    super(url, options);
   }
 
-  static create(url: string, axiosConfig?: AxiosRequestConfig): Observable<MarkerVttFile> {
-    let instance = new MarkerVttFile(url, axiosConfig);
+  static create(url: string, options: VttLoadOptions): Observable<MarkerVttFile> {
+    let instance = new MarkerVttFile(url, options);
     return instance.fetch().pipe(map(result => {
       return instance;
     }))

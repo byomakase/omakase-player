@@ -255,6 +255,10 @@ export interface SubtitlesCreateEvent extends OmakaseEvent {
   textTrack: OmakaseTextTrack<OmakaseTextTrackCue>
 }
 
+export interface SubtitlesChartEvent extends OmakaseEvent {
+  cue?: OmakaseTextTrackCue;
+}
+
 // endregion
 
 // region timeline

@@ -17,7 +17,7 @@
 import Konva from 'konva';
 import {Thumbnail} from './thumbnail';
 import {catchError, debounceTime, filter, map, Observable, of, Subject, take, takeUntil} from 'rxjs';
-import {TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle} from '../timeline-lane';
+import {TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle, VTT_DOWNSAMPLE_CONFIG_DEFAULT} from '../timeline-lane';
 import {ImageUtil} from '../../util/image-util';
 import {Dimension, Position} from '../../common/measurement';
 import {ThumbnailEvent, ThumbnailVttCue} from '../../types';
@@ -31,10 +31,10 @@ import {VideoControllerApi} from '../../video/video-controller-api';
 import {ThumbnailLaneApi} from '../../api';
 import {ThumbnailVttFile} from '../../vtt';
 import {VttAdapter, VttAdapterConfig} from '../../common/vtt-adapter';
-import {VttTimelineLane} from '../vtt-timeline-lane';
+import {VttTimelineLane, VttTimelineLaneConfig} from '../vtt-timeline-lane';
 import {AuthUtil} from '../../util/auth-util';
 
-export interface ThumbnailLaneConfig extends TimelineLaneConfig<ThumbnailLaneStyle>, VttAdapterConfig<ThumbnailVttFile> {
+export interface ThumbnailLaneConfig extends VttTimelineLaneConfig<ThumbnailLaneStyle>, VttAdapterConfig<ThumbnailVttFile> {
   axiosConfig?: AxiosRequestConfig;
 }
 
@@ -50,6 +50,8 @@ export interface ThumbnailLaneStyle extends TimelineLaneStyle {
 
 const configDefault: ThumbnailLaneConfig = {
   ...TIMELINE_LANE_CONFIG_DEFAULT,
+  ...VTT_DOWNSAMPLE_CONFIG_DEFAULT,
+  downsampleStrategy: 'drop',
   style: {
     ...TIMELINE_LANE_CONFIG_DEFAULT.style,
     thumbnailHeight: 40,
@@ -103,7 +105,7 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
       x: 0,
       y: this.style.height / 2 - this.style.thumbnailHeight / 2,
       width: this._timecodedGroup.width(),
-      height: this._timecodedGroup.height(),
+      height: this._config.style.height ,
     });
 
     this._timecodedGroup.add(this._timecodedEventCatcher);
@@ -156,7 +158,7 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
     })
 
     if (this.vttUrl) {
-      this.loadVtt(this.vttUrl, this._config.axiosConfig).subscribe();
+      this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig)).subscribe();
     } else if (this.vttFile) {
       onVttFileLoaded();
     }
@@ -421,20 +423,25 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
       if (vttFile) {
         // try loading first thumbnail to define proportional dimensions
         let firstCue: ThumbnailVttCue = vttFile.cues[0];
-        ImageUtil.createKonvaImageSizedByHeight(firstCue.url, this.style.thumbnailHeight, AuthUtil.authentication).subscribe({
-          next: (image) => {
-            o$.next({
-              width: image.getSize().width,
-              height: this.style.thumbnailHeight
-            });
-            o$.complete();
-          },
-          error: err => {
-            console.debug(`Error loading: ${firstCue.url}`, err);
-            o$.next(void 0);
-            o$.complete();
-          }
-        })
+        if (firstCue) {
+          ImageUtil.createKonvaImageSizedByHeight(firstCue.url, this.style.thumbnailHeight, AuthUtil.authentication).subscribe({
+            next: (image) => {
+              o$.next({
+                width: image.getSize().width,
+                height: this.style.thumbnailHeight
+              });
+              o$.complete();
+            },
+            error: err => {
+              console.debug(`Error loading: ${firstCue.url}`, err);
+              o$.next(void 0);
+              o$.complete();
+            }
+          })
+        } else {
+          o$.next(void 0);
+          o$.complete();
+        }
       } else {
         o$.next(void 0);
         o$.complete();

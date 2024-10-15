@@ -14,23 +14,36 @@
  * limitations under the License.
  */
 
-import {BaseOmakaseRemoteVttFile} from './vtt-file';
 import {OmakaseVttCueExtension, ThumbnailVttCue} from '../types';
 import {map, Observable} from 'rxjs';
 import Decimal from 'decimal.js';
-import {AxiosRequestConfig} from 'axios';
 import {VttCueParsed} from './model';
+import {DownsampleStrategy, VttLoadOptions} from '../api/vtt-aware-api';
+import {DownsampledVttFile} from './downsampled-vtt-file';
 
 const isUrlAbsouteRegex = /^(http(s):\/\/.)[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)$/;
 
-export class ThumbnailVttFile extends BaseOmakaseRemoteVttFile<ThumbnailVttCue> {
+export class ThumbnailVttFile extends DownsampledVttFile<ThumbnailVttCue> {
 
-  protected constructor(url: string, axiosConfig?: AxiosRequestConfig) {
-    super(url, axiosConfig);
+  protected override _supportedDownsampleStrategies: DownsampleStrategy[] = ['none', 'drop'];
+
+  protected constructor(url: string, options: VttLoadOptions) {
+    super(url, options);
   }
 
-  static create(url: string, axiosConfig?: AxiosRequestConfig): Observable<ThumbnailVttFile> {
-    let instance = new ThumbnailVttFile(url, axiosConfig);
+  protected override resolveDownsampledCue(index: number, startTime: number, endTime: number, cues: ThumbnailVttCue[]): ThumbnailVttCue {
+    return {
+      index: index,
+      id: `SAMPLED_${index}`,
+      startTime: startTime,
+      endTime: endTime,
+      text: `SAMPLED`,
+      url: cues[0].url
+    }
+  }
+
+  static create(url: string, options: VttLoadOptions): Observable<ThumbnailVttFile> {
+    let instance = new ThumbnailVttFile(url, options);
     return instance.fetch().pipe(map(result => {
       return instance;
     }))

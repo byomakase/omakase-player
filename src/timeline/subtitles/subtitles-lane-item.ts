@@ -17,9 +17,11 @@
 import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle} from '../../layout/konva-component';
 import Konva from 'konva';
 import {Dimension, HasRectMeasurement, Horizontals, OnMeasurementsChange, Position, RectMeasurement} from '../../common/measurement';
-import {Comparable, OmakaseTextTrackCue, WithOptionalPartial} from '../../types';
+import {Comparable, OmakaseTextTrackCue, SubtitlesChartEvent, WithOptionalPartial} from '../../types';
 import {nullifier} from '../../util/destroy-util';
 import {KonvaFactory} from '../../factory/konva-factory';
+import { Subject } from 'rxjs/internal/Subject';
+import { SubtitlesLane } from './subtitles-lane';
 
 export interface SubtitlesLaneItemStyle {
   height: number;
@@ -29,13 +31,14 @@ export interface SubtitlesLaneItemStyle {
 }
 
 export interface SubtitlesLaneItemConfig extends ComponentConfig<SubtitlesLaneItemStyle> {
-  cue: OmakaseTextTrackCue;
+  lane: SubtitlesLane;
+  cues: Array<OmakaseTextTrackCue>;
   x: number;
   width: number;
   listening?: boolean;
 }
 
-const configDefault: Omit<SubtitlesLaneItemConfig, 'cue' | 'x' | 'width'> = {
+const configDefault: Omit<SubtitlesLaneItemConfig, 'lane' | 'cues' | 'x' | 'width'> = {
   listening: false,
   style: {
     height: 20,
@@ -46,9 +49,13 @@ const configDefault: Omit<SubtitlesLaneItemConfig, 'cue' | 'x' | 'width'> = {
 }
 
 export class SubtitlesLaneItem extends BaseKonvaComponent<SubtitlesLaneItemConfig, SubtitlesLaneItemStyle, Konva.Group> implements OnMeasurementsChange, HasRectMeasurement, Comparable<SubtitlesLaneItem> {
+  public readonly onClick$: Subject<SubtitlesChartEvent> = new Subject<SubtitlesChartEvent>();
+
   private _group: Konva.Group;
   private _bgRect: Konva.Rect;
-  private _cue: OmakaseTextTrackCue;
+  private _cues: Array<OmakaseTextTrackCue>;
+
+  private _lane: SubtitlesLane;
 
   constructor(config: ConfigWithOptionalStyle<SubtitlesLaneItemConfig>,) {
     super({
@@ -60,7 +67,9 @@ export class SubtitlesLaneItem extends BaseKonvaComponent<SubtitlesLaneItemConfi
       },
     });
 
-    this._cue = this.config.cue;
+    this._lane = this.config.lane;
+
+    this._cues = this.config.cues;
 
     this._group = new Konva.Group({
       x: this.config.x,
@@ -84,6 +93,28 @@ export class SubtitlesLaneItem extends BaseKonvaComponent<SubtitlesLaneItemConfi
     })
 
     this._group.add(this._bgRect)
+
+    this._group.on('click', (event) => {
+      let cue = this.findCue();
+      if (cue) {
+        this.onClick$.next({
+          cue: cue
+        });
+      } 
+    });
+  }
+
+  protected findCue(): OmakaseTextTrackCue | undefined {
+    if (!this._lane) {
+      throw new Error("Lane does not exist!");
+    }
+
+    let timelinePositionX = this._lane.getTimeline().getTimecodedFloatingRelativePointerPosition().x;
+    let timelinePositionTime = this._lane.getTimeline().timelinePositionToTime(timelinePositionX);
+    
+    let subCue = this._cues.find(cue => timelinePositionTime >= cue.startTime && timelinePositionTime <= cue.endTime);
+
+    return subCue;
   }
 
   protected provideKonvaNode(): Konva.Group {
@@ -131,26 +162,34 @@ export class SubtitlesLaneItem extends BaseKonvaComponent<SubtitlesLaneItemConfi
     this._group.visible(visible);
   }
 
-  getCue(): OmakaseTextTrackCue {
-    return this._cue;
+  getCues(): Array<OmakaseTextTrackCue> {
+    return this._cues;
   }
 
-  setCue(textTrackCue: OmakaseTextTrackCue) {
-    this._cue = textTrackCue;
+  setCues(textTrackCues: Array<OmakaseTextTrackCue>) {
+    this._cues = textTrackCues;
+  }
+
+  getFirstCue(): OmakaseTextTrackCue {
+    return this.getCues()[0];
+  }
+
+  getLastCue(): OmakaseTextTrackCue {
+    return this.getCues()[this.getCues().length - 1];
   }
 
   compareTo(o: SubtitlesLaneItem): number {
-    return this._cue && o ? (
-      this.getCue().id === o.getCue().id
-      && this.getCue().startTime === o.getCue().startTime
-      && this.getCue().endTime === o.getCue().endTime
+    return this._cues && o ? (
+      this.getFirstCue().id === o.getFirstCue().id
+      && this.getFirstCue().startTime === o.getFirstCue().startTime
+      && this.getLastCue().endTime === o.getLastCue().endTime
     ) ? 0 : -1 : -1;
   }
 
   override destroy() {
     super.destroy();
     nullifier(
-      this._cue
+      this._cues
     );
   }
 }

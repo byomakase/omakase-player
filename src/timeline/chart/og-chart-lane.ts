@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle} from '../timeline-lane';
+import {TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle, VTT_DOWNSAMPLE_CONFIG_DEFAULT} from '../timeline-lane';
 import Konva from 'konva';
 import {Constants} from '../../constants';
 import {debounceTime, distinctUntilChanged, filter, Subject, take, takeUntil} from 'rxjs';
@@ -30,9 +30,9 @@ import {OgChartVttFile} from '../../vtt';
 import {isNullOrUndefined} from '../../util/object-util';
 import {OgChartLaneApi} from '../../api';
 import {VttAdapter, VttAdapterConfig} from '../../common/vtt-adapter';
-import {VttTimelineLane} from '../vtt-timeline-lane';
+import {VttTimelineLane, VttTimelineLaneConfig} from '../vtt-timeline-lane';
 
-export interface OgChartLaneConfig extends TimelineLaneConfig<OgChartLaneStyle>, VttAdapterConfig<OgChartVttFile> {
+export interface OgChartLaneConfig extends VttTimelineLaneConfig<OgChartLaneStyle>, VttAdapterConfig<OgChartVttFile> {
   axiosConfig?: AxiosRequestConfig;
 
   valueMin?: number;
@@ -55,6 +55,8 @@ export interface OgChartLaneStyle extends TimelineLaneStyle {
 
 const configDefault: OgChartLaneConfig = {
   ...TIMELINE_LANE_CONFIG_DEFAULT,
+  ...VTT_DOWNSAMPLE_CONFIG_DEFAULT,
+  downsampleStrategy: 'avg',
   style: {
     ...TIMELINE_LANE_CONFIG_DEFAULT.style,
     height: 40,
@@ -107,10 +109,9 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
     });
 
     this._itemsGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
-      y: this.style.paddingTop,
+      y: this._config.style.paddingTop,
       width: this._timecodedGroup.width(),
-      height: this._timecodedGroup.height() - (this.style.paddingTop + this.style.paddingBottom)
+      height: this._config.style.height - (this._config.style.paddingTop + this._config.style.paddingBottom)
     });
 
     this._timecodedGroup.add(this._timecodedEventCatcher);
@@ -145,7 +146,7 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
     })
 
     if (this.vttUrl) {
-      this.loadVtt(this.vttUrl, this._config.axiosConfig).subscribe();
+      this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig)).subscribe();
     }
   }
 
@@ -160,10 +161,13 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
 
     this.clearItems();
 
+    if (this.vttFile.cues.length < 1) {
+      return;
+    }
+
     let visibleTimeRange = this._timeline!.getVisibleTimeRange();
     let cues = this.vttFile.findCues(visibleTimeRange.start, visibleTimeRange.end);
 
-    let itemHeight = this._itemsGroup!.height();
     let minMax = this.findMinMax(cues);
 
     let valueMin = isNullOrUndefined(this._config.valueMin) ? minMax.min.value : this._config.valueMin!;

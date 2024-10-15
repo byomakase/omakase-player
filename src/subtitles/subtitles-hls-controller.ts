@@ -21,24 +21,5 @@ export class SubtitlesHlsController extends SubtitlesController {
 
   constructor(videoController: VideoControllerApi) {
     super(videoController);
-
-    // unsafe, working on HLS version 1.5.8
-    // see https://github.com/video-dev/hls.js/blob/master/src/controller/subtitle-track-controller.ts
-    // @ts-ignore
-    let hlsSubtitleTrackController = this._videoController.getHls().subtitleTrackController;
-
-    if (hlsSubtitleTrackController) {
-      if (hlsSubtitleTrackController.pollTrackChange) {
-        hlsSubtitleTrackController.pollTrackChange = (timeout: number) => {
-          // overriden to prevent HLS polling & toggling already shown / hidden subtitles
-        }
-      }
-
-      if (hlsSubtitleTrackController.asyncPollTrackChange) {
-        hlsSubtitleTrackController.asyncPollTrackChange = () => {
-          // overriden to prevent HLS polling & toggling already shown / hidden subtitles
-        }
-      }
-    }
   }
 }

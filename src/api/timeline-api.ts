@@ -168,7 +168,7 @@ export interface TimelineApi extends Api {
    * Adds multiple instantiated TimelineLane-s to timeline
    * @param timelineLanes
    */
-  addTimelineLanes(timelineLanes: TimelineLaneApi[]): void;
+  addTimelineLanes(timelineLanes: TimelineLaneApi[]): TimelineLaneApi[];
 
   /**
    * @returns all TimelineLane-s

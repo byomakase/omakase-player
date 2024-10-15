@@ -17,7 +17,7 @@
 import Konva from 'konva';
 import {RectMeasurement} from '../common/measurement';
 import {Timeline} from './timeline';
-import {distinctUntilChanged, filter, interval, map, Observable, Subject, takeUntil} from 'rxjs';
+import {filter, Observable, Subject, takeUntil} from 'rxjs';
 import {Validators} from '../validators';
 import {VideoControllerApi} from '../video/video-controller-api';
 import {KonvaFlexGroup, KonvaFlexItem} from '../layout/konva-flex';
@@ -33,8 +33,9 @@ import {TextLabel, TimelineNode} from './timeline-component';
 import {KonvaComponentFlexContentNode} from '../layout/konva-component-flex';
 import {TimelineLaneApi} from '../api';
 import {KonvaFactory} from '../factory/konva-factory';
-import {OmakaseVttCue, OmakaseVttFile, SelectRequired, WithOptionalPartial, WithRequired} from '../types';
+import {SelectRequired, WithOptionalPartial, WithRequired} from '../types';
 import {isNullOrUndefined} from '../util/object-util';
+import {DownsampleConfig} from '../api/vtt-aware-api';
 
 /**
  * Base configuration for classes that extend {@link BaseTimelineLane}
@@ -45,6 +46,8 @@ export interface TimelineLaneConfig<S extends TimelineLaneStyle> {
   id?: string;
   description?: string;
   layoutEasingDuration?: number;
+
+  minimized?: boolean;
 }
 
 /**
@@ -78,7 +81,13 @@ export const TIMELINE_LANE_STYLE_DEFAULT: TimelineLaneStyle = {
 
 export const TIMELINE_LANE_CONFIG_DEFAULT: WithRequired<TimelineLaneConfig<TimelineLaneStyle>, 'layoutEasingDuration'> = {
   style: TIMELINE_LANE_STYLE_DEFAULT,
-  layoutEasingDuration: 300
+  layoutEasingDuration: 300,
+  minimized: false
+}
+
+export const VTT_DOWNSAMPLE_CONFIG_DEFAULT: DownsampleConfig = {
+  downsamplePeriod: 1000,
+  downsampleStrategy: 'none'
 }
 
 type DefaultStyleOverrides = Pick<WithOptionalPartial<TimelineLaneConfig<any>, 'style'>, 'style'>
@@ -216,7 +225,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
     let flexGroup = KonvaFlexGroup.of({
       konvaNode: KonvaFactory.createGroup(),
       konvaBgNode: this._leftBgRect,
-      height: this._styleAdapter.style.height,
+      height: this._config.minimized ? 0 : this._styleAdapter.style.height,
       width: '100%',
       margins: FlexSpacingBuilder.instance()
         .spacing(this.style.marginBottom ? this.style.marginBottom : 0, 'EDGE_BOTTOM')
@@ -315,7 +324,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
     return KonvaFlexGroup.of({
       konvaNode: KonvaFactory.createGroup(),
       konvaBgNode: this._rightBgRect,
-      height: this._styleAdapter.style.height,
+      height: this._config.minimized ? 0 : this._styleAdapter.style.height,
       width: '100%',
       clip: true,
       margins: FlexSpacingBuilder.instance()
@@ -345,7 +354,16 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
     this._rightBgRect.setAttrs({
       fill: this._styleAdapter.style.rightBackgroundFill ? this._styleAdapter.style.rightBackgroundFill : this._styleAdapter.style.backgroundFill,
       opacity: this._styleAdapter.style.rightBackgroundOpacity ? this._styleAdapter.style.leftBackgroundOpacity : this._styleAdapter.style.backgroundOpacity,
+    });
+
+    [this.mainLeftFlexGroup, this.mainRightFlexGroup].forEach(p => {
+      let marginFlexSpacing = FlexSpacingBuilder.instance()
+        .spacing(this.style.marginBottom ? this.style.marginBottom : 0, 'EDGE_BOTTOM')
+        .build();
+
+      p.setHeightAndMargins(this.style.height, marginFlexSpacing, false); // refreshLayout = false because we want refresh to occurr when both left and right panel layouts were recalculated
     })
+    this._timeline?.settleLayout();
   }
 
   clearContent() {
@@ -397,7 +415,18 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
   }
 
   minimize() {
-    this.setHeightAndMargins(0, 0);
+    this.style = {
+      height: 0,
+      marginBottom: 0
+    } as Partial<S>;
+  }
+
+  maximize() {
+    // revert to inital style from config
+    this.style = {
+      height: this._config.style.height,
+      marginBottom: this._config.style.marginBottom ? this._config.style.marginBottom : 0
+    } as Partial<S>;
   }
 
   minimizeEased(): Observable<void> {
@@ -415,7 +444,12 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
         onUpdateHandler: (frame, value) => {
           let newHeight = Math.round(value);
           let newMargin = new Decimal(marginBottom).mul(newHeight).div(this._styleAdapter.style.height).toDecimalPlaces(0).toNumber()
-          this.setHeightAndMargins(newHeight, newMargin)
+
+          this.style = {
+            height: newHeight,
+            marginBottom: newMargin
+          } as Partial<S>;
+
         },
         onCompleteHandler: (frame, value) => {
           this.minimize();
@@ -424,11 +458,6 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
         }
       })
     })
-  }
-
-  maximize() {
-    let marginBottom = this._styleAdapter.style.marginBottom ? this._styleAdapter.style.marginBottom : 0;
-    this.setHeightAndMargins(this._styleAdapter.style.height, marginBottom);
   }
 
   maximizeEased(): Observable<void> {
@@ -441,12 +470,16 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
       let marginBottom = this._styleAdapter.style.marginBottom ? this._styleAdapter.style.marginBottom : 0;
       animate({
         duration: isNullOrUndefined(this._config.layoutEasingDuration) ? TIMELINE_LANE_CONFIG_DEFAULT.layoutEasingDuration : this._config.layoutEasingDuration!,
-        startValue: 0,
-        endValue: this._styleAdapter.style.height,
+        startValue: this.style.height,
+        endValue: this._config.style.height, // revert to inital style from config
         onUpdateHandler: (frame, value) => {
           let newHeight = Math.round(value);
           let newMargin = new Decimal(marginBottom).mul(newHeight).div(this._styleAdapter.style.height).toDecimalPlaces(0).toNumber()
-          this.setHeightAndMargins(newHeight, newMargin)
+
+          this.style = {
+            height: newHeight,
+            marginBottom: newMargin
+          } as Partial<S>;
         },
         onCompleteHandler: (frame, value) => {
           this.maximize();
@@ -471,15 +504,6 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
     } else {
       return this.minimizeEased();
     }
-  }
-
-  protected setHeightAndMargins(height: number, margin: number) {
-    // refreshLayout = false because we want refresh to occurr when both left and right panel layouts were recalculated
-    this._mainLeftFlexGroup.setHeightAndMargins(height, FlexSpacingBuilder.instance().spacing(margin, 'EDGE_BOTTOM').build(), false);
-    this._mainRightFlexGroup.setHeightAndMargins(height, FlexSpacingBuilder.instance().spacing(margin, 'EDGE_BOTTOM').build(), false);
-
-    // entire timeline is affected, thus settle it
-    this._timeline!.settleLayout();
   }
 
   get style(): S {

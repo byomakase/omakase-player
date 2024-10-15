@@ -23,7 +23,7 @@
   <title>Omakase Player demo</title>
   <link rel="stylesheet" href="css/player.css">
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@0.9.2-SNAPSHOT.1725315674/dist/omakase-player.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@0.10.1-SNAPSHOT.1727961099/dist/omakase-player.umd.min.js"></script>
   <script src="https://esonderegger.github.io/web-audio-peak-meter/web-audio-peak-meter-2.1.0.min.js"></script>
   <script src="js/index.js"></script>
 </head>
@@ -37,13 +37,13 @@
       <span id="ff-back" class="icon"><img src="images/ff-back.svg" alt="" height="12"/></span>
       <span id="back" class="icon"><img src="images/back.svg" alt="" height="12"/></span>
       <span id="buttonPlay" class="icon">
-                    <img id="playImage" src="images/play.svg" alt="" height="12"/>
+                    <img id="playImage" src="images/play.svg" alt="" height="12" width="14"/>
                 </span>
       <span id="buttonPause" class="icon" style="display: none;">
-                    <img id="pauseImage" src="images/pause.svg" alt="" height="12"/>
+                    <img id="pauseImage" src="images/pause.svg" alt="" height="12" width="14"/>
                 </span>
       <span id="buttonReplay" class="icon" style="display: none;">
-                    <img id="replayImage" src="images/replay.svg" alt="" height="12"/>
+                    <img id="replayImage" src="images/replay.svg" alt="" height="12" width="14"/>
                 </span>
       <span id="forward" class="icon"><img src="images/forward.svg" alt="" height="12"/></span>
       <span id="ff-forward" class="icon"><img src="images/ff-forward.svg" alt="" height="12"/></span>
@@ -58,6 +58,8 @@
       <span id="out-to-playhead" class="icon"><img src="images/out-to-playhead.svg" alt="" height="12"/></span>
       <span id="safe-zone-off" class="icon"><img src="images/safe-zone-off.svg" alt="" height="12"/></span>
       <span id="safe-zone-on" class="icon" style="display: none;"><img src="images/safe-zone-on.svg" alt="" height="12"/></span>
+      <span id="detach-pip" class="icon"><img src="images/detach.svg" alt="" height="12"></span>
+      <span id="attach-pip" class="icon" style="display: none;"><img src="images/attach.svg" alt="" height="12"></span>
       <span id="full-screen" class="icon"><img src="images/full-screen.svg" alt="" height="12"/></span>
     </div>
   </div>

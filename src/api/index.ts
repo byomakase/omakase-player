@@ -19,6 +19,7 @@ export * from './omakase-player-api';
 export * from './video-api';
 export * from './audio-api';
 export * from './subtitles-api';
+export * from './alerts-api';
 
 export * from './timeline-api';
 export * from './timeline-lane-api';

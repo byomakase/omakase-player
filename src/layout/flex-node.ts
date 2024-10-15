@@ -353,9 +353,11 @@ export abstract class BaseFlexNode<C extends FlexNodeConfig, T extends FlexConte
     this.refreshLayoutFromRoot();
   }
 
-  setMargins(margins: FlexSpacing[]): void {
+  setMargins(margins: FlexSpacing[], refreshLayout: boolean = true): void {
     this.setMarginsInternal(margins);
-    this.refreshLayoutFromRoot();
+    if (refreshLayout) {
+      this.refreshLayoutFromRoot();
+    }
   }
 
   setPositions(positions: FlexSpacing[]): void {

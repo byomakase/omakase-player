@@ -282,32 +282,42 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   protected initEventHandlers() {
     let latestSeekStartTime: number | undefined;
 
+    fromEvent(this.videoElement, HTMLVideoElementEventKeys.PLAYING).pipe(takeUntil(this._videoEventBreaker$)).subscribe({
+      next: () => {
+        this.onPlay$.next({
+          currentTime: this.getCurrentTime(),
+          currentTimecode: this.getCurrentTimecode()
+        })
+      }
+    })
+
     fromEvent(this.videoElement, HTMLVideoElementEventKeys.PAUSE).pipe(takeUntil(this._videoEventBreaker$)).subscribe({
       next: () => {
-        if (this._playbackStateMachine!.pausing) {
-          if (this._video!.correctedDuration && (this.getCurrentTime() < this._video!.correctedDuration)) {
-            this._seekToFrame(this.getCurrentTime() >= this._video!.correctedDuration ? this.getTotalFrames() : this.getCurrentFrame()).subscribe(() => {
-              afterPauseSync();
-            })
-          } else {
-            this.syncVideoFrames({}).subscribe(result => {
-              afterPauseSync();
-            })
-          }
-        }
+        // PlaybackState.pausing can be either true (pause through API) or even false (pause initiated externally by browser with PIP close)
+        // Thus, we will not inspect this._playbackStateMachine!.pausing
 
         let afterPauseSync = () => {
           console.debug(`%cpause control sync start`, 'color: purple');
           this._seekFromCurrentFrame(1).pipe(takeUntil(this._seekBreaker$), take(1)).subscribe({
-              next: () => {
-                console.debug(`%cpause control sync end`, 'color: purple');
-                this.videoTimeChangeHandlerExecutor();
-                this.onPause$.next({
-                  currentTime: this.getCurrentTime(),
-                  currentTimecode: this.getCurrentTimecode()
-                })
-              }
-            })
+            next: () => {
+              console.debug(`%cpause control sync end`, 'color: purple');
+              this.videoTimeChangeHandlerExecutor();
+              this.onPause$.next({
+                currentTime: this.getCurrentTime(),
+                currentTimecode: this.getCurrentTimecode()
+              })
+            }
+          })
+        }
+
+        if (this._video!.correctedDuration && (this.getCurrentTime() < this._video!.correctedDuration)) {
+          this._seekToFrame(this.getCurrentTime() >= this._video!.correctedDuration ? this.getTotalFrames() : this.getCurrentFrame()).subscribe(() => {
+            afterPauseSync();
+          })
+        } else {
+          this.syncVideoFrames({}).subscribe(result => {
+            afterPauseSync();
+          })
         }
       }
     })
@@ -959,10 +969,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
 
       // first start request video frame callback cycle
       this.videoElement.play().then(() => {
-        this.onPlay$.next({
-          currentTime: this.getCurrentTime(),
-          currentTimecode: this.getCurrentTimecode()
-        })
+        // handled in HTMLVideoElementEventKeys.PLAYING event handler
       });
     }
   }
@@ -1303,7 +1310,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
     return this._isVideoLoaded;
   }
 
-  getHls(): Hls {
+  getHls(): Hls | undefined {
     throw new Error('Unsupported or video not loaded with Hls.js')
   }
 

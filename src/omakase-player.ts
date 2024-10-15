@@ -38,11 +38,13 @@ import {VideoNativeController} from './video/video-native-controller';
 import {AlertsController} from './alerts/alerts-controller';
 import {AlertsApi} from './api/alerts-api';
 import {BlobUtil} from './util/blob-util';
+import {VTT_DOWNSAMPLE_CONFIG_DEFAULT} from './timeline/timeline-lane';
 
 export interface OmakasePlayerConfig {
   playerHTMLElementId?: string;
   crossorigin?: 'anonymous' | 'use-credentials',
-  hls?: Partial<HlsConfig>
+  hls?: Partial<HlsConfig>;
+  vttDownsamplePeriod?: number;
 }
 
 const configDefault: OmakasePlayerConfig = {
@@ -95,6 +97,10 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
       this._subtitlesController = new SubtitlesHlsController(this._videoController);
     } else {
       this._subtitlesController = new SubtitlesController(this._videoController);
+    }
+
+    if (config?.vttDownsamplePeriod) {
+      VTT_DOWNSAMPLE_CONFIG_DEFAULT.downsamplePeriod = config.vttDownsamplePeriod;
     }
 
     this._alertsController = new AlertsController();

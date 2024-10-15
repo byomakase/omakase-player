@@ -18,6 +18,8 @@ import {AxiosRequestConfig} from 'axios';
 import {from, map, Observable} from 'rxjs';
 import {httpGet} from '../http';
 import {M3u8Parser} from './m3u8-parser';
+import {AuthenticationData} from '../video/model';
+import {AuthUtil} from '../util/auth-util';
 import HLS from 'parse-hls';
 
 export abstract class BaseM3u8File {
@@ -55,7 +57,10 @@ export abstract class BaseM3u8File {
 
 export class M3u8File extends BaseM3u8File {
 
-  static create(url: string, axiosConfig?: AxiosRequestConfig): Observable<M3u8File> {
+  static create(url: string, axiosConfig?: AxiosRequestConfig, authentication?: AuthenticationData): Observable<M3u8File> {
+    if (!axiosConfig && authentication) {
+      axiosConfig = AuthUtil.getAuthorizedAxiosConfig(url, authentication);
+    }
     let instance = new M3u8File(url, axiosConfig);
     return instance.fetch().pipe(map(result => {
       return instance;

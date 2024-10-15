@@ -61,3 +61,4 @@ Thumbs.db
 /dist/
 /.parcel-cache/
 /package/
+/infrastructure/templates/packaged.*

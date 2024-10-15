@@ -83,6 +83,10 @@ export class TimelineDomController implements Destroyable {
     this._divTimelineTimecode = this.getTimelineElement<HTMLDivElement>(domClasses.timelineTimecode);
   }
 
+  private cleanDom() {
+    this._divTimeline.innerHTML = '';
+  }
+
   settleDom() {
     if (this._timeline.getScrubberLane()) {
       this.refreshTimecode();
@@ -131,6 +135,7 @@ export class TimelineDomController implements Destroyable {
 
   destroy(): void {
     nextCompleteVoidSubjects(this._destroyed$);
+    this.cleanDom();
   }
 
 

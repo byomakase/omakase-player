@@ -121,7 +121,7 @@ body {
 
 .controls {
   background-color: #235067;
-  width: 650px;
+  width: 700px;
   height: 30px;
   margin-top: 0px;
   margin-bottom: 40px;
@@ -446,7 +446,42 @@ body {
 .omakase-timeline-overlay .omakase-timeline-timecode {
   position: absolute;
   padding-left: 10px;
-  padding-top: 10px;
+  padding-top: 22px;
   overflow: hidden;
+  width: 100px !important;
 }
 
+.legend-box {
+  background-color: #E9F7FF;
+  width: 150px;
+  height: 100px;
+  position: relative;
+  border-radius: 2px;
+  display: flex;
+  flex-direction: column;
+}
+
+.legend-box-item {
+  margin: 20px 0px 0px 20px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.legend-box-min-icon {
+  background-color: green;
+  width: 20px;
+  height: 20px;
+  border-radius: 2px;
+}
+
+.legend-box-avg-icon {
+  background-color: orange;
+  width: 20px;
+  height: 20px;
+  border-radius: 2px;
+}
+
+.legend-box-text {
+  padding-left: 10px;
+}

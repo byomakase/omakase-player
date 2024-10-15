@@ -1,14 +1,18 @@
-import {AxiosRequestConfig} from 'axios';
 import {map, mergeAll, Observable, sampleTime, takeUntil} from 'rxjs';
-import {VttAwareApi} from '../api/vtt-aware-api';
+import {DownsampleConfig, VttAwareApi, VttLoadOptions} from '../api/vtt-aware-api';
 import {OmakaseVttCue, OmakaseVttCueEvent, OmakaseVttFile, PlayheadMoveEvent, ScrubberMoveEvent, VideoTimeChangeEvent} from '../types';
-import {BaseTimelineLane, TimelineLaneConfig, TimelineLaneStyle} from './timeline-lane';
+import {BaseTimelineLane, TimelineLaneConfig, TimelineLaneStyle, VTT_DOWNSAMPLE_CONFIG_DEFAULT} from './timeline-lane';
 import {VttAdapter} from '../common/vtt-adapter';
 import {AuthUtil} from '../util/auth-util';
+import {AxiosRequestConfig} from 'axios';
 
 const sampleTimeSyncVideoMetadata = 100;
 
-export abstract class VttTimelineLane<C extends TimelineLaneConfig<S>, S extends TimelineLaneStyle, Q extends OmakaseVttCue, T extends OmakaseVttFile<Q>> extends BaseTimelineLane<C, S> implements VttAwareApi<Q, T> {
+export interface VttTimelineLaneConfig<S extends TimelineLaneStyle> extends TimelineLaneConfig<S>, Partial<DownsampleConfig> {
+
+}
+
+export abstract class VttTimelineLane<C extends VttTimelineLaneConfig<S>, S extends TimelineLaneStyle, Q extends OmakaseVttCue, T extends OmakaseVttFile<Q>> extends BaseTimelineLane<C, S> implements VttAwareApi<Q, T> {
   protected abstract readonly _vttAdapter: VttAdapter<T>;
 
   protected _onVideoCueEvent$?: Observable<OmakaseVttCueEvent<Q>>;
@@ -63,11 +67,21 @@ export abstract class VttTimelineLane<C extends TimelineLaneConfig<S>, S extends
     this._vttAdapter.vttFile = vttFile;
   }
 
-  loadVtt(vttUrl: string, axiosConfig?: AxiosRequestConfig): Observable<T | undefined> {
-    if (!axiosConfig && AuthUtil.authentication) {
-      axiosConfig = AuthUtil.getAuthorizedAxiosConfig(AuthUtil.authentication);
+  loadVtt(vttUrl: string, options: VttLoadOptions = {}): Observable<T | undefined> {
+    if (!options.axiosConfig && AuthUtil.authentication) {
+      options.axiosConfig = AuthUtil.getAuthorizedAxiosConfig(vttUrl, AuthUtil.authentication);
     }
-    return this._vttAdapter.loadVtt(vttUrl, axiosConfig);
+    return this._vttAdapter.loadVtt(vttUrl, options);
+  }
+
+  getVttLoadOptions(axiosConfig?: AxiosRequestConfig): VttLoadOptions {
+    return {
+      axiosConfig,
+      downsampleConfig: {
+        downsamplePeriod: this._config.downsamplePeriod ?? VTT_DOWNSAMPLE_CONFIG_DEFAULT.downsamplePeriod,
+        downsampleStrategy: this._config.downsampleStrategy ?? VTT_DOWNSAMPLE_CONFIG_DEFAULT.downsampleStrategy
+      }
+    }
   }
 
   private getCueEvents(source$: Observable<VideoTimeChangeEvent | PlayheadMoveEvent | ScrubberMoveEvent>): Observable<OmakaseVttCueEvent<Q>> {

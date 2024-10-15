@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle} from '../timeline-lane';
+import {TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle, VTT_DOWNSAMPLE_CONFIG_DEFAULT} from '../timeline-lane';
 import Konva from 'konva';
 import {Constants} from '../../constants';
 import {combineLatest, debounceTime, filter, Subject, take, takeUntil} from 'rxjs';
@@ -30,9 +30,9 @@ import {VideoControllerApi} from '../../video/video-controller-api';
 import {AudioTrackLaneApi} from '../../api';
 import {AudioVttFile} from '../../vtt';
 import {VttAdapter, VttAdapterConfig} from '../../common/vtt-adapter';
-import {VttTimelineLane} from '../vtt-timeline-lane';
+import {VttTimelineLane, VttTimelineLaneConfig} from '../vtt-timeline-lane';
 
-export interface AudioTrackLaneConfig extends TimelineLaneConfig<AudioTrackLaneStyle>, VttAdapterConfig<AudioVttFile> {
+export interface AudioTrackLaneConfig extends VttTimelineLaneConfig<AudioTrackLaneStyle>, VttAdapterConfig<AudioVttFile> {
   axiosConfig?: AxiosRequestConfig;
 }
 
@@ -49,6 +49,8 @@ export interface AudioTrackLaneStyle extends TimelineLaneStyle {
 
 const configDefault: AudioTrackLaneConfig = {
   ...TIMELINE_LANE_CONFIG_DEFAULT,
+  ...VTT_DOWNSAMPLE_CONFIG_DEFAULT,
+  downsampleStrategy: 'max',
   style: {
     ...TIMELINE_LANE_CONFIG_DEFAULT.style,
     height: 40,
@@ -92,9 +94,9 @@ export class AudioTrackLane extends VttTimelineLane<AudioTrackLaneConfig, AudioT
     });
 
     this._itemsGroup = KonvaFactory.createGroup({
-      y: this.style.paddingTop,
+      y: this._config.style.paddingTop,
       width: this._timecodedGroup.width(),
-      height: this._timecodedGroup.height() - (this.style.paddingTop + this.style.paddingBottom)
+      height: this._config.style.height - (this._config.style.paddingTop + this._config.style.paddingBottom)
     });
 
     this._timecodedGroup.add(this._timecodedEventCatcher);
@@ -128,7 +130,7 @@ export class AudioTrackLane extends VttTimelineLane<AudioTrackLaneConfig, AudioT
     })
 
     if (this.vttUrl) {
-      this.loadVtt(this.vttUrl, this._config.axiosConfig).subscribe();
+      this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig)).subscribe();
     }
   }
 
@@ -301,9 +303,15 @@ export class AudioTrackLane extends VttTimelineLane<AudioTrackLaneConfig, AudioT
     }
 
     if (this._itemsMap.size > 0) {
+      let visibleTimeRange = this._timeline!.getVisibleTimeRange();
       for (let item of this._itemsMap.values()) {
-        let x = this._timeline!.timeToTimelinePosition(item.getAudioVttCue().startTime);
-        item.setPosition({x})
+        let cue = item.getAudioVttCue();
+        if ((cue.startTime >= visibleTimeRange.start && cue.startTime <= visibleTimeRange.end) || (cue.endTime >= visibleTimeRange.start && cue.endTime <= visibleTimeRange.end)) {
+          let x = this._timeline!.timeToTimelinePosition(cue.startTime);
+          item.setPosition({x})
+        } else {
+          item.destroy()
+        }
       }
     }
   }
