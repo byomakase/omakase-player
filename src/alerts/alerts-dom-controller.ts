@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { DomUtil } from '../util/dom-util';
-import { AlertsController } from './alerts-controller';
-import { Alert } from './model';
+import {DomUtil} from '../util/dom-util';
+import {AlertsController} from './alerts-controller';
+import {Alert} from './model';
 
 export class AlertsDomController {
   private _alertsController!: AlertsController;
@@ -54,7 +54,7 @@ export class AlertsDomController {
   removeAlertFromDom(alert: Alert) {
     const alertElement = DomUtil.getElementById<HTMLDivElement>(alert.id);
     if (alertElement) {
-        DomUtil.getElementByClass<HTMLDivElement>('omakase-player-alerts')?.removeChild(alertElement);
+      DomUtil.getElementByClass<HTMLDivElement>('omakase-player-alerts')?.removeChild(alertElement);
     }
     this.stackAlertsInDom();
   }
@@ -62,8 +62,8 @@ export class AlertsDomController {
   updateAlertInDom(alert: Alert) {
     const alertElement = DomUtil.getElementById<HTMLDivElement>(alert.id);
     if (alertElement) {
-        const textElement = DomUtil.getElementByClass<HTMLDivElement>('alert-text', alertElement);
-        textElement.innerText = alert.text;
+      const textElement = DomUtil.getElementByClass<HTMLDivElement>('alert-text', alertElement);
+      textElement.innerText = alert.text;
     }
     const alertIndex = this._alertsController.alerts.indexOf(alert);
     if (alertIndex < this._alertsController.alerts.length - 1) {
@@ -99,7 +99,7 @@ export class AlertsDomController {
   moveAlertToEndInDom(alert: Alert) {
     const alertElement = DomUtil.getElementById<HTMLDivElement>(alert.id);
     if (alertElement) {
-        DomUtil.getElementByClass<HTMLDivElement>('omakase-player-alerts')?.appendChild(alertElement);
+      DomUtil.getElementByClass<HTMLDivElement>('omakase-player-alerts')?.appendChild(alertElement);
     }
     this.stackAlertsInDom();
   }

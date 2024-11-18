@@ -21,11 +21,11 @@ import Decimal from 'decimal.js';
 import {BaseTimelineLane, TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle} from '../timeline-lane';
 import {filter, Subject, takeUntil} from 'rxjs';
 import {ClickEvent, MouseEnterEvent, MouseLeaveEvent, MouseMoveEvent, MouseOutEvent, MouseOverEvent} from '../../types';
-import {completeUnsubscribeSubjects} from '../../util/observable-util';
+import {completeUnsubscribeSubjects} from '../../util/rxjs-util';
 import {Timeline} from '../timeline';
 import {destroyer, nullifier} from '../../util/destroy-util';
 import {KonvaFactory} from '../../factory/konva-factory';
-import {VideoControllerApi} from '../../video/video-controller-api';
+import {VideoControllerApi} from '../../video';
 import {ScrubberLaneApi} from '../../api';
 import {konvaUnlistener} from '../../util/konva-util';
 
@@ -137,12 +137,18 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
       })
     })
 
-    this._videoController!.onVideoLoading$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.clearContent();
-    })
+    this._videoController!.onVideoLoaded$.pipe(filter(p => !!p && !(p.isAttaching || p.isDetaching)))
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: () => {
+          this.settleLayout()
+        }
+      })
 
-    this._videoController!.onVideoLoaded$.pipe(filter(p => !!p), takeUntil(this._destroyed$)).subscribe((event) => {
-      this.settleLayout();
+    this._videoController!.onVideoLoading$.pipe(filter(p => !(p.isAttaching || p.isDetaching)), takeUntil(this._destroyed$)).subscribe({
+      next: (event) => {
+        this.clearContent();
+      }
     })
   }
 

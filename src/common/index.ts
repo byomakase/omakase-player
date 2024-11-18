@@ -14,4 +14,5 @@
  * limitations under the License.
  */
 
-export type {ConfigWithOptionalStyle} from '../layout/konva-component';
+export {StyleAdapter} from './style-adapter';
+export type {Dimension, Position, RectMeasurement, Verticals, Horizontals, OnMeasurementsChange, HasRectMeasurement} from './measurement';

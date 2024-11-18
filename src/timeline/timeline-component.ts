@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 
-import {filter, Observable, Subject, takeUntil} from 'rxjs';
+import {concat, concatMap, filter, Observable, Subject, takeUntil} from 'rxjs';
 import {ClickEvent, MouseEnterEvent, MouseLeaveEvent} from '../types';
 import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle, KonvaComponent} from '../layout/konva-component';
 import Konva from 'konva';
-import {OnMeasurementsChange} from '../common/measurement';
+import {OnMeasurementsChange} from '../common';
 import {konvaUnlistener} from '../util/konva-util';
 import {WindowUtil} from '../util/window-util';
 import {ImageUtil} from '../util/image-util';
 import {KonvaFactory} from '../factory/konva-factory';
 import {isNullOrUndefined} from '../util/object-util';
+import {nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
 
 
 export interface TimelineNodeStyle {
@@ -314,7 +315,8 @@ export interface ImageButtonConfig extends TimelineNodeConfig<ImageButtonStyle>,
  * Timeline image button. Can be added  to timeline lane. {@link TimelineLaneApi}
  */
 export class ImageButton extends BaseTimelineNode<ImageButtonConfig, ImageButtonStyle> {
-  private _konvaImage?: Konva.Image;
+  protected _konvaImage?: Konva.Image;
+  protected _loadImageQueue = new Subject<ImageButtonImageConfig>();
 
   constructor(config: ConfigWithOptionalStyle<ImageButtonConfig>) {
     super({
@@ -325,11 +327,15 @@ export class ImageButton extends BaseTimelineNode<ImageButtonConfig, ImageButton
       },
     });
 
-    this.setImage(this.config).subscribe()
+    this._loadImageQueue.pipe(takeUntil(this._destroyed$))
+      .pipe(concatMap((config) => this.loadImage(config)))
+      .subscribe();
+
+    this.setImage(this.config)
   }
 
   private loadImage(imageButtonImageConfig: ImageButtonImageConfig): Observable<ImageButtonImageConfig | undefined> {
-    return new Observable<ImageButtonImageConfig>(o$ => {
+    return passiveObservable<ImageButtonImageConfig | undefined>(observer => {
       ImageUtil.createKonvaImage(imageButtonImageConfig.src).subscribe({
         next: (image) => {
           if (this._konvaImage) {
@@ -345,20 +351,18 @@ export class ImageButton extends BaseTimelineNode<ImageButtonConfig, ImageButton
 
           this._group.add(this._konvaImage);
 
-          o$.next({
+          nextCompleteObserver(observer, {
             src: imageButtonImageConfig.src,
             width: this._konvaImage.width(),
             height: this._konvaImage.height()
-          });
-          o$.complete();
+          })
         },
         error: (err) => {
           if (this._konvaImage) {
             this._konvaImage.destroy();
           }
           console.error(err);
-          o$.next();
-          o$.complete();
+          nextCompleteObserver(observer)
         }
       })
     })
@@ -366,10 +370,10 @@ export class ImageButton extends BaseTimelineNode<ImageButtonConfig, ImageButton
 
   /**
    * Sets new image to display
-   * @param value
+   * @param config
    */
-  setImage(value: ImageButtonImageConfig): Observable<ImageButtonImageConfig | undefined> {
-    return this.loadImage(value);
+  setImage(config: ImageButtonImageConfig) {
+    this._loadImageQueue.next(config);
   }
 }
 

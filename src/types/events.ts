@@ -14,13 +14,15 @@
  * limitations under the License.
  */
 
-import {MomentObservation, PeriodObservation} from './model';
+import {HelpMenuGroup, MomentObservation, PeriodObservation} from './model';
 import {Thumbnail} from '../timeline/thumbnail/thumbnail';
-import {CamelToSnakeCase} from './types';
-import {OmakaseTextTrack, OmakaseTextTrackCue} from './track';
-import {Marker} from '../timeline';
 import {OmakaseChartCue} from './chart';
-import {Video} from '../video';
+import {MarkerApi} from '../api/marker-api';
+import {CamelToSnakeCase} from './ts-types';
+import {OmakaseAudioTrack, OmakaseTextTrackCue, SubtitlesVttTrack} from './track';
+import {Video, VideoLoadOptions} from '../video';
+import {BufferedTimespan} from '../video/video-controller';
+import {AudioInputOutputNode, AudioMeterStandard, VideoSafeZone, VideoWindowPlaybackState} from '../video/model';
 
 export const OmakasePlayerEvents: OmakasePlayerEventsType = {
   OMAKASE_SUBTITLES_HIDE: 'omakaseSubtitlesHide',
@@ -40,7 +42,13 @@ export const OmakasePlayerEvents: OmakasePlayerEventsType = {
   OMAKASE_SUBTITLES_CREATE: 'omakaseSubtitlesCreate',
   OMAKASE_SUBTITLES_REMOVE: 'omakaseSubtitlesRemove',
   OMAKASE_SUBTITLES_SHOW: 'omakaseSubtitlesShow',
-  OMAKASE_TIMELINE_SCROLL: 'omakaseTimelineScroll'
+  OMAKASE_TIMELINE_SCROLL: 'omakaseTimelineScroll',
+  OMAKASE_MARKER_LIST_ACTION: 'omakaseMarkerListAction',
+  OMAKASE_MARKER_LIST_CLICK: 'omakaseMarkerListClick',
+  OMAKASE_MARKER_LIST_DELETE: 'omakaseMarkerListDelete',
+  OMAKASE_MARKER_LIST_UPDATE: 'omakaseMarkerListUpdate',
+  OMAKASE_MARKER_LIST_CREATE: 'omakaseMarkerListCreate',
+  OMAKASE_MARKER_LIST_INIT: 'omakaseMarkerListInit',
 }
 
 export type OmakasePlayerEventsType = OmakasePlayerEventsMappingType<OmakasePlayerEventMap>
@@ -49,11 +57,11 @@ export type OmakasePlayerEventsMappingType<T> = {
   [K in keyof T as Uppercase<CamelToSnakeCase<string & K>>]: K
 }
 
-export type OmakasePlayerEventMap = VideoEventMap & AudioEventMap & SubtitlesEventMap & TimelineEventMap
+export type OmakasePlayerEventMap = VideoEventMap & AudioEventMap & SubtitlesEventMap & TimelineEventMap & MarkerListEventMap
 
 export type VideoEventMap = {
   'omakaseVideoLoading': VideoLoadingEvent,
-  'omakaseVideoLoaded': VideoLoadedEvent,
+  'omakaseVideoLoaded': VideoLoadedEvent | undefined,
   'omakaseVideoPlay': VideoPlayEvent,
   'omakaseVideoPause': VideoPlayEvent,
   'omakaseVideoTimeChange': VideoTimeChangeEvent,
@@ -66,10 +74,11 @@ export type VideoEventMap = {
 
 export type AudioEventMap = {
   'omakaseAudioSwitched': AudioEvent,
+  // TODO omakaseAudioLoaded event
 }
 
 export type SubtitlesEventMap = {
-  'omakaseSubtitlesLoaded': SubtitlesLoadedEvent,
+  'omakaseSubtitlesLoaded': SubtitlesLoadedEvent | undefined,
   'omakaseSubtitlesCreate': SubtitlesCreateEvent,
   'omakaseSubtitlesRemove': SubtitlesEvent,
   'omakaseSubtitlesShow': SubtitlesEvent,
@@ -79,6 +88,15 @@ export type SubtitlesEventMap = {
 export type TimelineEventMap = {
   'omakaseTimelineScroll': TimelineScrollEvent,
   'omakaseTimelineZoom': TimelineZoomEvent
+}
+
+export type MarkerListEventMap = {
+  'omakaseMarkerListAction': MarkerListActionEvent,
+  'omakaseMarkerListClick': MarkerListClickEvent,
+  'omakaseMarkerListDelete': MarkerListDeleteEvent,
+  'omakaseMarkerListUpdate': MarkerListUpdateEvent,
+  'omakaseMarkerListInit': MarkerListInitEvent,
+  'omakaseMarkerListCreate': MarkerListCreateEvent,
 }
 
 export interface OmakaseEvent {
@@ -132,10 +150,16 @@ export interface VideoEvent extends OmakaseEvent {
 export interface VideoLoadingEvent extends VideoEvent {
   sourceUrl: string;
   frameRate: number;
+  options?: VideoLoadOptions;
+  isAttaching?: boolean;
+  isDetaching?: boolean;
 }
 
 export interface VideoLoadedEvent extends VideoEvent {
   video: Video;
+  videoLoadOptions?: VideoLoadOptions;
+  isAttaching?: boolean;
+  isDetaching?: boolean;
 }
 
 export interface VideoPlayEvent extends VideoEvent {
@@ -207,21 +231,46 @@ export interface VideoSeekedEvent extends VideoEvent {
 }
 
 export interface VideoBufferingEvent extends VideoEvent {
-  bufferedTimespans: {
-    start: number,
-    end: number
-  }[]
+  bufferedTimespans: BufferedTimespan[]
 }
 
 export interface VideoVolumeEvent extends VideoEvent {
   /**
    * Volume
    */
-  volume: number
+  volume: number;
+
+  /**
+   * Muted
+   */
+  muted: boolean;
+}
+
+export interface VideoPlaybackRateEvent extends VideoEvent {
+  /**
+   * Playback rate
+   */
+  playbackRate: number;
 }
 
 export interface VideoEndedEvent extends VideoEvent {
 
+}
+
+export interface VideoHelpMenuChangeEvent extends VideoEvent {
+  helpMenuGroups: HelpMenuGroup[]
+}
+
+export interface VideoFullscreenChangeEvent extends VideoEvent {
+  fullscreen: boolean
+}
+
+export interface VideoSafeZoneChangeEvent extends VideoEvent {
+  videoSafeZones: VideoSafeZone[]
+}
+
+export interface VideoWindowPlaybackStateChangeEvent extends VideoEvent {
+  videoWindowPlaybackState: VideoWindowPlaybackState
 }
 
 export type VideoErrorType = 'VIDEO_LOAD_ERROR' | 'VIDEO_ERROR'
@@ -233,10 +282,45 @@ export interface VideoErrorEvent extends VideoEvent {
 
 export interface AudioEvent extends OmakaseEvent {
 
+}
+
+export interface AudioLoadedEvent extends AudioEvent {
+
   /**
-   * Audio track. Type depends on VideoController implementation.
+   * Audio tracks
    */
-  audioTrack: any
+  audioTracks: OmakaseAudioTrack[]
+
+  /**
+   * Audio track
+   */
+  activeAudioTrack: OmakaseAudioTrack | undefined;
+}
+
+export interface AudioSwitchedEvent extends AudioEvent {
+
+  /**
+   * Audio track
+   */
+  activeAudioTrack: OmakaseAudioTrack
+}
+
+export interface AudioRoutingEvent extends AudioEvent {
+  audioInputOutputNodes: AudioInputOutputNode[][]
+}
+
+export interface AudioContextChangeEvent extends AudioEvent {
+  audioInputsNumber?: number;
+  audioOutputsNumber?: number;
+  audioInputOutputNodes: AudioInputOutputNode[][]
+}
+
+export interface AudioWorkletNodeCreatedEvent extends AudioEvent {
+  audioMeterStandard: AudioMeterStandard
+}
+
+export interface AudioPeakProcessorWorkletNodeMessageEvent extends AudioEvent {
+  data: any
 }
 
 // endregion
@@ -244,15 +328,16 @@ export interface AudioEvent extends OmakaseEvent {
 // region subtitles
 
 export interface SubtitlesEvent extends OmakaseEvent {
+  tracks: SubtitlesVttTrack[],
+  currentTrack: SubtitlesVttTrack | undefined
+}
+
+export interface SubtitlesLoadedEvent extends SubtitlesEvent {
 
 }
 
-export interface SubtitlesLoadedEvent extends OmakaseEvent {
+export interface SubtitlesCreateEvent extends SubtitlesEvent {
 
-}
-
-export interface SubtitlesCreateEvent extends OmakaseEvent {
-  textTrack: OmakaseTextTrack<OmakaseTextTrackCue>
 }
 
 export interface SubtitlesChartEvent extends OmakaseEvent {
@@ -334,7 +419,23 @@ export interface MarkerChangeEvent extends MarkerEvent {
 }
 
 export interface MarkerFocusEvent extends MarkerEvent {
-  marker: Marker;
+  marker: MarkerApi;
+}
+
+export interface MarkerCreateEvent extends MarkerEvent {
+  marker: MarkerApi;
+}
+
+export interface MarkerDeleteEvent extends MarkerEvent {
+  marker: MarkerApi;
+}
+
+export interface MarkerUpdateEvent extends MarkerEvent {
+  marker: MarkerApi;
+}
+
+export interface MarkerInitEvent extends MarkerEvent {
+  markers: MarkerApi[];
 }
 
 export interface MomentMarkerChangeEvent extends MarkerChangeEvent {
@@ -358,3 +459,38 @@ export interface ChartCueEvent extends ChartEvent {
 }
 
 // endregion
+
+// region marker list
+
+export interface MarkerListEvent extends OmakaseEvent {
+
+}
+
+export interface MarkerListClickEvent extends MarkerListEvent {
+  marker: MarkerApi
+}
+
+export interface MarkerListDeleteEvent extends MarkerListEvent {
+  marker: MarkerApi
+}
+
+export interface MarkerListUpdateEvent extends MarkerListEvent {
+  marker: MarkerApi
+}
+
+export interface MarkerListCreateEvent extends MarkerListEvent {
+  marker: MarkerApi
+}
+
+export interface MarkerListInitEvent extends MarkerListEvent {
+  markers: MarkerApi[]
+}
+
+export interface MarkerListActionEvent extends MarkerListEvent {
+  marker: MarkerApi
+  action: string
+}
+
+export interface ThumnbailVttUrlChangedEvent extends VideoEvent {
+  thumbnailVttUrl?: string
+}

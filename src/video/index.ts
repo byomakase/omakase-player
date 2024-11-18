@@ -15,6 +15,7 @@
  */
 
 export type {VideoController} from './video-controller'
-export type {VideoLoadOptions, PlaybackState} from './model';
-export {Video, PlaybackStateMachine} from './model';
+export type {Video, VideoLoadOptions, PlaybackState} from './model';
+export {PlaybackStateMachine} from './model';
+export type {VideoControllerApi} from './video-controller-api';
 

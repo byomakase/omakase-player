@@ -16,25 +16,24 @@
 
 export class BlobUtil {
 
-    private static _blobs: Set<string> = new Set();
+  private static _blobs: Set<string> = new Set();
 
-    static createBlob(blobParts: BlobPart[], mimeType?: string): Blob {
-     return mimeType ? new Blob(blobParts, {type: mimeType}) : new Blob(blobParts);
-   }
+  static createBlob(blobParts: BlobPart[], options?: BlobPropertyBag): Blob {
+    return new Blob(blobParts, options);
+  }
 
-   static createObjectURL(blob: Blob): string {
+  static createObjectURL(blob: Blob): string {
     const url = URL.createObjectURL(blob);
     this._blobs.add(url);
     return url;
-   }
+  }
 
-   static revokeObjectURL(url: string): void {
+  static revokeObjectURL(url: string): void {
     this._blobs.delete(url);
     return URL.revokeObjectURL(url);
-   }
+  }
 
-   static revokeAll(): void {
+  static revokeAll(): void {
     this._blobs.forEach((url) => this.revokeObjectURL(url));
-   }
- }
- 
+  }
+}

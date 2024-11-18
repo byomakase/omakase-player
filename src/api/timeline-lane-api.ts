@@ -15,9 +15,9 @@
  */
 
 import {Destroyable} from '../types';
-import {OnMeasurementsChange, RectMeasurement} from '../common/measurement';
+import {OnMeasurementsChange, Position, RectMeasurement} from '../common';
 import {Timeline, TimelineLaneComponentConfig, TimelineLaneStyle, TimelineNode} from '../timeline';
-import {VideoControllerApi} from '../video/video-controller-api';
+import {VideoControllerApi} from '../video';
 import {KonvaFlexGroup} from '../layout/konva-flex';
 import {Observable} from 'rxjs';
 
@@ -49,6 +49,16 @@ export interface TimelineLaneApi extends Destroyable, OnMeasurementsChange {
    * @internal
    */
   getTimecodedRect(): RectMeasurement;
+
+  /**
+   * @internal
+   */
+  getTimecodedPointerPosition(): Position | undefined;
+
+  /**
+   * @internal
+   */
+  getTimecodedPointerPositionTime(): number;
 
   /**
    * Clears Timeline lane content

@@ -18,16 +18,16 @@ import Konva from 'konva';
 import {BaseMarker, MarkerConfig} from './marker';
 import {PeriodMarkerChangeEvent, PeriodObservation} from '../../types';
 import {BaseMarkerHandle, MarkerHandleConfig} from './marker-handle';
-import {Position, Verticals} from '../../common/measurement';
+import {Position, Verticals} from '../../common';
 import {Timeline} from '../timeline';
 import {MarkerLane} from './marker-lane';
 import {takeUntil} from 'rxjs';
-import {ConfigWithOptionalStyle} from '../../common';
 import {z} from 'zod';
 import {isNullOrUndefined} from '../../util/object-util';
 import {MarkerUtil} from './marker-util';
 import {MARKER_STYLE_DEFAULT, MarkerHandleStyle, MarkerStyle} from './marker-types';
 import {KonvaFactory} from '../../factory/konva-factory';
+import {ConfigWithOptionalStyle} from '../../layout';
 
 // region marker handle
 export interface PeriodMarkerHandleStyle extends MarkerHandleStyle {

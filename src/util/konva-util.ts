@@ -15,7 +15,6 @@
  */
 
 import Konva from 'konva';
-import {DestroyUtil} from './destroy-util';
 
 export class KonvaUtil {
   public static unlisten(...nodes: (Konva.Node | undefined)[]) {

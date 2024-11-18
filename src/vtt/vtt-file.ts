@@ -16,12 +16,41 @@
 
 import {from, map, Observable} from 'rxjs';
 import {httpGet} from '../http';
-import {OmakaseRemoteVttFile, OmakaseVttCue, OmakaseVttCueExtension, OmakaseVttFile, OmakaseWebVttExtensionVersion} from '../types';
+import {OmakaseVttCue, OmakaseVttCueExtension} from '../types';
 import {AxiosRequestConfig} from 'axios';
 import {VttCueParsed, VttFileParsed} from './model';
 import {VttUtil} from './vtt-util';
 import {StringUtil} from '../util/string-util';
 import {VttLoadOptions} from '../api/vtt-aware-api';
+
+export enum OmakaseWebVttExtensionVersion {
+  V1_0 = 'V1.0'
+}
+
+export interface OmakaseRemoteVttFile<T extends OmakaseVttCue> extends OmakaseVttFile<T> {
+  get url(): string;
+}
+
+export interface OmakaseVttFile<T extends OmakaseVttCue> {
+  get extensionVersion(): OmakaseWebVttExtensionVersion | undefined;
+
+  get cues(): T[];
+
+  get hasCues(): boolean;
+
+  /**
+   * @returns first cue that intersects given time frame
+   * @param time
+   */
+  findCue(time: number): T | undefined;
+
+  /**
+   * @returns cues that intersect given time frame
+   * @param startTime
+   * @param endTime
+   */
+  findCues(startTime: number, endTime: number | undefined): T[]
+}
 
 export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements OmakaseVttFile<T> {
   protected _extensionVersion?: OmakaseWebVttExtensionVersion;
@@ -131,6 +160,11 @@ export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements Oma
     return [...resultCues.values()];
   }
 
+  findNearestCue(time: number): T | undefined {
+    const cues = this._cues.sort((a, b) => this.getCueDistance(a, time) - this.getCueDistance(b, time))
+    return cues[0];
+  }
+
   /**
    * Binary search for closest cue index in _cuesStartTimesSorted
    * @param time
@@ -141,6 +175,7 @@ export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements Oma
     let endIndex = this._cuesStartTimesSorted.length - 1;
     while (startIndex <= endIndex) {
       const mid = Math.floor((startIndex + endIndex) / 2);
+
       if (this._cuesStartTimesSorted[mid] === time) {
         return mid;
       } else if (this._cuesStartTimesSorted[mid] < time) {
@@ -149,13 +184,36 @@ export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements Oma
         endIndex = mid - 1;
       }
     }
-    return endIndex;
+
+    // Handle boundary cases and return the closest index
+    if (startIndex >= this._cuesStartTimesSorted.length) {
+      return endIndex; // Time is beyond the largest cue
+    }
+
+    if (endIndex < 0) {
+      return startIndex; // Time is smaller than the smallest cue
+    }
+
+    // Return the closest between startIndex and endIndex
+    return (time - this._cuesStartTimesSorted[endIndex] <= this._cuesStartTimesSorted[startIndex] - time)
+      ? endIndex
+      : startIndex;
   }
 
   private refreshSorted() {
     [this._cuesStartTimesSorted].forEach(cuesKeys => cuesKeys.sort((a, b) => {
       return a - b;
     }));
+  }
+
+  private getCueDistance(cue: T, time: number) {
+    if (cue.startTime <= time && cue.endTime >= time) {
+      return 0;
+    } else if (cue.startTime > time) {
+      return cue.startTime - time;
+    } else {
+      return time - cue.endTime;
+    }
   }
 
 }

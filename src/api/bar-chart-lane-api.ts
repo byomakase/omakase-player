@@ -1,4 +1,3 @@
-import { BarChartVttCue } from './../types/vtt';
 /*
  * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
@@ -15,8 +14,10 @@ import { BarChartVttCue } from './../types/vtt';
  * limitations under the License.
  */
 
-import { Api } from './api';
-import { BarChartVttFile } from '../vtt/chart-vtt-file';
-import { VttAwareApi } from './vtt-aware-api';
+import {Api} from './api';
+import {BarChartVttFile} from '../vtt';
+import {VttAwareApi} from './vtt-aware-api';
+import {BarChartVttCue} from '../types';
 
-export interface BarChartLaneApi extends Api, VttAwareApi<BarChartVttCue, BarChartVttFile> {}
+export interface BarChartLaneApi extends Api, VttAwareApi<BarChartVttCue, BarChartVttFile> {
+}

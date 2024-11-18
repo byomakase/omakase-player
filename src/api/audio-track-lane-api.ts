@@ -1,4 +1,3 @@
-import { AudioVttCue } from './../types/vtt';
 /*
  * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
@@ -15,8 +14,10 @@ import { AudioVttCue } from './../types/vtt';
  * limitations under the License.
  */
 
-import { Api } from './api';
-import { AudioVttFile } from '../vtt';
-import { VttAwareApi } from './vtt-aware-api';
+import {Api} from './api';
+import {AudioVttFile} from '../vtt';
+import {VttAwareApi} from './vtt-aware-api';
+import {AudioVttCue} from '../types';
 
-export interface AudioTrackLaneApi extends Api, VttAwareApi<AudioVttCue, AudioVttFile> {}
+export interface AudioTrackLaneApi extends Api, VttAwareApi<AudioVttCue, AudioVttFile> {
+}

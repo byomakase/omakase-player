@@ -17,11 +17,11 @@
 import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle} from '../../layout/konva-component';
 import Konva from 'konva';
 import {Dimension, HasRectMeasurement, Horizontals, OnMeasurementsChange, Position, RectMeasurement} from '../../common/measurement';
-import {Comparable, OmakaseTextTrackCue, SubtitlesChartEvent, WithOptionalPartial} from '../../types';
+import {Comparable, OmakaseTextTrackCue, SubtitlesChartEvent} from '../../types';
 import {nullifier} from '../../util/destroy-util';
 import {KonvaFactory} from '../../factory/konva-factory';
-import { Subject } from 'rxjs/internal/Subject';
-import { SubtitlesLane } from './subtitles-lane';
+import {Subject} from 'rxjs/internal/Subject';
+import {SubtitlesLane} from './subtitles-lane';
 
 export interface SubtitlesLaneItemStyle {
   height: number;
@@ -31,14 +31,14 @@ export interface SubtitlesLaneItemStyle {
 }
 
 export interface SubtitlesLaneItemConfig extends ComponentConfig<SubtitlesLaneItemStyle> {
-  lane: SubtitlesLane;
-  cues: Array<OmakaseTextTrackCue>;
+  subtitlesLane: SubtitlesLane;
+  cues: OmakaseTextTrackCue[];
   x: number;
   width: number;
   listening?: boolean;
 }
 
-const configDefault: Omit<SubtitlesLaneItemConfig, 'lane' | 'cues' | 'x' | 'width'> = {
+const configDefault: Omit<SubtitlesLaneItemConfig, 'subtitlesLane' | 'cues' | 'x' | 'width'> = {
   listening: false,
   style: {
     height: 20,
@@ -53,9 +53,9 @@ export class SubtitlesLaneItem extends BaseKonvaComponent<SubtitlesLaneItemConfi
 
   private _group: Konva.Group;
   private _bgRect: Konva.Rect;
-  private _cues: Array<OmakaseTextTrackCue>;
+  private _cues: OmakaseTextTrackCue[];
 
-  private _lane: SubtitlesLane;
+  private _subtitlesLane: SubtitlesLane;
 
   constructor(config: ConfigWithOptionalStyle<SubtitlesLaneItemConfig>,) {
     super({
@@ -67,7 +67,7 @@ export class SubtitlesLaneItem extends BaseKonvaComponent<SubtitlesLaneItemConfi
       },
     });
 
-    this._lane = this.config.lane;
+    this._subtitlesLane = this.config.subtitlesLane;
 
     this._cues = this.config.cues;
 
@@ -95,26 +95,17 @@ export class SubtitlesLaneItem extends BaseKonvaComponent<SubtitlesLaneItemConfi
     this._group.add(this._bgRect)
 
     this._group.on('click', (event) => {
-      let cue = this.findCue();
+      let cue = this.findCueOnTime(this._subtitlesLane.getTimecodedPointerPositionTime());
       if (cue) {
         this.onClick$.next({
           cue: cue
         });
-      } 
+      }
     });
   }
 
-  protected findCue(): OmakaseTextTrackCue | undefined {
-    if (!this._lane) {
-      throw new Error("Lane does not exist!");
-    }
-
-    let timelinePositionX = this._lane.getTimeline().getTimecodedFloatingRelativePointerPosition().x;
-    let timelinePositionTime = this._lane.getTimeline().timelinePositionToTime(timelinePositionX);
-    
-    let subCue = this._cues.find(cue => timelinePositionTime >= cue.startTime && timelinePositionTime <= cue.endTime);
-
-    return subCue;
+  protected findCueOnTime(timelinePositionTime: number): OmakaseTextTrackCue | undefined {
+    return this._cues.find(cue => timelinePositionTime >= cue.startTime && timelinePositionTime <= cue.endTime);
   }
 
   protected provideKonvaNode(): Konva.Group {
@@ -155,6 +146,10 @@ export class SubtitlesLaneItem extends BaseKonvaComponent<SubtitlesLaneItemConfi
     this.onMeasurementsChange();
   }
 
+  getCues(): OmakaseTextTrackCue[] {
+    return this._cues;
+  }
+
   setVisible(visible: boolean) {
     this.style = {
       visible: visible
@@ -162,28 +157,8 @@ export class SubtitlesLaneItem extends BaseKonvaComponent<SubtitlesLaneItemConfi
     this._group.visible(visible);
   }
 
-  getCues(): Array<OmakaseTextTrackCue> {
-    return this._cues;
-  }
-
-  setCues(textTrackCues: Array<OmakaseTextTrackCue>) {
-    this._cues = textTrackCues;
-  }
-
-  getFirstCue(): OmakaseTextTrackCue {
-    return this.getCues()[0];
-  }
-
-  getLastCue(): OmakaseTextTrackCue {
-    return this.getCues()[this.getCues().length - 1];
-  }
-
   compareTo(o: SubtitlesLaneItem): number {
-    return this._cues && o ? (
-      this.getFirstCue().id === o.getFirstCue().id
-      && this.getFirstCue().startTime === o.getFirstCue().startTime
-      && this.getLastCue().endTime === o.getLastCue().endTime
-    ) ? 0 : -1 : -1;
+    return this._cues && o ? JSON.stringify(this.getCues()) === JSON.stringify(o.getCues()) ? 0 : -1 : -1;
   }
 
   override destroy() {

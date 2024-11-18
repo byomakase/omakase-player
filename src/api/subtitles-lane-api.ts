@@ -1,4 +1,3 @@
-import { SubtitlesVttCue } from './../types/vtt';
 /*
  * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
@@ -15,8 +14,10 @@ import { SubtitlesVttCue } from './../types/vtt';
  * limitations under the License.
  */
 
-import { Api } from './api';
-import { SubtitlesVttFile } from '../vtt';
-import { VttAwareApi } from './vtt-aware-api';
+import {Api} from './api';
+import {SubtitlesVttFile} from '../vtt';
+import {VttAwareApi} from './vtt-aware-api';
+import {SubtitlesVttCue} from '../types';
 
-export interface SubtitlesLaneApi extends Api, VttAwareApi<SubtitlesVttCue, SubtitlesVttFile> {}
+export interface SubtitlesLaneApi extends Api, VttAwareApi<SubtitlesVttCue, SubtitlesVttFile> {
+}

@@ -15,7 +15,7 @@
  */
 
 import {SubtitlesController} from './subtitles-controller';
-import {VideoControllerApi} from '../video/video-controller-api';
+import {VideoControllerApi} from '../video';
 
 export class SubtitlesHlsController extends SubtitlesController {
 

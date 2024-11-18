@@ -20,9 +20,8 @@ import {Timeline} from '../timeline';
 import {TextLabel} from '../timeline-component';
 import {KonvaComponentFlexContentNode} from '../../layout/konva-component-flex';
 import {FlexSpacingBuilder} from '../../layout/flex-node';
-import {VideoControllerApi} from '../../video/video-controller-api';
+import {VideoControllerApi} from '../../video';
 import {KonvaFactory} from '../../factory/konva-factory';
-import Konva from 'konva';
 
 export interface LabelLaneConfig extends TimelineLaneConfig<LabelLaneStyle> {
   text: string;

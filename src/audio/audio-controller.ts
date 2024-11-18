@@ -15,30 +15,72 @@
  */
 
 import {AudioApi} from '../api';
-import {Observable, Subject} from 'rxjs';
-import {AudioEvent, Destroyable} from '../types';
-import {VideoControllerApi} from '../video/video-controller-api';
+import {BehaviorSubject, Observable, Subject} from 'rxjs';
+import {AudioContextChangeEvent, AudioLoadedEvent, AudioRoutingEvent, AudioSwitchedEvent, AudioPeakProcessorWorkletNodeMessageEvent, Destroyable, OmakaseAudioTrack} from '../types';
+import {VideoControllerApi} from '../video';
+import {AudioInputOutputNode, AudioMeterStandard} from '../video/model';
 
 export class AudioController implements AudioApi, Destroyable {
-  public onAudioSwitched$: Observable<AudioEvent> = new Subject<AudioEvent>();
+  public readonly onAudioLoaded$: BehaviorSubject<AudioLoadedEvent | undefined> = new BehaviorSubject<AudioLoadedEvent | undefined>(void 0);
+  public readonly onAudioSwitched$: Observable<AudioSwitchedEvent> = new Subject<AudioSwitchedEvent>();
+  public readonly onAudioContextChange$: Observable<AudioContextChangeEvent> = new Subject<AudioContextChangeEvent>();
+  public readonly onAudioRouting$: Observable<AudioRoutingEvent> = new Subject<AudioRoutingEvent>();
+  public readonly onAudioPeakProcessorWorkletNodeMessage$: Observable<AudioPeakProcessorWorkletNodeMessageEvent> = new Subject<AudioPeakProcessorWorkletNodeMessageEvent>();
 
   protected _videoController: VideoControllerApi;
 
   constructor(videoController: VideoControllerApi) {
     this._videoController = videoController;
-    this.onAudioSwitched$ = videoController.onAudioSwitched$;
+
+    this.onAudioLoaded$ = this._videoController.onAudioLoaded$;
+    this.onAudioSwitched$ = this._videoController.onAudioSwitched$;
+    this.onAudioContextChange$ = this._videoController.onAudioContextChange$;
+    this.onAudioRouting$ = this._videoController.onAudioRouting$;
+    this.onAudioPeakProcessorWorkletNodeMessage$ = this._videoController.onAudioPeakProcessorWorkletNodeMessage$;
   }
 
-  getAudioTracks(): any[] {
+  getActiveAudioTrack(): OmakaseAudioTrack | undefined {
+    return this._videoController.getActiveAudioTrack();
+  }
+
+  getAudioTracks(): OmakaseAudioTrack[] {
     return this._videoController.getAudioTracks();
   }
 
-  getCurrentAudioTrack(): any {
-    return this._videoController.getCurrentAudioTrack();
+  setActiveAudioTrack(id: string): Observable<void> {
+    return this._videoController.setActiveAudioTrack(id);
   }
 
-  setAudioTrack(audioTrackId: number) {
-    this._videoController.setAudioTrack(audioTrackId);
+  getAudioContext(): AudioContext | undefined {
+    return this._videoController.getAudioContext();
+  }
+
+  getMediaElementAudioSourceNode(): MediaElementAudioSourceNode | undefined {
+    return this._videoController.getMediaElementAudioSourceNode();
+  }
+
+  createAudioContext(inputsNumber: number, outputsNumber?: number): Observable<void> {
+    return this._videoController.createAudioContext(inputsNumber, outputsNumber);
+  }
+
+  createAudioContextWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void> {
+    return this._videoController.createAudioContextWithOutputsResolver(inputsNumber, outputsNumberResolver);
+  }
+
+  getAudioInputOutputNodes(): AudioInputOutputNode[][] {
+    return this._videoController.getAudioInputOutputNodes();
+  }
+
+  routeAudioInputOutputNode(newAudioInputOutputNode: AudioInputOutputNode): Observable<void> {
+    return this._videoController.routeAudioInputOutputNode(newAudioInputOutputNode);
+  }
+
+  routeAudioInputOutputNodes(newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void> {
+    return this._videoController.routeAudioInputOutputNodes(newAudioInputOutputNodes);
+  }
+
+  createAudioPeakProcessorWorkletNode(audioMeterStandard: AudioMeterStandard): Observable<void> {
+    return this._videoController.createAudioPeakProcessorWorkletNode(audioMeterStandard);
   }
 
   destroy() {

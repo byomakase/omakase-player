@@ -17,11 +17,10 @@
 import Konva from 'konva';
 import {TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle, VTT_DOWNSAMPLE_CONFIG_DEFAULT} from '../timeline-lane';
 import {MarkerLaneApi} from '../../api';
-import {ConfigWithOptionalStyle} from '../../common';
 import {PeriodMarker, PeriodMarkerConfig} from './period-marker';
 import {MomentMarker, MomentMarkerConfig} from './moment-marker';
-import {filter, Subject, take, takeUntil} from 'rxjs';
-import {MarkerFocusEvent, MarkerVttCue} from '../../types';
+import {MarkerCreateEvent, MarkerDeleteEvent, MarkerFocusEvent, MarkerInitEvent, MarkerUpdateEvent, MarkerVttCue} from '../../types';
+import {filter, Subject, take, takeUntil, zip} from 'rxjs';
 import {Timeline} from '../timeline';
 import {Marker} from './marker';
 import {MarkerVttFile} from '../../vtt';
@@ -29,10 +28,11 @@ import {destroyer} from '../../util/destroy-util';
 import {AxiosRequestConfig} from 'axios';
 import Decimal from 'decimal.js';
 import {MARKER_STYLE_DEFAULT, MarkerStyle} from './marker-types';
-import {VideoControllerApi} from '../../video/video-controller-api';
+import {VideoControllerApi} from '../../video';
 import {VttAdapter, VttAdapterConfig} from '../../common/vtt-adapter';
 import {VttTimelineLane, VttTimelineLaneConfig} from '../vtt-timeline-lane';
 import {KonvaFactory} from '../../factory/konva-factory';
+import {ConfigWithOptionalStyle} from '../../layout';
 
 export interface MarkerLaneConfig extends VttTimelineLaneConfig<MarkerLaneStyle>, VttAdapterConfig<MarkerVttFile> {
   axiosConfig?: AxiosRequestConfig;
@@ -55,6 +55,10 @@ const configDefault: MarkerLaneConfig = {
 
 export class MarkerLane extends VttTimelineLane<MarkerLaneConfig, MarkerLaneStyle, MarkerVttCue, MarkerVttFile> implements MarkerLaneApi {
   public readonly onMarkerFocus$: Subject<MarkerFocusEvent> = new Subject<MarkerFocusEvent>();
+  public readonly onMarkerCreate$: Subject<MarkerCreateEvent> = new Subject<MarkerCreateEvent>();
+  public readonly onMarkerDelete$: Subject<MarkerDeleteEvent> = new Subject<MarkerDeleteEvent>();
+  public readonly onMarkerUpdate$: Subject<MarkerUpdateEvent> = new Subject<MarkerUpdateEvent>();
+  public readonly onMarkerInit$: Subject<MarkerInitEvent> = new Subject<MarkerInitEvent>();
 
   protected readonly _vttAdapter: VttAdapter<MarkerVttFile> = new VttAdapter(MarkerVttFile);
 
@@ -89,7 +93,7 @@ export class MarkerLane extends VttTimelineLane<MarkerLaneConfig, MarkerLaneStyl
     this._timeline!.addToTimecodedFloatingContent(this._timecodedSpanningGroup, 5);
 
     this._vttAdapter.vttFileLoaded$.pipe(takeUntil(this._destroyed$)).subscribe({
-      next: () => {
+      next: (vttFile) => {
         this._videoController!.onVideoLoaded$.pipe(filter(p => !!p), take(1), takeUntil(this._destroyed$)).subscribe({
           next: (event) => {
             this.createEntities();
@@ -98,12 +102,22 @@ export class MarkerLane extends VttTimelineLane<MarkerLaneConfig, MarkerLaneStyl
       }
     });
 
-    this._videoController!.onVideoLoading$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.clearContent();
+    zip([this._videoController!.onVideoLoaded$.pipe(filter(p => !!p && !(p.isAttaching || p.isDetaching))), this._vttAdapter.vttFileLoaded$])
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: () => {
+          this.createEntities()
+        }
+      })
+
+    this._videoController!.onVideoLoading$.pipe(filter(p => !(p.isAttaching || p.isDetaching)), takeUntil(this._destroyed$)).subscribe({
+      next: (event) => {
+        this.clearContent();
+      }
     })
 
     if (this.vttUrl) {
-      this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig)).subscribe();
+      this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig));
     }
   }
 
@@ -142,6 +156,10 @@ export class MarkerLane extends VttTimelineLane<MarkerLaneConfig, MarkerLaneStyl
     this._timecodedSpanningGroup?.destroyChildren();
   }
 
+  get name(): string {
+    return this._description ?? '';
+  }
+
   createMomentMarker(config: ConfigWithOptionalStyle<MomentMarkerConfig>): MomentMarker {
     return this.addMarker(new MomentMarker(config)) as MomentMarker;
   }
@@ -173,10 +191,22 @@ export class MarkerLane extends VttTimelineLane<MarkerLaneConfig, MarkerLaneStyl
       this.focusMarker(marker.id);
     })
 
+    marker.onDestroy$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
+      this.onMarkerDelete$.next({ marker });
+    })
+
+    if (marker instanceof PeriodMarker) {
+      marker.onChange$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
+        this.onMarkerUpdate$.next({ marker });
+      })
+    }
+
     this._markers.push(marker);
     this._markersById.set(marker.id, marker);
 
     this._timecodedSpanningGroup!.add(marker.konvaNode)
+
+    this.onMarkerCreate$.next({ marker });
 
     return marker;
   }
@@ -245,6 +275,40 @@ export class MarkerLane extends VttTimelineLane<MarkerLaneConfig, MarkerLaneStyl
     return this._markerInFocus;
   }
 
+  toggleMarker(markerId: string) {
+    const marker = this._markers.find(m => m.id === markerId);
+    if (!marker) {
+      return;
+    }
+    const activeMarker = this._markers.find((marker) => marker.style.renderType === 'spanning');
+      if (activeMarker) {
+        activeMarker.style = {
+          ...activeMarker.style,
+          renderType: 'lane',
+        };
+      }
+      if (activeMarker?.id !== markerId) {
+        marker.style = {
+          ...marker.style,
+          renderType: 'spanning',
+        };
+      }
+  }
+
+  updateMarker(markerId: string, updateData: Partial<Marker>) {
+    const marker = this._markers.find(marker => marker.id === markerId);
+    if (!marker) {
+      return;
+    }
+    const { timeObservation, ...otherData } = updateData;
+    Object.assign(marker, otherData);
+    if (timeObservation !== undefined) {
+      marker.timeObservation = timeObservation;
+      marker.refreshTimelinePosition()
+    }
+    this.onMarkerUpdate$.next({ marker });
+  }
+
   private moveToTop(marker: Marker) {
     if (marker) {
       this._timecodedSpanningGroup!.moveToTop();
@@ -304,6 +368,9 @@ export class MarkerLane extends VttTimelineLane<MarkerLaneConfig, MarkerLaneStyl
         }
       }
     })
+
+    this.onMarkerInit$.next({ markers: this._markers });
+
   }
 
   override destroy() {

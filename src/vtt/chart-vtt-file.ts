@@ -42,7 +42,7 @@ export abstract class ChartVttFile<T extends LineChartVttCue | BarChartVttCue | 
         return measurements;
       }
     }, {} as any);
-    
+
     return {
       index: index,
       id: `SAMPLED_${index}`,

@@ -15,58 +15,103 @@
  */
 
 import {Timeline, TimelineConfig} from './timeline';
-import {filter, first, forkJoin, Observable, Subject, takeUntil} from 'rxjs';
-import {AudioApi, OmakasePlayerApi, SubtitlesApi, TimelineApi, VideoApi} from './api';
+import {forkJoin, Observable, Subject, takeUntil} from 'rxjs';
+import {AlertsApi, AudioApi, MarkerListApi, OmakasePlayerApi, SubtitlesApi, TimelineApi, VideoApi} from './api';
 import {VIDEO_HLS_CONTROLLER_CONFIG_DEFAULT, VideoHlsController} from './video/video-hls-controller';
 import {SubtitlesController} from './subtitles/subtitles-controller';
 import EventEmitter from 'eventemitter3';
 import {OmakaseEventKey, OmakaseEventListener} from './events';
 import {Destroyable, OmakasePlayerEventMap, OmakasePlayerEvents, OmakasePlayerEventsType} from './types';
 import {AudioController} from './audio/audio-controller';
-import {ConfigWithOptionalStyle} from './common';
 // we need to include styles in compilation process, thus import them
 import './../style/omakase-player.scss'
-import {nextCompleteVoidSubject} from './util/observable-util';
-import {VideoControllerApi} from './video/video-controller-api';
+import {nextCompleteSubject} from './util/rxjs-util';
+import {Video, VideoControllerApi, VideoLoadOptions} from './video';
 import {destroyer, nullifier} from './util/destroy-util';
 import {HlsConfig} from 'hls.js';
-import {VIDEO_CONTROLLER_CONFIG_DEFAULT} from './video/video-controller';
 import {YogaProvider} from './common/yoga-provider';
-import {Video, VideoLoadOptions} from './video';
-import {SubtitlesHlsController} from './subtitles/subtitles-hls-controller';
 import {VideoNativeController} from './video/video-native-controller';
 import {AlertsController} from './alerts/alerts-controller';
-import {AlertsApi} from './api/alerts-api';
 import {BlobUtil} from './util/blob-util';
+import {DetachableVideoController} from './video/detachable-video-controller';
 import {VTT_DOWNSAMPLE_CONFIG_DEFAULT} from './timeline/timeline-lane';
+import {MediaChromeVisibility, VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT, VideoDomController} from './video/video-dom-controller';
+import {VideoDomControllerApi} from './video/video-dom-controller-api';
+import {DetachedVideoController} from './video/detached-video-controller';
+import {ConfigWithOptionalStyle} from './layout';
+import {MarkerList, MarkerListConfig} from './marker-list/marker-list';
+import {AuthUtil} from './util/auth-util';
+import { AuthenticationData } from './authentication/model';
 
 export interface OmakasePlayerConfig {
   playerHTMLElementId?: string;
+  mediaChromeHTMLElementId?: string;
   crossorigin?: 'anonymous' | 'use-credentials',
-  hls?: Partial<HlsConfig>;
+
+  /**
+   * HLS.js configuration
+   */
+  hls?: Partial<HlsConfig>,
+
   vttDownsamplePeriod?: number;
+
+  /**
+   *  Is this OmakasePlayer instance a detached player instance. Property is set on detached player.
+   */
+  detachedPlayer?: boolean,
+
+  /**
+   *  URL where detached player resides. Property is set on non-detached (local) player side.
+   */
+  detachedPlayerUrl?: string,
+
+  /**
+   *  Authentication data for HLS.js, VTT and thumbnail image requests
+   */
+  authentication?: AuthenticationData,
+
+  /**
+   *  Show player with or without media chrome controls
+   */
+  mediaChrome?: MediaChromeVisibility,
+
+  /**
+   *  VTT url for the thumbnails (used for preview in media chrome time range)
+   */
+  thumbnailVttUrl?: string,
+
+  /**
+   *  Function to get thumbnail url from time (used for preview in media chrome time range)
+   */
+  thumbnailFn?: (time: number) => string | undefined,
 }
 
 const configDefault: OmakasePlayerConfig = {
-  playerHTMLElementId: VIDEO_CONTROLLER_CONFIG_DEFAULT.playerHTMLElementId,
-  crossorigin: VIDEO_CONTROLLER_CONFIG_DEFAULT.crossorigin,
+  playerHTMLElementId: VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT.playerHTMLElementId,
+  crossorigin: VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT.crossorigin,
   hls: {
     ...VIDEO_HLS_CONTROLLER_CONFIG_DEFAULT.hls
-  }
+  },
+  detachedPlayer: false,
+  mediaChrome: 'fullscreen-only'
 }
 
 export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
+  public static instance: OmakasePlayerApi;
+
   private readonly _config: OmakasePlayerConfig;
-  // controllers
+
+  private readonly _videoDomController: VideoDomControllerApi;
+  private readonly _alertsController: AlertsApi;
+
   private _videoController: VideoControllerApi;
   private _audioController: AudioController;
   private _subtitlesController: SubtitlesController;
-  private _alertsController: AlertsController;
+
+  private _timeline?: Timeline;
 
   private _eventEmitter = new EventEmitter();
   private _destroyed$ = new Subject<void>();
-
-  private _timeline?: Timeline;
 
   constructor(config?: OmakasePlayerConfig) {
     this._config = config ? {
@@ -76,28 +121,13 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
       ...configDefault,
     };
 
-    let loader: 'hls' | 'native' = 'hls'; // for now lets just use HLS
-
-    if (loader === 'hls') {
-      this._videoController = new VideoHlsController({
-        playerHTMLElementId: this._config.playerHTMLElementId,
-        crossorigin: this._config.crossorigin,
-        hls: this._config.hls
-      });
-    } else {
-      this._videoController = new VideoNativeController({
-        playerHTMLElementId: this._config.playerHTMLElementId,
-        crossorigin: this._config.crossorigin
-      });
+    if (this._config.detachedPlayer && !config?.mediaChrome) {
+      this._config.mediaChrome = 'enabled';
     }
 
-    this._audioController = new AudioController(this._videoController);
+    OmakasePlayer.instance = this;
 
-    if (loader === 'hls') {
-      this._subtitlesController = new SubtitlesHlsController(this._videoController);
-    } else {
-      this._subtitlesController = new SubtitlesController(this._videoController);
-    }
+    AuthUtil.authentication = this._config.authentication;
 
     if (config?.vttDownsamplePeriod) {
       VTT_DOWNSAMPLE_CONFIG_DEFAULT.downsamplePeriod = config.vttDownsamplePeriod;
@@ -105,22 +135,55 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
 
     this._alertsController = new AlertsController();
 
+    this._videoDomController = new VideoDomController({
+      playerHTMLElementId: this._config.playerHTMLElementId,
+      crossorigin: this._config.crossorigin,
+      detachedPlayer: this._config.detachedPlayer,
+      mediaChrome: this._config.mediaChrome,
+      mediaChromeHTMLElementId: this._config.mediaChromeHTMLElementId,
+      thumbnailVttUrl: this._config.thumbnailVttUrl,
+      thumbnailFn: this._config.thumbnailFn
+    })
+
+    let createLocalVideoController = () => {
+      let loader: 'hls' | 'native' = 'hls'; // for now lets just use HLS
+
+      if (loader === 'hls') {
+        return new VideoHlsController({
+          hls: this._config.hls
+        }, this._videoDomController);
+      } else {
+        return new VideoNativeController({}, this._videoDomController);
+      }
+    }
+
+    if (this._config.detachedPlayer) {
+      this._videoController = new DetachedVideoController(createLocalVideoController());
+    } else {
+      this._videoController = new DetachableVideoController({
+        detachedPlayerUrl: this._config.detachedPlayerUrl,
+        thumbnailVttUrl: this._config.thumbnailVttUrl
+      }, createLocalVideoController());
+    }
+
+    this._videoDomController.attachVideoController(this._videoController);
+
+    this._audioController = new AudioController(this._videoController);
+    this._subtitlesController = new SubtitlesController(this._videoController);
+
     this.bindEventHandlers();
   }
 
+  setAuthentication(authentication: AuthenticationData) {
+    AuthUtil.authentication = authentication;
+  }
+
+  setThumbnailVttUrl(thumbnailVttUrl: string) {
+    this._videoController.loadThumbnailVttUrl(thumbnailVttUrl);
+  }
+
   loadVideo(videoSourceUrl: string, frameRate: number | string, options?: VideoLoadOptions): Observable<Video> {
-    return new Observable<Video>(o$ => {
-      this._videoController.loadVideo(videoSourceUrl, frameRate, options).pipe(first()).subscribe({
-        next: video => {
-          o$.next(video);
-          o$.complete();
-        },
-        error: (error) => {
-          o$.error(error);
-          o$.complete();
-        }
-      })
-    })
+    return this._videoController.loadVideo(videoSourceUrl, frameRate, options)
   }
 
   createTimeline(config: Partial<ConfigWithOptionalStyle<TimelineConfig>>): Observable<TimelineApi> {
@@ -157,6 +220,51 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
     })
   }
 
+  createMarkerList(config: MarkerListConfig): Observable<MarkerListApi> {
+    return new Observable<MarkerList>(o$ => {
+      const markerList = new MarkerList(config, this._videoController);
+
+      // bind marker list event handlers
+      markerList.onMarkerAction$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
+        this.emit('omakaseMarkerListAction', event);
+      })
+
+      markerList.onMarkerClick$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
+        this.emit('omakaseMarkerListClick', event);
+      })
+
+      markerList.onMarkerDelete$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
+        this.emit('omakaseMarkerListDelete', event);
+      })
+
+      markerList.onMarkerCreate$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
+        this.emit('omakaseMarkerListCreate', event);
+      })
+
+      markerList.onMarkerUpdate$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
+        this.emit('omakaseMarkerListUpdate', event);
+      })
+
+      markerList.onMarkerInit$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
+        this.emit('omakaseMarkerListInit', event);
+      })
+
+      if (config.vttUrl) {
+        markerList.onVttLoaded$.pipe(takeUntil(this._destroyed$)).subscribe(() => {
+          o$.next(markerList);
+          o$.complete();
+        })
+      } else {
+        // timeout is here to make sure the marker list element is created in the dom
+        setTimeout(() => {
+          o$.next(markerList);
+          o$.complete();
+        })
+      }
+
+    })
+  }
+
   private bindEventHandlers() {
     // video
     this._videoController.onPlay$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
@@ -171,7 +279,7 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
       this.emit('omakaseVideoLoading', event!);
     })
 
-    this._videoController.onVideoLoaded$.pipe(takeUntil(this._destroyed$), filter(p => !!p)).subscribe((event) => {
+    this._videoController.onVideoLoaded$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
       this.emit('omakaseVideoLoaded', event!);
     })
 
@@ -205,7 +313,7 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
     })
 
     // subtitles
-    this._subtitlesController.onSubtitlesLoaded$.pipe(takeUntil(this._destroyed$), filter(p => !!p)).subscribe((event) => {
+    this._subtitlesController.onSubtitlesLoaded$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
       this.emit('omakaseSubtitlesLoaded', event!);
     })
 
@@ -292,7 +400,7 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
 
     this._eventEmitter.removeAllListeners();
 
-    nextCompleteVoidSubject(this._destroyed$);
+    nextCompleteSubject(this._destroyed$);
 
     nullifier(
       this._timeline,

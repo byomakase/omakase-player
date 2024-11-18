@@ -1,0 +1,33 @@
+<!--
+  - Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+  -
+  - Licensed under the Apache License, Version 2.0 (the "License");
+  - you may not use this file except in compliance with the License.
+  - You may obtain a copy of the License at
+  -
+  -     http://www.apache.org/licenses/LICENSE-2.0
+  -
+  - Unless required by applicable law or agreed to in writing, software
+  - distributed under the License is distributed on an "AS IS" BASIS,
+  - WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  - See the License for the specific language governing permissions and
+  - limitations under the License.
+  -->
+
+<svg width="62" height="62" viewBox="0 0 62 62" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g clip-path="url(#clip0_768_637)">
+    <path
+      d="M10.15 3.95C4.55 3.95 0 8.5 0 14.09V51.85C0 57.45 4.55 62 10.15 62H47.91C53.5 62 58.06 57.45 58.06 51.85V32.97C58.06 32.01 57.28 31.22 56.31 31.22C55.34 31.22 54.56 32 54.56 32.97V51.85C54.56 55.52 51.58 58.5 47.91 58.5H10.15C6.48 58.5 3.5 55.52 3.5 51.85V14.09C3.5 10.42 6.48 7.44 10.15 7.44H29.03C29.99 7.44 30.78 6.66 30.78 5.69C30.78 4.72 30 3.94 29.03 3.94H10.15V3.95Z"
+      fill="#DDDDDD"/>
+    <path
+      d="M60.2102 0C59.7902 0 59.3402 0.19 58.9902 0.53L34.7202 24.81V14.37C34.7202 13.41 33.9402 12.62 32.9702 12.62C32.0002 12.62 31.2202 13.4 31.2202 14.37V29.06C31.2202 29.53 31.4002 29.97 31.7302 30.3C32.0602 30.63 32.5002 30.81 32.9702 30.81H47.6602C48.6202 30.81 49.4102 30.03 49.4102 29.06C49.4102 28.09 48.6302 27.31 47.6602 27.31H37.1902L61.4802 3.01C61.8202 2.67 62.0002 2.22 62.0002 1.75C62.0002 1.29 61.8202 0.86 61.4902 0.54C61.0802 0.11 60.5702 0.01 60.2102 0Z"
+      fill="#DDDDDD"/>
+  </g>
+  <defs>
+    <clipPath id="clip0_768_637">
+      <rect width="62" height="62" fill="white"/>
+    </clipPath>
+  </defs>
+</svg>
+
+

@@ -16,7 +16,6 @@
 
 import {YogaProvider} from '../common/yoga-provider';
 import {Destroyable} from '../types';
-import {UuidUtil} from '../util/uuid-util';
 import {isNullOrUndefined} from '../util/object-util';
 import {z} from 'zod';
 
@@ -24,6 +23,7 @@ import {z} from 'zod';
 import {Config, Edge, Node, Overflow, PositionType, Yoga} from 'yoga-layout';
 import {destroyer, nullifier} from '../util/destroy-util';
 import {yogaLiberator} from '../util/yoga-util';
+import {CryptoUtil} from '../util/crypto-util';
 
 export type FlexJustifyContent = 'JUSTIFY_CENTER' | 'JUSTIFY_FLEX_END' | 'JUSTIFY_FLEX_START' | 'JUSTIFY_SPACE_AROUND' | 'JUSTIFY_SPACE_BETWEEN' | 'JUSTIFY_SPACE_EVENLY';
 export type FlexDirection = 'FLEX_DIRECTION_COLUMN' | 'FLEX_DIRECTION_COLUMN_REVERSE' | 'FLEX_DIRECTION_COUNT' | 'FLEX_DIRECTION_ROW' | 'FLEX_DIRECTION_ROW_REVERSE';
@@ -163,7 +163,7 @@ export abstract class BaseFlexNode<C extends FlexNodeConfig, T extends FlexConte
   }
 
   protected processOptions() {
-    this._name = this._config.name ? this._config.name : `flex-${UuidUtil.uuid()}`;
+    this._name = this._config.name ? this._config.name : `flex-${CryptoUtil.uuid()}`;
 
     if (!isNullOrUndefined(this._config.flexGrow)) {
       this._yogaNode.setFlexGrow(this._config.flexGrow);

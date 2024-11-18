@@ -165,6 +165,11 @@ export interface TimelineApi extends Api {
   removeTimelineLanes(ids: string[]): void;
 
   /**
+   * Removes all timeline lanes
+   */
+  removeAllTimelineLanes(): void;
+
+  /**
    * Adds multiple instantiated TimelineLane-s to timeline
    * @param timelineLanes
    */

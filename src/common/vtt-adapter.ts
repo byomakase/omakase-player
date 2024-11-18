@@ -1,8 +1,8 @@
-import { AxiosRequestConfig } from 'axios';
-import {Destroyable, OmakaseVttCue, OmakaseVttFile} from '../types';
-import { catchError, map, Observable, of, Subject, take } from 'rxjs';
+import {Destroyable, OmakaseVttCue} from '../types';
+import {catchError, map, Observable, of, Subject, take} from 'rxjs';
 import {nullifier} from '../util/destroy-util';
-import { VttLoadOptions } from '../api/vtt-aware-api';
+import {VttLoadOptions} from '../api/vtt-aware-api';
+import {OmakaseVttFile} from '../vtt';
 
 export interface VttFileFactory<T extends OmakaseVttFile<OmakaseVttCue>> {
   create(url: string, options: VttLoadOptions): Observable<T>;

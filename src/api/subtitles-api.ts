@@ -16,8 +16,7 @@
 
 import {Api} from './api';
 import {BehaviorSubject, Observable} from 'rxjs';
-import {SubtitlesEvent, SubtitlesLoadedEvent, SubtitlesVttTrackConfig} from '../types';
-import {SubtitlesVttTrack} from '../track';
+import {SubtitlesCreateEvent, SubtitlesEvent, SubtitlesLoadedEvent, SubtitlesVttTrack} from '../types';
 
 export interface SubtitlesApi extends Api {
 
@@ -31,7 +30,7 @@ export interface SubtitlesApi extends Api {
    * Fires on subtitles create
    * @readonly
    */
-  onCreate$: Observable<SubtitlesEvent>;
+  onCreate$: Observable<SubtitlesCreateEvent>;
 
   /**
    * Fires on subtitles remove
@@ -53,9 +52,9 @@ export interface SubtitlesApi extends Api {
 
   /**
    * Creates new Subtitles VTT track
-   * @param config SubtitlesVttTrack configuration
+   * @param track
    */
-  createVttTrack(config: SubtitlesVttTrackConfig): Observable<SubtitlesVttTrack | undefined>;
+  createVttTrack(track: Pick<SubtitlesVttTrack, 'id' | 'src' | 'default' | 'label' | 'language'>): Observable<SubtitlesVttTrack | undefined>;
 
   /**
    * @returns all VTT tracks
@@ -66,43 +65,43 @@ export interface SubtitlesApi extends Api {
    * Removes VTT track by ID
    * @param id VTT track ID
    */
-  removeTrack(id: string): void;
+  removeTrack(id: string): Observable<void>;
 
   /**
    * Removes all VTT tracks
    */
-  removeAllTracks(): void;
+  removeAllTracks(): Observable<void>;
 
   /**
-   * @returns current active VTT track
+   * @returns active VTT track
    */
-  getCurrentTrack(): SubtitlesVttTrack | undefined;
+  getActiveTrack(): SubtitlesVttTrack | undefined;
 
   /**
    * Shows VTT track by ID
    * @param id VTT track ID
    */
-  showTrack(id: string): void;
+  showTrack(id: string): Observable<void>;
 
   /**
    * Hides VTT track by ID
    * @param id VTT track ID
    */
-  hideTrack(id: string): void;
+  hideTrack(id: string): Observable<void>;
 
   /**
    * Shows active VTT track
    */
-  showActiveTrack(): void;
+  showActiveTrack(): Observable<void>;
 
   /**
    * Hides active VTT track
    */
-  hideActiveTrack(): void;
+  hideActiveTrack(): Observable<void>;
 
   /**
    * Toggles show / hide of active VTT track
    */
-  toggleShowHideActiveTrack(): void;
+  toggleShowHideActiveTrack(): Observable<void>;
 
 }

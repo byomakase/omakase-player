@@ -14,216 +14,153 @@
  * limitations under the License.
  */
 
-import {SubtitlesVttTrack} from '../track';
-import {Destroyable, SubtitlesCreateEvent, SubtitlesEvent, SubtitlesLoadedEvent, SubtitlesVttTrackConfig} from '../types';
-import {BehaviorSubject, filter, forkJoin, Observable, of, Subject, takeUntil} from 'rxjs';
+import {Destroyable, SubtitlesCreateEvent, SubtitlesEvent, SubtitlesLoadedEvent, SubtitlesVttTrack} from '../types';
+import {BehaviorSubject, Observable, Subject} from 'rxjs';
 import {SubtitlesApi} from '../api';
-import {completeUnsubscribeSubjects, nextCompleteVoidSubject} from '../util/observable-util';
-import {VideoControllerApi} from '../video/video-controller-api';
+import {nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
+import {VideoControllerApi} from '../video';
 import {nullifier} from '../util/destroy-util';
+import {CryptoUtil} from '../util/crypto-util';
+import {isNullOrUndefined} from '../util/object-util';
 
 export class SubtitlesController implements SubtitlesApi, Destroyable {
-  public readonly onSubtitlesLoaded$: BehaviorSubject<SubtitlesLoadedEvent | undefined> = new BehaviorSubject<SubtitlesLoadedEvent | undefined>(void 0);
-  public readonly onCreate$: Subject<SubtitlesCreateEvent> = new Subject<SubtitlesCreateEvent>();
-  public readonly onRemove$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
-  public readonly onShow$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
-  public readonly onHide$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
+  public readonly onSubtitlesLoaded$: BehaviorSubject<SubtitlesLoadedEvent | undefined>;
+  public readonly onCreate$: Observable<SubtitlesCreateEvent>;
+  public readonly onRemove$: Observable<SubtitlesEvent>;
+  public readonly onShow$: Observable<SubtitlesEvent>;
+  public readonly onHide$: Observable<SubtitlesEvent>;
 
-  protected _currentTrack?: SubtitlesVttTrack;
   protected _videoController: VideoControllerApi;
-  protected _subtitlesTracks: Map<string, SubtitlesVttTrack> = new Map<string, SubtitlesVttTrack>();
 
   protected _destroyed$ = new Subject<void>();
 
   constructor(videoController: VideoControllerApi) {
     this._videoController = videoController;
 
-    this._videoController.onVideoLoaded$.pipe(takeUntil(this._destroyed$), filter(p => !!p)).subscribe((event) => {
-      this.removeAllTracks();
-
-      let subtitlesVttTracks = this._videoController.getSubtitlesVttTracks();
-      if (subtitlesVttTracks && subtitlesVttTracks.length > 0) {
-        let os$ = subtitlesVttTracks.map(subtitlesVttTrack => this.createVttTrackInternal(subtitlesVttTrack));
-        forkJoin(os$).subscribe({
-          next: () => {
-            this.onSubtitlesLoaded$.next({});
-          },
-          error: (err) => {
-            console.error(err);
-            this.onSubtitlesLoaded$.next({});
-          }
-        })
-      } else {
-        // subtitles are loaded, but no subtitles found
-        this.onSubtitlesLoaded$.next({});
-      }
-    })
+    this.onSubtitlesLoaded$ = this._videoController.onSubtitlesLoaded$;
+    this.onCreate$ = this._videoController.onSubtitlesCreate$;
+    this.onRemove$ = this._videoController.onSubtitlesRemove$;
+    this.onShow$ = this._videoController.onSubtitlesShow$;
+    this.onHide$ = this._videoController.onSubtitlesHide$;
   }
 
-  createVttTrack(config: SubtitlesVttTrackConfig): Observable<SubtitlesVttTrack | undefined> {
-    if (!this._videoController.isVideoLoaded) {
-      return of(void 0);
-    } else {
-      return this.createVttTrackInternal(new SubtitlesVttTrack(config));
-    }
+  createVttTrack(track: Pick<SubtitlesVttTrack, 'id' | 'src' | 'default' | 'label' | 'language'>): Observable<SubtitlesVttTrack | undefined> {
+    return this._videoController.createSubtitlesVttTrack({
+      ...track,
+      id: isNullOrUndefined(track.id) ? CryptoUtil.uuid() : track.id,
+      default: track.default ? track.default : false,
+      hidden: true,
+      kind: 'subtitles',
+      embedded: false,
+    });
   }
 
-  protected createVttTrackInternal(subtitlesVttTrack: SubtitlesVttTrack): Observable<SubtitlesVttTrack | undefined> {
-    return new Observable<SubtitlesVttTrack>(o$ => {
-      if (this._subtitlesTracks.has(subtitlesVttTrack.id)) {
-        this.removeTrack(subtitlesVttTrack.id);
-      }
+  getTracks(): SubtitlesVttTrack[] {
+    return this._videoController.getSubtitlesTracks();
+  }
 
-      this._videoController.appendHTMLTrackElement(subtitlesVttTrack).subscribe(element => {
-        if (element) {
-          subtitlesVttTrack.element = element;
-
-          this._subtitlesTracks.set(subtitlesVttTrack.id, subtitlesVttTrack);
-
-          this.onCreate$.next({
-            textTrack: subtitlesVttTrack
-          });
-
-          o$.next(subtitlesVttTrack);
-          o$.complete();
-        } else {
-          o$.next(void 0);
-          o$.complete();
+  removeAllTracks(): Observable<void> {
+    return passiveObservable(observer => {
+      this._videoController.removeAllSubtitlesTracks().subscribe({
+        next: () => {
+          nextCompleteObserver(observer);
         }
       })
     });
   }
 
-  getTracks(): SubtitlesVttTrack[] {
-    if (!this._videoController.isVideoLoaded) {
-      return [];
-    }
-
-    return [...this._subtitlesTracks.values()];
+  removeTrack(id: string): Observable<void> {
+    return passiveObservable(observer => {
+      this._videoController.removeSubtitlesTrack(id).subscribe({
+        next: () => {
+          nextCompleteObserver(observer);
+        }
+      })
+    });
   }
 
-  removeAllTracks() {
-    if (!this._videoController.isVideoLoaded) {
-      return;
-    }
+  getActiveTrack(): SubtitlesVttTrack | undefined {
+    return this._videoController.getActiveSubtitlesTrack();
+  }
 
-    this._subtitlesTracks.forEach((value, key) => {
-      this.removeTrack(value.id);
+  showTrack(id: string): Observable<void> {
+    return passiveObservable(observer => {
+      this._videoController.showSubtitlesTrack(id).subscribe({
+        next: () => {
+          nextCompleteObserver(observer);
+        }
+      })
+    });
+  }
+
+  showActiveTrack(): Observable<void> {
+    return passiveObservable((observer => {
+      let activeTrack = this.getActiveTrack();
+      if (activeTrack) {
+        this.showTrack(activeTrack.id).subscribe({
+          next: () => {
+            nextCompleteObserver(observer);
+          }
+        });
+      } else {
+        nextCompleteObserver(observer);
+      }
+    }))
+  }
+
+  hideTrack(id: string): Observable<void> {
+    return passiveObservable(observer => {
+      this._videoController.hideSubtitlesTrack(id).subscribe({
+        next: () => {
+          nextCompleteObserver(observer);
+        }
+      })
     })
   }
 
-  removeTrack(id: string) {
-    if (!this._videoController.isVideoLoaded) {
-      return;
-    }
-
-    let track = this._subtitlesTracks.get(id);
-    if (track) {
-      // remove existing track
-      this._subtitlesTracks.delete(id);
-      // remove existing track from HTML DOM
-      this._videoController.removeTextTrackById(track.id);
-
-      this.onRemove$.next({});
-    }
-  }
-
-  getCurrentTrack(): SubtitlesVttTrack | undefined {
-    return this._currentTrack;
-  }
-
-  showTrack(id: string): void {
-    this.showTrackInternal(id);
-  }
-
-  protected showTrackInternal(id: string): void {
-    if (!this._videoController.isVideoLoaded) {
-      return;
-    }
-
-    let textTracksList = this._videoController.getTextTrackList();
-    if (textTracksList && textTracksList.length > 0) {
-      for (let i = 0; i < textTracksList.length; i++) {
-        let textTrack = textTracksList[i];
-        if (textTrack.id !== id && !(textTrack.mode === 'hidden' || textTrack.mode === 'disabled')) {
-          textTrack.mode = 'hidden';
-        }
-      }
-    }
-
-    let subtitlesVttTrack = this._subtitlesTracks.get(id);
-    if (subtitlesVttTrack) {
-      let textTrack = this._videoController.getTextTrackById(subtitlesVttTrack.id);
-
-      if (textTrack) {
-        textTrack.mode = 'showing';
-        subtitlesVttTrack.hidden = false;
-
-        this._currentTrack = subtitlesVttTrack;
-
-        this.onShow$.next({});
-      }
-    }
-  }
-
-  showActiveTrack(): void {
-    let currentTrack = this.getCurrentTrack();
-    if (currentTrack) {
-      this.showTrack(currentTrack.id);
-    }
-  }
-
-  hideTrack(id: string) {
-    if (!this._videoController.isVideoLoaded) {
-      return;
-    }
-
-    let track = this._subtitlesTracks.get(id);
-    if (track) {
-      let domTextTrack = this._videoController.getTextTrackById(track.id);
-      if (domTextTrack) {
-        domTextTrack.mode = 'hidden';
-        track.hidden = true;
-
-        this.onHide$.next({});
-      }
-    }
-  }
-
-  hideActiveTrack(): void {
-    let currentTrack = this.getCurrentTrack();
-    if (currentTrack) {
-      this.hideTrack(currentTrack.id);
-    }
-  }
-
-  toggleShowHideActiveTrack(): void {
-    let currentTrack = this.getCurrentTrack();
-    if (currentTrack) {
-      if (currentTrack.hidden) {
-        this.showActiveTrack();
+  hideActiveTrack(): Observable<void> {
+    return passiveObservable(observer => {
+      let activeTrack = this.getActiveTrack();
+      if (activeTrack) {
+        this.hideTrack(activeTrack.id).subscribe({
+          next: () => {
+            nextCompleteObserver(observer);
+          }
+        })
       } else {
-        this.hideActiveTrack();
+        nextCompleteObserver(observer);
       }
-    }
+    })
+  }
+
+  toggleShowHideActiveTrack(): Observable<void> {
+    return passiveObservable(observer => {
+      let activeTrack = this.getActiveTrack();
+      if (activeTrack) {
+        if (activeTrack.hidden) {
+          this.showActiveTrack().subscribe({
+            next: () => {
+              nextCompleteObserver(observer);
+            }
+          });
+        } else {
+          this.hideActiveTrack().subscribe({
+            next: () => {
+              nextCompleteObserver(observer);
+            }
+          });
+        }
+      } else {
+        nextCompleteObserver(observer);
+      }
+    })
   }
 
   destroy() {
-    this.removeAllTracks();
-
-    completeUnsubscribeSubjects(
-      this.onCreate$,
-      this.onRemove$,
-      this.onShow$,
-      this.onHide$
-    );
-
-    nextCompleteVoidSubject(this._destroyed$);
+    nextCompleteSubject(this._destroyed$);
 
     nullifier(
-      this._currentTrack,
-      this._videoController,
-      this._subtitlesTracks
+      this._videoController
     )
   }
 }

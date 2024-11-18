@@ -16,9 +16,9 @@
 
 import Konva from 'konva';
 import {Subject} from 'rxjs';
-import {StyleAdapter} from '../common/style-adapter';
+import {StyleAdapter} from '../common';
 import {Destroyable, WithOptionalPartial} from '../types';
-import {nextCompleteVoidSubject} from '../util/observable-util';
+import {nextCompleteSubject} from '../util/rxjs-util';
 import {destroyer, nullifier} from '../util/destroy-util';
 
 export interface ComponentConfig<S> {
@@ -59,7 +59,7 @@ export abstract class BaseKonvaComponent<C extends ComponentConfig<S>, S, T exte
       this._konvaNode
     )
 
-    nextCompleteVoidSubject(this._destroyed$);
+    nextCompleteSubject(this._destroyed$);
 
     nullifier(
       this._konvaNode

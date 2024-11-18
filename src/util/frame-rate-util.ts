@@ -92,10 +92,10 @@ export class FrameRateUtil {
         return 0;
       } else {
         let offsettedTime = time - video.initSegmentTimeOffset;
-        return video.frameRateDecimal.mul(offsettedTime).floor().toNumber();
+        return new Decimal(video.frameRate).mul(offsettedTime).floor().toNumber();
       }
     } else {
-      return video.frameRateDecimal.mul(time).floor().toNumber();
+      return new Decimal(video.frameRate).mul(time).floor().toNumber();
     }
   }
 
@@ -106,7 +106,7 @@ export class FrameRateUtil {
    * @param video
    */
   static frameNumberToTime(frameNumber: number, video: Video): number {
-    let time = Decimal.div(frameNumber, video.frameRateDecimal).toNumber();
+    let time = Decimal.div(frameNumber, video.frameRate).toNumber();
     if (video.initSegmentTimeOffset && frameNumber !== 0) {
       return time + video.initSegmentTimeOffset;
     } else {
@@ -164,6 +164,10 @@ export class FrameRateUtil {
     } else {
       throw new Error(errorMessage);
     }
+  }
+
+  static isFrameRateFractional(frameRate: number): boolean {
+    return Number.isInteger(frameRate)
   }
 
 

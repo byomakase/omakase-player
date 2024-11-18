@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { AlertsConfig } from '../alerts/alerts-controller';
-import { Alert, AlertConfig } from '../alerts/model';
-import { Api } from './api';
+import {AlertsConfig} from '../alerts/alerts-controller';
+import {Alert, AlertConfig} from '../alerts/model';
+import {Api} from './api';
 
 export interface AlertsApi extends Api {
   /**

@@ -73,7 +73,39 @@ body {
   padding-left: 100px;
 }
 
-.markers {
+
+.marker-list-empty {
+  padding: 10px;
+  line-height: 27px;
+  border-right: 2px solid #235067;
+  border-left: 2px solid #235067;
+  border-bottom: 2px solid #235067;
+}
+
+.omakase-marker-list-row {
+  border-bottom: 2px solid #235067;
+  border-right: 2px solid #235067;
+  opacity: 0.7;
+  position: relative;
+}
+
+.omakase-marker-list-row.active {
+  background-color: rgba(36, 80, 103, 0.14);
+  opacity: 1;
+}
+
+.marker-color {
+  position:absolute;
+  width:5px;
+  height:47px
+}
+
+.marker-remove {
+  position: absolute;
+  top: 5px;
+  right: 11px;
+  cursor:pointer;
+  color: #235067;
 }
 
 .marker-image {
@@ -107,8 +139,8 @@ body {
   border-bottom: 2px solid #235067;
   border-left: 2px solid #235067;
   border-right: 2px solid #235067;
-  #border-bottom-left-radius: 5px;
-  #border-bottom-right-radius: 5px;
+  /* border-bottom-left-radius: 5px; */
+  /* border-bottom-right-radius: 5px; */
 }
 
 .inner-stats {

@@ -15,29 +15,27 @@
  */
 
 import {BehaviorSubject, Subject} from 'rxjs';
-import Decimal from 'decimal.js';
 
-export class Video {
-  private readonly _sourceUrl: string;
-  private readonly _frameRate: number;
-  private readonly _frameRateDecimal: Decimal;
-  private readonly _dropFrame: boolean;
-  private readonly _duration: number;
-  private readonly _totalFrames: number;
+export interface Video {
+  sourceUrl: string;
+  frameRate: number;
+  dropFrame: boolean;
+  duration: number;
+  totalFrames: number;
 
   /**
    * Frame duration in seconds
    * @private
    */
-  private readonly _frameDuration: number
+  frameDuration: number
 
   /**
    * Time offset incurred by init segment
    * @private
    */
-  private readonly _initSegmentTimeOffset?: number;
+  initSegmentTimeOffset?: number;
 
-  private readonly _audioOnly: boolean;
+  audioOnly: boolean;
 
   /**
    * Corrected duration field may be updated once when:
@@ -47,78 +45,12 @@ export class Video {
    *
    * @private correctedDuration
    */
-  private _correctedDuration?: number;
-
-  constructor(sourceUrl: string, frameRate: number, dropFrame: boolean, duration: number, audioOnly: boolean, initSegmentTimeOffset: number | undefined = undefined) {
-    this._sourceUrl = sourceUrl;
-    this._frameRate = frameRate;
-    this._frameRateDecimal = new Decimal(frameRate);
-    this._dropFrame = dropFrame;
-    this._duration = duration;
-    this._totalFrames = Decimal.mul(this._duration, this._frameRate).ceil().toNumber();
-    this._frameDuration = Decimal.div(1, this._frameRate).toNumber();
-    this._audioOnly = audioOnly;
-    this._initSegmentTimeOffset = initSegmentTimeOffset;
-  }
-
-  get sourceUrl(): string {
-    return this._sourceUrl;
-  }
-
-  get frameRate(): number {
-    return this._frameRate;
-  }
-
-  get frameRateNonFractional(): boolean {
-    return Number.isInteger(this.frameRate)
-  }
-
-  get frameRateFractional(): boolean {
-    return !this.frameRateNonFractional;
-  }
-
-  get dropFrame(): boolean {
-    return this._dropFrame;
-  }
+  correctedDuration?: number;
 
   /**
-   * Duration in seconds
+   * Timecode offset
    */
-  get duration(): number {
-    return this._duration;
-  }
-
-  /**
-   * Total number of frames
-   */
-  get totalFrames() {
-    return this._totalFrames;
-  }
-
-  get frameDuration(): number {
-    return this._frameDuration;
-  }
-
-  get correctedDuration(): number | undefined {
-    return this._correctedDuration;
-  }
-
-  set correctedDuration(value: number | undefined) {
-    console.debug(`%cVideo duration correction: initialDuration:${this.duration} > updatedDuration:${value} `, 'color: magenta');
-    this._correctedDuration = value;
-  }
-
-  get initSegmentTimeOffset(): number | undefined {
-    return this._initSegmentTimeOffset;
-  }
-
-  get audioOnly(): boolean {
-    return this._audioOnly;
-  }
-
-  get frameRateDecimal(): Decimal {
-    return this._frameRateDecimal;
-  }
+  ffomTimecodeObject?: TimecodeObject;
 }
 
 export interface TimecodeObject {
@@ -263,24 +195,6 @@ export class PlaybackStateMachine {
   }
 }
 
-export interface BasicAuthenticationData {
-  type: 'basic';
-  username: string;
-  password: string;
-}
-
-export interface BearerAuthenticationData {
-  type: 'bearer';
-  token: string;
-}
-
-export interface CustomAuthenticationData {
-  type: 'custom';
-  headers: (url: string) => { headers: { [header: string]: string } };
-}
-
-export type AuthenticationData = BasicAuthenticationData | BearerAuthenticationData | CustomAuthenticationData;
-
 export interface VideoLoadOptions {
   /**
    * Set video duration explicitly
@@ -296,11 +210,17 @@ export interface VideoLoadOptions {
    * Is frame rate with drop frame or not
    */
   dropFrame?: boolean
+}
 
+/**
+ * @internal
+ */
+export interface VideoLoadOptionsInternal {
   /**
-   * Authentication data for requests made by hls.js (supports basic or bearer token authentication)
+   * Active {@link VideoWindowPlaybackState} when video loaded started
+   * @internal
    */
-  authentication?: AuthenticationData
+  videoWindowPlaybackState: VideoWindowPlaybackState;
 }
 
 export interface FrameRateModel {
@@ -309,3 +229,50 @@ export interface FrameRateModel {
   dropFrameEnabled: boolean;
   dropFramesOnMinute?: number;
 }
+
+export interface VideoSafeZone {
+  id?: string;
+
+  /**
+   * If provided {@link aspectRatio} will be ignored
+   */
+  topRightBottomLeftPercent?: number[],
+
+  /**
+   * Aspect ratio for safe zone
+   */
+  aspectRatio?: string,
+
+  /**
+   * If used {@link aspectRatio} must be provided
+   */
+  scalePercent?: number
+
+  htmlId?: string,
+  htmlClass?: string,
+}
+
+export type VideoWindowPlaybackState = 'detaching' | 'detached' | 'attaching' | 'attached'
+
+/**
+ * Represents connected or disconnected {@link AudioNode} or input-output point
+ */
+export interface AudioInputOutputNode {
+
+  /**
+   * Input
+   */
+  inputNumber: number;
+
+  /**
+   * Output
+   */
+  outputNumber: number;
+
+  /**
+   * Connected status, true = connected, false = not connected
+   */
+  connected: boolean;
+}
+
+export type AudioMeterStandard = 'peak-sample' | 'true-peak';

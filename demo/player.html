@@ -21,9 +21,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Omakase Player demo</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@0.11.0-SNAPSHOT.1731401150/dist/style.css">
   <link rel="stylesheet" href="css/player.css">
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@0.10.1-SNAPSHOT.1727961099/dist/omakase-player.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@0.11.0-SNAPSHOT.1731401150/dist/omakase-player.umd.min.js"></script>
   <script src="https://esonderegger.github.io/web-audio-peak-meter/web-audio-peak-meter-2.1.0.min.js"></script>
   <script src="js/index.js"></script>
 </head>
@@ -82,27 +83,33 @@
         <div class="markers-title">
           <span style="display: inline-block; width: 277px;">IN AND OUT MARKERS</span>
           <span id="addMarker" style="cursor: pointer;">
-                        <img src="images/add.svg" style="height: 12px;padding-left: 15px;"/>
-                    </span>
+            <img src="images/add.svg" style="height: 12px;padding-left: 15px;"/>
+          </span>
         </div>
-        <div id="marker1"
-             style="opacity: 0.7; padding-left: 0px; border-left: 5px solid #6AC7F6; height: 45px; border-bottom: 2px solid #235067; border-right: 2px solid #235067">
+        <div id="omakase-marker-list"></div>
+        <template id="marker-empty">
+          <div class="marker-list-empty">No markers defined</div>
+        </template>
+        <template id="marker-header"></template>
+        <template id="marker-template">
+          <div class="marker-color" slot="color"></div>
+          <div class="marker-remove" slot="remove"><img src="images/remove.svg" style="height:12px"/></div>
           <div class="marker-image">
-            <img id="predefined-image" src="https://demo.player.byomakase.org/data/thumbnails/thumbnail.0000001.jpg" height="46px"/>
+            <img slot="thumbnail" height="47px"/>
           </div>
           <div class="marker-details">
             <div>
-              <span style="display: inline-block; width: 150px;font-weight: bold">Predefined Marker</span>
+              <span style="display: inline-block; width: 150px;font-weight: bold" slot="name"></span>
             </div>
             <div>
               <span style="display: inline-block; width: 35px; font-weight: bold">IN:</span>
-              <span id="markerStart">00:00:00:00</span></div>
+              <span slot="start">00:00:00:00</span></div>
             <div>
               <span style="display: inline-block; width: 35px;font-weight: bold">OUT:</span>
-              <span id="markerEnd">00:00:30:00</span>
+              <span slot="end">00:00:30:00</span>
             </div>
           </div>
-        </div>
+        </template>
 
       </div>
       <div class="player-time">

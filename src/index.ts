@@ -16,8 +16,9 @@
 
 export * from './api'
 export * from './common'
-export * from './track'
+export * from './layout'
 export * from './types'
+export * from './vtt'
 
 // TODO consolidate in next major version
 export * from './timeline/marker'

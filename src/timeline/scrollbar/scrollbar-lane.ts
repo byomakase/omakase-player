@@ -23,7 +23,7 @@ import {KonvaFactory} from '../../factory/konva-factory';
 import Konva from 'konva';
 import {FlexSpacingBuilder} from '../../layout/flex-node';
 import {KonvaComponentFlexContentNode} from '../../layout/konva-component-flex';
-import {VideoControllerApi} from '../../video/video-controller-api';
+import {VideoControllerApi} from '../../video';
 
 export interface ScrollbarLaneConfig extends TimelineLaneConfig<ScrollbarLaneStyle> {
 

@@ -23,9 +23,12 @@ import {OmakaseEventEmitter} from '../events';
 import {OmakasePlayerEventMap, OmakasePlayerEventsType} from '../types';
 import {AudioApi} from './audio-api';
 import {TimelineApi} from './timeline-api';
-import {ConfigWithOptionalStyle} from '../common';
 import {Video, VideoLoadOptions} from '../video';
-import { AlertsApi } from './alerts-api';
+import {AlertsApi} from './alerts-api';
+import {MarkerListConfig} from '../marker-list/marker-list';
+import {MarkerListApi} from './marker-list-api';
+import {ConfigWithOptionalStyle} from '../layout';
+import {AuthenticationData} from '../authentication/model';
 
 export interface OmakasePlayerApi extends Api, OmakaseEventEmitter<OmakasePlayerEventMap> {
 
@@ -50,6 +53,24 @@ export interface OmakasePlayerApi extends Api, OmakaseEventEmitter<OmakasePlayer
    * @param config Timeline configuration
    */
   createTimeline(config: Partial<ConfigWithOptionalStyle<TimelineConfig>>): Observable<TimelineApi>;
+
+  /**
+   * Creates Marker List
+   * @param config Marker List configuration
+   */
+  createMarkerList(config: MarkerListConfig): Observable<MarkerListApi>;
+
+  /**
+   * Set authentication for HLS.js, VTT and thumbnail image requests
+   * @param authentication Basic authentication, Bearer token authentication or custom authentication function
+   */
+  setAuthentication(authentication: AuthenticationData): void;
+
+  /**
+   * Set thumbnail vtt url for media chrome thumbnail preview
+   * @param vttUrl Thumbnail Vtt Url
+   */
+  setThumbnailVttUrl(thumbnailVttUrl: string): void;
 
   /**
    * @returns Timeline API

@@ -20,13 +20,12 @@ import {Constants} from '../constants';
 import {OnMeasurementsChange, Position} from '../common/measurement';
 import {Timeline} from './timeline';
 import {BufferedTimespan} from '../video/video-controller';
-import {BehaviorSubject, combineLatest, filter, Subject, takeUntil} from 'rxjs';
-import {VideoControllerApi} from '../video/video-controller-api';
+import {BehaviorSubject, combineLatest, filter, merge, Subject, takeUntil} from 'rxjs';
+import {PlaybackState, VideoControllerApi} from '../video';
 import {KonvaFactory} from '../factory/konva-factory';
 import {WindowUtil} from '../util/window-util';
-import {PlaybackState} from '../video';
 import {KonvaUtil} from '../util/konva-util';
-import {nextCompleteVoidSubject} from '../util/observable-util';
+import {nextCompleteSubject} from '../util/rxjs-util';
 import {isNullOrUndefined} from '../util/object-util';
 import {PlayheadMoveEvent} from '../types';
 
@@ -224,35 +223,46 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
 
     this._group.add(this._playheadGroup);
 
-    // react on timeline zoom
-    this._timeline.onZoom$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.settleLayout();
+    merge(this._timeline.onZoom$, this._timeline.onScroll$).pipe(takeUntil(this._destroyed$)).subscribe({
+      next: (event) => {
+        this.settleLayout();
+      }
     })
 
-    this._videoController.onVideoLoading$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this._group.visible(false);
+    this._videoController.onVideoLoading$.pipe(takeUntil(this._destroyed$)).subscribe({
+      next: (event) => {
+        this._group.visible(false);
+      }
     })
 
-    this._videoController.onVideoLoaded$.pipe(takeUntil(this._destroyed$)).pipe(filter(p => !!p)).subscribe((event) => {
-      this._group.visible(true);
-      this.doPlayProgress()
-      this.doBufferingProgress()
+    this._videoController.onVideoLoaded$.pipe(takeUntil(this._destroyed$)).pipe(filter(p => !!p)).subscribe({
+      next: (event) => {
+        this.doPlayProgress()
+        this.doBufferingProgress()
+        this._group.visible(true);
+      }
     })
 
-    this._videoController.onVideoTimeChange$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.doPlayProgress()
+    this._videoController.onVideoTimeChange$.pipe(takeUntil(this._destroyed$)).subscribe({
+      next: (event) => {
+        this.doPlayProgress()
+      }
     })
 
     combineLatest([
       this._videoController.onSeeking$,
       this._videoController.onSeeked$
-    ]).pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.doPlayProgress()
-      this.doBufferingProgress()
+    ]).pipe(takeUntil(this._destroyed$)).subscribe({
+      next: (event) => {
+        this.doPlayProgress()
+        this.doBufferingProgress()
+      }
     })
 
-    this._videoController.onBuffering$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.doBufferingProgress()
+    this._videoController.onBuffering$.pipe(takeUntil(this._destroyed$)).subscribe({
+      next: (event) => {
+        this.doBufferingProgress()
+      }
     })
 
     this._playheadGroup.on('mouseover', () => {
@@ -288,9 +298,12 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
         return;
       }
 
-      this.dragEnd();
       let time = this._timeline.timelinePositionToTime(this._playheadGroup.getPosition().x);
-      this._videoController.seekToTime(time).subscribe();
+      this._videoController.seekToTime(time).subscribe({
+        next: () => {
+          this.dragEnd();
+        }
+      });
     })
 
     this._videoController.onPlaybackState$.pipe(takeUntil(this._destroyed$)).subscribe((state) => {
@@ -350,15 +363,17 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
       dragmove: true
     })
 
-    let newPlayheadPosition = this._timeline.constrainTimelinePosition(position);
-    let relativePointerPosition = this._timeline.getTimecodedFloatingRelativePointerPosition().x;
-    let visiblePositionRange = this._timeline.getVisiblePositionRange();
+    let relativePointerPosition = this._timeline.getTimecodedFloatingRelativePointerPosition();
+    if (relativePointerPosition) {
+      let newPlayheadPosition = this._timeline.constrainTimelinePosition(position);
+      let visiblePositionRange = this._timeline.getVisiblePositionRange();
 
-    if (relativePointerPosition >= visiblePositionRange.start && relativePointerPosition <= visiblePositionRange.end) {
-      this.repositionPlayhead(newPlayheadPosition);
-    } else {
-      // this prevents playhead mouse drag
-      this.repositionPlayhead(this._state.positionBeforeDrag!.x);
+      if (relativePointerPosition.x >= visiblePositionRange.start && relativePointerPosition.x <= visiblePositionRange.end) {
+        this.repositionPlayhead(newPlayheadPosition);
+      } else {
+        // this prevents playhead mouse drag
+        this.repositionPlayhead(this._state.positionBeforeDrag!.x);
+      }
     }
 
     this.updateState({
@@ -367,7 +382,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
   }
 
   dragEnd() {
-    nextCompleteVoidSubject(this._dragBreaker$);
+    nextCompleteSubject(this._dragBreaker$);
     this.updateState({
       dragging: false
     });
@@ -402,36 +417,41 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
   }
 
   private scrollToRevealPlayhead() {
-    let visiblePositionRange = this._timeline.getVisiblePositionRange();
-    let relativePointerPosition = this._timeline.getTimecodedFloatingRelativePointerPosition().x;
-    let playheadPosition = this._playheadGroup.x();
+    let relativePointerPosition = this._timeline.getTimecodedFloatingRelativePointerPosition();
+    if (relativePointerPosition) {
+      let visiblePositionRange = this._timeline.getVisiblePositionRange();
 
-    if (relativePointerPosition < visiblePositionRange.start) {
-      this._timeline.scrollTimeline(-playheadPosition);
-    } else if (relativePointerPosition > visiblePositionRange.end) {
-      this._timeline.scrollTimeline(-playheadPosition + this._timeline.getTimecodedContainerDimension().width);
+      let playheadPosition = this._playheadGroup.x();
+
+      if (relativePointerPosition.x < visiblePositionRange.start) {
+        this._timeline.scrollTimeline(-playheadPosition);
+      } else if (relativePointerPosition.x > visiblePositionRange.end) {
+        this._timeline.scrollTimeline(-playheadPosition + this._timeline.getTimecodedContainerDimension().width);
+      }
     }
   }
 
   private playheadMoveRelativePointer() {
-    let visiblePositionRange = this._timeline.getVisiblePositionRange();
-    let relativePointerPosition = this._timeline.getTimecodedFloatingRelativePointerPosition().x;
+    let relativePointerPosition = this._timeline.getTimecodedFloatingRelativePointerPosition();
+    if (relativePointerPosition) {
+      let visiblePositionRange = this._timeline.getVisiblePositionRange();
 
-    let pointerBorderDistance = 0;
-    if (relativePointerPosition < visiblePositionRange.start) {
-      pointerBorderDistance = Math.abs(visiblePositionRange.start - relativePointerPosition)
-    } else if (relativePointerPosition > visiblePositionRange.end) {
-      pointerBorderDistance = Math.abs(visiblePositionRange.end - relativePointerPosition)
-    }
+      let pointerBorderDistance = 0;
+      if (relativePointerPosition.x < visiblePositionRange.start) {
+        pointerBorderDistance = Math.abs(visiblePositionRange.start - relativePointerPosition.x)
+      } else if (relativePointerPosition.x > visiblePositionRange.end) {
+        pointerBorderDistance = Math.abs(visiblePositionRange.end - relativePointerPosition.x)
+      }
 
-    let speedPx = this.resolvetimelineScrollSpeed(pointerBorderDistance);
+      let speedPx = this.resolvetimelineScrollSpeed(pointerBorderDistance);
 
-    if (relativePointerPosition < visiblePositionRange.start) {
-      this.repositionPlayhead(this._timeline.constrainTimelinePosition(visiblePositionRange.start - speedPx));
-    } else if (relativePointerPosition > visiblePositionRange.end) {
-      this.repositionPlayhead(this._timeline.constrainTimelinePosition(visiblePositionRange.end + speedPx))
-    } else {
-      // we're inside visible area, dragmove will do repositioning if needed
+      if (relativePointerPosition.x < visiblePositionRange.start) {
+        this.repositionPlayhead(this._timeline.constrainTimelinePosition(visiblePositionRange.start - speedPx));
+      } else if (relativePointerPosition.x > visiblePositionRange.end) {
+        this.repositionPlayhead(this._timeline.constrainTimelinePosition(visiblePositionRange.end + speedPx))
+      } else {
+        // we're inside visible area, dragmove will do repositioning if needed
+      }
     }
   }
 

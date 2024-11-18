@@ -1,0 +1,30 @@
+<!--
+  - Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+  -
+  - Licensed under the Apache License, Version 2.0 (the "License");
+  - you may not use this file except in compliance with the License.
+  - You may obtain a copy of the License at
+  -
+  -     http://www.apache.org/licenses/LICENSE-2.0
+  -
+  - Unless required by applicable law or agreed to in writing, software
+  - distributed under the License is distributed on an "AS IS" BASIS,
+  - WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  - See the License for the specific language governing permissions and
+  - limitations under the License.
+  -->
+
+<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g clip-path="url(#clip0_872_210)">
+    <path d="M9.95289 18.0571H8.2641L2.36831 23.9529V16.3183H0V28H11.6817V25.6317H4.04711L9.95289 19.7159V18.0571Z" fill="white"/>
+    <path d="M9.94267 9.9429V8.2541L4.05687 2.36831H11.6814V0H0.00976562V11.6717H2.37807V4.04711L8.28386 9.9429H9.94267Z" fill="white"/>
+    <path d="M18.0669 18.0371V19.7259L23.9527 25.6117H16.3281V27.98H27.9998V16.3083H25.6315V23.9329L19.7257 18.0371H18.0669Z" fill="white"/>
+    <path d="M18.0569 9.93291H19.7457L25.6315 4.04711V11.6717H27.9998V0H16.3281V2.36831H23.9527L18.0569 8.27409V9.93291Z" fill="white"/>
+  </g>
+  <defs>
+    <clipPath id="clip0_872_210">
+      <rect width="28" height="28" fill="white"/>
+    </clipPath>
+  </defs>
+</svg>
+

@@ -17,7 +17,7 @@
 import {TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle, VTT_DOWNSAMPLE_CONFIG_DEFAULT} from '../timeline-lane';
 import Konva from 'konva';
 import {Constants} from '../../constants';
-import {combineLatest, debounceTime, filter, Subject, take, takeUntil} from 'rxjs';
+import {combineLatest, debounceTime, filter, Subject, takeUntil, zip} from 'rxjs';
 import {AudioVttCue} from '../../types';
 import {AudioTrackLaneItem} from './audio-track-lane-item';
 import Decimal from 'decimal.js';
@@ -26,7 +26,7 @@ import {Timeline} from '../timeline';
 import {destroyer} from '../../util/destroy-util';
 import {AxiosRequestConfig} from 'axios';
 import {KonvaFactory} from '../../factory/konva-factory';
-import {VideoControllerApi} from '../../video/video-controller-api';
+import {VideoControllerApi} from '../../video';
 import {AudioTrackLaneApi} from '../../api';
 import {AudioVttFile} from '../../vtt';
 import {VttAdapter, VttAdapterConfig} from '../../common/vtt-adapter';
@@ -115,22 +115,23 @@ export class AudioTrackLane extends VttTimelineLane<AudioTrackLaneConfig, AudioT
         this.settleAll();
       });
 
-    this._vttAdapter.vttFileLoaded$.pipe(takeUntil(this._destroyed$)).subscribe({
-      next: () => {
-        this._videoController!.onVideoLoaded$.pipe(filter(p => !!p), take(1), takeUntil(this._destroyed$)).subscribe({
-          next: (event) => {
-            this.createEntities();
-          }
-        })
-      }
-    });
 
-    this._videoController!.onVideoLoading$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.clearContent();
+    zip([this._videoController!.onVideoLoaded$.pipe(filter(p => !!p && !(p.isAttaching || p.isDetaching))), this._vttAdapter.vttFileLoaded$])
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: () => {
+          this.createEntities()
+        }
+      })
+
+    this._videoController!.onVideoLoading$.pipe(filter(p => !(p.isAttaching || p.isDetaching)), takeUntil(this._destroyed$)).subscribe({
+      next: (event) => {
+        this.clearContent();
+      }
     })
 
     if (this.vttUrl) {
-      this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig)).subscribe();
+      this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig));
     }
   }
 

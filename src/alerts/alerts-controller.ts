@@ -13,10 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { AlertsApi } from '../api/alerts-api';
-import { UuidUtil } from '../util/uuid-util';
-import { AlertsDomController } from './alerts-dom-controller';
-import { Alert, AlertConfig } from './model';
+import {AlertsApi} from '../api';
+import {AlertsDomController} from './alerts-dom-controller';
+import {Alert, AlertConfig} from './model';
+import {CryptoUtil} from '../util/crypto-util';
 
 export interface AlertsConfig {
   /**
@@ -78,7 +78,7 @@ export class AlertsController implements AlertsApi {
 
   private createAlert(type: 'info' | 'warning' | 'error', text: string, config?: AlertConfig): Alert {
     const alert = {
-      id: UuidUtil.uuid(),
+      id: CryptoUtil.uuid(),
       type,
       text,
     };

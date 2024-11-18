@@ -1,4 +1,3 @@
-import { MarkerVttCue } from './../types/vtt';
 /*
  * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
@@ -15,17 +14,19 @@ import { MarkerVttCue } from './../types/vtt';
  * limitations under the License.
  */
 
-import { Api } from './api';
-import { MomentMarker, MomentMarkerConfig } from '../timeline/marker/moment-marker';
-import { PeriodMarker, PeriodMarkerConfig } from '../timeline/marker/period-marker';
-import { Observable } from 'rxjs';
-import { MarkerFocusEvent } from '../types';
-import { ConfigWithOptionalStyle } from '../common';
-import { Marker } from '../timeline';
-import { VttAwareApi } from './vtt-aware-api';
-import { MarkerVttFile } from '../vtt';
+import {MomentMarker, MomentMarkerConfig} from '../timeline/marker/moment-marker';
+import {PeriodMarker, PeriodMarkerConfig} from '../timeline/marker/period-marker';
+import {Observable} from 'rxjs';
+import {MarkerFocusEvent, MarkerVttCue} from '../types';
+import {Marker} from '../timeline';
+import {VttAwareApi} from './vtt-aware-api';
+import {MarkerVttFile} from '../vtt';
+import {ConfigWithOptionalStyle} from '../layout';
+import {MarkerAwareApi} from './marker-aware-api';
 
-export interface MarkerLaneApi extends Api, VttAwareApi<MarkerVttCue, MarkerVttFile> {
+export interface MarkerLaneApi extends MarkerAwareApi, VttAwareApi<MarkerVttCue, MarkerVttFile> {
+
+
   /**
    *  Fires on marker focus
    *  @readonly
@@ -55,17 +56,6 @@ export interface MarkerLaneApi extends Api, VttAwareApi<MarkerVttCue, MarkerVttF
    * @param id Marker ID
    */
   getMarker(id: string): Marker | undefined;
-
-  /**
-   * @returns all Marker's
-   */
-  getMarkers(): Marker[];
-
-  /**
-   * Removes Marker by ID
-   * @param id Marker ID
-   */
-  removeMarker(id: string): void;
 
   /**
    * Removes all Marker's

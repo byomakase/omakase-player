@@ -14,9 +14,12 @@
  * limitations under the License.
  */
 
-import {Dimension, Position} from './common/measurement';
+import {Dimension, Position} from './common';
+import {AudioInputOutputNode} from './video/model';
 
 export class Constants {
+  public static OMP_HANDSHAKE_BROADCAST_CHANNEL_ID = 'OMP_HANDSHAKE_BROADCAST_CHANNEL_ID'
+
   public static POSITION_TOP_LEFT: Position = {
     x: 0,
     y: 0

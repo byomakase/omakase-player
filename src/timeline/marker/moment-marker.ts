@@ -20,11 +20,11 @@ import {MomentMarkerChangeEvent, MomentObservation} from '../../types';
 import {BaseMarkerHandle, MarkerHandleConfig} from './marker-handle';
 import {MarkerLane} from './marker-lane';
 import {Timeline} from '../timeline';
-import {ConfigWithOptionalStyle} from '../../common';
 import {z} from 'zod';
 import {MarkerUtil} from './marker-util';
 import {MARKER_STYLE_DEFAULT, MarkerHandleStyle, MarkerStyle} from './marker-types';
 import {Position} from '../../common/measurement';
+import {ConfigWithOptionalStyle} from '../../layout';
 
 // region marker handle
 export interface MomentMarkerHandleStyle extends MarkerHandleStyle {

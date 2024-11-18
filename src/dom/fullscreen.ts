@@ -43,6 +43,30 @@ export interface FullscreenDocument {
   webkitCancelFullScreen?: Document['exitFullscreen'];
   mozCancelFullScreen?: Document['exitFullscreen'];
   msExitFullscreen?: Document['exitFullscreen'];
+
+  addEventListener<K extends keyof FullscreenDocumentEventMap>(
+    type: K,
+    listener: (this: Document, ev: FullscreenDocumentEventMap[K]) => unknown,
+    options?: boolean | AddEventListenerOptions
+  ): void;
+
+  removeEventListener<K extends keyof FullscreenDocumentEventMap>(
+    type: K,
+    listener: (this: Document, ev: FullscreenDocumentEventMap[K]) => unknown,
+    options?: boolean | EventListenerOptions
+  ): void;
+}
+
+export interface FullscreenDocumentEventMap {
+  fullscreenchange: DocumentEventMap['fullscreenchange'];
+  webkitfullscreenchange: DocumentEventMap['fullscreenchange'];
+  mozfullscreenchange: DocumentEventMap['fullscreenchange'];
+  MSFullscreenChange: DocumentEventMap['fullscreenchange'];
+
+  fullscreenerror: DocumentEventMap['fullscreenerror'];
+  webkitfullscreenerror: DocumentEventMap['fullscreenerror'];
+  mozfullscreenerror: DocumentEventMap['fullscreenerror'];
+  MSFullscreenError: DocumentEventMap['fullscreenerror'];
 }
 
 export class Fullscreen {
@@ -101,4 +125,46 @@ export class Fullscreen {
 
     return method.call(_document);
   }
+
+  public static getEventsNames(): Array<keyof FullscreenDocumentEventMap> | null {
+    if (typeof document === 'undefined') return null;
+
+    const _document = document as FullscreenDocument;
+
+    if ('exitFullscreen' in _document)
+      return ['fullscreenchange', 'fullscreenerror'];
+    if ('webkitExitFullscreen' in _document)
+      return ['webkitfullscreenchange', 'webkitfullscreenerror'];
+    if ('webkitCancelFullScreen' in _document)
+      return ['webkitfullscreenchange', 'webkitfullscreenerror'];
+    if ('mozCancelFullScreen' in _document)
+      return ['mozfullscreenchange', 'mozfullscreenerror'];
+    if ('msExitFullscreen' in _document)
+      return ['MSFullscreenChange', 'MSFullscreenError'];
+
+    return null;
+  }
+
+  public static getEventName(eventType: 'change' | 'error') {
+    const eventsNames = this.getEventsNames();
+    if (!eventsNames) return null;
+
+    if (eventType === 'change') return eventsNames[0];
+    return eventsNames[1];
+  }
+
+  public static on(eventType: 'change' | 'error', callback: (event: Event) => void) {
+    const eventName = Fullscreen.getEventName(eventType);
+    if (!eventName) return;
+
+    (document as FullscreenDocument).addEventListener(eventName, callback);
+  }
+
+  public static off(eventType: 'change' | 'error', callback: (event: Event) => void) {
+    const eventName = Fullscreen.getEventName(eventType);
+    if (!eventName) return;
+
+    (document as FullscreenDocument).removeEventListener(eventName, callback);
+  }
+
 }

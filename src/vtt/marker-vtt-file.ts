@@ -19,7 +19,7 @@ import {MarkerVttCue, OmakaseVttCueExtension} from '../types';
 import {map, Observable} from 'rxjs';
 import Decimal from 'decimal.js';
 import {VttCueParsed} from './model';
-import { VttLoadOptions } from '../api/vtt-aware-api';
+import {VttLoadOptions} from '../api/vtt-aware-api';
 
 export class MarkerVttFile extends BaseOmakaseRemoteVttFile<MarkerVttCue> {
 

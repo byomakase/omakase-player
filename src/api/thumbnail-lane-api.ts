@@ -1,4 +1,3 @@
-import { ThumbnailVttCue } from './../types/vtt';
 /*
  * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
@@ -14,12 +13,11 @@ import { ThumbnailVttCue } from './../types/vtt';
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-import { Observable } from 'rxjs';
-import { ThumbnailEvent } from '../types';
-import { ThumbnailVttFile } from '../vtt';
-import { VttAwareApi } from './vtt-aware-api';
-import { Api } from './api';
+import {Observable} from 'rxjs';
+import {ThumbnailEvent, ThumbnailVttCue} from '../types';
+import {ThumbnailVttFile} from '../vtt';
+import {VttAwareApi} from './vtt-aware-api';
+import {Api} from './api';
 
 export interface ThumbnailLaneApi extends Api, VttAwareApi<ThumbnailVttCue, ThumbnailVttFile> {
   /**

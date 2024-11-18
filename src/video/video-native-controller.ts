@@ -18,26 +18,29 @@ import {HTMLVideoElementEventKeys, VIDEO_CONTROLLER_CONFIG_DEFAULT, VideoControl
 import {first, forkJoin, fromEvent, Observable} from 'rxjs';
 import {z} from 'zod';
 import {Video, VideoLoadOptions} from './model';
+import Decimal from 'decimal.js';
+import {VideoDomControllerApi} from './video-dom-controller-api';
+import {nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
 
 export interface VideoNativeControllerConfig extends VideoControllerConfig {
 
 }
 
-export const VIDEO_NATIVE_CONTROLLER_CONFIG_DEFAULT: VideoNativeControllerConfig = {
+export const VIDEO_NATIVE_CONTROLLER_CONFIG_DEFAULT: Omit<VideoNativeControllerConfig, 'videoDomController'> = {
   ...VIDEO_CONTROLLER_CONFIG_DEFAULT
 }
 
 export class VideoNativeController extends VideoController<VideoNativeControllerConfig> {
 
-  constructor(config: Partial<VideoNativeControllerConfig>) {
+  constructor(config: VideoNativeControllerConfig, videoDomController: VideoDomControllerApi) {
     super({
       ...VIDEO_NATIVE_CONTROLLER_CONFIG_DEFAULT,
       ...config
-    });
+    }, videoDomController);
   }
 
-  loadVideoInternal(sourceUrl: string, frameRate: number, options?: VideoLoadOptions): Observable<Video> {
-    return new Observable<Video>(o$ => {
+  loadVideoUsingLoader(sourceUrl: string, frameRate: number, options?: VideoLoadOptions): Observable<Video> {
+    return passiveObservable<Video>(observer => {
       let videoLoadedData$ = fromEvent(this.videoElement, HTMLVideoElementEventKeys.LOADEDDATA).pipe(first());
 
       forkJoin([videoLoadedData$]).pipe(first()).subscribe(result => {
@@ -50,14 +53,24 @@ export class VideoNativeController extends VideoController<VideoNativeController
         }
 
         let dropFrame = options && options.dropFrame !== void 0 ? options.dropFrame : false;
-        let video = new Video(sourceUrl, frameRate, dropFrame, duration, false); // TODO adjust for audio only
 
-        o$.next(video);
-        o$.complete();
+        let video: Video = {
+          sourceUrl: sourceUrl,
+          frameRate: frameRate,
+          dropFrame: dropFrame,
+          duration: duration,
+          totalFrames: Decimal.mul(duration, frameRate).ceil().toNumber(),
+          frameDuration: Decimal.div(1, frameRate).toNumber(),
+          audioOnly: false
+        }  // TODO adjust for audio only
+
+        nextCompleteObserver(observer, video);
       })
 
       this.videoElement.src = sourceUrl;
-      this.videoElement.load();
+      this.videoElement.load(); // TODO in progressive watch for load event and then complete observable
+
+
     })
   }
 

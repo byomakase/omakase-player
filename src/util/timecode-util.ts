@@ -32,10 +32,9 @@ export class TimecodeUtil {
    * Format video media time to timecode
    * @param time video time
    * @param video
-   * @param ffomTimecodeObject video time offset, default = 0
    */
-  static formatToTimecode(time: number, video: Video, ffomTimecodeObject: TimecodeObject | undefined = void 0): string {
-    let frameRateDecimal = video.frameRateDecimal;
+  static formatToTimecode(time: number, video: Video): string {
+    let frameRateDecimal = new Decimal(video.frameRate);
     let frameNumberDecimal: Decimal;
     let frameRateRoundedDecimal = frameRateDecimal.round();
 
@@ -49,13 +48,8 @@ export class TimecodeUtil {
       frameNumberDecimal = frameRateDecimal.mul(time).floor();
     }
 
-
-    if (ffomTimecodeObject) {
-      if (ffomTimecodeObject.dropFrame !== video.dropFrame) {
-        throw new Error(`Incorrect FFOM format`);
-      }
-
-      let ffomFrameNumber = TimecodeUtil.timecodeObjectToFrameNumber(ffomTimecodeObject, frameRateDecimal);
+    if (video.ffomTimecodeObject) {
+      let ffomFrameNumber = TimecodeUtil.timecodeObjectToFrameNumber(video.ffomTimecodeObject, frameRateDecimal);
       frameNumberDecimal = frameNumberDecimal.add(ffomFrameNumber);
     }
 
@@ -118,13 +112,13 @@ export class TimecodeUtil {
     return TimecodeUtil.formatTimecodeText(timecodeObject);
   }
 
-  private static formatTimecodeText(timecodeObject: TimecodeObject): string {
+  static formatTimecodeText(timecodeObject: TimecodeObject): string {
     let frameSeparator = timecodeObject.audioOnly ? '.' : timecodeObject.dropFrame ? ';' : ':';
     return `${TimecodeUtil.padZero(timecodeObject.hours)}:${TimecodeUtil.padZero(timecodeObject.minutes)}:${TimecodeUtil.padZero(timecodeObject.seconds)}${frameSeparator}${TimecodeUtil.padZero(timecodeObject.frames)}`;
   }
 
   static parseTimecodeToTime(timecode: string, video: Video, ffomTimecodeObject: TimecodeObject | undefined = void 0): number {
-    let frameNumber = TimecodeUtil.parseTimecodeToFrame(timecode, video.frameRateDecimal, ffomTimecodeObject);
+    let frameNumber = TimecodeUtil.parseTimecodeToFrame(timecode, new Decimal(video.frameRate), ffomTimecodeObject);
     return FrameRateUtil.frameNumberToTime(frameNumber, video);
   }
 

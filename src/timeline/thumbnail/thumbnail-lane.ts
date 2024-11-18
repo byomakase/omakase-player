@@ -16,18 +16,18 @@
 
 import Konva from 'konva';
 import {Thumbnail} from './thumbnail';
-import {catchError, debounceTime, filter, map, Observable, of, Subject, take, takeUntil} from 'rxjs';
+import {debounceTime, filter, Observable, Subject, takeUntil, zip} from 'rxjs';
 import {TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle, VTT_DOWNSAMPLE_CONFIG_DEFAULT} from '../timeline-lane';
 import {ImageUtil} from '../../util/image-util';
-import {Dimension, Position} from '../../common/measurement';
+import {Dimension, Position} from '../../common';
 import {ThumbnailEvent, ThumbnailVttCue} from '../../types';
 import {AxiosRequestConfig} from 'axios';
-import {nextCompleteVoidSubject} from '../../util/observable-util';
+import {nextCompleteSubject} from '../../util/rxjs-util';
 import {Timeline} from '../timeline';
 import {destroyer} from '../../util/destroy-util';
 import Decimal from 'decimal.js';
 import {KonvaFactory} from '../../factory/konva-factory';
-import {VideoControllerApi} from '../../video/video-controller-api';
+import {VideoControllerApi} from '../../video';
 import {ThumbnailLaneApi} from '../../api';
 import {ThumbnailVttFile} from '../../vtt';
 import {VttAdapter, VttAdapterConfig} from '../../common/vtt-adapter';
@@ -105,7 +105,7 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
       x: 0,
       y: this.style.height / 2 - this.style.thumbnailHeight / 2,
       width: this._timecodedGroup.width(),
-      height: this._config.style.height ,
+      height: this._config.style.height,
     });
 
     this._timecodedGroup.add(this._timecodedEventCatcher);
@@ -139,28 +139,22 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
       this.hideThumbnailHover();
     })
 
-    let onVttFileLoaded = () => {
-      this._videoController!.onVideoLoaded$.pipe(filter(p => !!p), take(1), takeUntil(this._destroyed$)).subscribe({
-        next: (event) => {
-          this.createEntitiesAsync().subscribe();
+    zip([this._videoController!.onVideoLoaded$.pipe(filter(p => !!p && !(p.isAttaching || p.isDetaching))), this._vttAdapter.vttFileLoaded$])
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: () => {
+          this.createEntities()
         }
       })
-    }
 
-    this._vttAdapter.vttFileLoaded$.pipe(takeUntil(this._destroyed$)).subscribe({
-      next: () => {
-        onVttFileLoaded();
+    this._videoController!.onVideoLoading$.pipe(filter(p => !(p.isAttaching || p.isDetaching)), takeUntil(this._destroyed$)).subscribe({
+      next: (event) => {
+        this.clearContent();
       }
-    });
-
-    this._videoController!.onVideoLoading$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.clearContent();
     })
 
     if (this.vttUrl) {
-      this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig)).subscribe();
-    } else if (this.vttFile) {
-      onVttFileLoaded();
+      this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig));
     }
   }
 
@@ -219,7 +213,7 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
   }
 
   private fireEventStreamBreaker() {
-    nextCompleteVoidSubject(this._eventStreamBreaker$);
+    nextCompleteSubject(this._eventStreamBreaker$);
     this._eventStreamBreaker$ = new Subject<void>();
   }
 
@@ -393,7 +387,7 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
     }
   }
 
-  private createEntitiesAsync(): Observable<boolean> {
+  private createEntities() {
     if (!this.vttFile) {
       throw new Error('VTT file not loaded')
     }
@@ -404,18 +398,16 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
 
     this.clearContent();
 
-    return this.resolveDimension(this.vttFile).pipe(map(dimension => {
-      if (dimension) {
-        this._thumbnailDimension = dimension;
-        this.createAndAdjustThumbnails();
-      } else {
-        console.debug(`Unable to load first cue and determine thumbnail size, thumbnails will not be loaded`);
+    this.resolveDimension(this.vttFile).subscribe({
+      next: (dimension) => {
+        if (dimension) {
+          this._thumbnailDimension = dimension;
+          this.createAndAdjustThumbnails();
+        } else {
+          console.debug(`Unable to load first cue and determine thumbnail size, thumbnails will not be loaded`);
+        }
       }
-      return true;
-    }), catchError(err => {
-      console.error(err);
-      return of(false);
-    }))
+    })
   }
 
   private resolveDimension(vttFile: ThumbnailVttFile): Observable<Dimension | undefined> {

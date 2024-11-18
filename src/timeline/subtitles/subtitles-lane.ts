@@ -14,22 +14,22 @@
  * limitations under the License.
  */
 
-import { TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle, VTT_DOWNSAMPLE_CONFIG_DEFAULT } from '../timeline-lane';
+import {TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle, VTT_DOWNSAMPLE_CONFIG_DEFAULT} from '../timeline-lane';
 import Konva from 'konva';
-import { combineLatest, debounceTime, filter, Subject, take, takeUntil } from 'rxjs';
-import { Horizontals } from '../../common/measurement';
-import { OmakaseTextTrackCue, SubtitlesVttCue } from '../../types';
-import { SubtitlesLaneItem } from './subtitles-lane-item';
-import { Timeline } from '../timeline';
-import { AxiosRequestConfig } from 'axios';
-import { destroyer } from '../../util/destroy-util';
-import { KonvaFactory } from '../../factory/konva-factory';
-import { VideoControllerApi } from '../../video/video-controller-api';
-import { SubtitlesLaneApi } from '../../api';
-import { SubtitlesVttFile } from '../../vtt';
-import { VttAdapter, VttAdapterConfig } from '../../common/vtt-adapter';
-import { VttTimelineLane, VttTimelineLaneConfig } from '../vtt-timeline-lane';
-import { UuidUtil } from '../../util/uuid-util';
+import {combineLatest, debounceTime, filter, Subject, takeUntil, zip} from 'rxjs';
+import {Horizontals} from '../../common/measurement';
+import {OmakaseTextTrackCue, SubtitlesVttCue} from '../../types';
+import {SubtitlesLaneItem} from './subtitles-lane-item';
+import {Timeline} from '../timeline';
+import {AxiosRequestConfig} from 'axios';
+import {destroyer} from '../../util/destroy-util';
+import {KonvaFactory} from '../../factory/konva-factory';
+import {VideoControllerApi} from '../../video';
+import {SubtitlesLaneApi} from '../../api';
+import {SubtitlesVttFile} from '../../vtt';
+import {VttAdapter, VttAdapterConfig} from '../../common/vtt-adapter';
+import {VttTimelineLane, VttTimelineLaneConfig} from '../vtt-timeline-lane';
+import {CryptoUtil} from '../../util/crypto-util';
 
 export interface SubtitlesLaneConfig extends VttTimelineLaneConfig<SubtitlesLaneStyle>, VttAdapterConfig<SubtitlesVttFile> {
   axiosConfig?: AxiosRequestConfig;
@@ -83,7 +83,7 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
 
     let timecodedRect = this.getTimecodedRect();
 
-    this._timecodedGroup = new Konva.Group({
+    this._timecodedGroup = KonvaFactory.createGroup({
       ...timecodedRect
     });
 
@@ -102,31 +102,33 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
 
     this._timeline!.addToTimecodedFloatingContent(this._timecodedGroup, 2);
 
-    this._onSettleLayout$.pipe(takeUntil(this._destroyed$)).subscribe(() => {
-      this.settlePosition();
+    this._onSettleLayout$.pipe(takeUntil(this._destroyed$)).subscribe({
+      next: () => {
+        this.settlePosition();
+      }
     })
 
-    combineLatest([this._onSettleLayout$]).pipe(debounceTime(100)).pipe(takeUntil(this._destroyed$))
+    combineLatest([this._onSettleLayout$, this._timeline!.onScroll$]).pipe(debounceTime(100)).pipe(takeUntil(this._destroyed$))
       .subscribe(() => {
         this.settleAll();
       });
 
-    this._vttAdapter.vttFileLoaded$.pipe(takeUntil(this._destroyed$)).subscribe({
-      next: () => {
-        this._videoController!.onVideoLoaded$.pipe(filter(p => !!p), take(1), takeUntil(this._destroyed$)).subscribe({
-          next: (event) => {
-            this.createEntities();
-          }
-        })
-      }
-    });
+    zip([this._videoController!.onVideoLoaded$.pipe(filter(p => !!p && !(p.isAttaching || p.isDetaching))), this._vttAdapter.vttFileLoaded$])
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: () => {
+          this.createEntities()
+        }
+      })
 
-    this._videoController!.onVideoLoading$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.clearContent();
+    this._videoController!.onVideoLoading$.pipe(filter(p => !(p.isAttaching || p.isDetaching)), takeUntil(this._destroyed$)).subscribe({
+      next: (event) => {
+        this.clearContent();
+      }
     })
 
     if (this.vttUrl) {
-      this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig)).subscribe();
+      this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig));
     }
   }
 
@@ -173,19 +175,16 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
     }
 
     if (this._itemsMap.size > 0) {
-
       let visibleTimeRange = this._timeline!.getVisibleTimeRange();
-      this._itemsMap.forEach((subtitlesLaneItem) => {
-        let firstCue = subtitlesLaneItem.getFirstCue();
-        let lastCue = subtitlesLaneItem.getLastCue();
+      this._itemsMap.forEach((subtitlesLaneItem, index) => {
+        let firstCue = subtitlesLaneItem.getCues()[0];
+        let lastCue = subtitlesLaneItem.getCues()[subtitlesLaneItem.getCues().length - 1];
 
         if ((lastCue.endTime >= visibleTimeRange.start && firstCue.startTime <= visibleTimeRange.end)) {
-          let squashedCue: OmakaseTextTrackCue = {
-            id: "",
+          let horizontals = this.resolveItemHorizontals({
             startTime: firstCue.startTime,
             endTime: lastCue.endTime
-          }
-          let horizontals = this.resolveItemHorizontals(squashedCue);
+          });
           subtitlesLaneItem.setHorizontals(horizontals)
         } else {
           subtitlesLaneItem.destroy()
@@ -194,41 +193,33 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
     }
   }
 
-  private squashCues(cues: Array<OmakaseTextTrackCue>) {
-    let pixelDuration = this.calculatePixelDuration(cues);
-    let squashedCues: Array<Array<OmakaseTextTrackCue>> = [];
+  private squashCues(cues: SubtitlesVttCue[]): SubtitlesVttCue[][] {
+    let singlePixelDuration = this._videoController!.getVideo()!.duration / this.getTimecodedRect().width;
+    let squashedCues: SubtitlesVttCue[][] = [];
 
-    let lastCue: OmakaseTextTrackCue = cues[0];
-    let squashed: Array<OmakaseTextTrackCue> = [];
-    cues.forEach((cue) => {
-      if (cue.startTime - lastCue.endTime >= pixelDuration * this._cueThresholdCoefficient) {
-        if (lastCue.endTime - squashed[0].startTime >= pixelDuration * this._cueThresholdCoefficient) {
-          squashedCues.push(squashed);
+    if (cues && cues.length > 0) {
+      let lastCue: SubtitlesVttCue = cues[0];
+      let squashed: SubtitlesVttCue[] = [];
+      cues.forEach((cue) => {
+        if (cue.startTime - lastCue.endTime >= singlePixelDuration * this._cueThresholdCoefficient) {
+          if (lastCue.endTime - squashed[0].startTime >= singlePixelDuration * this._cueThresholdCoefficient) {
+            squashedCues.push(squashed);
+          }
           squashed = [];
         }
-      }
-      squashed.push(cue);
-      lastCue = cue;
-    })
+        squashed.push(cue);
+        lastCue = cue;
+      })
 
-    if (lastCue?.endTime - squashed[0].startTime >= pixelDuration * this._cueThresholdCoefficient) {
-      squashedCues.push(squashed);
+      if (lastCue.endTime - squashed[0].startTime >= singlePixelDuration * this._cueThresholdCoefficient) {
+        squashedCues.push(squashed);
+      }
     }
 
     return squashedCues;
   }
 
-  private calculatePixelDuration(cues: Array<OmakaseTextTrackCue>): number {
-    let duration = 0;
-    for (let i = 0; i < cues.length; i++) {
-      let horizontals = this.resolveItemHorizontals(cues[i]);
-      duration += (cues[i].endTime - cues[i].startTime) / horizontals.width;
-    }
-
-    return duration / cues.length;
-  }
-
-  resolveItemHorizontals(textTrackCue: OmakaseTextTrackCue): Horizontals {
+  resolveItemHorizontals(textTrackCue: { startTime: number, endTime: number }): Horizontals {
     let startTimeX = this._timeline!.constrainTimelinePosition(this._timeline!.timeToTimelinePosition(textTrackCue.startTime));
     let endTimeX = this._timeline!.constrainTimelinePosition(this._timeline!.timeToTimelinePosition(textTrackCue.endTime));
     return {
@@ -248,19 +239,25 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
 
     this.clearItems();
 
-    let squashedCues = this.squashCues(this.vttFile.cues);
+    let visibleTimeRange = this._timeline!.getVisibleTimeRange();
+    let visibleCues = this.vttFile.findCues(visibleTimeRange.start, visibleTimeRange.end); // TODO include time in clip margin
+
+    let squashedCues = this.squashCues(visibleCues);
 
     squashedCues.forEach((cues, index) => {
+      let firstCue = cues[0];
+      let lastCue = cues[cues.length - 1];
+
       let squashedCue: OmakaseTextTrackCue = {
-        id: "",
-        startTime: cues[0].startTime,
-        endTime: cues[cues.length - 1].endTime
+        id: CryptoUtil.uuid(),
+        startTime: firstCue.startTime,
+        endTime: lastCue.endTime
       }
       let horizontals = this.resolveItemHorizontals(squashedCue);
 
       let subtitlesLaneItem = new SubtitlesLaneItem({
         ...horizontals,
-        lane: this,
+        subtitlesLane: this,
         cues: cues,
         style: {
           height: this._itemsGroup!.height(),
@@ -269,7 +266,7 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
         },
         listening: true
       });
-      this._itemsMap.set(cues[0].startTime, subtitlesLaneItem);
+      this._itemsMap.set(firstCue.startTime, subtitlesLaneItem);
       this._itemsGroup!.add(subtitlesLaneItem.konvaNode);
 
       if (this._itemProcessFn) {
@@ -280,7 +277,7 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
 
   public getTimeline() {
     if (!this._timeline) {
-      throw new Error("Timeline is not loaded!");
+      throw new Error('Timeline is not loaded!');
     }
 
     return this._timeline;

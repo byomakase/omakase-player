@@ -15,6 +15,8 @@
  */
 
 import {z} from 'zod';
+import {TimecodeUtil} from './util/timecode-util';
+import {Video} from './video';
 
 export class Validators {
 
@@ -46,6 +48,33 @@ export class Validators {
     return (value: string) => {
       return z.coerce.string()
         .url()
+        .parse(value);
+    }
+  }
+
+  public static videoTime(): (value: number) => number {
+    return (value: number) => {
+      return z.coerce.number()
+        .min(0)
+        .parse(value);
+    }
+  }
+
+  public static videoTimecode(): (value: string, video: Video) => string {
+    return (value: string, video: Video) => {
+      let timecodeObject = TimecodeUtil.parseTimecodeToTimecodeObject(value);
+      if (timecodeObject.dropFrame !== video.dropFrame) {
+        throw new Error(`Timecode format provided (${value}) is in ${timecodeObject.dropFrame ? 'drop-frame' : 'no drop-frame'} format and doesn't match video (${video.dropFrame ? 'drop-frame' : 'no drop-frame'})`);
+      }
+      return value;
+    }
+  }
+
+  public static audioChannelsNumber(): (value: number) => number {
+    return (value: number) => {
+      return z.coerce.number()
+        .min(1)
+        .max(32)
         .parse(value);
     }
   }

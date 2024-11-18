@@ -14,35 +14,78 @@
  * limitations under the License.
  */
 
-import {Observable} from 'rxjs';
+import {BehaviorSubject, Observable} from 'rxjs';
 import {VideoApi} from '../api';
-import {Destroyable, OmakaseTextTrack, OmakaseTextTrackCue} from '../types';
+import {AudioContextChangeEvent, AudioLoadedEvent, AudioRoutingEvent, AudioSwitchedEvent, AudioWorkletNodeCreatedEvent, AudioPeakProcessorWorkletNodeMessageEvent, Destroyable, SubtitlesCreateEvent, SubtitlesEvent, SubtitlesLoadedEvent, SubtitlesVttTrack, VideoHelpMenuChangeEvent, ThumnbailVttUrlChangedEvent} from '../types';
 import {BufferedTimespan} from './video-controller';
-import {SubtitlesVttTrack} from '../track';
-import {PlaybackState, Video, VideoLoadOptions} from './model';
+import {AudioInputOutputNode, AudioMeterStandard, PlaybackState, Video, VideoLoadOptions, VideoLoadOptionsInternal} from './model';
 
+/**
+ * @internal
+ */
 export interface VideoControllerApi extends VideoApi, Destroyable {
-
-  onHelpMenuChange$: Observable<void>;
+  onAudioLoaded$: BehaviorSubject<AudioLoadedEvent | undefined>;
+  onAudioWorkletNodeCreated$: BehaviorSubject<AudioWorkletNodeCreatedEvent | undefined>;
+  onSubtitlesLoaded$: BehaviorSubject<SubtitlesLoadedEvent | undefined>;
 
   onPlaybackState$: Observable<PlaybackState>;
 
-  loadVideo(sourceUrl: string, frameRate: number | string, options?: VideoLoadOptions): Observable<Video>;
+  onAudioSwitched$: Observable<AudioSwitchedEvent>;
+  onAudioContextChange$: Observable<AudioContextChangeEvent>;
+  onAudioRouting$: Observable<AudioRoutingEvent>;
+  onAudioPeakProcessorWorkletNodeMessage$: Observable<AudioPeakProcessorWorkletNodeMessageEvent>;
+
+  onSubtitlesCreate$: Observable<SubtitlesCreateEvent>;
+  onSubtitlesRemove$: Observable<SubtitlesEvent>;
+  onSubtitlesShow$: Observable<SubtitlesEvent>;
+  onSubtitlesHide$: Observable<SubtitlesEvent>;
+
+  onHelpMenuChange$: Observable<VideoHelpMenuChangeEvent>;
+  onThumbnailVttUrlChanged$: Observable<ThumnbailVttUrlChangedEvent | undefined>;
+
+  loadVideoInternal(sourceUrl: string, frameRate: number | string, options: VideoLoadOptions | undefined, optionsInternal: VideoLoadOptionsInternal): Observable<Video>;
 
   getPlaybackState(): PlaybackState | undefined;
 
   getBufferedTimespans(): BufferedTimespan[];
 
-  // subtitles VTT tracks
-  getSubtitlesVttTracks(): SubtitlesVttTrack[] | undefined
+  // subtitles
+  createSubtitlesVttTrack(subtitlesVttTrack: SubtitlesVttTrack): Observable<SubtitlesVttTrack | undefined>;
 
-  // DOM specific
-  appendHTMLTrackElement(omakaseTextTrack: OmakaseTextTrack<OmakaseTextTrackCue>): Observable<HTMLTrackElement | undefined>;
+  getSubtitlesTracks(): SubtitlesVttTrack[];
 
-  getTextTrackList(): TextTrackList | undefined;
+  getActiveSubtitlesTrack(): SubtitlesVttTrack | undefined;
 
-  getTextTrackById(id: string): TextTrack | undefined;
+  removeSubtitlesTrack(id: string): Observable<void>;
 
-  removeTextTrackById(id: string): boolean;
+  removeAllSubtitlesTracks(): Observable<void>;
+
+  showSubtitlesTrack(id: string): Observable<void>;
+
+  hideSubtitlesTrack(id: string): Observable<void>;
+
+  // audio
+  getAudioContext(): AudioContext | undefined;
+
+  getMediaElementAudioSourceNode(): MediaElementAudioSourceNode | undefined;
+
+  createAudioContext(inputsNumber: number, outputsNumber?: number): Observable<void>;
+
+  createAudioContextWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void>;
+
+  getAudioInputOutputNodes(): AudioInputOutputNode[][];
+
+  routeAudioInputOutputNode(newAudioInputOutputNode: AudioInputOutputNode): Observable<void>;
+
+  routeAudioInputOutputNodes(newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void>;
+
+  getAudioPeakProcessorWorkletNode(): AudioWorkletNode | undefined;
+
+  createAudioPeakProcessorWorkletNode(audioMeterStandard: AudioMeterStandard): Observable<void>;
+
+  getThumbnailVttUrl(): string | undefined;
+
+  loadThumbnailVttUrl(thumbnailVttUrl: string): Observable<void>;
+
 
 }

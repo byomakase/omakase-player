@@ -15,16 +15,14 @@
  */
 
 import Konva from 'konva';
-import {RectMeasurement} from '../common/measurement';
+import {Position, RectMeasurement, StyleAdapter} from '../common';
 import {Timeline} from './timeline';
 import {filter, Observable, Subject, takeUntil} from 'rxjs';
 import {Validators} from '../validators';
-import {VideoControllerApi} from '../video/video-controller-api';
+import {VideoControllerApi} from '../video';
 import {KonvaFlexGroup, KonvaFlexItem} from '../layout/konva-flex';
-import {StyleAdapter} from '../common/style-adapter';
-import {nextCompleteVoidSubject} from '../util/observable-util';
+import {nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {StringUtil} from '../util/string-util';
-import {UuidUtil} from '../util/uuid-util';
 import {animate} from '../util/animation-util';
 import Decimal from 'decimal.js';
 import {FlexSpacingBuilder} from '../layout/flex-node';
@@ -36,6 +34,7 @@ import {KonvaFactory} from '../factory/konva-factory';
 import {SelectRequired, WithOptionalPartial, WithRequired} from '../types';
 import {isNullOrUndefined} from '../util/object-util';
 import {DownsampleConfig} from '../api/vtt-aware-api';
+import {CryptoUtil} from '../util/crypto-util';
 
 /**
  * Base configuration for classes that extend {@link BaseTimelineLane}
@@ -181,7 +180,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
     this._styleAdapter = new StyleAdapter<S>(this._config.style);
 
 
-    this._id = StringUtil.isNullUndefinedOrWhitespace(this._config.id) ? UuidUtil.uuid() : Validators.id()(this._config.id!);
+    this._id = StringUtil.isNullUndefinedOrWhitespace(this._config.id) ? CryptoUtil.uuid() : Validators.id()(this._config.id!);
 
     if (this._config.description) {
       this._description = Validators.description()(this._config.description);
@@ -380,6 +379,14 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
     };
   }
 
+  getTimecodedPointerPosition(): Position | undefined {
+    return this._timeline ? this._timeline.getTimecodedFloatingRelativePointerPosition() : void 0
+  }
+
+  getTimecodedPointerPositionTime(): number {
+    return this._timeline && this.getTimecodedPointerPosition() ? this._timeline.timelinePositionToTime(this.getTimecodedPointerPosition()!.x) : 0;
+  }
+
   get id(): string {
     return this._id;
   }
@@ -434,7 +441,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
       throw new Error('Timeline lane not added to timeline');
     }
 
-    return new Observable<void>(o$ => {
+    return passiveObservable(observer => {
       let layout = this._mainLeftFlexGroup.getLayout();
       let marginBottom = this._styleAdapter.style.marginBottom ? this._styleAdapter.style.marginBottom : 0;
       animate({
@@ -453,8 +460,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
         },
         onCompleteHandler: (frame, value) => {
           this.minimize();
-          o$.next();
-          o$.complete();
+          nextCompleteObserver(observer);
         }
       })
     })
@@ -465,7 +471,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
       throw new Error('Timeline lane not added to timeline');
     }
 
-    return new Observable<void>(o$ => {
+    return passiveObservable(observer => {
       let layout = this._mainLeftFlexGroup.getLayout();
       let marginBottom = this._styleAdapter.style.marginBottom ? this._styleAdapter.style.marginBottom : 0;
       animate({
@@ -483,8 +489,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
         },
         onCompleteHandler: (frame, value) => {
           this.maximize();
-          o$.next();
-          o$.complete();
+          nextCompleteObserver(observer);
         }
       })
     })
@@ -529,7 +534,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
       this.mainRightFlexGroup
     )
 
-    nextCompleteVoidSubject(this._destroyed$);
+    nextCompleteSubject(this._destroyed$);
 
     nullifier(
       this._config,

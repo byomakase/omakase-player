@@ -21,7 +21,7 @@ import {KonvaFlexItem} from '../../layout/konva-flex';
 import {FlexGroupConfig} from '../../layout/flex-group';
 import {Timeline} from '../timeline';
 import {Subject, takeUntil} from 'rxjs';
-import {nextCompleteVoidSubject} from '../../util/observable-util';
+import {nextCompleteSubject} from '../../util/rxjs-util';
 
 export class ScrollbarFlexContentNode extends KonvaComponentFlexContentNode<Scrollbar> {
   private _scrollableHorizontally: ScrollableHorizontally;
@@ -83,6 +83,6 @@ export class TimelineScrollbar extends ScrollbarFlexItem {
 
   override destroy() {
     super.destroy();
-    nextCompleteVoidSubject(this._destroyed$);
+    nextCompleteSubject(this._destroyed$);
   }
 }

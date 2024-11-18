@@ -18,7 +18,7 @@ import {KonvaComponent} from './konva-component';
 import {KonvaFlexContentNode} from './konva-flex';
 import {destroyer} from '../util/destroy-util';
 import {Layout} from './flex-node';
-import {OnMeasurementsChange} from '../common/measurement';
+import {OnMeasurementsChange} from '../common';
 
 /**
  * Used as content node in flex layouting

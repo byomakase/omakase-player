@@ -114,7 +114,11 @@ export abstract class BaseFlexGroup<C extends FlexGroupConfig, T extends FlexGro
     return this;
   }
 
-  removeChild(flexNode: FlexNode<any>) {
+  removeChild(flexNode: FlexNode<any>, refreshLayout: boolean = true) {
+    return this._removeChild(flexNode, refreshLayout);
+  }
+
+  protected _removeChild(flexNode: FlexNode<any>, refreshLayout: boolean) {
     if (flexNode === void 0) {
       throw new Error(`Flex node is undefined`)
     }
@@ -124,7 +128,10 @@ export abstract class BaseFlexGroup<C extends FlexGroupConfig, T extends FlexGro
     this._yogaNode.removeChild(flexNode.yogaNode);
 
     this._contentNode.removeContentChild(flexNode.contentNode);
-    this.refreshLayoutFromRoot();
+
+    if (refreshLayout) {
+      this.refreshLayoutFromRoot();
+    }
 
     return this;
   }

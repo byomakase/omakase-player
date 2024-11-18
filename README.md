@@ -55,6 +55,14 @@ omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8', 25).subscribe({ //
 })
 ```
 
+Media chrome controls visibility can be toggled with the `mediaChrome` property. Possible values are `enabled` (always enabled), `disabled` (always disabled) and `fullscreen-only` (enabled in fullscreen, disabled otherwise). Default value is `fullscreen-only` in regular mode and `enabled` in detached mode.
+
+```javascript
+let omakasePlayer = new omakase.OmakasePlayer({
+  mediaChrome: 'enabled'
+});
+```
+
 ## Video API
 
 Complete list of Video API methods is available in API Reference Docs
@@ -65,10 +73,15 @@ Video playback control is achieved through Video API.
 
 ```javascript
 // plays video
-omakasePlayer.video.play();
+omakasePlayer.video.play()
+
+// plays video and notifies user on successful play action
+omakasePlayer.video.play().subscribe(() => {
+  console.log(`Play started`);
+})
 
 // pauses video
-omakasePlayer.video.pause();
+omakasePlayer.video.pause()
 
 // seeks to timestamp
 omakasePlayer.video.seekToTime(123.45).subscribe({
@@ -146,6 +159,53 @@ omakasePlayer.video.onVideoTimeChange$.subscribe({
 })
 ```
 
+### Detached video player
+
+To enable full video detaching in Omakase Player we need to instantiate another *detached* instance of Omakase Player on same host, and tell our *local* instance where to find it. 
+
+Local player instance configuration on `https://my-server.com/omp-player`:
+```javascript
+// local-omakase-player.js
+
+// Local OmakasePlayer instance configuration on https://my-server.com/omp-player
+let omakasePlayer = new omakase.OmakasePlayer({
+  playerHTMLElementId: 'omakase-player',
+  detachedPlayerUrl: 'https://my-server.com/player/omp-player-detached'
+});
+```
+
+Detached player instance configuration on `https://my-server.com/omp-player-detached`:
+```javascript
+// detached-omakase-player.js
+
+// Local OmakasePlayer instance configuration on https://my-server.com/omp-player
+let omakasePlayer = new omakase.OmakasePlayer({
+  playerHTMLElementId: 'omakase-player',
+  detachedPlayer: true // this OmakasePlayer instance will be run in detached mode 
+});
+```
+
+We can now load a video, detach it to independent browser window and play it!:
+```javascript
+// local-omakase-player.js
+
+omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8', 25).subscribe({
+  next: (video) => {
+    console.log(`Video loaded`)
+    
+    omakasePlayer.video.detachVideoWindow().subscribe(() => {
+      console.log(`Video detached`)
+      
+      omakasePlayer.video.play();
+    })
+  }
+})
+```
+
+Due to security and usability policies, most modern browsers require a user interaction before allowing certain actions, such as video autoplay or fullscreen initiation. 
+It could be that on-time-only user interaction (such as clicking on play button in detached player) is needed before video playback or switching to fullscreen playback after video detaching.   
+
+
 ### Hls.js
 
 We can fetch hls.js instance through API, as well as subscribe to hls.js events:
@@ -167,8 +227,8 @@ omakasePlayer.video.addSafeZone({
 })
 
 // adds safe zone calculated from provided aspect ratio expression
-omakasePlayer.video.addSafeZoneWithAspectRatio({
-  aspectRatioText: "16/9"
+omakasePlayer.video.addSafeZone({
+  aspectRatio: "16/9"
 })
 
 // toggles fullscreen
@@ -186,7 +246,7 @@ Few common usages of Audio API:
 let audioTracks = omakasePlayer.audio.getAudioTracks();
 
 // retrieves active audio track
-let activeAudioTrack = omakasePlayer.audio.getCurrentAudioTrack();
+let activeAudioTrack = omakasePlayer.audio.getActiveAudioTrack();
 
 // detect audio tracks switching
 omakasePlayer.audio.onAudioSwitched$.subscribe({
@@ -195,10 +255,34 @@ omakasePlayer.audio.onAudioSwitched$.subscribe({
   }
 })
 
-// sets audio track with id=0 as active audio track
-omakasePlayer.audio.setAudioTrack(0);
+// sets another audio track as active
+omakasePlayer.audio.setActiveAudioTrack(audioTracks[1].id);
 
 ```
+
+### AudioContext and audio routing
+
+```javascript
+
+// creates AudioContext with 2 inputs and 4 outputs
+omakasePlayer.audio.createAudioContext(2, 4);
+
+// connects 1st output with 2nd output
+omakasePlayer.audio.routeAudioInputOutputNode({
+  inputNumber: 0,
+  outputNumber: 1,
+  connected: true
+})
+
+// disconnects 2nd input and 2nd output
+omakasePlayer.audio.routeAudioInputOutputNode({
+  inputNumber: 1,
+  outputNumber: 1,
+  connected: false
+})
+
+```
+
 
 ## Timeline
 
@@ -222,7 +306,7 @@ omakasePlayer.createTimeline({
   }
 }).subscribe({
   next: (timelineApi) => {
-    console.log(`Timeline loaded`)
+    console.log(`Timeline created`)
   }
 })
 ```
@@ -251,7 +335,7 @@ Scrubber Lane is created automatically. Scrubber Lane instance can be fetched by
 ```javascript
 omakasePlayer.createTimeline().subscribe({
   next: (timelineApi) => {
-    console.log(`Timeline loaded`);
+    console.log(`Timeline created`);
 
     let scrubberLane = omakasePlayer.timeline.getScrubberLane();
     // set custom styles for Scrubber Lane
@@ -598,10 +682,202 @@ textLabelMaximize.onClick$.subscribe({
 })
 ```
 
+## Marker List API
+
+Marker list is initialized by defining div placeholder and calling `createMarkerList()` API method with optional configuration.
+The marker list web component will be added into a html element with id defined in `markerListHTMLElementId`. If this parameter is not provided, it will default to`omakase-player-marker-list`. Following code will instantiate an empty marker list.
+
+```html
+
+<div id="marker-list"></div>
+```
+
+```javascript
+
+omakasePlayer.createMarkerList({
+  markerListHTMLElementId: 'marker-list'
+})
+
+```
+
+### Loading markers from a VTT file
+
+A marker list can be loaded from a VTT file. In this case a function to create a marker list item from VTT file cues can also be provided, as well as HTML content to render while the file is loading.
+
+```html
+
+<div id="marker-list"></div>
+<template id="loading-template">
+  <!-- content to render while the VTT file is loading -->
+</template>
+```
+
+```javascrip
+const colors = ['red', 'green', 'blue']
+
+omakasePlayer.createMarkerList({
+  loadingHTMLElementId: 'loading-template',
+  vttUrl: './markers.vtt',
+  vttMarkerCreateFn: (cue, index) => ({
+    name: 'VTT Marker ' + index,
+    timeObservation: {
+      start: cue.startTime,
+      end: cue.endTime
+    },
+    style: {
+      color: colors[index % colors.length]
+    },
+    data: {
+      custom_key: 'custom value'
+    }
+  })
+})
+```
+
+### Deep linking with timeline lanes
+
+Marker list can also be linked to one or multiple timeline lanes. If linked in this way, the markers from the timeline lane(s) will appear on the marker list and they will stay in sync regardless if markers are added to Marker List or timeline lane(s).
+
+```javascript
+omakasePlayer.createMarkerList({
+  source: [
+    omakasePlayer.timeline.getTimelineLane('marker-lane-1'),
+    omakasePlayer.timeline.getTimelineLane('marker-lane-2')
+  ]
+})
+```
+
+### Thumbnails
+
+Thumbnail VTT file can be passed using `thumbnailVttFile` property. If provided, it will be used to automatically set the thumbnail to the closest vtt cue based on the marker start time.
+You can also use `thumbnailFn` property for defining a function that will provide a thumbnail url for any given time.
+
+```javascript
+
+omakasePlayer.createMarkerList({
+  thumbnailVttFile: omakasePlayer.timeline.thumbnailVttFile
+})
+
+```
+
+### CRUD methods
+
+The following methods are available on the marker list. Usage examples are shown below.
+
+- `addMarker`
+- `updateMarker`
+- `removeMarker`
+- `toggleMarker`
+
+```javascript
+omakasePlayer.createMarkerList().subscribe(markerList => {
+// add marker
+  const marker = markerList.addMarker({
+    name: 'Marker',
+    timeObservation: {
+      start: 100,
+      end: 200
+    },
+    style: {
+      color: 'red'
+    }
+  })
+
+// update marker
+  markerList.updateMarker(marker.id, {timeObservation: {start: 100, end: 300}})
+
+// set marker as active/inactive
+  markerList.toggleMarker(marker.id)
+
+// remove marker
+  markerList.removeMarker(marker.id)
+})
+```
+
+### Styling and templating
+
+Marker list HTML and style can be customised by passing a css file url and template element ids.
+
+A template for the marker list row can include slots to render data or trigger actions. The following slots are predefined:
+
+- `color` (from marker `style` property)
+- `thumbnail` (found in the `thumbnailVttFile`, if provided)
+- `name` (marker `text` property)
+- `track` (name of the linked timeline lane, if applicable)
+- `start` (`start` or `time` property from marker `timeObservation`)
+- `end` (`end` property from marker `timeObservation`)
+- `duration` (difference between `end` and `start`)
+- `remove` (triggers marker removal)
+
+Beside predefined slots, dynamic slots can be used to display custom data or trigger custom actions. Custom data slots must be prefixed with `data-` and custom actions slots must be prefixed with `action-`.
+
+The parameter `styleUrl` can be an array to provide multiple css files.
+
+```html
+
+<template id="row-template">
+  <div slot="color"></div>
+  <div slot="name"></div>
+  <div slot="start"></div>
+  <div slot="end"></div>
+  <div class="actions">
+    <span slot="action-edit"></span>
+    <span slot="remove"></span>
+  </div>
+</template>
+
+<template id="header-template">
+  <!-- header content -->
+</template>
+
+<template id="empty-template">
+  <!-- content to render if marker list is empty -->
+</template>
+```
+
+```javascript
+omakasePlayer.createMarkerList({
+  templateHTMLElementId: 'row-template',
+  headerHTMLElementId: 'header-template',
+  emptyHTMLElementId: 'empty-template',
+  styleUrl: './style.css'
+})
+```
+
+### Events
+
+The following action events are provided:
+
+- `onMarkerClick$` (triggered when the marker row is clicked)
+- `onMarkerAction$` (triggered when a custom element provided with an `action-<name>` slot is clicked)
+
+The following marker lifecycle events are provided:
+
+- `onMarkerCreate$`
+- `onMarkerUpdate$`
+- `onMarkerDelete$`
+- `onMarkerInit$`
+
+Some usage examples are shown below:
+
+```javascript
+omakasePlayer.createMarkerList().subscribe(markerList => {
+  markerList.onMarkerClick$.subscribe(event => {
+    console.log(event.marker)
+  })
+  markerList.onMarkerAction$.subscribe(event => {
+    console.log(event.action, event.marker)
+  })
+})
+```
+
+### Destroy
+
+Marker list can be destroyed with the `destroy()` method. This cleans up the marker list resources and removes it from the DOM.
+
 ## Subtitles API
 
 Complete list of Audio API methods is available in API Reference Docs.
-
 Omakase Player automatically identifies all available subtitles VTT tracks from stream manifest and makes them available through Subtitles API.
 
 ```javascript

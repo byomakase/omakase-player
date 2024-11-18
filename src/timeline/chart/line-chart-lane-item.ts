@@ -16,7 +16,7 @@
 
 import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle} from '../../layout/konva-component';
 import Konva from 'konva';
-import {Position} from '../../common/measurement';
+import {Position} from '../../common';
 import {LineChartCue, WithOptionalPartial} from '../../types';
 import {nullifier} from '../../util/destroy-util';
 

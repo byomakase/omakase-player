@@ -13,8 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { AxiosRequestConfig } from 'axios';
-import { AuthenticationData, BasicAuthenticationData, BearerAuthenticationData, CustomAuthenticationData } from '../video/model';
+import {AxiosRequestConfig} from 'axios';
+import {AuthenticationData, BasicAuthenticationData, BearerAuthenticationData, CustomAuthenticationData} from '../authentication/model';
 
 export class AuthUtil {
   static _authentication?: AuthenticationData;

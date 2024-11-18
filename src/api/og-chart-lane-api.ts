@@ -1,4 +1,3 @@
-import { OgChartVttCue } from './../types/vtt';
 /*
  * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
@@ -15,8 +14,10 @@ import { OgChartVttCue } from './../types/vtt';
  * limitations under the License.
  */
 
-import { Api } from './api';
-import { OgChartVttFile } from '../vtt/chart-vtt-file';
-import { VttAwareApi } from './vtt-aware-api';
+import {Api} from './api';
+import {OgChartVttFile} from '../vtt';
+import {VttAwareApi} from './vtt-aware-api';
+import {OgChartVttCue} from '../types';
 
-export interface OgChartLaneApi extends Api, VttAwareApi<OgChartVttCue, OgChartVttFile> {}
+export interface OgChartLaneApi extends Api, VttAwareApi<OgChartVttCue, OgChartVttFile> {
+}

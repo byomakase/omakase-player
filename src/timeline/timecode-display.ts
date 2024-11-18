@@ -20,8 +20,8 @@ import {Constants} from '../constants';
 import {HasRectMeasurement, OnMeasurementsChange, RectMeasurement} from '../common/measurement';
 import {filter, Subject, takeUntil} from 'rxjs';
 import {VideoLoadedEvent} from '../types';
-import {nextCompleteVoidSubject} from '../util/observable-util';
-import {VideoControllerApi} from '../video/video-controller-api';
+import {nextCompleteSubject} from '../util/rxjs-util';
+import {VideoControllerApi} from '../video';
 import {TimelineApi} from '../api';
 
 export interface TimecodeDisplayStyle {
@@ -133,7 +133,7 @@ export class TimecodeDisplay extends BaseKonvaComponent<TimecodeDisplayConfig, T
   }
 
   private fireVideoEventStreamBreaker() {
-    nextCompleteVoidSubject(this._videoEventStreamBreaker$);
+    nextCompleteSubject(this._videoEventStreamBreaker$);
     this._videoEventStreamBreaker$ = new Subject<void>();
   }
 

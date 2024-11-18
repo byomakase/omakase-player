@@ -16,8 +16,8 @@
 
 import {TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle, VTT_DOWNSAMPLE_CONFIG_DEFAULT} from '../timeline-lane';
 import Konva from 'konva';
-import {debounceTime, distinctUntilChanged, filter, Subject, take, takeUntil} from 'rxjs';
-import {LineChartLaneItem, LineChartLaneItemStyle} from './line-chart-lane-item';
+import {debounceTime, distinctUntilChanged, filter, Subject, takeUntil, zip} from 'rxjs';
+import {LineChartLaneItem} from './line-chart-lane-item';
 import {Timeline} from '../timeline';
 import {destroyer} from '../../util/destroy-util';
 import {AxiosRequestConfig} from 'axios';
@@ -26,7 +26,7 @@ import Decimal from 'decimal.js';
 import {LineChartVttCue} from '../../types';
 import {KonvaFactory} from '../../factory/konva-factory';
 import {isNullOrUndefined} from '../../util/object-util';
-import {VideoControllerApi} from '../../video/video-controller-api';
+import {VideoControllerApi} from '../../video';
 import {LineChartLaneApi} from '../../api';
 import {VttAdapter, VttAdapterConfig} from '../../common/vtt-adapter';
 import {VttTimelineLane, VttTimelineLaneConfig} from '../vtt-timeline-lane';
@@ -139,22 +139,22 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
       this.settleAll();
     })
 
-    this._vttAdapter.vttFileLoaded$.pipe(takeUntil(this._destroyed$)).subscribe({
-      next: () => {
-        this._videoController!.onVideoLoaded$.pipe(filter(p => !!p), take(1), takeUntil(this._destroyed$)).subscribe({
-          next: (event) => {
-            this.createEntities();
-          }
-        })
-      }
-    });
+    zip([this._videoController!.onVideoLoaded$.pipe(filter(p => !!p && !(p.isAttaching || p.isDetaching))), this._vttAdapter.vttFileLoaded$])
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: () => {
+          this.createEntities()
+        }
+      })
 
-    this._videoController!.onVideoLoading$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.clearContent();
+    this._videoController!.onVideoLoading$.pipe(filter(p => !(p.isAttaching || p.isDetaching)), takeUntil(this._destroyed$)).subscribe({
+      next: (event) => {
+        this.clearContent();
+      }
     })
 
     if (this.vttUrl) {
-      this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig)).subscribe();
+      this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig));
     }
   }
 
@@ -262,20 +262,19 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
     let pointYScale = pointYMax - pointYMin;
 
     this._lines!.forEach((line, lineIndex, lines) => {
-
       const style = {
         ...this.style,
         ...this._lineStyleFn(lineIndex, lines.length)
       };
-  
+
       this._linePoints = [];
       this.vttFile!.cues.forEach((cue, index) => {
 
         let pointX = this._timeline!.timeToTimelinePosition(cue.startTime);
         let pointY = itemHeight - new Decimal(this.getCueValue(cue, lineIndex) - pointYMin).mul(itemHeight).div(pointYScale).toNumber();
-  
+
         this._linePoints = this._linePoints!.concat(pointX, pointY);
-  
+
         const item = new LineChartLaneItem({
           cue: cue,
           style: {
@@ -292,7 +291,7 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
         this._itemsMap.set(index, item);
         this._itemsGroup!.add(item.konvaNode);
       });
-  
+
       line.points(this._linePoints);
 
     })

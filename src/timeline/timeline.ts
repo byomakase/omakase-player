@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-import {ConfigWithOptionalStyle} from '../common';
 import Konva from 'konva';
 import Decimal from 'decimal.js';
 import {ScrollableHorizontally, Scrollbar} from './scrollbar/scrollbar';
-import {Dimension, Horizontals, Position, RectMeasurement} from '../common/measurement';
+import {Dimension, Horizontals, Position, RectMeasurement} from '../common';
 import {animate} from '../util/animation-util';
-import {BehaviorSubject, debounceTime, filter, fromEvent, map, Observable, of, sampleTime, Subject, take, takeUntil} from 'rxjs';
-import {Destroyable, PlayheadMoveEvent, ScrubberMoveEvent, ThumbnailVttCue, TimecodeClickEvent, TimecodeMouseMoveEvent, TimelineReadyEvent, TimelineScrollEvent, TimelineZoomEvent, VideoLoadedEvent, VideoLoadingEvent} from '../types';
+import {BehaviorSubject, debounceTime, filter, fromEvent, map, merge, Observable, sampleTime, Subject, take, takeUntil} from 'rxjs';
+import {Destroyable, PlayheadMoveEvent, ScrubberMoveEvent, ThumbnailVttCue, TimecodeClickEvent, TimecodeMouseMoveEvent, TimelineReadyEvent, TimelineScrollEvent, TimelineZoomEvent, VideoLoadedEvent} from '../types';
 import {Playhead} from './playhead';
 import {Thumbnail} from './thumbnail/thumbnail';
 import {ImageUtil} from '../util/image-util';
@@ -30,8 +29,8 @@ import {ScrubberLane} from './scrubber';
 import {TimelineApi, TimelineLaneApi} from '../api';
 import {z} from 'zod';
 import {AxiosRequestConfig} from 'axios';
-import {completeUnsubscribeSubjects, nextCompleteVoidSubject, nextCompleteVoidSubjects} from '../util/observable-util';
-import {VideoControllerApi} from '../video/video-controller-api';
+import {completeUnsubscribeSubjects, nextCompleteObserver, nextCompleteSubject, passiveObservable, simplePassiveObservable} from '../util/rxjs-util';
+import {PlaybackState, VideoControllerApi} from '../video';
 import {destroyer, nullifier} from '../util/destroy-util';
 import {KonvaFlexGroup} from '../layout/konva-flex';
 import {StyleAdapter} from '../common/style-adapter';
@@ -41,10 +40,10 @@ import {KonvaFactory} from '../factory/konva-factory';
 import {TimelineScrollbar} from './scrollbar';
 import {ThumbnailVttFile} from '../vtt';
 import {TimelineDomController} from './timeline-dom-controller';
-import {PlaybackState} from '../video';
 import {konvaUnlistener} from '../util/konva-util';
 import {Scrubber} from './scrubber/scrubber';
 import {VttAdapter} from '../common/vtt-adapter';
+import {ConfigWithOptionalStyle} from '../layout';
 
 type ZoomDirection = 'zoom_in' | 'zoom_out';
 
@@ -652,12 +651,16 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
 
     this.addTimelineLane(this._scrubberLane);
 
-    this._videoController.onVideoLoading$.pipe(filter(p => !!p), takeUntil(this._destroyed$)).subscribe((event) => {
-      this.onVideoLoadingEvent(event!);
+    this._videoController!.onVideoLoading$.pipe(filter(p => !(p.isAttaching || p.isDetaching)), takeUntil(this._destroyed$)).subscribe({
+      next: (event) => {
+        this.clearContent();
+      }
     })
 
-    this._videoController.onVideoLoaded$.pipe(filter(p => !!p), takeUntil(this._destroyed$)).subscribe((event) => {
-      this.onVideoLoadedEvent(event!);
+    this._videoController.onVideoLoaded$.pipe(filter(p => !!p), takeUntil(this._destroyed$)).subscribe({
+      next: (event) => {
+        this.onVideoLoadedEvent(event!);
+      }
     })
 
     fromEvent(window, 'resize').pipe(takeUntil(this._destroyed$)).subscribe({
@@ -671,12 +674,10 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
         return;
       }
 
-      let pointerPosition = this._timecodedContainer.getRelativePointerPosition();
-
       this.onTimecodeMouseMove$.next({
         mouseEvent: event.evt,
         cancelableEvent: event,
-        timecode: this.timelinePositionToTimecode(pointerPosition.x)
+        timecode: this.timelinePositionToTimecode(this._timecodedContainer.getRelativePointerPosition().x)
       })
     });
 
@@ -826,7 +827,7 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
         this.scrubberMove();
         this.refreshScrollWithPlayhead();
       }
-      nextCompleteVoidSubject(this._dragBreaker$);
+      nextCompleteSubject(this._dragBreaker$);
     })
 
     this._scrubberLane.onMouseMove$.pipe(debounceTime(20)).pipe(takeUntil(this._destroyed$)).subscribe({
@@ -1135,7 +1136,7 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
   }
 
   private scrollToPositionEased(newTimelineX: number): Observable<number> {
-    return new Observable<number>(o$ => {
+    return passiveObservable(observer => {
       let currentTimelineX = this.getTimecodedFloatingPosition().x;
       animate({
         duration: this._config.scrollEasingDuration,
@@ -1145,8 +1146,7 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
           this.scrollTimeline(value)
         },
         onCompleteHandler: (frame, value) => {
-          o$.next(this.getHorizontalScrollPercent());
-          o$.complete();
+          nextCompleteObserver(observer, this.getHorizontalScrollPercent())
         }
       })
     })
@@ -1241,8 +1241,9 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
       let timecodedContainerFocus = zoomFocusPercent ? this.resolveTimecodedFloatingPosition(zoomFocusPercent) : this.resolveTimelineContainerZoomFocusPosition();
       return this.zoomByPercentEased(percentSafeParsed.data, timecodedContainerFocus);
     } else {
-      return of(this.getZoomPercent());
+      return simplePassiveObservable<number>(this.getZoomPercent())
     }
+
   }
 
   private resolveTimecodedFloatingPosition(percent: number): number {
@@ -1342,7 +1343,7 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
   }
 
   private zoomByWidthEased(newTimecodedWidth: number, timecodedContainerFocus: number): Observable<number> {
-    return new Observable<number>(o$ => {
+    return passiveObservable(observer => {
       let currentWidth = this.getTimecodedFloatingDimension().width;
 
       if (currentWidth !== newTimecodedWidth) {
@@ -1354,13 +1355,11 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
             this.zoomByWidth(value, timecodedContainerFocus);
           },
           onCompleteHandler: (frame, value) => {
-            o$.next(this.getZoomPercent());
-            o$.complete();
+            nextCompleteObserver(observer, this.getZoomPercent());
           }
         })
       } else {
-        o$.next(this.getZoomPercent());
-        o$.complete();
+        nextCompleteObserver(observer, this.getZoomPercent());
       }
     })
   }
@@ -1402,7 +1401,7 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
   private scrubberMove() {
     if (this._videoController.isVideoLoaded() && this._scrubber) {
       let isSnapped = false;
-      let pointerPosition = this._timecodedFloatingGroup.getRelativePointerPosition();
+      let pointerPosition = this.getTimecodedFloatingRelativePointerPosition();
 
       if (pointerPosition) {
         let x = pointerPosition.x;
@@ -1422,10 +1421,6 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
   // endregion
 
   // region video
-
-  private onVideoLoadingEvent(event: VideoLoadingEvent) {
-    this.clearContent();
-  }
 
   private onVideoLoadedEvent(event: VideoLoadedEvent) {
     this.fireVideoEventBreaker();
@@ -1468,7 +1463,7 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
       }
     })
 
-    this.onZoom$.pipe(takeUntil(this._videoEventBreaker$)).subscribe({
+    merge(this.onZoom$, this.onScroll$).pipe(takeUntil(this._videoEventBreaker$)).subscribe({
       next: (event) => {
         this.scrubberMove();
       }
@@ -1476,7 +1471,7 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
   }
 
   private fireVideoEventBreaker() {
-    nextCompleteVoidSubject(this._videoEventBreaker$);
+    nextCompleteSubject(this._videoEventBreaker$);
     this._videoEventBreaker$ = new Subject<void>();
   }
 
@@ -1541,17 +1536,23 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
   removeTimelineLanes(ids: string[]) {
     let isAnyRemoved = false;
     ids.forEach(id => {
-      let result = this._removeTimelineLane(id);
+      let result = this._removeTimelineLane(id, false);
       if (result) {
         isAnyRemoved = result;
       }
     })
     if (isAnyRemoved) {
+      this._mainLeftFlexGroup.refreshLayoutFromRoot();
+      this._timelineLaneStaticFlexGroup.refreshLayoutFromRoot();
       this.settleLayout();
     }
   }
 
-  private _removeTimelineLane(id: string): boolean {
+  removeAllTimelineLanes() {
+    this.removeTimelineLanes(this.getTimelineLanes().map(p => p.id));
+  }
+
+  private _removeTimelineLane(id: string, refreshLayout: boolean = true): boolean {
     if (!this._timelineLanesMap.has(id)) {
       console.debug(`TimelineLane with id=${id} doesn't exist`);
       return false;
@@ -1566,15 +1567,17 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
 
     if (timelineLane) {
       this._mainLeftFlexGroup
-        .removeChild(timelineLane!.mainLeftFlexGroup)
+        .removeChild(timelineLane!.mainLeftFlexGroup, refreshLayout)
       this._timelineLaneStaticFlexGroup
-        .removeChild(timelineLane!.mainRightFlexGroup)
+        .removeChild(timelineLane!.mainRightFlexGroup, refreshLayout)
 
       this._timelineLanes.splice(this._timelineLanes.findIndex(p => p.id === id), 1);
       this._timelineLanesMap.delete(id);
       timelineLane!.destroy();
 
-      this.settleLayout();
+      if (refreshLayout) {
+        this.settleLayout();
+      }
       return true;
     }
 
@@ -1684,8 +1687,8 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
     return this._timecodedFloatingGroup.getPosition()
   }
 
-  getTimecodedFloatingRelativePointerPosition(): Position {
-    return this._timecodedFloatingGroup.getRelativePointerPosition()
+  getTimecodedFloatingRelativePointerPosition(): Position | undefined {
+    return this._konvaStage.getPointersPositions().length > 0 ? this._timecodedFloatingGroup.getRelativePointerPosition() : void 0
   }
 
   getTimecodedFloatingRect(): RectMeasurement {
@@ -1733,9 +1736,15 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
   }
 
   loadThumbnailVttFileFromUrl(vttUrl: string): Observable<ThumbnailVttFile | undefined> {
-    return this._vttAdapter.loadVtt(vttUrl, {
-      axiosConfig: this._config.axiosConfig
-    });
+    return passiveObservable<ThumbnailVttFile | undefined>(observer => {
+      this._vttAdapter.loadVtt(vttUrl, {
+        axiosConfig: this._config.axiosConfig
+      }).subscribe({
+        next: (value) => {
+          nextCompleteObserver(observer, value)
+        }
+      })
+    })
   }
 
   setDescriptionPaneVisible(visible: boolean): void {
@@ -1749,7 +1758,7 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
   }
 
   setDescriptionPaneVisibleEased(visible: boolean): Observable<void> {
-    return new Observable(o$ => {
+    return passiveObservable(observer => {
       animate({
         duration: this._config.layoutEasingDuration,
         startValue: visible ? 0 : this._mainLeftFlexGroup.getLayout().width,
@@ -1760,8 +1769,7 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
         },
         onCompleteHandler: (frame, value) => {
           this.setDescriptionPaneVisible(visible);
-          o$.next();
-          o$.complete();
+          nextCompleteObserver(observer)
         }
       })
     })
@@ -1799,7 +1807,8 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
   }
 
   destroy(): void {
-    nextCompleteVoidSubjects(this._destroyed$, this._videoEventBreaker$);
+    nextCompleteSubject(this._destroyed$);
+    nextCompleteSubject(this._videoEventBreaker$);
 
     completeUnsubscribeSubjects(
       this.onScroll$,

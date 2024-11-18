@@ -25,6 +25,11 @@ export class StringUtil {
   public static isNonEmpty(value: string | undefined | null): boolean {
     return !StringUtil.isNullUndefinedOrWhitespace(value);
   }
+
+  public static toArrayBuffer(str: string): ArrayBuffer {
+    const encoder = new TextEncoder();
+    return encoder.encode(str).buffer;
+  }
 }
 
 

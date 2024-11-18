@@ -16,7 +16,7 @@
 
 import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle} from '../../layout/konva-component';
 import Konva from 'konva';
-import {Dimension, HasRectMeasurement, Position, RectMeasurement} from '../../common/measurement';
+import {Dimension, HasRectMeasurement, Position, RectMeasurement} from '../../common';
 import {AudioVttCue, WithOptionalPartial} from '../../types';
 import Decimal from 'decimal.js';
 import {Constants} from '../../constants';

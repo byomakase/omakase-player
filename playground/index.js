@@ -17,19 +17,18 @@
 import {AudioTrackLane, MarkerLane, MomentMarker, OmakasePlayer, PeriodMarker, SubtitlesLane, ThumbnailLane} from "../src";
 import {RandomUtil} from "../src/util/random-util";
 import {ColorUtil} from "../src/util/color-util";
-import Hls from "hls.js";
 
 window.addEventListener('load', () => {
   let eventProcessor = (eventKey, event) => {
     console.log('EVENT: ' + eventKey, event)
   }
 
-  let addToStreamsSelect = (value, text) => {
-    let streamsSelect = document.getElementById('streamsSelect');
+  let addTodatasetSelect = (value, text) => {
+    let datasetSelect = document.getElementById('datasetSelect');
     let option = document.createElement('option');
     option.value = value;
     option.text = text;
-    streamsSelect.append(option)
+    datasetSelect.append(option)
   }
 
   let testStreams = [
@@ -69,13 +68,16 @@ window.addEventListener('load', () => {
   ];
 
   testStreams.forEach(testStream => {
-    addToStreamsSelect(testStream.id, testStream.name)
+    addTodatasetSelect(testStream.id, testStream.name)
   })
 
   let activeStreamData = testStreams.find(p => p.id === 'omakase_player_demo1')
 
   let omakasePlayer = new OmakasePlayer({
-    playerHTMLElementId: 'omakase-player1'
+    playerHTMLElementId: 'omakase-player1',
+    style: {
+      fontFamily: 'Arial'
+    }
   });
 
   omakasePlayer.video.onVideoError$.subscribe(event => {
@@ -102,7 +104,7 @@ window.addEventListener('load', () => {
         // console.log('omakasePlayer.video.onSeeked$', event)
       })
 
-      omakasePlayer.video.onAudioSwitched$.subscribe(event => {
+      omakasePlayer.audio.onAudioSwitched$.subscribe(event => {
         // console.log('omakasePlayer.video.onAudioSwitched$', event)
       })
 
@@ -116,40 +118,7 @@ window.addEventListener('load', () => {
         })
       }
 
-      let audioTracks = omakasePlayer.audio.getAudioTracks()
-      // console.log('Audio tracks', omakasePlayer.video.getAudioTracks())
-      if (audioTracks && audioTracks.length > 0) {
-        omakasePlayer.on(omakasePlayer.EVENTS.OMAKASE_AUDIO_SWITCHED, (event) => {
-          // console.log('Audio track switched', event);
-        })
-
-        let currentAudioTrack = omakasePlayer.audio.getCurrentAudioTrack();
-        let differentAudioTrackIndex = audioTracks.findIndex(p => p !== currentAudioTrack);
-
-        setTimeout(() => {
-          omakasePlayer.audio.setAudioTrack(differentAudioTrackIndex);
-        }, 5000)
-
-      }
-
-      omakasePlayer.createTimeline({
-        thumbnailVttUrl: activeStreamData.thumbs_vtt
-      }).subscribe((timeline) => {
-        // console.log('Timeline created')
-
-        timeline.onScroll$.subscribe((event) => {
-          // eventProcessor('timeline.scrollEvent$', event);
-          document.getElementById('inputScrollTo').value = event.scrollPercent;
-        });
-
-        timeline.onZoom$.subscribe((event) => {
-          // eventProcessor('timeline.zoomEvent$', event);
-          document.getElementById('inputZoomTo').value = event.zoomPercent;
-        });
-
-        attachButtonHandlers(timeline);
-        createTimelineLanes(timeline);
-      })
+      createTimeline()
 
     },
     error: (error) => {
@@ -158,227 +127,248 @@ window.addEventListener('load', () => {
     }
   });
 
+  let createTimeline = () => {
+    omakasePlayer.createTimeline({
+      thumbnailVttUrl: activeStreamData.thumbs_vtt
+    }).subscribe((timeline) => {
+      // console.log('Timeline created')
 
-  let createTimelineLanes = (timeline) => {
-    if (activeStreamData.thumbnails && activeStreamData.thumbnails.length > 0) {
-      activeStreamData.thumbnails.forEach(thumbnails => {
-        let thumbnailLane = new ThumbnailLane({
-          id: thumbnails.id,
-          description: thumbnails.description,
-          vttUrl: thumbnails.url,
+      timeline.onScroll$.subscribe((event) => {
+        // eventProcessor('timeline.scrollEvent$', event);
+        document.getElementById('inputScrollTo').value = event.scrollPercent;
+      });
+
+      timeline.onZoom$.subscribe((event) => {
+        // eventProcessor('timeline.zoomEvent$', event);
+        document.getElementById('inputZoomTo').value = event.zoomPercent;
+      });
+
+      attachButtonHandlers(timeline);
+      createTimelineLanes(timeline);
+    })
+
+
+    let createTimelineLanes = (timeline) => {
+      if (activeStreamData.thumbnails && activeStreamData.thumbnails.length > 0) {
+        activeStreamData.thumbnails.forEach(thumbnails => {
+          let thumbnailLane = new ThumbnailLane({
+            id: thumbnails.id,
+            description: thumbnails.description,
+            vttUrl: thumbnails.url,
+            style: {
+              backgroundFill: '#0078ef',
+              height: 60,
+              leftBackgroundFill: '#72e79f',
+              leftBackgroundOpacity: 0.8
+            }
+          });
+
+          thumbnailLane.onClick$.subscribe((event) => {
+            omakasePlayer.video.seekToTime(event.thumbnail.cue.startTime).subscribe(() => {
+            })
+          })
+
+          timeline.addTimelineLane(thumbnailLane);
+        })
+      }
+
+      if (activeStreamData.subtitles && activeStreamData.subtitles.length > 0) {
+        activeStreamData.subtitles.forEach(subtitle => {
+
+          let subtitlesLane = new SubtitlesLane({
+            id: subtitle.id,
+            description: subtitle.description,
+            vttUrl: subtitle.url,
+            style: {
+              backgroundFill: "#eaeaea",
+              paddingTop: 5,
+              paddingBottom: 5
+            }
+          });
+
+          timeline.addTimelineLane(subtitlesLane);
+        })
+      }
+
+      if (activeStreamData.audio && activeStreamData.audio.length > 0) {
+        activeStreamData.audio.forEach(audio => {
+
+          let audioTrackLane = new AudioTrackLane({
+            id: audio.id,
+            description: audio.name,
+            vttUrl: audio.url,
+            style: {
+              backgroundFill: "#ffffff",
+              paddingTop: 5,
+              paddingBottom: 5,
+              height: 100,
+              itemWidth: 3,
+              itemMinPadding: 1,
+              itemCornerRadius: 2,
+              maxSampleFillLinearGradientColorStops: [0, '#ff0099', 0.2, 'yellow', 1, 'green'],
+              minSampleFillLinearGradientColorStops: [0, 'green', 0.8, 'yellow', 1, 'red'],
+            }
+          });
+
+          timeline.addTimelineLane(audioTrackLane);
+        })
+      }
+
+      let showSafeZone = true;
+
+      if (showSafeZone) {
+        let _4_3 = omakasePlayer.video.addSafeZone({
+          aspectRatio: "4/3",
+          scalePercent: 90
+        });
+
+        let _16_9 = omakasePlayer.video.addSafeZone({
+          aspectRatio: "16/9",
+          scalePercent: 30
+        });
+
+        let _9_16 = omakasePlayer.video.addSafeZone({
+          aspectRatio: "9/16"
+        });
+
+        let _17_9 = omakasePlayer.video.addSafeZone({
+          aspectRatio: "17/9"
+        });
+      }
+
+
+      let inAndOutMarkersLane = timeline.getTimelineLane('marker_lane_inout_1');
+      let inAndOutMarkersLane2 = timeline.getTimelineLane('marker_lane_inout_2');
+
+      if (!inAndOutMarkersLane) {
+        inAndOutMarkersLane = new MarkerLane({
+          id: "marker_lane_inout_1",
+          description: "In and out markers",
           style: {
-            backgroundFill: '#0078ef',
-            height: 60,
-            leftBackgroundFill: '#72e79f',
-            leftBackgroundOpacity: 0.8
+            backgroundFill: '#eaeaea', height: 50
           }
         });
 
-        thumbnailLane.onClick$.subscribe((event) => {
-          omakasePlayer.video.seekToTime(event.thumbnail.cue.startTime).subscribe(() => {
-          })
+        timeline.addTimelineLane(inAndOutMarkersLane);
+      }
+
+      if (!inAndOutMarkersLane2) {
+        inAndOutMarkersLane2 = new MarkerLane({
+          id: "marker_lane_inout_2",
+          description: "In and out markers 2",
+          style: {
+            backgroundFill: '#d0d0d0'
+          }
+        });
+
+        timeline.addTimelineLane(inAndOutMarkersLane2);
+      }
+
+
+      let renderTypes = ['lane', 'spanning']
+      let symbolTypes = ['square', 'triangle', 'circle']
+
+      let randomRenderType = () => {
+        return renderTypes[RandomUtil.randomNumber(0, renderTypes.length - 1)];
+      }
+
+      let randomSymbolType = () => {
+        return symbolTypes[RandomUtil.randomNumber(0, symbolTypes.length - 1)];
+      }
+
+      let randomMarkerStyle = () => {
+        return {
+          color: ColorUtil.randomHexColor(),
+          renderType: randomRenderType(),
+          symbolType: randomSymbolType()
+        }
+      }
+
+      let randomMomentTimeObservation = () => {
+        return {
+          time: RandomUtil.randomNumber(0, omakasePlayer.video.getDuration())
+        }
+      }
+
+      let randomPeriodTimeObservation = () => {
+        let start = RandomUtil.randomNumber(0, omakasePlayer.video.getDuration());
+        let duration = omakasePlayer.video.getDuration() * 0.3
+        let end = RandomUtil.randomNumber(start, (start + duration) > omakasePlayer.video.getDuration() ? omakasePlayer.video.getDuration() : start + duration);
+        return {
+          start: start, end: end
+        }
+      }
+
+      let createDebugMarkers = (markerLane) => {
+        markerLane.createMomentMarker({
+          id: "moment_marker_lane1",
+          timeObservation: {
+            time: 50
+          },
+          editable: false,
+          style: {
+            symbolType: 'square',
+            color: ColorUtil.randomHexColor(),
+            renderType: 'lane'
+          }
+        });
+
+        markerLane.addMarker(new MomentMarker({
+          id: "moment_marker_spanning1",
+          timeObservation: {
+            time: 100
+          },
+          style: {
+            symbolType: 'square',
+            color: ColorUtil.randomHexColor(),
+            renderType: 'spanning'
+          }
+        }))
+
+        markerLane.createPeriodMarker({
+          id: "testmarker2",
+          timeObservation: {
+            start: 150,
+            end: 200
+          },
+          style: {
+            symbolType: 'square',
+            color: ColorUtil.randomHexColor(),
+            renderType: 'lane'
+          }
         })
 
-        timeline.addTimelineLane(thumbnailLane);
-      })
-    }
-
-    if (activeStreamData.subtitles && activeStreamData.subtitles.length > 0) {
-      activeStreamData.subtitles.forEach(subtitle => {
-
-        let subtitlesLane = new SubtitlesLane({
-          id: subtitle.id,
-          description: subtitle.description,
-          vttUrl: subtitle.url,
+        markerLane.addMarker(new PeriodMarker({
+          id: "testmarker4",
+          timeObservation: {
+            start: 250,
+            end: 300
+          },
           style: {
-            backgroundFill: "#eaeaea",
-            paddingTop: 5,
-            paddingBottom: 5
+            symbolType: 'square',
+            color: ColorUtil.randomHexColor(),
+            renderType: 'spanning'
           }
-        });
+        }))
 
-        timeline.addTimelineLane(subtitlesLane);
-      })
-    }
 
-    if (activeStreamData.audio && activeStreamData.audio.length > 0) {
-      activeStreamData.audio.forEach(audio => {
-
-        let audioTrackLane = new AudioTrackLane({
-          id: audio.id,
-          description: audio.name,
-          vttUrl: audio.url,
+        markerLane.addMarker(new PeriodMarker({
+          id: "testmarker5",
+          timeObservation: {
+            start: 1250,
+            end: 1250
+          },
           style: {
-            backgroundFill: "#ffffff",
-            paddingTop: 5,
-            paddingBottom: 5,
-            height: 100,
-            itemWidth: 3,
-            itemMinPadding: 1,
-            itemCornerRadius: 2,
-            maxSampleFillLinearGradientColorStops: [0, '#ff0099', 0.2, 'yellow', 1, 'green'],
-            minSampleFillLinearGradientColorStops: [0, 'green', 0.8, 'yellow', 1, 'red'],
+            symbolType: 'square',
+            color: ColorUtil.randomHexColor(),
+            renderType: 'spanning'
           }
-        });
-
-        timeline.addTimelineLane(audioTrackLane);
-      })
-    }
-
-    let showSafeZone = true;
-
-    if (showSafeZone) {
-      let _4_3 = omakasePlayer.video.addSafeZoneWithAspectRatio({
-        aspectRatioText: "4/3",
-        scalePercent: 90
-      });
-
-      let _16_9 = omakasePlayer.video.addSafeZoneWithAspectRatio({
-        aspectRatioText: "16/9",
-        scalePercent: 30
-      });
-
-      let _9_16 = omakasePlayer.video.addSafeZoneWithAspectRatio({
-        aspectRatioText: "9/16"
-      });
-
-      let _17_9 = omakasePlayer.video.addSafeZoneWithAspectRatio({
-        aspectRatioText: "17/9"
-      });
-    }
-
-
-    let inAndOutMarkersLane = timeline.getTimelineLane('marker_lane_inout_1');
-    let inAndOutMarkersLane2 = timeline.getTimelineLane('marker_lane_inout_2');
-
-    if (!inAndOutMarkersLane) {
-      inAndOutMarkersLane = new MarkerLane({
-        id: "marker_lane_inout_1",
-        description: "In and out markers",
-        style: {
-          backgroundFill: '#eaeaea', height: 50
-        }
-      });
-
-      timeline.addTimelineLane(inAndOutMarkersLane);
-    }
-
-    if (!inAndOutMarkersLane2) {
-      inAndOutMarkersLane2 = new MarkerLane({
-        id: "marker_lane_inout_2",
-        description: "In and out markers 2",
-        style: {
-          backgroundFill: '#d0d0d0'
-        }
-      });
-
-      timeline.addTimelineLane(inAndOutMarkersLane2);
-    }
-
-
-    let renderTypes = ['lane', 'spanning']
-    let symbolTypes = ['square', 'triangle', 'circle']
-
-    let randomRenderType = () => {
-      return renderTypes[RandomUtil.randomNumber(0, renderTypes.length - 1)];
-    }
-
-    let randomSymbolType = () => {
-      return symbolTypes[RandomUtil.randomNumber(0, symbolTypes.length - 1)];
-    }
-
-    let randomMarkerStyle = () => {
-      return {
-        color: ColorUtil.randomHexColor(),
-        renderType: randomRenderType(),
-        symbolType: randomSymbolType()
+        }))
       }
+
+      createDebugMarkers(inAndOutMarkersLane)
+      createDebugMarkers(inAndOutMarkersLane2)
     }
-
-    let randomMomentTimeObservation = () => {
-      return {
-        time: RandomUtil.randomNumber(0, omakasePlayer.video.getDuration())
-      }
-    }
-
-    let randomPeriodTimeObservation = () => {
-      let start = RandomUtil.randomNumber(0, omakasePlayer.video.getDuration());
-      let duration = omakasePlayer.video.getDuration() * 0.3
-      let end = RandomUtil.randomNumber(start, (start + duration) > omakasePlayer.video.getDuration() ? omakasePlayer.video.getDuration() : start + duration);
-      return {
-        start: start, end: end
-      }
-    }
-
-    let createDebugMarkers = (markerLane) => {
-      markerLane.createMomentMarker({
-        id: "moment_marker_lane1",
-        timeObservation: {
-          time: 50
-        },
-        editable: false,
-        style: {
-          symbolType: 'square',
-          color: ColorUtil.randomHexColor(),
-          renderType: 'lane'
-        }
-      });
-
-      markerLane.addMarker(new MomentMarker({
-        id: "moment_marker_spanning1",
-        timeObservation: {
-          time: 100
-        },
-        style: {
-          symbolType: 'square',
-          color: ColorUtil.randomHexColor(),
-          renderType: 'spanning'
-        }
-      }))
-
-      markerLane.createPeriodMarker({
-        id: "testmarker2",
-        timeObservation: {
-          start: 150,
-          end: 200
-        },
-        style: {
-          symbolType: 'square',
-          color: ColorUtil.randomHexColor(),
-          renderType: 'lane'
-        }
-      })
-
-      markerLane.addMarker(new PeriodMarker({
-        id: "testmarker4",
-        timeObservation: {
-          start: 250,
-          end: 300
-        },
-        style: {
-          symbolType: 'square',
-          color: ColorUtil.randomHexColor(),
-          renderType: 'spanning'
-        }
-      }))
-
-
-      markerLane.addMarker(new PeriodMarker({
-        id: "testmarker5",
-        timeObservation: {
-          start: 1250,
-          end: 1250
-        },
-        style: {
-          symbolType: 'square',
-          color: ColorUtil.randomHexColor(),
-          renderType: 'spanning'
-        }
-      }))
-    }
-
-    createDebugMarkers(inAndOutMarkersLane)
-    createDebugMarkers(inAndOutMarkersLane2)
   }
 
   let attachButtonHandlers = (timeline) => {
@@ -486,9 +476,9 @@ window.addEventListener('load', () => {
     });
   }
 
-  let streamsSelect = document.getElementById('streamsSelect');
-  streamsSelect.onchange = (event) => {
-    let id = streamsSelect.value;
+  let datasetSelect = document.getElementById('datasetSelect');
+  datasetSelect.onchange = (event) => {
+    let id = datasetSelect.value;
 
     let testStream = testStreams.find(p => p.id === id);
 
@@ -504,7 +494,7 @@ window.addEventListener('load', () => {
     if (event.code === 'Space') {
       if (event.target === document.body) {
         event.preventDefault(); // prevents scrolling
-        omakasePlayer.video.togglePlayPause();
+        omakasePlayer.video.togglePlayPause().subscribe();
       }
     }
 

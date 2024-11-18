@@ -15,29 +15,115 @@
  */
 
 import {Api} from './api';
-import {Observable} from 'rxjs';
-import {AudioEvent} from '../types';
+import {BehaviorSubject, Observable} from 'rxjs';
+import {AudioContextChangeEvent, AudioLoadedEvent, AudioRoutingEvent, AudioSwitchedEvent, AudioPeakProcessorWorkletNodeMessageEvent, OmakaseAudioTrack} from '../types';
+import {AudioInputOutputNode, AudioMeterStandard} from '../video/model';
 
 export interface AudioApi extends Api {
+  /**
+   * Fires on subtitles load. Initial value is undefined.
+   * @readonly
+   */
+  onAudioLoaded$: BehaviorSubject<AudioLoadedEvent | undefined>;
+
   /**
    *  Fires on audio track switched
    *  @readonly
    */
-  onAudioSwitched$: Observable<AudioEvent>;
+  onAudioSwitched$: Observable<AudioSwitchedEvent>;
 
   /**
-   * @returns available audio tracks. Type depends on VideoController implementation.
+   * Fires on AudioContext creation
+   * @readonly
    */
-  getAudioTracks(): any[];
+  onAudioContextChange$: Observable<AudioContextChangeEvent>;
 
   /**
-   * @returns current active audio track. Type depends on VideoController implementation.
+   * Fires on audio input / output channel connection change
+   * @readonly
    */
-  getCurrentAudioTrack(): any;
+  onAudioRouting$: Observable<AudioRoutingEvent>;
+
+  /**
+   * Fires on event produced by {@link AudioWorkletNode} created with {@link createAudioPeakProcessorWorkletNode}
+   * @readonly
+   */
+  onAudioPeakProcessorWorkletNodeMessage$: Observable<AudioPeakProcessorWorkletNodeMessageEvent>;
+
+  /**
+   * @returns available audio tracks
+   */
+  getAudioTracks(): OmakaseAudioTrack[];
+
+  /**
+   * @returns current active audio track
+   */
+  getActiveAudioTrack(): OmakaseAudioTrack | undefined;
 
   /**
    * Sets active audio track
-   * @param audioTrackId Audio track ID
+   * @param id {@link OmakaseAudioTrack} id
    */
-  setAudioTrack(audioTrackId: number): void;
+  setActiveAudioTrack(id: string): Observable<void>;
+
+  /**
+   * @returns {@link AudioContext} if created
+   */
+  getAudioContext(): AudioContext | undefined;
+
+  /**
+   * @returns {@link MediaElementAudioSourceNode} implicitly created on <video> element when {@link AudioContext} is created
+   */
+  getMediaElementAudioSourceNode(): MediaElementAudioSourceNode | undefined;
+
+  /**
+   * Creates AudioContext. {@link AudioContext}.resume() is invoked on first video play
+   *
+   * @param inputsNumber Number of input channels. Implicitly created {@link ChannelSplitterNode} is configured with {@link inputsNumber}.
+   * @param outputsNumber Number of output channels. Implicitly created {@link ChannelMergerNode} is configured with {@link outputsNumber}. If not provided {@link outputsNumber} is resolved by calling defaultAudioOutputsResolver function:
+   * <pre>
+   * const defaultAudioOutputsResolver: (maxChannelCount: number) => number = (maxChannelCount: number) => {
+   *   if (maxChannelCount <= 1) {
+   *     return 1;
+   *   } else if (maxChannelCount >= 2 && maxChannelCount <= 5) {
+   *     return 2
+   *   } else if (maxChannelCount >= 6) {
+   *     return 6
+   *   } else {
+   *     return maxChannelCount;
+   *   }
+   * }
+   * </pre>
+   */
+  createAudioContext(inputsNumber: number, outputsNumber?: number): Observable<void>;
+
+  /**
+   * Creates AudioContext. {@link AudioContext}.resume() is invoked on first video play
+   *
+   * @param inputsNumber See {@link createAudioContext}
+   * @param outputsNumberResolver Function to resolve outputsNumber. Provides {@link AudioContext}.destination.maxChannelCount as input argument
+   */
+  createAudioContextWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void>;
+
+  /**
+   * @returns Matrix of {@link AudioInputOutputNode}s
+   */
+  getAudioInputOutputNodes(): AudioInputOutputNode[][];
+
+  /**
+   * Routes (connects or disconnects) provided {@link AudioInputOutputNode} (connects it or disconnects it)
+   * @param newAudioInputOutputNode
+   */
+  routeAudioInputOutputNode(newAudioInputOutputNode: AudioInputOutputNode): Observable<void>;
+
+  /**
+   * Routes multiple {@link AudioInputOutputNode}
+   * @param newAudioInputOutputNodes
+   */
+  routeAudioInputOutputNodes(newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void>;
+
+  /**
+   * Creates {@link AudioWorkletNode} and attaches it to {@link AudioContext} input. It can be used for audio peak processing and gathering live volume levels data
+   */
+  createAudioPeakProcessorWorkletNode(audioMeterStandard: AudioMeterStandard): Observable<void>;
 }

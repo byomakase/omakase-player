@@ -14,22 +14,13 @@
  * limitations under the License.
  */
 
-export interface OmakaseTrackConfig {
-  id: string;
-  src: string;
-  default: boolean;
-  label: string;
-  language: string;
-  kind: string;
-}
-
 export interface OmakaseTextTrackCue {
   id: string;
   startTime: number;
   endTime: number;
 }
 
-export interface OmakaseTextTrack<T extends OmakaseTextTrackCue> {
+export interface OmakaseTextTrack {
   id: string;
   src: string;
   default: boolean;
@@ -37,5 +28,68 @@ export interface OmakaseTextTrack<T extends OmakaseTextTrackCue> {
   language: string;
   kind: string;
   hidden: boolean;
-  cues: T[];
+}
+
+export interface OmakaseVttCue extends OmakaseTextTrackCue {
+  index: number;
+  text: string;
+  vttCue?: VTTCue;
+  extension?: OmakaseVttCueExtension;
+}
+
+export interface ThumbnailVttCue extends OmakaseVttCue {
+  url: string;
+}
+
+export interface SubtitlesVttCue extends OmakaseVttCue {
+
+}
+
+export interface AudioVttCue extends OmakaseVttCue {
+  minSample: number;
+  maxSample: number;
+}
+
+export interface MarkerVttCue extends OmakaseVttCue {
+
+}
+
+export interface LineChartVttCue extends OmakaseVttCue {
+  value: number
+}
+
+export interface BarChartVttCue extends OmakaseVttCue {
+  value: number
+}
+
+export interface OgChartVttCue extends OmakaseVttCue {
+  value: number
+}
+
+export interface OmakaseVttCueExtension {
+  rows?: VttCueExtensionRow[];
+}
+
+export interface VttCueExtensionRow {
+  value?: string;
+  measurement?: string;
+  comment?: string;
+}
+
+export interface OmakaseVttCueEvent<T extends OmakaseVttCue> {
+  cue?: T;
+  action: 'entry' | 'exit';
+}
+
+export interface SubtitlesVttTrack extends OmakaseTextTrack {
+  kind: 'subtitles';
+  embedded: boolean;
+  contentDigest?: string;
+}
+
+export interface OmakaseAudioTrack {
+  id: string;
+  src: string;
+  label: string;
+  language?: string;
 }

@@ -14,23 +14,59 @@
  * limitations under the License.
  */
 import Decimal from 'decimal.js';
-import {AudioEvent, Destroyable, HelpMenuGroup, OmakaseTextTrack, OmakaseTextTrackCue, VideoBufferingEvent, VideoEndedEvent, VideoErrorEvent, VideoLoadedEvent, VideoLoadingEvent, VideoPlayEvent, VideoSeekedEvent, VideoSeekingEvent, VideoTimeChangeEvent, VideoVolumeEvent} from '../types';
-import {BehaviorSubject, catchError, delay, fromEvent, interval, map, Observable, of, race, Subject, take, takeUntil, throwError} from 'rxjs';
+import {
+  AudioContextChangeEvent,
+  AudioLoadedEvent,
+  AudioPeakProcessorWorkletNodeMessageEvent,
+  AudioRoutingEvent,
+  AudioSwitchedEvent,
+  AudioWorkletNodeCreatedEvent,
+  HelpMenuGroup,
+  OmakaseAudioTrack,
+  SubtitlesCreateEvent,
+  SubtitlesEvent,
+  SubtitlesLoadedEvent,
+  SubtitlesVttTrack,
+  ThumnbailVttUrlChangedEvent,
+  VideoBufferingEvent,
+  VideoEndedEvent,
+  VideoErrorEvent,
+  VideoFullscreenChangeEvent,
+  VideoHelpMenuChangeEvent,
+  VideoLoadedEvent,
+  VideoLoadingEvent,
+  VideoPlaybackRateEvent,
+  VideoPlayEvent,
+  VideoSafeZoneChangeEvent,
+  VideoSeekedEvent,
+  VideoSeekingEvent,
+  VideoTimeChangeEvent,
+  VideoVolumeEvent,
+  VideoWindowPlaybackStateChangeEvent
+} from '../types';
+import {BehaviorSubject, delay, forkJoin, fromEvent, interval, map, merge, Observable, of, Subject, switchMap, take, takeUntil, throwError, timeout} from 'rxjs';
 import {FrameRateUtil} from '../util/frame-rate-util';
-import {completeSubjects, completeUnsubscribeSubjects, nextCompleteVoidSubject, nextCompleteVoidSubjects} from '../util/observable-util';
+import {completeSubject, completeSubjects, completeUnsubscribeSubjects, errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {z} from 'zod';
 import {TimecodeUtil} from '../util/timecode-util';
-import {VideoDomController} from './video-dom-controller';
 import Hls from 'hls.js';
 import {Validators} from '../validators';
 import {parseErrorMessage, zodErrorMapOverload} from '../util/error-util';
 import {VideoControllerApi} from './video-controller-api';
 import {destroyer, nullifier} from '../util/destroy-util';
-import {SubtitlesVttTrack} from '../track';
-import {PlaybackState, PlaybackStateMachine, TimecodeObject, Video, VideoLoadOptions} from './model';
+import {AudioInputOutputNode, AudioMeterStandard, PlaybackState, PlaybackStateMachine, Video, VideoLoadOptions, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
 import {isNullOrUndefined} from '../util/object-util';
 import {StringUtil} from '../util/string-util';
 import {AuthUtil} from '../util/auth-util';
+import {VideoDomControllerApi} from './video-dom-controller-api';
+import {AudioUtil} from '../util/audio-util';
+import {BlobUtil} from '../util/blob-util';
+
+// import workers for audio processing
+// @ts-ignore
+import peakSampleProcessor from '../worker/omp-peak-sample-processor.js?raw';
+// @ts-ignore
+import truePeakProcessor from '../worker/omp-true-peak-processor.js?raw';
 
 export const HTMLVideoElementEventKeys = {
   PAUSE: 'pause',
@@ -44,13 +80,20 @@ export const HTMLVideoElementEventKeys = {
   LOADEDMETEDATA: 'loadedmetadata',
   ENDED: 'ended',
   PROGRESS: 'progress',
-  VOLUMECHANGE: 'volumechange'
+  VOLUMECHANGE: 'volumechange',
+  RATECHANGE: 'ratechange',
 }
 
 export interface BufferedTimespan {
   start: number;
   end: number;
 }
+
+export interface VideoControllerConfig {
+}
+
+export const VIDEO_CONTROLLER_CONFIG_DEFAULT: VideoControllerConfig = {}
+
 
 enum SeekDirection {
   BACKWARD = 'BACKWARD',
@@ -72,20 +115,22 @@ interface SyncConditions {
   newTimecode?: string;
 }
 
-export interface VideoControllerConfig {
-  playerHTMLElementId: string;
-  crossorigin: 'anonymous' | 'use-credentials'
+const defaultAudioOutputsResolver: (maxChannelCount: number) => number = (maxChannelCount: number) => {
+  if (maxChannelCount <= 1) {
+    return 1;
+  } else if (maxChannelCount >= 2 && maxChannelCount <= 5) {
+    return 2
+  } else if (maxChannelCount >= 6) {
+    return 6
+  } else {
+    return maxChannelCount;
+  }
 }
 
-export const VIDEO_CONTROLLER_CONFIG_DEFAULT: VideoControllerConfig = {
-  playerHTMLElementId: 'omakase-player',
-  crossorigin: 'anonymous',
-}
-
-
-export abstract class VideoController<C extends VideoControllerConfig> implements VideoControllerApi, Destroyable {
+export abstract class VideoController<C extends VideoControllerConfig> implements VideoControllerApi {
   public readonly onVideoLoaded$: BehaviorSubject<VideoLoadedEvent | undefined> = new BehaviorSubject<VideoLoadedEvent | undefined>(void 0);
   public readonly onVideoLoading$: Subject<VideoLoadingEvent> = new Subject<VideoLoadingEvent>();
+
   public readonly onPlay$: Subject<VideoPlayEvent> = new Subject<VideoPlayEvent>();
   public readonly onPause$: Subject<VideoPlayEvent> = new Subject<VideoPlayEvent>();
   public readonly onVideoTimeChange$: Subject<VideoTimeChangeEvent> = new Subject<VideoTimeChangeEvent>();
@@ -93,21 +138,41 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   public readonly onSeeked$: Subject<VideoSeekedEvent> = new Subject<VideoSeekedEvent>();
   public readonly onBuffering$: Subject<VideoBufferingEvent> = new Subject<VideoBufferingEvent>();
   public readonly onEnded$: Subject<VideoEndedEvent> = new Subject<VideoEndedEvent>();
-  public readonly onAudioSwitched$: Subject<AudioEvent> = new Subject<AudioEvent>();
-  public readonly onPlaybackState$: Subject<PlaybackState> = new Subject<PlaybackState>();
-  public readonly onHelpMenuChange$: Subject<void> = new BehaviorSubject<void>(void 0);
   public readonly onVideoError$: Subject<VideoErrorEvent> = new Subject<VideoErrorEvent>();
   public readonly onVolumeChange$: Subject<VideoVolumeEvent> = new Subject<VideoVolumeEvent>();
+  public readonly onFullscreenChange$: Subject<VideoFullscreenChangeEvent> = new Subject<VideoFullscreenChangeEvent>();
+  public readonly onVideoSafeZoneChange$: Subject<VideoSafeZoneChangeEvent> = new Subject<VideoSafeZoneChangeEvent>();
+  public readonly onVideoWindowPlaybackStateChange$: Subject<VideoWindowPlaybackStateChangeEvent> = new Subject<VideoWindowPlaybackStateChangeEvent>();
 
-  protected _config: C;
+  public readonly onAudioLoaded$: BehaviorSubject<AudioLoadedEvent | undefined> = new BehaviorSubject<AudioLoadedEvent | undefined>(void 0);
+  public readonly onAudioSwitched$: Subject<AudioSwitchedEvent> = new Subject<AudioSwitchedEvent>();
+  public readonly onAudioContextChange$: Subject<AudioContextChangeEvent> = new Subject<AudioContextChangeEvent>();
+  public readonly onAudioRouting$: Subject<AudioRoutingEvent> = new Subject<AudioRoutingEvent>();
+  public readonly onAudioPeakProcessorWorkletNodeMessage$: Subject<AudioPeakProcessorWorkletNodeMessageEvent> = new Subject<AudioPeakProcessorWorkletNodeMessageEvent>();
+  public readonly onAudioWorkletNodeCreated$: BehaviorSubject<AudioWorkletNodeCreatedEvent | undefined> = new BehaviorSubject<AudioWorkletNodeCreatedEvent | undefined>(void 0);
 
-  protected _subtitlesVttTracks: SubtitlesVttTrack[] | undefined;
-  protected _videoDomController: VideoDomController;
-  protected _helpMenuGroups: HelpMenuGroup[] = [];
+  public readonly onHelpMenuChange$: Subject<VideoHelpMenuChangeEvent> = new Subject<VideoHelpMenuChangeEvent>();
+  public readonly onPlaybackState$: Subject<PlaybackState> = new Subject<PlaybackState>();
+  public readonly onPlaybackRateChange$: Subject<VideoPlaybackRateEvent> = new Subject<VideoPlaybackRateEvent>();
+  public readonly onSubtitlesLoaded$: BehaviorSubject<SubtitlesLoadedEvent | undefined> = new BehaviorSubject<SubtitlesLoadedEvent | undefined>(void 0);
+  public readonly onSubtitlesCreate$: Subject<SubtitlesCreateEvent> = new Subject<SubtitlesCreateEvent>();
+  public readonly onSubtitlesRemove$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
+  public readonly onSubtitlesShow$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
+  public readonly onSubtitlesHide$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
+
+  public readonly onThumbnailVttUrlChanged$: Subject<ThumnbailVttUrlChangedEvent | undefined> = new Subject<ThumnbailVttUrlChangedEvent | undefined>();
+
+  protected readonly _config: C;
+  protected readonly _videoDomController: VideoDomControllerApi;
+  /**
+   * Stream of data provided by videoElement.requestVideoFrameCallback()
+   * @protected
+   */
+  protected readonly _videoFrameCallback$: Subject<VideoFrameCallbackData | undefined> = new BehaviorSubject<VideoFrameCallbackData | undefined>(void 0);
+  protected readonly _animationFrameCallback$: Subject<number | undefined> = new BehaviorSubject<number | undefined>(void 0);
 
   protected _video?: Video;
-  protected _ffomTimecode?: string; // timecode offset
-  protected _ffomTimecodeObject?: TimecodeObject; // timecode offset
+  protected _videoLoadOptions?: VideoLoadOptions;
   protected _playbackStateMachine?: PlaybackStateMachine;
   protected _frameDurationSpillOverCorrection: number = 0.001;
   protected _syncStepCurrentTimeMediaTime: number = 0;
@@ -119,16 +184,31 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   protected _videoStalledCheckLastCurrentTime?: number;
   protected _videoPausedSeekBufferingThresholdMs = 500;
 
-  private _isVideoLoaded = false;
+  protected _requestAnimationFrameId?: number;
 
+  protected _embeddedSubtitlesTracks: SubtitlesVttTrack[] | undefined;
+  protected _subtitlesTracks: Map<string, SubtitlesVttTrack> = new Map<string, SubtitlesVttTrack>();
+  protected _activeSubtitlesTrack?: SubtitlesVttTrack;
+
+  protected _audioTracks: Map<string, OmakaseAudioTrack> = new Map<string, OmakaseAudioTrack>();
+  protected _activeAudioTrack?: OmakaseAudioTrack;
+
+  protected _audioContext?: AudioContext;
+  protected _mediaElementAudioSource?: MediaElementAudioSourceNode;
+  protected _audioChannelSplitterNode?: ChannelSplitterNode;
+  protected _audioChannelMergerNode?: ChannelMergerNode;
+  protected _audioInputsNumber?: number;
+  protected _audioOutputsNumber?: number;
   /**
-   * Stream of data provided by videoElement.requestVideoFrameCallback()
+   * Mapped by inputNumber, then by outputNumber
    * @protected
    */
-  protected readonly _videoFrameCallback$: Subject<VideoFrameCallbackData | undefined> = new BehaviorSubject<VideoFrameCallbackData | undefined>(void 0);
+  protected _audioInputOutputNodes: Map<number, Map<number, AudioInputOutputNode>> = new Map<number, Map<number, AudioInputOutputNode>>();
+  protected _audioPeakProcessorWorkletNode?: AudioWorkletNode;
 
-  protected readonly _animationFrameCallback$: Subject<number | undefined> = new BehaviorSubject<number | undefined>(void 0);
-  protected _requestAnimationFrameId?: number;
+  protected _thumbnailVttUrl?: string;
+
+  protected _helpMenuGroups: HelpMenuGroup[] = [];
 
   protected _videoEventBreaker$ = new Subject<void>();
   protected _destroyed$ = new Subject<void>();
@@ -145,13 +225,9 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
    */
   protected _pausingBreaker$ = new Subject<void>();
 
-  protected constructor(config: C) {
+  protected constructor(config: C, videoDomController: VideoDomControllerApi) {
     this._config = config;
-    this._videoDomController = new VideoDomController(this._config.playerHTMLElementId, this._config.crossorigin, this);
-
-    if (!this._videoDomController.videoElement) {
-      throw new Error('VideoController element not set');
-    }
+    this._videoDomController = videoDomController;
 
     this._videoFrameCallback$.pipe(takeUntil(this._destroyed$)).subscribe(videoFrameCallbackData => {
       if (videoFrameCallbackData) {
@@ -183,100 +259,128 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
       }
     })
 
-    race([this.onPause$, this.onEnded$]).pipe(takeUntil(this._destroyed$)).subscribe(() => {
+    merge(this.onPause$, this.onEnded$)
+      .pipe(switchMap(value => [value])) // each new emission switches to latest, racing observables
+      .pipe(takeUntil(this._destroyed$)).subscribe(() => {
       if (this._video!.audioOnly) {
         this.stopAnimationFrameLoop();
       }
     })
   }
 
-  loadVideo(sourceUrl: string, frameRate: number | string, options?: VideoLoadOptions): Observable<Video> {
-    try {
-      this.detachVideoEventListeners();
+  loadVideoInternal(sourceUrl: string, frameRate: number | string, options: VideoLoadOptions | undefined, optionsInternal?: VideoLoadOptionsInternal): Observable<Video> {
+    return passiveObservable<Video>(observer => {
+      try {
+        nextCompleteSubject(this._videoEventBreaker$);
+        this._videoEventBreaker$ = new Subject<void>();
 
-      if (this.isVideoLoaded()) {
-        this.onVideoLoaded$.next(void 0); // we have to remove old value as emmiter is BehaviourSubject
-      }
+        this._videoLoadOptions = options;
 
-      AuthUtil.authentication = options?.authentication;
-
-      this._isVideoLoaded = false;
-      this._video = void 0;
-
-      sourceUrl = Validators.url()(sourceUrl);
-
-      frameRate = FrameRateUtil.resolveFrameRate(frameRate);
-
-      if (options && !isNullOrUndefined(options.dropFrame)) {
-        z.coerce.boolean()
-          .parse(options?.dropFrame, zodErrorMapOverload('Invalid dropFrame'));
-      }
-      let dropFrame = options && (options.dropFrame !== void 0) ? options.dropFrame : false;
-
-      if (dropFrame && !FrameRateUtil.isSupportedDropFrameRate(frameRate)) {
-        throw new Error(`Frame rate not supported: ${frameRate}, drop frame: ${dropFrame}`);
-      }
-
-      if (options && !StringUtil.isNullUndefinedOrWhitespace(options.ffom)) {
-        let ffomTimecodeObject = TimecodeUtil.parseTimecodeToTimecodeObject(options.ffom!);
-        if (ffomTimecodeObject.dropFrame !== dropFrame) {
-          throw new Error(`Incorrect FFOM format: ${options.ffom}, drop frame: ${dropFrame}`);
+        if (this.videoElement && this._videoFrameCallbackHandle) {
+          this.videoElement.cancelVideoFrameCallback(this._videoFrameCallbackHandle);
         }
-        this._ffomTimecode = options.ffom;
-        this._ffomTimecodeObject = ffomTimecodeObject;
-      }
 
-      if (!isNullOrUndefined(options?.duration)) {
-        z.coerce.number()
-          .min(0)
-          .parse(options?.duration, zodErrorMapOverload('Invalid duration'));
-      }
+        if (this.isVideoLoaded()) {
+          this._video = void 0;
+          this._audioTracks = new Map<string, OmakaseAudioTrack>();
+          this._activeAudioTrack = void 0;
+          this._subtitlesTracks = new Map<string, SubtitlesVttTrack>();
+          this._activeSubtitlesTrack = void 0;
 
-      this.onVideoLoading$.next({
-        sourceUrl: sourceUrl,
-        frameRate: frameRate
-      });
+          // we have to remove old value as emmiter is BehaviourSubject
+          this.onVideoLoaded$.next(void 0);
+          this.onAudioLoaded$.next(void 0);
+          this.onSubtitlesLoaded$.next(void 0);
+        }
 
-      return this.loadVideoInternal(sourceUrl, frameRate, options).pipe(map(video => {
-        this._video = video;
+        sourceUrl = Validators.url()(sourceUrl);
 
-        // this._syncStepCurrentTimeMediaTime = 0;
-        this._syncStepCurrentTimeMediaTime = Decimal.div(this._video.frameDuration, 10).toNumber();
+        frameRate = FrameRateUtil.resolveFrameRate(frameRate);
 
-        this._playbackStateMachine = new PlaybackStateMachine();
+        if (options && !isNullOrUndefined(options.dropFrame)) {
+          z.coerce.boolean()
+            .parse(options?.dropFrame, zodErrorMapOverload('Invalid dropFrame'));
+        }
+        let dropFrame = options && (options.dropFrame !== void 0) ? options.dropFrame : false;
 
-        this.initEventHandlers();
-        this.startVideoFrameCallback();
+        if (dropFrame && !FrameRateUtil.isSupportedDropFrameRate(frameRate)) {
+          throw new Error(`Frame rate not supported: ${frameRate}, drop frame: ${dropFrame}`);
+        }
 
-        this._isVideoLoaded = true;
+        if (!isNullOrUndefined(options?.duration)) {
+          z.coerce.number()
+            .min(0)
+            .parse(options?.duration, zodErrorMapOverload('Invalid duration'));
+        }
 
-        this.onVideoLoaded$.next({
-          video: this._video
+        this.onVideoLoading$.next({
+          sourceUrl: sourceUrl,
+          frameRate: frameRate,
+          options: options,
+          isAttaching: optionsInternal && optionsInternal.videoWindowPlaybackState === 'attaching',
+          isDetaching: optionsInternal && optionsInternal.videoWindowPlaybackState === 'detaching'
         });
 
-        return video;
-      }), catchError((e, caught) => {
-        let message = parseErrorMessage(e)
+        this.loadVideoUsingLoader(sourceUrl, frameRate as number, options).pipe(take(1)).subscribe({
+          next: (video) => {
+            this._video = video;
+
+            if (options && !StringUtil.isNullUndefinedOrWhitespace(options.ffom)) {
+              let ffomTimecodeObject = TimecodeUtil.parseTimecodeToTimecodeObject(options.ffom!);
+              if (ffomTimecodeObject.dropFrame !== dropFrame) {
+                throw new Error(`Incorrect FFOM format: ${options.ffom}, drop frame: ${dropFrame}`);
+              }
+              this._video.ffomTimecodeObject = ffomTimecodeObject;
+            }
+
+            // this._syncStepCurrentTimeMediaTime = 0;
+            this._syncStepCurrentTimeMediaTime = Decimal.div(this._video.frameDuration, 10).toNumber();
+
+            this._playbackStateMachine = new PlaybackStateMachine();
+
+            this.initEventHandlers();
+            this.startVideoFrameCallback();
+
+            this.onVideoLoaded$.next({
+              video: this._video,
+              videoLoadOptions: this._videoLoadOptions,
+              isAttaching: optionsInternal && optionsInternal.videoWindowPlaybackState === 'attaching',
+              isDetaching: optionsInternal && optionsInternal.videoWindowPlaybackState === 'detaching'
+            });
+
+            this.processEmbeddedSubtitles();
+
+            nextCompleteObserver(observer, video);
+          },
+          error: (error) => {
+            return throwError(() => error);
+          }
+        })
+      } catch (e) {
         this.onVideoError$.next({
           type: 'VIDEO_LOAD_ERROR',
-          message: message
+          message: parseErrorMessage(e)
         })
-        return throwError(() => new Error(message));
-      }));
-    } catch (e) {
-      let message = parseErrorMessage(e)
-      this.onVideoError$.next({
-        type: 'VIDEO_LOAD_ERROR',
-        message: message
-      })
-      return throwError(() => new Error(message));
-    }
+        errorCompleteObserver(observer, e);
+      }
+    })
   }
 
-  protected abstract loadVideoInternal(sourceUrl: string, frameRate: number, options?: VideoLoadOptions): Observable<Video>;
+  loadVideo(sourceUrl: string, frameRate: number | string, options?: VideoLoadOptions): Observable<Video> {
+    return this.loadVideoInternal(sourceUrl, frameRate, options)
+  }
+
+
+  reloadVideo(): Observable<Video> {
+    this.validateVideoLoaded();
+
+    return this.loadVideo(this._video!.sourceUrl, this._video!.frameRate, this._videoLoadOptions);
+  }
+
+  protected abstract loadVideoUsingLoader(sourceUrl: string, frameRate: number, options?: VideoLoadOptions): Observable<Video>;
 
   get videoElement(): HTMLVideoElement {
-    return this._videoDomController.videoElement;
+    return this._videoDomController.getVideoElement();
   }
 
   protected initEventHandlers() {
@@ -295,10 +399,9 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
       next: () => {
         // PlaybackState.pausing can be either true (pause through API) or even false (pause initiated externally by browser with PIP close)
         // Thus, we will not inspect this._playbackStateMachine!.pausing
-
         let afterPauseSync = () => {
           console.debug(`%cpause control sync start`, 'color: purple');
-          this._seekFromCurrentFrame(1).pipe(takeUntil(this._seekBreaker$), take(1)).subscribe({
+          this._seekFromCurrentFrame(1).pipe(takeUntil(this._pausingBreaker$), takeUntil(this._seekBreaker$), take(1)).subscribe({
             next: () => {
               console.debug(`%cpause control sync end`, 'color: purple');
               this.videoTimeChangeHandlerExecutor();
@@ -338,8 +441,23 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
 
     fromEvent(this.videoElement, HTMLVideoElementEventKeys.VOLUMECHANGE).pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
       this.onVolumeChange$.next({
-        volume: this.getVolume()
+        volume: this.getVolume(),
+        muted: this.isMuted()
       })
+    })
+
+    fromEvent(this.videoElement, HTMLVideoElementEventKeys.RATECHANGE).pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
+      this.onPlaybackRateChange$.next({
+        playbackRate: this.getPlaybackRate()
+      })
+    })
+
+    this._videoDomController.onFullscreenChange$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
+      this.onFullscreenChange$.next(event);
+    })
+
+    this._videoDomController.onVideoSafeZoneChange$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
+      this.onVideoSafeZoneChange$.next(event);
     })
 
     this._playbackStateMachine!.onChange$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
@@ -437,15 +555,6 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
     nextVideoFrameCallback();
   }
 
-  private detachVideoEventListeners() {
-    nextCompleteVoidSubject(this._videoEventBreaker$);
-    this._videoEventBreaker$ = new Subject<void>();
-
-    if (this.videoElement && this._videoFrameCallbackHandle) {
-      this.videoElement.cancelVideoFrameCallback(this._videoFrameCallbackHandle);
-    }
-  }
-
   private syncVideoFrames(syncConditions: SyncConditions): Observable<boolean> {
     console.debug('syncFrames - START', syncConditions);
     return new Observable<boolean>(o$ => {
@@ -460,7 +569,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
       })
 
       let completeSync = () => {
-        nextCompleteVoidSubject(syncLoopVideoCallbackBreaker$)
+        nextCompleteSubject(syncLoopVideoCallbackBreaker$)
         o$.next(true);
         o$.complete();
         console.debug(`%csyncFrames - END`, 'color: gray')
@@ -480,7 +589,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
        * For now we want to check frame time tolerance only for fractional non-drop frame rates
        */
       let shouldCheckFrameTimeTolerance = () => {
-        return !this.getVideo()!.dropFrame && this.getVideo()!.frameRateFractional
+        return !this.getVideo()!.dropFrame && FrameRateUtil.isFrameRateFractional(this.getVideo()!.frameRate)
       }
 
       /**
@@ -683,7 +792,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
     return new Observable<boolean>(o$ => {
       // if we already have seek in progress, break previous seek operation
       if (this._playbackStateMachine!.seeking) {
-        nextCompleteVoidSubject(this._seekBreaker$);
+        nextCompleteSubject(this._seekBreaker$);
         this._seekBreaker$ = new Subject<void>();
       }
 
@@ -747,7 +856,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
     return new Observable<boolean>(o$ => {
       // do we have seek already in progress
       if (this._playbackStateMachine!.seeking) {
-        nextCompleteVoidSubject(this._seekBreaker$);
+        nextCompleteSubject(this._seekBreaker$);
         this._seekBreaker$ = new Subject<void>();
       }
 
@@ -934,13 +1043,15 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   }
 
   getPlaybackState(): PlaybackState | undefined {
-    return this._playbackStateMachine?.state;
+    return this._playbackStateMachine ? this._playbackStateMachine.state : void 0;
   }
-
-  // region VideoController API
 
   getVideo(): Video | undefined {
     return this._video;
+  }
+
+  getVideoLoadOptions(): VideoLoadOptions | undefined {
+    return this._videoLoadOptions;
   }
 
   getHTMLVideoElement(): HTMLVideoElement {
@@ -948,73 +1059,87 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   }
 
   calculateTimeToFrame(time: number): number {
-    if (!this.isVideoLoaded()) {
-      throw new Error('Video not loaded');
-    }
-
-    return FrameRateUtil.timeToFrameNumber(time, this._video!);
+    this.validateVideoLoaded();
+    return FrameRateUtil.timeToFrameNumber(time, this.getVideo()!);
   }
 
   calculateFrameToTime(frameNumber: number): number {
-    if (!this.isVideoLoaded()) {
-      throw new Error('Video not loaded');
-    }
-
-    return FrameRateUtil.frameNumberToTime(frameNumber, this._video!);
+    this.validateVideoLoaded();
+    return FrameRateUtil.frameNumberToTime(frameNumber, this.getVideo()!);
   }
 
-  play() {
-    if (this.isVideoLoaded() && !this.isPlaying()) {
-      this._checkAndCancelPausing();
-
-      // first start request video frame callback cycle
-      this.videoElement.play().then(() => {
-        // handled in HTMLVideoElementEventKeys.PLAYING event handler
-      });
-    }
+  play(): Observable<void> {
+    return passiveObservable(observer => {
+      if (this.isVideoLoaded() && !this.isPlaying()) {
+        this._checkAndCancelPausing();
+        // first start request video frame callback cycle
+        this.videoElement.play().then(() => {
+          // handled in HTMLVideoElementEventKeys.PLAYING event handler
+          nextCompleteObserver(observer);
+        }).catch((error) => {
+          errorCompleteObserver(observer, error)
+        });
+      } else {
+        nextCompleteObserver(observer);
+      }
+    })
   }
 
-  pause() {
-    if (this.isVideoLoaded() && this.isPlaying()) {
+  pause(): Observable<void> {
+    return passiveObservable(observer => {
+      if (this.isVideoLoaded() && this.isPlaying()) {
 
-      let pauseApproximateTime = this.getCurrentTime();
+        let pauseApproximateTime = this.getCurrentTime();
+        this._pausingBreaker$ = new Subject<void>();
+        this._pausingBreaker$.pipe(take(1)).subscribe({
+          next: () => {
+            console.debug(`%cpausing breaker triggered`, 'color: gray')
+            console.log(`%cpausing breaker triggered`, 'color: gray')
+            this.onPause$.next({
+              currentTime: pauseApproximateTime,
+              currentTimecode: this.formatToTimecode(pauseApproximateTime)
+            });
+          }
+        })
 
-      this._pausingBreaker$ = new Subject<void>();
-      this._pausingBreaker$.subscribe({
-        next: () => {
-          console.debug(`%cpausing breaker triggered`, 'color: gray')
-          this.onPause$.next({
-            currentTime: pauseApproximateTime,
-            currentTimecode: this.formatToTimecode(pauseApproximateTime)
-          });
-        }
-      })
+        this._playbackStateMachine!.setPausing();
 
-      this._playbackStateMachine!.setPausing();
+        this.onPause$.pipe(take(1)).subscribe({
+          next: () => {
+            nextCompleteObserver(observer);
+          }
+        }).add(() => {
+          if (this._pausingBreaker$) {
+            completeSubject(this._pausingBreaker$);
+          }
+        })
 
-      // stop request video frame callback cycle ?
-      this.videoElement.pause();
-    }
+        this.videoElement.pause();
+
+      } else {
+        nextCompleteObserver(observer);
+      }
+    })
   }
 
   private _checkAndCancelPausing() {
     if (this._playbackStateMachine!.pausing) {
-      nextCompleteVoidSubject(this._pausingBreaker$);
+      nextCompleteSubject(this._pausingBreaker$);
     }
   }
 
-  togglePlayPause() {
+  togglePlayPause(): Observable<void> {
     if (this.isPlaying()) {
-      this.pause()
+      return this.pause()
     } else {
-      this.play();
+      return this.play();
     }
   }
 
   isPlaying() {
     return this.isVideoLoaded()
-      && this.videoElement.currentTime > 0
-      && this.videoElement.currentTime < this.getDuration()
+      && this.getCurrentTime() > 0
+      && this.getCurrentTime() < this.getDuration()
       && !this.videoElement.paused // caution: when using default HTML video controls, when seeking while playing - video is actually paused for a moment
       && !this.videoElement.ended
       && (this.videoElement.readyState > this.videoElement.HAVE_CURRENT_DATA)
@@ -1026,7 +1151,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   }
 
   isSeeking(): boolean {
-    return !!this._playbackStateMachine && this._playbackStateMachine.state.seeking;
+    return !!this.getPlaybackState() && this.getPlaybackState()!.seeking;
   }
 
   getCurrentTime(): number {
@@ -1041,44 +1166,67 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
     return this.isVideoLoaded() ? this.videoElement.playbackRate : 0;
   }
 
-  setPlaybackRate(playbackRate: number): void {
-    if (!this.isVideoLoaded()) {
-      return;
-    }
+  setPlaybackRate(playbackRate: number): Observable<void> {
+    return passiveObservable(observer => {
+      if (this.isVideoLoaded()) {
 
-    try {
-      playbackRate = z.coerce.number()
-        .min(0.1)
-        .max(16)
-        .default(1)
-        .parse(playbackRate);
-    } catch (e) {
-      playbackRate = 1;
-    }
+        try {
+          playbackRate = z.coerce.number()
+            .min(0.1)
+            .max(16)
+            .default(1)
+            .parse(playbackRate);
+        } catch (e) {
+          playbackRate = 1;
+        }
 
-    this.videoElement.playbackRate = playbackRate;
+        if (playbackRate !== this.getPlaybackRate()) {
+          this.onPlaybackRateChange$.pipe(take(1), timeout(60000), takeUntil(this._destroyed$)).subscribe({
+            next: () => {
+              nextCompleteObserver(observer);
+            }
+          })
+        } else {
+          nextCompleteObserver(observer);
+        }
+
+        this.videoElement.playbackRate = playbackRate;
+
+        // TODO we could wait for change event before resolution
+
+      } else {
+        nextCompleteObserver(observer);
+      }
+    })
   }
 
   getVolume(): number {
     return this.isVideoLoaded() ? this.videoElement.volume : 0;
   }
 
-  setVolume(volume: number) {
-    if (!this.isVideoLoaded()) {
-      return;
-    }
+  setVolume(volume: number): Observable<void> {
+    return passiveObservable(observer => {
+      if (this.isVideoLoaded()) {
+        try {
+          volume = z.coerce.number()
+            .min(0)
+            .max(1)
+            .default(1)
+            .parse(volume);
 
-    try {
-      volume = z.coerce.number()
-        .min(0)
-        .max(1)
-        .default(1)
-        .parse(volume);
+          this.videoElement.volume = volume;
 
-      this.videoElement.volume = volume;
-    } catch (e) {
-      // nop
-    }
+          // TODO we could wait for change event before resolution
+
+          nextCompleteObserver(observer)
+        } catch (e) {
+          // nop
+          nextCompleteObserver(observer)
+        }
+      } else {
+        nextCompleteObserver(observer);
+      }
+    })
   }
 
   /**
@@ -1122,7 +1270,12 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
 
     this._checkAndCancelPausing();
 
-    return this._seekToFrame(frame);
+    return passiveObservable<boolean>(observer => {
+      this._seekToFrame(frame).subscribe({
+        next: (value) => nextCompleteObserver(observer, value),
+        error: (error) => errorCompleteObserver(observer, error)
+      })
+    })
   }
 
   seekFromCurrentFrame(framesCount: number): Observable<boolean> {
@@ -1133,7 +1286,12 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
 
     this._checkAndCancelPausing();
 
-    return this._seekFromCurrentFrame(framesCount);
+    return passiveObservable<boolean>(observer => {
+      this._seekFromCurrentFrame(framesCount).subscribe({
+        next: (value) => nextCompleteObserver(observer, value),
+        error: (error) => errorCompleteObserver(observer, error)
+      })
+    })
   }
 
   seekFromCurrentTime(timeAmount: number): Observable<boolean> {
@@ -1175,10 +1333,15 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
 
     this._checkAndCancelPausing();
 
-    return this.seekTimeAndSync(time, {
-      seekToTime: time,
-      seekDirection: time === this.getCurrentTime() ? SeekDirection.NONE : time > this.getCurrentTime() ? SeekDirection.FORWARD : SeekDirection.BACKWARD
-    });
+    return passiveObservable<boolean>(observer => {
+      this.seekTimeAndSync(time, {
+        seekToTime: time,
+        seekDirection: time === this.getCurrentTime() ? SeekDirection.NONE : time > this.getCurrentTime() ? SeekDirection.FORWARD : SeekDirection.BACKWARD
+      }).subscribe({
+        next: (value) => nextCompleteObserver(observer, value),
+        error: (error) => errorCompleteObserver(observer, error)
+      })
+    })
   }
 
   seekToTimecode(timecode: string): Observable<boolean> {
@@ -1216,66 +1379,46 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
 
   formatToTimecode(time: number): string {
     this.validateVideoLoaded();
-
-    time = z.coerce.number()
-      .min(0)
-      .parse(time);
-
-    return TimecodeUtil.formatToTimecode(time, this._video!, this._ffomTimecodeObject)
+    time = Validators.videoTime()(time);
+    return TimecodeUtil.formatToTimecode(time, this.getVideo()!)
   }
 
   parseTimecodeToFrame(timecode: string): number {
     this.validateVideoLoaded();
-
-    let timecodeObject = TimecodeUtil.parseTimecodeToTimecodeObject(timecode);
-    if (timecodeObject.dropFrame !== this._video!.dropFrame) {
-      throw new Error(`Video timecode format (${timecode}) and FFOM format (${this._ffomTimecode}) don't match`);
-    }
-
-    return TimecodeUtil.parseTimecodeToFrame(timecode, this._video!.frameRateDecimal, this._ffomTimecodeObject);
+    timecode = Validators.videoTimecode()(timecode, this.getVideo()!);
+    return TimecodeUtil.parseTimecodeToFrame(timecode, new Decimal(this.getVideo()!.frameRate), this.getVideo()!.ffomTimecodeObject);
   }
 
   parseTimecodeToTime(timecode: string): number {
     this.validateVideoLoaded();
-
-    let timecodeObject = TimecodeUtil.parseTimecodeToTimecodeObject(timecode);
-    if (timecodeObject.dropFrame !== this._video!.dropFrame) {
-      throw new Error(`Video timecode format (${timecode}) and FFOM format (${this._ffomTimecode}) don't match`);
-    }
-
-    return TimecodeUtil.parseTimecodeToTime(timecode, this._video!, this._ffomTimecodeObject);
+    timecode = Validators.videoTimecode()(timecode, this.getVideo()!);
+    return TimecodeUtil.parseTimecodeToTime(timecode, this.getVideo()!, this.getVideo()!.ffomTimecodeObject);
   }
 
-  mute() {
-    if (!this.isVideoLoaded()) {
-      return;
-    }
-
-    this.videoElement.muted = true;
+  mute(): Observable<void> {
+    return passiveObservable(observer => {
+      if (this.isVideoLoaded()) {
+        this.videoElement.muted = true;
+      }
+      nextCompleteObserver(observer);
+    })
   }
 
-  unmute() {
-    if (!this.isVideoLoaded()) {
-      return;
-    }
-
-    this.videoElement.muted = false;
+  unmute(): Observable<void> {
+    return passiveObservable(observer => {
+      if (this.isVideoLoaded()) {
+        this.videoElement.muted = false;
+      }
+      nextCompleteObserver(observer);
+    })
   }
 
   isMuted(): boolean {
     return !!this.videoElement && this.videoElement.muted;
   }
 
-  toggleMuteUnmute() {
-    if (!this.isVideoLoaded()) {
-      return;
-    }
-
-    if (this.isMuted()) {
-      this.unmute();
-    } else {
-      this.mute();
-    }
+  toggleMuteUnmute(): Observable<void> {
+    return this.isMuted() ? this.unmute() : this.mute();
   }
 
   isFullscreen(): boolean {
@@ -1286,52 +1429,83 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
     return this._videoDomController.isFullscreen();
   }
 
-  toggleFullscreen() {
-    if (!this.isVideoLoaded()) {
-      return;
-    }
-
-    this._videoDomController.toggleFullscreen();
+  toggleFullscreen(): Observable<void> {
+    return passiveObservable(observer => {
+      if (this.isVideoLoaded()) {
+        this._videoDomController.toggleFullscreen().subscribe({
+          next: () => {
+            nextCompleteObserver(observer);
+          },
+          error: (error) => errorCompleteObserver(observer, error)
+        })
+      } else {
+        nextCompleteObserver(observer);
+      }
+    })
   }
 
-  getAudioTracks(): any[] {
-    throw new Error('unsupported')
+  getActiveAudioTrack(): OmakaseAudioTrack | undefined {
+    throw new Error('Method not implemented')
   }
 
-  getCurrentAudioTrack(): any {
-    throw new Error('unsupported')
+  getAudioTracks(): OmakaseAudioTrack[] {
+    throw new Error('Method not implemented')
   }
 
-  setAudioTrack(audioTrackId: number): void {
-    throw new Error('unsupported')
+  setActiveAudioTrack(id: string): Observable<void> {
+    throw new Error('Method not implemented')
   }
 
   isVideoLoaded(): boolean {
-    return this._isVideoLoaded;
+    return !!this.onVideoLoaded$.value;
   }
 
   getHls(): Hls | undefined {
     throw new Error('Unsupported or video not loaded with Hls.js')
   }
 
-  appendHelpMenuGroup(helpMenuGroup: HelpMenuGroup) {
-    this._helpMenuGroups = [...this.getHelpMenuGroups(), helpMenuGroup]
-    this.onHelpMenuChange$.next();
+  appendHelpMenuGroup(helpMenuGroup: HelpMenuGroup): Observable<void> {
+    return passiveObservable(observer => {
+      this._helpMenuGroups = [...this.getHelpMenuGroups(), helpMenuGroup]
+      this.onHelpMenuChange$.next({
+        helpMenuGroups: this.getHelpMenuGroups()
+      });
+      nextCompleteObserver(observer);
+    })
   }
 
-  prependHelpMenuGroup(helpMenuGroup: HelpMenuGroup) {
-    this._helpMenuGroups = [helpMenuGroup, ...this.getHelpMenuGroups()]
-    this.onHelpMenuChange$.next();
+  prependHelpMenuGroup(helpMenuGroup: HelpMenuGroup): Observable<void> {
+    return passiveObservable(observer => {
+      this._helpMenuGroups = [helpMenuGroup, ...this.getHelpMenuGroups()]
+      this.onHelpMenuChange$.next({
+        helpMenuGroups: this.getHelpMenuGroups()
+      });
+      nextCompleteObserver(observer);
+    })
+  }
+
+  clearHelpMenuGroups(): Observable<void> {
+    return passiveObservable(observer => {
+      this._helpMenuGroups = [];
+      this.onHelpMenuChange$.next({
+        helpMenuGroups: this.getHelpMenuGroups()
+      });
+      nextCompleteObserver(observer);
+    })
   }
 
   getHelpMenuGroups(): HelpMenuGroup[] {
     return this._helpMenuGroups;
   }
 
-  // endregion
-
   destroy() {
-    nextCompleteVoidSubjects(this._videoEventBreaker$, this._seekBreaker$);
+    this.destroyAudioContext();
+    this.destroyAudioPeakProcessorWorkletNode();
+
+    this.removeAllSubtitlesTracks();
+
+    nextCompleteSubject(this._videoEventBreaker$);
+    nextCompleteSubject(this._seekBreaker$);
     completeSubjects(this._videoFrameCallback$);
 
     completeUnsubscribeSubjects(
@@ -1344,14 +1518,29 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
       this.onSeeked$,
       this.onBuffering$,
       this.onEnded$,
+      this.onVideoError$,
+      this.onVolumeChange$,
+      this.onFullscreenChange$,
+      this.onVideoSafeZoneChange$,
+      this.onVideoWindowPlaybackStateChange$,
+
+      this.onAudioLoaded$,
       this.onAudioSwitched$,
-      this.onPlaybackState$,
+
       this.onHelpMenuChange$,
-      this.onVideoError$
+      this.onPlaybackState$,
+      this.onPlaybackRateChange$,
+
+      this.onSubtitlesLoaded$,
+      this.onSubtitlesCreate$,
+      this.onSubtitlesRemove$,
+      this.onSubtitlesShow$,
+      this.onSubtitlesHide$
     )
 
-    nextCompleteVoidSubject(this._destroyed$);
+    nextCompleteSubject(this._destroyed$);
 
+    // TODO better to do it in provider
     destroyer(
       this._videoDomController
     )
@@ -1360,51 +1549,493 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
       this._videoDomController,
       this._playbackStateMachine,
       this._helpMenuGroups,
-      this._video
+      this._video,
+
+      this._activeSubtitlesTrack,
+      this._subtitlesTracks
     )
   }
 
-  addSafeZone(options: {
-    topRightBottomLeftPercent: number[],
-    htmlClass?: string
-  }): string {
-    return this._videoDomController.addSafeZone(options);
-  }
-
-  addSafeZoneWithAspectRatio(options: {
-    aspectRatioText: string,
-    scalePercent?: number,
-    htmlClass?: string
-  }): string {
-    return this._videoDomController.addSafeZoneWithAspectRatio(options);
+  addSafeZone(videoSafeZone: VideoSafeZone): Observable<VideoSafeZone> {
+    return this._videoDomController.addSafeZone(videoSafeZone);
   }
 
   removeSafeZone(id: string) {
-    this._videoDomController.removeSafeZone(id);
+    return this._videoDomController.removeSafeZone(id);
   }
 
-  clearSafeZones() {
-    this._videoDomController.clearSafeZones();
+  clearSafeZones(): Observable<void> {
+    return this._videoDomController.clearSafeZones();
   }
 
-  appendHTMLTrackElement(omakaseTextTrack: OmakaseTextTrack<OmakaseTextTrackCue>): Observable<HTMLTrackElement | undefined> {
-    return this._videoDomController.appendHTMLTrackElement(omakaseTextTrack);
+  getSafeZones(): VideoSafeZone[] {
+    return this._videoDomController.getSafeZones();
   }
 
-  getTextTrackById(id: string): TextTrack | undefined {
-    return this._videoDomController.getTextTrackById(id);
+  isDetachVideoWindowEnabled(): boolean {
+    return false;
   }
 
-  getTextTrackList(): TextTrackList | undefined {
-    return this._videoDomController.getTextTrackList();
+  isAttachVideoWindowEnabled(): boolean {
+    return false;
   }
 
-  removeTextTrackById(id: string): boolean {
-    return this._videoDomController.removeTextTrackById(id);
+  getVideoWindowPlaybackState(): VideoWindowPlaybackState {
+    return 'attached';
   }
 
-  getSubtitlesVttTracks(): SubtitlesVttTrack[] | undefined {
-    return this._subtitlesVttTracks;
+  detachVideoWindow(): Observable<void> {
+    throw new Error('I am not detachable');
   }
+
+  attachVideoWindow(): Observable<void> {
+    throw new Error('I am not attachable');
+
+  }
+
+  private processEmbeddedSubtitles() {
+    this.removeAllSubtitlesTracks().subscribe({
+      next: () => {
+        if (this._embeddedSubtitlesTracks && this._embeddedSubtitlesTracks.length > 0) {
+          let os$ = this._embeddedSubtitlesTracks.map(subtitlesVttTrack => this.createSubtitlesVttTrackInternal(subtitlesVttTrack));
+          forkJoin(os$).subscribe({
+            next: (tracks: (SubtitlesVttTrack | undefined)[]) => {
+              this.onSubtitlesLoaded$.next(this.createSubtitlesEvent());
+            },
+            error: (err) => {
+              console.error(err);
+              this.onSubtitlesLoaded$.next(this.createSubtitlesEvent());
+            }
+          })
+        } else {
+          this.onSubtitlesLoaded$.next(this.createSubtitlesEvent());
+        }
+      }
+    })
+  }
+
+  createSubtitlesVttTrack(subtitlesVttTrack: SubtitlesVttTrack): Observable<SubtitlesVttTrack | undefined> {
+    return passiveObservable(observer => {
+      if (this.isVideoLoaded()) {
+        this.createSubtitlesVttTrackInternal(subtitlesVttTrack).subscribe({
+          next: (value) => {
+            console.debug('Created subtitles track', subtitlesVttTrack)
+            nextCompleteObserver(observer, value)
+          },
+          error: (error) => {
+            console.error(error)
+            errorCompleteObserver(observer, error);
+          }
+        })
+      } else {
+        console.debug('Failed to create subtitles track, video not loaded', subtitlesVttTrack)
+        nextCompleteObserver(observer)
+      }
+    })
+  }
+
+  protected createSubtitlesVttTrackInternal(subtitlesVttTrack: SubtitlesVttTrack): Observable<SubtitlesVttTrack | undefined> {
+    return new Observable<SubtitlesVttTrack>(observer => {
+      this.removeSubtitlesTrack(subtitlesVttTrack.id).subscribe({
+        next: () => {
+          this._videoDomController.appendHTMLTrackElement(subtitlesVttTrack).subscribe(element => {
+            if (element) {
+              this._subtitlesTracks.set(subtitlesVttTrack.id, subtitlesVttTrack);
+              this.onSubtitlesCreate$.next(this.createSubtitlesEvent());
+              console.debug('Created subtitles track, track appended to DOM', subtitlesVttTrack)
+              nextCompleteObserver(observer, subtitlesVttTrack)
+            } else {
+              let message = `Failed to create subtitles track, appending to DOM failed for ${JSON.stringify(subtitlesVttTrack)}`
+              console.debug(message)
+              errorCompleteObserver(observer, message);
+            }
+          })
+        },
+        error: (error) => {
+          errorCompleteObserver(observer, error);
+        }
+      })
+    });
+  }
+
+  getSubtitlesTracks(): SubtitlesVttTrack[] {
+    return this.isVideoLoaded() ? [...this._subtitlesTracks.values()] : [];
+  }
+
+  removeAllSubtitlesTracks(): Observable<void> {
+    return passiveObservable(observer => {
+      if (this._subtitlesTracks.size > 0) {
+        let all = [...this._subtitlesTracks.values()].map(p => this.removeSubtitlesTrack(p.id));
+        forkJoin(all).subscribe({
+          next: () => {
+            nextCompleteObserver(observer)
+          }
+        })
+      } else {
+        nextCompleteObserver(observer)
+      }
+    })
+  }
+
+  removeSubtitlesTrack(id: string): Observable<void> {
+    return passiveObservable(observer => {
+      if (this.isVideoLoaded()) {
+        let track = this._subtitlesTracks.get(id);
+        if (track) {
+          // remove existing track
+          this._subtitlesTracks.delete(id);
+
+          // remove existing track from HTML DOM
+          this._videoDomController.removeTextTrackById(track.id)
+
+          this.onSubtitlesRemove$.next(this.createSubtitlesEvent());
+        }
+      }
+      nextCompleteObserver(observer);
+    })
+  }
+
+  getActiveSubtitlesTrack(): SubtitlesVttTrack | undefined {
+    return this._activeSubtitlesTrack;
+  }
+
+  showSubtitlesTrack(id: string): Observable<void> {
+    return passiveObservable(observer => {
+      if (this.isVideoLoaded()) {
+        let textTracksList = this._videoDomController.getTextTrackList();
+        if (textTracksList && textTracksList.length > 0) {
+          for (let i = 0; i < textTracksList.length; i++) {
+            let textTrack = textTracksList[i];
+            if (textTrack.id !== id && !(textTrack.mode === 'hidden' || textTrack.mode === 'disabled')) {
+              textTrack.mode = 'hidden';
+            }
+          }
+        }
+
+        let subtitlesVttTrack = this._subtitlesTracks.get(id);
+        if (subtitlesVttTrack) {
+          let textTrack = this._videoDomController.getTextTrackById(subtitlesVttTrack.id);
+
+          if (textTrack) {
+            textTrack.mode = 'showing';
+            subtitlesVttTrack.hidden = false;
+
+            this._activeSubtitlesTrack = subtitlesVttTrack;
+
+            this.onSubtitlesShow$.next(this.createSubtitlesEvent());
+          }
+        }
+      }
+      nextCompleteObserver(observer);
+    })
+  }
+
+  hideSubtitlesTrack(id: string): Observable<void> {
+    return passiveObservable(observer => {
+      if (this.isVideoLoaded()) {
+        let track = this._subtitlesTracks.get(id);
+        if (track) {
+          let domTextTrack = this._videoDomController.getTextTrackById(track.id);
+          if (domTextTrack) {
+            domTextTrack.mode = 'hidden';
+            track.hidden = true;
+
+            this.onSubtitlesHide$.next(this.createSubtitlesEvent());
+          }
+        }
+      }
+      nextCompleteObserver(observer);
+    })
+  }
+
+  private createSubtitlesEvent(): SubtitlesEvent {
+    return {
+      tracks: this.getSubtitlesTracks(),
+      currentTrack: this.getActiveSubtitlesTrack()
+    }
+  }
+
+  getAudioContext(): AudioContext | undefined {
+    return this._audioContext;
+  }
+
+  getMediaElementAudioSourceNode(): MediaElementAudioSourceNode | undefined {
+    return this._mediaElementAudioSource;
+  }
+
+  createAudioContext(inputsNumber: number, outputsNumber?: number): Observable<void> {
+    inputsNumber = Validators.audioChannelsNumber()(inputsNumber);
+
+    return this.createAudioContextWithOutputsResolver(inputsNumber, (maxChannelCount: number) => {
+      if (!isNullOrUndefined(outputsNumber)) {
+        return outputsNumber!;
+      } else {
+        return defaultAudioOutputsResolver(maxChannelCount);
+      }
+    });
+  }
+
+  createAudioContextWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void> {
+    return passiveObservable(observer => {
+      if (this._audioContext) {
+        console.debug('AudioContext already created');
+        nextCompleteObserver(observer)
+      } else {
+        console.debug('Creating AudioContext');
+
+        this._audioContext = new AudioContext();
+        this._audioInputsNumber = inputsNumber;
+
+        this._mediaElementAudioSource = this._audioContext.createMediaElementSource(this.getHTMLVideoElement());
+
+        let audioDestinationNode: AudioDestinationNode = this._audioContext.destination;
+        let maxChannelCount = audioDestinationNode.maxChannelCount; // the maximum number of channels that this hardware is capable of supporting
+        this._audioOutputsNumber = outputsNumberResolver(maxChannelCount);
+
+        console.debug('Configuring AudioContext with', {
+          inputsNumber: this._audioOutputsNumber,
+          outputsNumber: this._audioOutputsNumber
+        });
+
+        this._mediaElementAudioSource.channelCountMode = 'max';
+        this._mediaElementAudioSource.channelCount = this._audioInputsNumber;
+        this._audioChannelSplitterNode = this._audioContext.createChannelSplitter(this._audioInputsNumber);
+        this._audioChannelMergerNode = this._audioContext.createChannelMerger(this._audioOutputsNumber);
+
+        this._audioInputOutputNodes.clear();
+        for (let inputNumber = 0; inputNumber < this._audioInputsNumber; inputNumber++) {
+          let inputAudioInputOutputNodesByOutput: Map<number, AudioInputOutputNode> = new Map<number, AudioInputOutputNode>();
+          this._audioInputOutputNodes.set(inputNumber, inputAudioInputOutputNodesByOutput);
+          for (let outputNumber = 0; outputNumber < this._audioOutputsNumber; outputNumber++) {
+            inputAudioInputOutputNodesByOutput.set(outputNumber, {
+              inputNumber: inputNumber,
+              outputNumber: outputNumber,
+              connected: false
+            })
+          }
+        }
+
+        this.routeAudioInputOutputNodes(AudioUtil.resolveDefaultAudioRouting(this._audioInputsNumber, this._audioOutputsNumber))
+
+        this._mediaElementAudioSource.connect(this._audioChannelSplitterNode);
+
+        // connect silent gain node to prevent buffer overflows and stalls when audio isn't routed to destination
+        let silentGainNode = this._audioContext.createGain();
+        silentGainNode.gain.value = 0; // Set gain to 0 (silent)
+        silentGainNode.connect(this._audioContext.destination);
+        this._audioChannelSplitterNode.connect(silentGainNode);
+
+        this._audioChannelMergerNode.connect(this._audioContext.destination);
+
+        this.onAudioContextChange$.next({
+          audioInputsNumber: this._audioInputsNumber!,
+          audioOutputsNumber: this._audioOutputsNumber!,
+          audioInputOutputNodes: this.getAudioInputOutputNodes()
+        })
+        nextCompleteObserver(observer)
+
+        this.onPlay$.pipe(take(1)).subscribe({
+          next: () => {
+            if (this._audioContext?.state !== 'running') {
+              // this can be executed only after user gesture, so we have to bind it on some user gesture event (play) to enable it
+              this._audioContext?.resume().then((event) => {
+                console.debug('AudioContext resumed');
+              })
+            }
+          }
+        })
+      }
+    })
+  }
+
+  getAudioInputOutputNodes(): AudioInputOutputNode[][] {
+    return [...this._audioInputOutputNodes.values()].map(p => [...p.values()]);
+  }
+
+  routeAudioInputOutputNodes(newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void> {
+    return passiveObservable(observer => {
+      newAudioInputOutputNodes.forEach(p => this._routeAudioInputOutputNode(p, false));
+      this.onAudioRouting$.next({
+        audioInputOutputNodes: this.getAudioInputOutputNodes()
+      })
+      nextCompleteObserver(observer)
+    })
+  }
+
+  routeAudioInputOutputNode(newAudioInputOutputNode: AudioInputOutputNode): Observable<void> {
+    return passiveObservable(observer => {
+      this._routeAudioInputOutputNode(newAudioInputOutputNode);
+      nextCompleteObserver(observer)
+    })
+  }
+
+  protected _routeAudioInputOutputNode(newNode: AudioInputOutputNode, emitEvent = true) {
+    if (!this._audioInputOutputNodes.has(newNode.inputNumber)) {
+      console.debug(`Unknown audioInputOutputNode: ${JSON.stringify(newNode)}`)
+      return;
+    }
+
+    if (this._audioChannelSplitterNode && this._audioChannelMergerNode) {
+      let byOutput = this._audioInputOutputNodes.get(newNode.inputNumber)!;
+      let existingNode = byOutput.get(newNode.outputNumber);
+
+      // change is required only if newNode doesn't exist already and is connected, or if it exists and new connected state differs from existing
+      let changeRequired = (!existingNode && newNode.connected) || (existingNode && existingNode.connected !== newNode.connected);
+
+      if (changeRequired) {
+        try {
+          if (newNode.connected) {
+            this._audioChannelSplitterNode.connect(this._audioChannelMergerNode, newNode.inputNumber, newNode.outputNumber);
+          } else {
+            this._audioChannelSplitterNode.disconnect(this._audioChannelMergerNode, newNode.inputNumber, newNode.outputNumber);
+          }
+
+          byOutput.set(newNode.outputNumber, newNode);
+          if (emitEvent) {
+            this.onAudioRouting$.next({
+              audioInputOutputNodes: this.getAudioInputOutputNodes()
+            })
+          }
+        } catch (e) {
+          console.warn(e);
+        }
+      }
+    }
+  }
+
+  protected destroyAudioContext() {
+    if (this._audioContext) {
+      try {
+        this._mediaElementAudioSource?.disconnect();
+        if (this._audioContext.state !== 'closed') {
+          this._audioContext.close().then(() => {
+            console.debug('AudioContext closed')
+            this._audioContext = void 0;
+          }, reason => {
+            console.debug('Problem while closing AudioContext', reason)
+          })
+        }
+        this._audioChannelSplitterNode?.disconnect();
+        this._audioChannelMergerNode?.disconnect();
+        this._audioInputsNumber = void 0;
+        this._audioOutputsNumber = void 0;
+        this._audioInputOutputNodes.clear();
+
+        this.onAudioContextChange$.next({
+          audioInputsNumber: this._audioInputsNumber,
+          audioOutputsNumber: this._audioOutputsNumber,
+          audioInputOutputNodes: this.getAudioInputOutputNodes()
+        })
+      } catch (e) {
+        console.debug('Problems in disposing AudioContext', e)
+        console.debug(e);
+      }
+    }
+  }
+
+  getAudioPeakProcessorWorkletNode(): AudioWorkletNode | undefined {
+    return this._audioPeakProcessorWorkletNode;
+  }
+
+  createAudioPeakProcessorWorkletNode(audioMeterStandard: AudioMeterStandard): Observable<void> {
+    return passiveObservable(observer => {
+      if (this._audioPeakProcessorWorkletNode) {
+        console.debug('AudioWorkletNode already exists');
+        nextCompleteObserver(observer);
+      } else {
+        if (this._mediaElementAudioSource) {
+          let createAudioWorkletNode: () => Observable<AudioWorkletNode> = () => {
+            return passiveObservable(observer => {
+              let audioWorkletNodeName = `omp-${audioMeterStandard}-processor`; // name unique to omakase-player
+              try {
+                let audioWorkletNode = new AudioWorkletNode(this._mediaElementAudioSource!.context, audioWorkletNodeName, {
+                  parameterData: {},
+                });
+                nextCompleteObserver(observer, audioWorkletNode);
+              } catch (e) {
+                // console.debug(e)
+
+                const workletCode = audioMeterStandard === 'true-peak' ? truePeakProcessor : peakSampleProcessor;
+                let objectURL = BlobUtil.createObjectURL(BlobUtil.createBlob([workletCode], {type: 'application/javascript'}));
+
+                this._mediaElementAudioSource!.context.audioWorklet.addModule(objectURL).then(() => {
+                  let audioWorkletNode = new AudioWorkletNode(this._mediaElementAudioSource!.context, audioWorkletNodeName, {
+                    parameterData: {},
+                  })
+                  nextCompleteObserver(observer, audioWorkletNode);
+                })
+              }
+            })
+          }
+
+          createAudioWorkletNode().subscribe({
+            next: (audioWorkletNode) => {
+              this._audioPeakProcessorWorkletNode = audioWorkletNode;
+              this._audioPeakProcessorWorkletNode.port.onmessage = (event: MessageEvent) => {
+                this.handleAudioPeakProcessorWorkletNodeMessage(event)
+              };
+              this._mediaElementAudioSource!
+                .connect(this._audioPeakProcessorWorkletNode)
+                .connect(this._mediaElementAudioSource!.context.destination)
+
+              this.onAudioWorkletNodeCreated$.next({
+                audioMeterStandard: audioMeterStandard
+              })
+
+              nextCompleteObserver(observer);
+            },
+            error: (error) => {
+              errorCompleteObserver(observer, error);
+            }
+          })
+        } else {
+          nextCompleteObserver(observer);
+        }
+      }
+    })
+  }
+
+  protected handleAudioPeakProcessorWorkletNodeMessage = (event: MessageEvent) => {
+    this.onAudioPeakProcessorWorkletNodeMessage$.next({
+      data: event.data
+    })
+  }
+
+  destroyAudioPeakProcessorWorkletNode() {
+    if (this._audioPeakProcessorWorkletNode) {
+      try {
+        if (this._mediaElementAudioSource) {
+          this._audioPeakProcessorWorkletNode.disconnect(this._mediaElementAudioSource.context.destination);
+          this._mediaElementAudioSource.disconnect(this._audioPeakProcessorWorkletNode)
+        }
+        // this._audioPeakProcessorWorkletNode.port.postMessage('stop')  // TODO implement, this doesnt exist yet
+        this._audioPeakProcessorWorkletNode.port.onmessage = null;
+        this._audioPeakProcessorWorkletNode.port.close();
+        this._audioPeakProcessorWorkletNode = void 0;
+        this.onAudioWorkletNodeCreated$.next(void 0);
+      } catch (e) {
+        console.debug(e)
+        if (this._audioPeakProcessorWorkletNode) {
+          this._audioPeakProcessorWorkletNode.port.onmessage = null;
+          this._audioPeakProcessorWorkletNode = void 0;
+        }
+        this.onAudioWorkletNodeCreated$.next(void 0);
+      }
+    }
+  }
+
+  getThumbnailVttUrl(): string | undefined {
+      return this._thumbnailVttUrl;
+  }
+
+  loadThumbnailVttUrl(thumbnailVttUrl: string): Observable<void> {
+    return passiveObservable(observer => {
+      this._thumbnailVttUrl = thumbnailVttUrl;
+      this.onThumbnailVttUrlChanged$.next({ thumbnailVttUrl });
+      this._videoDomController.loadThumbnailVtt(thumbnailVttUrl);
+      nextCompleteObserver(observer);
+    })
+  }
+
 
 }

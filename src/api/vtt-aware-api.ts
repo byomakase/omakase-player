@@ -14,24 +14,27 @@
  * limitations under the License.
  */
 
-import { AxiosRequestConfig } from 'axios';
-import { OmakaseVttCue, OmakaseVttCueEvent, OmakaseVttFile } from '../types';
-import { Observable } from 'rxjs';
+import {AxiosRequestConfig} from 'axios';
+import {OmakaseVttCue, OmakaseVttCueEvent} from '../types';
+import {Observable} from 'rxjs';
+import {OmakaseVttFile} from '../vtt';
 
 export interface VttAwareApi<Q extends OmakaseVttCue, T extends OmakaseVttFile<Q>> {
   /**
    * URL pointing to the VTT file
    */
   get vttUrl(): string | undefined;
+
   set vttUrl(vttUrl: string | undefined);
 
   /**
    * VTT file content
    */
   get vttFile(): T | undefined;
+
   set vttFile(vttFile: T | undefined);
 
-    /**
+  /**
    * Fires when VTT file is loaded
    * @readonly
    */

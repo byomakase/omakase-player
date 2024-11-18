@@ -16,9 +16,27 @@
 
 import {Api} from './api';
 import {BehaviorSubject, Observable} from 'rxjs';
-import {AudioEvent, HelpMenuGroup, VideoBufferingEvent, VideoEndedEvent, VideoErrorEvent, VideoLoadedEvent, VideoLoadingEvent, VideoPlayEvent, VideoSeekedEvent, VideoSeekingEvent, VideoTimeChangeEvent, VideoVolumeEvent} from '../types';
+import {
+  HelpMenuGroup,
+  OmakaseAudioTrack,
+  VideoBufferingEvent,
+  VideoEndedEvent,
+  VideoErrorEvent,
+  VideoFullscreenChangeEvent,
+  VideoLoadedEvent,
+  VideoLoadingEvent,
+  VideoPlaybackRateEvent,
+  VideoPlayEvent,
+  VideoSafeZoneChangeEvent,
+  VideoSeekedEvent,
+  VideoSeekingEvent,
+  VideoTimeChangeEvent,
+  VideoVolumeEvent,
+  VideoWindowPlaybackStateChangeEvent
+} from '../types';
 import Hls from 'hls.js';
-import {Video} from '../video';
+import {Video, VideoLoadOptions} from '../video';
+import {VideoSafeZone, VideoWindowPlaybackState} from '../video/model';
 
 export interface VideoApi extends Api {
 
@@ -71,12 +89,6 @@ export interface VideoApi extends Api {
   onEnded$: Observable<VideoEndedEvent>;
 
   /**
-   *  Fires on audio track switched
-   *  @readonly
-   */
-  onAudioSwitched$: Observable<AudioEvent>;
-
-  /**
    *  Fires on if error occurs on video load
    *  @readonly
    */
@@ -95,6 +107,52 @@ export interface VideoApi extends Api {
   onVolumeChange$: Observable<VideoVolumeEvent>;
 
   /**
+   * Fires on playback rate change
+   *  @readonly
+   */
+  onPlaybackRateChange$: Observable<VideoPlaybackRateEvent>;
+
+  /**
+   * Fires on fullscreen change
+   *  @readonly
+   */
+  onFullscreenChange$: Observable<VideoFullscreenChangeEvent>;
+
+  /**
+   * Fires on video safe zone change
+   *  @readonly
+   */
+  onVideoSafeZoneChange$: Observable<VideoSafeZoneChangeEvent>;
+
+  /**
+   * Fires on video window playback state change
+   * @readonly
+   */
+  onVideoWindowPlaybackStateChange$: Observable<VideoWindowPlaybackStateChangeEvent>;
+
+  /**
+   * Loads new video
+   *
+   * @param sourceUrl Video manifest URL
+   * @param frameRate Video frame rate
+   */
+  loadVideo(sourceUrl: string, frameRate: number | string): Observable<Video>;
+
+  /**
+   * Loads new video
+   *
+   * @param sourceUrl Video manifest URL
+   * @param frameRate Video frame rate
+   * @param options
+   */
+  loadVideo(sourceUrl: string, frameRate: number | string, options?: VideoLoadOptions): Observable<Video>;
+
+  /**
+   * Reloads video
+   */
+  reloadVideo(): Observable<Video>;
+
+  /**
    * Indicates if video is loaded or not
    */
   isVideoLoaded(): boolean;
@@ -105,12 +163,17 @@ export interface VideoApi extends Api {
   getVideo(): Video | undefined;
 
   /**
+   * @returns VideoLoadOptions object used in {@link loadVideo}  method
+   */
+  getVideoLoadOptions(): VideoLoadOptions | undefined;
+
+  /**
    * @returns HTML <video> element reference
    */
   getHTMLVideoElement(): HTMLVideoElement;
 
   /**
-   * @returns video duration. If duration is provided in omakasePlayer.loadVideo() method, method returns provided value. If duration is not provided in omakasePlayer.loadVideo() method, method returns HTML <video> element "duration" property
+   * @returns video duration. If duration is provided in {@link loadVideo} method, method returns provided value. If duration is not provided in {@link loadVideo} method, method returns HTML <video> element "duration" property
    */
   getDuration(): number;
 
@@ -133,7 +196,7 @@ export interface VideoApi extends Api {
    * Sets video playback rate
    * @param playbackRate Decimal value between [0.1, 16]. For example, if provided value is "2", video playback rate will be 2x of normal playback rate
    */
-  setPlaybackRate(playbackRate: number): void;
+  setPlaybackRate(playbackRate: number): Observable<void>;
 
   /**
    * @returns current volume level
@@ -144,7 +207,7 @@ export interface VideoApi extends Api {
    * Sets volume level
    * @param volume Decimal value between [0, 1]
    */
-  setVolume(volume: number): void;
+  setVolume(volume: number): Observable<void>;
 
   /**
    * @returns current frame number
@@ -152,7 +215,7 @@ export interface VideoApi extends Api {
   getCurrentFrame(): number;
 
   /**
-   * @returns video frame rate provided in omakasePlayer.loadVideo() method
+   * @returns video frame rate provided in {@link loadVideo} method
    */
   getFrameRate(): number;
 
@@ -178,18 +241,19 @@ export interface VideoApi extends Api {
 
   /**
    * Starts video playback
+   * @returns Observable<void> when play started
    */
-  play(): void;
+  play(): Observable<void>;
 
   /**
    * Pauses video playback
    */
-  pause(): void
+  pause(): Observable<void>;
 
   /**
    * Toggles video play and pause
    */
-  togglePlayPause(): void;
+  togglePlayPause(): Observable<void>;
 
   /**
    * Seeks to particular video frame. Video must be in non-playing mode.
@@ -271,12 +335,12 @@ export interface VideoApi extends Api {
   /**
    * Video mute
    */
-  mute(): void;
+  mute(): Observable<void>;
 
   /**
    * Video unmute
    */
-  unmute(): void;
+  unmute(): Observable<void>;
 
   /**
    * @returns is video muted
@@ -286,7 +350,7 @@ export interface VideoApi extends Api {
   /**
    * Toggles mute / unmute
    */
-  toggleMuteUnmute(): void;
+  toggleMuteUnmute(): Observable<void>;
 
   /**
    * Indicates if video is in fullscreen mode
@@ -296,23 +360,23 @@ export interface VideoApi extends Api {
   /**
    * Toggles video fullscreen mode
    */
-  toggleFullscreen(): void;
+  toggleFullscreen(): Observable<void>;
 
   /**
-   * @returns available audio tracks. Type depends on VideoController implementation.
+   * @returns available audio tracks
    */
-  getAudioTracks(): any[];
+  getAudioTracks(): OmakaseAudioTrack[];
 
   /**
-   * @returns current active audio tracks. Type depends on VideoController implementation.
+   * @returns current active audio track
    */
-  getCurrentAudioTrack(): any;
+  getActiveAudioTrack(): OmakaseAudioTrack | undefined;
 
   /**
    * Sets active audio track
-   * @param audioTrackId Audio track ID
+   * @param id {@link OmakaseAudioTrack} id
    */
-  setAudioTrack(audioTrackId: number): void;
+  setActiveAudioTrack(id: string): Observable<void>;
 
   /**
    * @returns Hls (hls.js) instance if video is loaded, otherwise undefined
@@ -323,13 +387,18 @@ export interface VideoApi extends Api {
    * Appends new HelpMenuGroup to video context menu
    * @param helpMenuGroup
    */
-  appendHelpMenuGroup(helpMenuGroup: HelpMenuGroup): void;
+  appendHelpMenuGroup(helpMenuGroup: HelpMenuGroup): Observable<void>;
 
   /**
    * Appends new HelpMenuGroup to video context menu
    * @param helpMenuGroup
    */
-  prependHelpMenuGroup(helpMenuGroup: HelpMenuGroup): void;
+  prependHelpMenuGroup(helpMenuGroup: HelpMenuGroup): Observable<void>;
+
+  /**
+   * Removes help menu groups
+   */
+  clearHelpMenuGroups(): Observable<void>;
 
   /**
    * @returns available HelpMenuGroup's
@@ -337,34 +406,53 @@ export interface VideoApi extends Api {
   getHelpMenuGroups(): HelpMenuGroup[];
 
   /**
-   * Adds safe zone area. @returns DOM <div> id.
-   * @param options
+   * Adds safe zone area.
+   * @returns safe zone id.
+   * @param videoSafeZone
    */
-  addSafeZone(options: {
-    topRightBottomLeftPercent: number[],
-    htmlClass?: string
-  }): string;
+  addSafeZone(videoSafeZone: VideoSafeZone): Observable<VideoSafeZone>;
 
   /**
-   * Adds safe zone calculated from provided aspect ratio expression
-   * @param options
-   */
-  addSafeZoneWithAspectRatio(options: {
-    aspectRatioText: string,
-    scalePercent?: number,
-    htmlClass?: string
-  }): string;
-
-  /**
-   * Removes safe zone area by DOM <div> id
+   * Removes safe zone area
    *
    * @param id
    */
-  removeSafeZone(id: string): void;
+  removeSafeZone(id: string): Observable<void>;
 
   /**
    * Clears all added safe zones
    */
-  clearSafeZones(): void;
+  clearSafeZones(): Observable<void>;
+
+  /**
+   * @returns video safe zones
+   */
+  getSafeZones(): VideoSafeZone[];
+
+  /**
+   * Is detach video window enabled
+   */
+  isDetachVideoWindowEnabled(): boolean;
+
+  /**
+   * Is attach video enabled
+   */
+  isAttachVideoWindowEnabled(): boolean;
+
+  /**
+   * @returns {@link VideoWindowPlaybackState}
+   */
+  getVideoWindowPlaybackState(): VideoWindowPlaybackState;
+
+  /**
+   * Detaches video to new window
+   */
+  detachVideoWindow(): Observable<void>;
+
+  /**
+   * Attaches back video from detached window
+   */
+  attachVideoWindow(): Observable<void>;
+
 
 }

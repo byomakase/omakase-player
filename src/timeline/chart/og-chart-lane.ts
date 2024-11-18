@@ -17,14 +17,14 @@
 import {TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle, VTT_DOWNSAMPLE_CONFIG_DEFAULT} from '../timeline-lane';
 import Konva from 'konva';
 import {Constants} from '../../constants';
-import {debounceTime, distinctUntilChanged, filter, Subject, take, takeUntil} from 'rxjs';
+import {debounceTime, distinctUntilChanged, filter, Subject, takeUntil, zip} from 'rxjs';
 import {OgChartLaneItem} from './og-chart-lane-item';
 import Decimal from 'decimal.js';
 import {OgChartCue, OgChartVttCue, WithOptionalPartial} from '../../types';
 import {Timeline} from '../timeline';
 import {destroyer} from '../../util/destroy-util';
 import {KonvaFactory} from '../../factory/konva-factory';
-import {VideoControllerApi} from '../../video/video-controller-api';
+import {VideoControllerApi} from '../../video';
 import {AxiosRequestConfig} from 'axios';
 import {OgChartVttFile} from '../../vtt';
 import {isNullOrUndefined} from '../../util/object-util';
@@ -131,22 +131,22 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
       this.settleAll();
     })
 
-    this._vttAdapter.vttFileLoaded$.pipe(takeUntil(this._destroyed$)).subscribe({
-      next: () => {
-        this._videoController!.onVideoLoaded$.pipe(filter(p => !!p), take(1), takeUntil(this._destroyed$)).subscribe({
-          next: (event) => {
-            this.createEntities();
-          }
-        })
-      }
-    });
+    zip([this._videoController!.onVideoLoaded$.pipe(filter(p => !!p && !(p.isAttaching || p.isDetaching))), this._vttAdapter.vttFileLoaded$])
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: () => {
+          this.createEntities()
+        }
+      })
 
-    this._videoController!.onVideoLoading$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.clearContent();
+    this._videoController!.onVideoLoading$.pipe(filter(p => !(p.isAttaching || p.isDetaching)), takeUntil(this._destroyed$)).subscribe({
+      next: (event) => {
+        this.clearContent();
+      }
     })
 
     if (this.vttUrl) {
-      this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig)).subscribe();
+      this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig));
     }
   }
 

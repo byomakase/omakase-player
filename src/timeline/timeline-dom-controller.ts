@@ -18,10 +18,10 @@ import {Destroyable} from '../types';
 import {Timeline} from './timeline';
 import {StringUtil} from '../util/string-util';
 import {DomUtil} from '../util/dom-util';
-import {VideoControllerApi} from '../video/video-controller-api';
+import {VideoControllerApi} from '../video';
 import {filter, Subject, takeUntil} from 'rxjs';
-import {nextCompleteVoidSubjects} from '../util/observable-util';
-import {Dimension, Position} from '../common/measurement';
+import {nextCompleteSubject} from '../util/rxjs-util';
+import {Dimension, Position} from '../common';
 
 const domClasses = {
   timeline: 'omakase-timeline',
@@ -134,7 +134,7 @@ export class TimelineDomController implements Destroyable {
   }
 
   destroy(): void {
-    nextCompleteVoidSubjects(this._destroyed$);
+    nextCompleteSubject(this._destroyed$);
     this.cleanDom();
   }
 

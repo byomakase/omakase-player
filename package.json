@@ -1,10 +1,10 @@
 {
     "name": "@byomakase/omakase-player",
-    "version": "0.10.1",
+    "version": "0.11.0",
     "description": "## Omakase Player - Open source JavaScript framework for building frame accurate video experiences",
     "author": "ByOmakase",
     "homepage": "https://player.byomakase.org",
-    "copyright": "Copyright 2023 ByOmakase, LLC <https://byomakase.org/>",
+    "copyright": "Copyright 2024 ByOmakase, LLC <https://byomakase.org/>",
     "license": "Apache-2.0",
     "keywords": [
         "hls",
@@ -26,26 +26,26 @@
         "prod": "tsc --noEmit && vite build --debug",
         "check": "tsc --noEmit",
         "dev:tsc": "rm -rf dist/lib && tsc --watch",
-        "build:prod": "rm -rf dist && tsc --noEmit && vite build --debug"
+        "build:workers": "vite build --config vite.workers.config.mjs",
+        "build:prod": "rm -rf dist && npm run build:workers && tsc --noEmit && vite build --debug"
     },
     "dependencies": {
-        "axios": "1.6.7",
+        "axios": "1.7.4",
         "decimal.js": "10.4.3",
         "eventemitter3": "5.0.0",
         "hls.js": "1.5.15",
         "konva": "8.3.14",
+        "media-chrome": "^4.2.1",
         "node-webvtt": "1.9.4",
         "parse-hls": "^1.0.7",
         "rxjs": "7.8.1",
-        "uuid": "9.0.1",
         "yoga-layout": "2.0.1",
-        "zod": "3.23.0-canary.20240222T232722"
+        "zod": "3.23.8"
     },
     "devDependencies": {
-        "@types/uuid": "^9.0.8",
         "sass": "^1.59.2",
         "typescript": "^4.9.5",
-        "vite": "^4.1.3",
+        "vite": "5.4.9",
         "vite-plugin-dts": "^2.0.2"
     },
     "publishConfig": {

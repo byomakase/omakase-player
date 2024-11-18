@@ -22,11 +22,12 @@ import {MarkerChangeEvent, MarkerEvent, TimeObservation} from '../../types';
 import {Observable, Subject} from 'rxjs';
 import {Timeline} from '../timeline';
 import {Validators} from '../../validators';
-import {completeUnsubscribeSubjects} from '../../util/observable-util';
+import {completeUnsubscribeSubjects} from '../../util/rxjs-util';
 import {StringUtil} from '../../util/string-util';
-import {UuidUtil} from '../../util/uuid-util';
 import {konvaUnlistener} from '../../util/konva-util';
 import {MarkerHandleVerticals, MarkerStyle} from './marker-types';
+import { MarkerApi } from '../../api/marker-api';
+import {CryptoUtil} from '../../util/crypto-util';
 
 export interface MarkerConfig<T extends TimeObservation, S extends MarkerStyle> extends ComponentConfig<S> {
   timeObservation: T;
@@ -36,7 +37,7 @@ export interface MarkerConfig<T extends TimeObservation, S extends MarkerStyle> 
   editable?: boolean;
 }
 
-export interface Marker extends KonvaComponent<MarkerConfig<any, any>, MarkerStyle, Konva.Group> {
+export interface Marker extends MarkerApi, KonvaComponent<MarkerConfig<any, any>, MarkerStyle, Konva.Group> {
   onClick$: Observable<MarkerEvent>;
   onMouseEnter$: Observable<MarkerEvent>;
   onMouseLeave$: Observable<MarkerEvent>;
@@ -44,8 +45,6 @@ export interface Marker extends KonvaComponent<MarkerConfig<any, any>, MarkerSty
   onMouseOut$: Observable<MarkerEvent>;
 
   refreshTimelinePosition(): void;
-
-  get id(): string;
 
   get timeObservation(): TimeObservation;
 
@@ -56,6 +55,10 @@ export interface Marker extends KonvaComponent<MarkerConfig<any, any>, MarkerSty
   set editable(editable: boolean);
 
   get text(): string | undefined;
+
+  get style(): MarkerStyle;
+
+  set style(s: MarkerStyle);
 }
 
 export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConfig<T, S>, S extends MarkerStyle, E extends MarkerChangeEvent> extends BaseKonvaComponent<C, S, Konva.Group> implements Marker {
@@ -64,6 +67,7 @@ export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConf
   public readonly onMouseLeave$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
   public readonly onMouseOver$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
   public readonly onMouseOut$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
+  public readonly onDestroy$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
 
   public readonly onChange$: Subject<E> = new Subject<E>();
 
@@ -75,11 +79,12 @@ export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConf
   protected _timeObservation: T;
   protected _editable: boolean;
   private _text?: string;
+  protected _data?: Record<string, any>;
 
   protected constructor(config: C) {
     super(config);
 
-    this._id = StringUtil.isNullUndefinedOrWhitespace(this.config.id) ? UuidUtil.uuid() : Validators.id()(this.config.id!);
+    this._id = StringUtil.isNullUndefinedOrWhitespace(this.config.id) ? CryptoUtil.uuid() : Validators.id()(this.config.id!);
 
     this._timeObservation = this.config.timeObservation;
     this._editable = this.config.editable ? Validators.boolean()(this.config.editable!) : false;
@@ -122,6 +127,8 @@ export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConf
 
   override destroy() {
     super.destroy();
+
+    this.onDestroy$.next({});
 
     konvaUnlistener(
       this._group
@@ -216,4 +223,21 @@ export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConf
   get text(): string | undefined {
     return this._text;
   }
+
+  get name(): string | undefined {
+    return this._text;
+  }
+
+  set name(name: string | undefined) {
+    this._text = name;
+  }
+
+  get data(): Record<string, any> | undefined {
+    return this._data;
+  }
+
+  set data(data: Record<string, any> | undefined) {
+    this._data = data;
+  }
+
 }

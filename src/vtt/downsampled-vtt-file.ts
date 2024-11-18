@@ -31,14 +31,14 @@ export abstract class DownsampledVttFile<T extends OmakaseVttCue> extends BaseOm
   protected override downsampleCues(cues: T[]): T[] {
 
     if (this._downsampleConfig?.downsampleStrategy) {
-        if (!this._supportedDownsampleStrategies.includes(this._downsampleConfig.downsampleStrategy)) {
-            throw new Error('Downsampling strategy not supported: ' + this._downsampleConfig.downsampleStrategy);
-        }
-        if (this._downsampleConfig.downsampleStrategy === 'none') {
-            return cues;
-        }
-    } else {
+      if (!this._supportedDownsampleStrategies.includes(this._downsampleConfig.downsampleStrategy)) {
+        throw new Error('Downsampling strategy not supported: ' + this._downsampleConfig.downsampleStrategy);
+      }
+      if (this._downsampleConfig.downsampleStrategy === 'none') {
         return cues;
+      }
+    } else {
+      return cues;
     }
 
     let samplePeriodDuration = (this._downsampleConfig?.downsamplePeriod ?? 1000) / 1000; // in seconds

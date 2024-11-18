@@ -18,7 +18,7 @@ import {AxiosRequestConfig} from 'axios';
 import {from, map, Observable} from 'rxjs';
 import {httpGet} from '../http';
 import {M3u8Parser} from './m3u8-parser';
-import {AuthenticationData} from '../video/model';
+import {AuthenticationData} from '../authentication/model';
 import {AuthUtil} from '../util/auth-util';
 import HLS from 'parse-hls';
 

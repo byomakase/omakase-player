@@ -21,10 +21,10 @@ import {forkJoin, from, map, Observable, of, switchMap} from 'rxjs';
 import {httpGet} from '../http';
 import {BlobUtil} from '../util/blob-util';
 import {M3u8File} from '../m3u8/m3u8-file';
-import {OmakaseVttCueExtension, OmakaseWebVttExtensionVersion, VttCueExtensionRow} from '../types';
+import {OmakaseVttCueExtension, VttCueExtensionRow} from '../types';
 import {StringUtil} from '../util/string-util';
-import {VttCueParsed, VttFileParsed} from './index';
-import {AuthenticationData} from '../video/model';
+import {OmakaseWebVttExtensionVersion, VttCueParsed, VttFileParsed} from './index';
+import {AuthenticationData} from '../authentication/model';
 import {AuthUtil} from '../util/auth-util';
 import {UrlUtil} from '../util/url-util';
 
@@ -95,7 +95,7 @@ export class VttUtil {
   }
 
   static createWebvttBlob(webvttText: string): string {
-    return BlobUtil.createObjectURL(BlobUtil.createBlob([webvttText], 'text/vtt'));
+    return BlobUtil.createObjectURL(BlobUtil.createBlob([webvttText], {type: 'text/vtt'}));
   }
 
   static parseVttCueExtension(cue: VttCueParsed, extensionVersion: OmakaseWebVttExtensionVersion): OmakaseVttCueExtension | undefined {

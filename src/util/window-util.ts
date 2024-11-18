@@ -24,4 +24,13 @@ export class WindowUtil {
     document.body.style.cursor = cursor;
   }
 
+  static open(url: string, target?: '_self' | '_blank' | '_parent' | '_top' | '_unfencedTop', features?: string): WindowProxy | undefined {
+    let openedWindow = window.open(url, target, features);
+    return openedWindow ? openedWindow : void 0;
+  }
+
+  static close() {
+    return window.close();
+  }
+
 }

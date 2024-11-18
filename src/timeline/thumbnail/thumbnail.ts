@@ -20,7 +20,7 @@ import {Dimension, HasRectMeasurement, OnMeasurementsChange, Position, RectMeasu
 import {Comparable, ThumbnailEvent, ThumbnailVttCue} from '../../types';
 import {Constants} from '../../constants';
 import {Subject} from 'rxjs';
-import {completeUnsubscribeSubjects} from '../../util/observable-util';
+import {completeUnsubscribeSubjects} from '../../util/rxjs-util';
 import {nullifier} from '../../util/destroy-util';
 import {KonvaFactory} from '../../factory/konva-factory';
 
