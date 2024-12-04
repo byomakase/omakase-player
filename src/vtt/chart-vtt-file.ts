@@ -23,11 +23,10 @@ import {DownsampleStrategy, VttLoadOptions} from '../api/vtt-aware-api';
 import {DownsampledVttFile} from './downsampled-vtt-file';
 
 export abstract class ChartVttFile<T extends LineChartVttCue | BarChartVttCue | OgChartVttCue> extends DownsampledVttFile<T> {
-
   protected override _supportedDownsampleStrategies: DownsampleStrategy[] = ['none', 'avg', 'max', 'min', 'drop'];
 
   protected override resolveDownsampledCue(index: number, startTime: number, endTime: number, cues: T[]): T {
-    const measurements: { [measurement: string]: number[] } = cues.reduce((measurements, cue) => {
+    const measurements: {[measurement: string]: number[]} = cues.reduce((measurements, cue) => {
       if (cue.extension?.rows) {
         for (const row of cue.extension.rows) {
           if (!row.measurement || !row.value) {
@@ -49,14 +48,14 @@ export abstract class ChartVttFile<T extends LineChartVttCue | BarChartVttCue | 
       startTime: startTime,
       endTime: endTime,
       text: `SAMPLED`,
-      value: this.getAggregateValue(cues.map(cue => cue.value)),
+      value: this.getAggregateValue(cues.map((cue) => cue.value)),
       extension: {
-        rows: Object.keys(measurements).map(measurement => ({
+        rows: Object.keys(measurements).map((measurement) => ({
           measurement,
           value: this.getAggregateValue(measurements[measurement]),
-          comment: 'SAMPLE'
-        }))
-      }
+          comment: 'SAMPLE',
+        })),
+      },
     } as any;
   }
 
@@ -74,20 +73,20 @@ export abstract class ChartVttFile<T extends LineChartVttCue | BarChartVttCue | 
         throw new Error('Usupported downsampling strategy: ' + this._downsampleConfig?.downsampleStrategy);
     }
   }
-
 }
 
 export class LineChartVttFile extends ChartVttFile<LineChartVttCue> {
-
   protected constructor(url: string, options: VttLoadOptions) {
     super(url, options);
   }
 
   static create(url: string, options: VttLoadOptions): Observable<LineChartVttFile> {
     let instance = new LineChartVttFile(url, options);
-    return instance.fetch().pipe(map(result => {
-      return instance;
-    }))
+    return instance.fetch().pipe(
+      map((result) => {
+        return instance;
+      })
+    );
   }
 
   protected mapCue(vttCueParsed: VttCueParsed, cueExtension: OmakaseVttCueExtension | undefined, index: number): LineChartVttCue {
@@ -97,26 +96,27 @@ export class LineChartVttFile extends ChartVttFile<LineChartVttCue> {
       startTime: new Decimal(vttCueParsed.start).toDecimalPlaces(3).toNumber(),
       endTime: new Decimal(vttCueParsed.end).toDecimalPlaces(3).toNumber(),
       text: vttCueParsed.text,
-      value: z.coerce.number()
+      value: z.coerce
+        .number()
         .catch(0)
         .parse(cueExtension && cueExtension.rows && cueExtension.rows.length > 0 ? cueExtension.rows[0].value : vttCueParsed.text),
-      extension: cueExtension
-    }
+      extension: cueExtension,
+    };
   }
-
 }
 
 export class BarChartVttFile extends ChartVttFile<BarChartVttCue> {
-
   protected constructor(url: string, options: VttLoadOptions) {
     super(url, options);
   }
 
   static create(url: string, options: VttLoadOptions): Observable<BarChartVttFile> {
     let instance = new BarChartVttFile(url, options);
-    return instance.fetch().pipe(map(result => {
-      return instance;
-    }))
+    return instance.fetch().pipe(
+      map((result) => {
+        return instance;
+      })
+    );
   }
 
   protected mapCue(vttCueParsed: VttCueParsed, cueExtension: OmakaseVttCueExtension | undefined, index: number): BarChartVttCue {
@@ -126,26 +126,27 @@ export class BarChartVttFile extends ChartVttFile<BarChartVttCue> {
       startTime: new Decimal(vttCueParsed.start).toDecimalPlaces(3).toNumber(),
       endTime: new Decimal(vttCueParsed.end).toDecimalPlaces(3).toNumber(),
       text: vttCueParsed.text,
-      value: z.coerce.number()
+      value: z.coerce
+        .number()
         .catch(0)
         .parse(cueExtension && cueExtension.rows && cueExtension.rows.length > 0 ? cueExtension.rows[0].value : vttCueParsed.text),
-      extension: cueExtension
-    }
+      extension: cueExtension,
+    };
   }
-
 }
 
 export class OgChartVttFile extends ChartVttFile<OgChartVttCue> {
-
   protected constructor(url: string, options: VttLoadOptions) {
     super(url, options);
   }
 
   static create(url: string, options: VttLoadOptions): Observable<OgChartVttFile> {
     let instance = new OgChartVttFile(url, options);
-    return instance.fetch().pipe(map(result => {
-      return instance;
-    }))
+    return instance.fetch().pipe(
+      map((result) => {
+        return instance;
+      })
+    );
   }
 
   protected mapCue(vttCueParsed: VttCueParsed, cueExtension: OmakaseVttCueExtension | undefined, index: number): OgChartVttCue {
@@ -155,11 +156,11 @@ export class OgChartVttFile extends ChartVttFile<OgChartVttCue> {
       startTime: new Decimal(vttCueParsed.start).toDecimalPlaces(3).toNumber(),
       endTime: new Decimal(vttCueParsed.end).toDecimalPlaces(3).toNumber(),
       text: vttCueParsed.text,
-      value: z.coerce.number()
+      value: z.coerce
+        .number()
         .catch(0)
         .parse(cueExtension && cueExtension.rows && cueExtension.rows.length > 0 ? cueExtension.rows[0].value : vttCueParsed.text),
-      extension: cueExtension
-    }
+      extension: cueExtension,
+    };
   }
-
 }

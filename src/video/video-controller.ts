@@ -42,7 +42,7 @@ import {
   VideoSeekingEvent,
   VideoTimeChangeEvent,
   VideoVolumeEvent,
-  VideoWindowPlaybackStateChangeEvent
+  VideoWindowPlaybackStateChangeEvent,
 } from '../types';
 import {BehaviorSubject, delay, forkJoin, fromEvent, interval, map, merge, Observable, of, Subject, switchMap, take, takeUntil, throwError, timeout} from 'rxjs';
 import {FrameRateUtil} from '../util/frame-rate-util';
@@ -57,7 +57,6 @@ import {destroyer, nullifier} from '../util/destroy-util';
 import {AudioInputOutputNode, AudioMeterStandard, PlaybackState, PlaybackStateMachine, Video, VideoLoadOptions, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
 import {isNullOrUndefined} from '../util/object-util';
 import {StringUtil} from '../util/string-util';
-import {AuthUtil} from '../util/auth-util';
 import {VideoDomControllerApi} from './video-dom-controller-api';
 import {AudioUtil} from '../util/audio-util';
 import {BlobUtil} from '../util/blob-util';
@@ -82,23 +81,21 @@ export const HTMLVideoElementEventKeys = {
   PROGRESS: 'progress',
   VOLUMECHANGE: 'volumechange',
   RATECHANGE: 'ratechange',
-}
+};
 
 export interface BufferedTimespan {
   start: number;
   end: number;
 }
 
-export interface VideoControllerConfig {
-}
+export interface VideoControllerConfig {}
 
-export const VIDEO_CONTROLLER_CONFIG_DEFAULT: VideoControllerConfig = {}
-
+export const VIDEO_CONTROLLER_CONFIG_DEFAULT: VideoControllerConfig = {};
 
 enum SeekDirection {
   BACKWARD = 'BACKWARD',
   FORWARD = 'FORWARD',
-  NONE = 'NONE'
+  NONE = 'NONE',
 }
 
 interface VideoFrameCallbackData {
@@ -110,8 +107,8 @@ interface SyncConditions {
   seekToFrame?: number;
   seekToTime?: number;
   currentTime?: number;
-  videoFrameCallbackData?: VideoFrameCallbackData,
-  seekDirection?: SeekDirection,
+  videoFrameCallbackData?: VideoFrameCallbackData;
+  seekDirection?: SeekDirection;
   newTimecode?: string;
 }
 
@@ -119,13 +116,13 @@ const defaultAudioOutputsResolver: (maxChannelCount: number) => number = (maxCha
   if (maxChannelCount <= 1) {
     return 1;
   } else if (maxChannelCount >= 2 && maxChannelCount <= 5) {
-    return 2
+    return 2;
   } else if (maxChannelCount >= 6) {
-    return 6
+    return 6;
   } else {
     return maxChannelCount;
   }
-}
+};
 
 export abstract class VideoController<C extends VideoControllerConfig> implements VideoControllerApi {
   public readonly onVideoLoaded$: BehaviorSubject<VideoLoadedEvent | undefined> = new BehaviorSubject<VideoLoadedEvent | undefined>(void 0);
@@ -229,47 +226,48 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
     this._config = config;
     this._videoDomController = videoDomController;
 
-    this._videoFrameCallback$.pipe(takeUntil(this._destroyed$)).subscribe(videoFrameCallbackData => {
+    this._videoFrameCallback$.pipe(takeUntil(this._destroyed$)).subscribe((videoFrameCallbackData) => {
       if (videoFrameCallbackData) {
         if (!this._playbackStateMachine!.seeking) {
           if (this.isPlaying()) {
-            this.videoTimeChangeHandlerExecutor();
+            this.dispatchVideoTimeChange();
           } else if (this.isPaused()) {
             // nop
           }
         }
       }
-    })
+    });
 
-    this._animationFrameCallback$.pipe(takeUntil(this._destroyed$)).subscribe(time => {
+    this._animationFrameCallback$.pipe(takeUntil(this._destroyed$)).subscribe((time) => {
       if (time) {
         if (!this._playbackStateMachine!.seeking) {
           if (this.isPlaying()) {
-            this.videoTimeChangeHandlerExecutor();
+            this.dispatchVideoTimeChange();
           } else if (this.isPaused()) {
             // nop
           }
         }
       }
-    })
+    });
 
     this.onPlay$.pipe(takeUntil(this._destroyed$)).subscribe(() => {
-      if (this._video!.audioOnly) {
+      if (this._video!.audioOnly && isNullOrUndefined(this._requestAnimationFrameId)) {
         this.startAnimationFrameLoop();
       }
-    })
+    });
 
     merge(this.onPause$, this.onEnded$)
-      .pipe(switchMap(value => [value])) // each new emission switches to latest, racing observables
-      .pipe(takeUntil(this._destroyed$)).subscribe(() => {
-      if (this._video!.audioOnly) {
-        this.stopAnimationFrameLoop();
-      }
-    })
+      .pipe(switchMap((value) => [value])) // each new emission switches to latest, racing observables
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe(() => {
+        if (this._video!.audioOnly) {
+          this.stopAnimationFrameLoop();
+        }
+      });
   }
 
   loadVideoInternal(sourceUrl: string, frameRate: number | string, options: VideoLoadOptions | undefined, optionsInternal?: VideoLoadOptionsInternal): Observable<Video> {
-    return passiveObservable<Video>(observer => {
+    return passiveObservable<Video>((observer) => {
       try {
         nextCompleteSubject(this._videoEventBreaker$);
         this._videoEventBreaker$ = new Subject<void>();
@@ -298,19 +296,16 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
         frameRate = FrameRateUtil.resolveFrameRate(frameRate);
 
         if (options && !isNullOrUndefined(options.dropFrame)) {
-          z.coerce.boolean()
-            .parse(options?.dropFrame, zodErrorMapOverload('Invalid dropFrame'));
+          z.coerce.boolean().parse(options?.dropFrame, zodErrorMapOverload('Invalid dropFrame'));
         }
-        let dropFrame = options && (options.dropFrame !== void 0) ? options.dropFrame : false;
+        let dropFrame = options && options.dropFrame !== void 0 ? options.dropFrame : false;
 
         if (dropFrame && !FrameRateUtil.isSupportedDropFrameRate(frameRate)) {
           throw new Error(`Frame rate not supported: ${frameRate}, drop frame: ${dropFrame}`);
         }
 
         if (!isNullOrUndefined(options?.duration)) {
-          z.coerce.number()
-            .min(0)
-            .parse(options?.duration, zodErrorMapOverload('Invalid duration'));
+          z.coerce.number().min(0).parse(options?.duration, zodErrorMapOverload('Invalid duration'));
         }
 
         this.onVideoLoading$.next({
@@ -318,58 +313,59 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
           frameRate: frameRate,
           options: options,
           isAttaching: optionsInternal && optionsInternal.videoWindowPlaybackState === 'attaching',
-          isDetaching: optionsInternal && optionsInternal.videoWindowPlaybackState === 'detaching'
+          isDetaching: optionsInternal && optionsInternal.videoWindowPlaybackState === 'detaching',
         });
 
-        this.loadVideoUsingLoader(sourceUrl, frameRate as number, options).pipe(take(1)).subscribe({
-          next: (video) => {
-            this._video = video;
+        this.loadVideoUsingLoader(sourceUrl, frameRate as number, options)
+          .pipe(take(1))
+          .subscribe({
+            next: (video) => {
+              this._video = video;
 
-            if (options && !StringUtil.isNullUndefinedOrWhitespace(options.ffom)) {
-              let ffomTimecodeObject = TimecodeUtil.parseTimecodeToTimecodeObject(options.ffom!);
-              if (ffomTimecodeObject.dropFrame !== dropFrame) {
-                throw new Error(`Incorrect FFOM format: ${options.ffom}, drop frame: ${dropFrame}`);
+              if (options && !StringUtil.isNullUndefinedOrWhitespace(options.ffom)) {
+                let ffomTimecodeObject = TimecodeUtil.parseTimecodeToTimecodeObject(options.ffom!);
+                if (ffomTimecodeObject.dropFrame !== dropFrame) {
+                  throw new Error(`Incorrect FFOM format: ${options.ffom}, drop frame: ${dropFrame}`);
+                }
+                this._video.ffomTimecodeObject = ffomTimecodeObject;
               }
-              this._video.ffomTimecodeObject = ffomTimecodeObject;
-            }
 
-            // this._syncStepCurrentTimeMediaTime = 0;
-            this._syncStepCurrentTimeMediaTime = Decimal.div(this._video.frameDuration, 10).toNumber();
+              // this._syncStepCurrentTimeMediaTime = 0;
+              this._syncStepCurrentTimeMediaTime = Decimal.div(this._video.frameDuration, 10).toNumber();
 
-            this._playbackStateMachine = new PlaybackStateMachine();
+              this._playbackStateMachine = new PlaybackStateMachine();
 
-            this.initEventHandlers();
-            this.startVideoFrameCallback();
+              this.initEventHandlers();
+              this.startVideoFrameCallback();
 
-            this.onVideoLoaded$.next({
-              video: this._video,
-              videoLoadOptions: this._videoLoadOptions,
-              isAttaching: optionsInternal && optionsInternal.videoWindowPlaybackState === 'attaching',
-              isDetaching: optionsInternal && optionsInternal.videoWindowPlaybackState === 'detaching'
-            });
+              this.onVideoLoaded$.next({
+                video: this._video,
+                videoLoadOptions: this._videoLoadOptions,
+                isAttaching: optionsInternal && optionsInternal.videoWindowPlaybackState === 'attaching',
+                isDetaching: optionsInternal && optionsInternal.videoWindowPlaybackState === 'detaching',
+              });
 
-            this.processEmbeddedSubtitles();
+              this.processEmbeddedSubtitles();
 
-            nextCompleteObserver(observer, video);
-          },
-          error: (error) => {
-            return throwError(() => error);
-          }
-        })
+              nextCompleteObserver(observer, video);
+            },
+            error: (error) => {
+              return throwError(() => error);
+            },
+          });
       } catch (e) {
         this.onVideoError$.next({
           type: 'VIDEO_LOAD_ERROR',
-          message: parseErrorMessage(e)
-        })
+          message: parseErrorMessage(e),
+        });
         errorCompleteObserver(observer, e);
       }
-    })
+    });
   }
 
   loadVideo(sourceUrl: string, frameRate: number | string, options?: VideoLoadOptions): Observable<Video> {
-    return this.loadVideoInternal(sourceUrl, frameRate, options)
+    return this.loadVideoInternal(sourceUrl, frameRate, options);
   }
-
 
   reloadVideo(): Observable<Video> {
     this.validateVideoLoaded();
@@ -386,135 +382,154 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   protected initEventHandlers() {
     let latestSeekStartTime: number | undefined;
 
-    fromEvent(this.videoElement, HTMLVideoElementEventKeys.PLAYING).pipe(takeUntil(this._videoEventBreaker$)).subscribe({
-      next: () => {
-        this.onPlay$.next({
-          currentTime: this.getCurrentTime(),
-          currentTimecode: this.getCurrentTimecode()
-        })
-      }
-    })
+    fromEvent(this.videoElement, HTMLVideoElementEventKeys.PLAYING)
+      .pipe(takeUntil(this._videoEventBreaker$))
+      .subscribe({
+        next: () => {
+          this.onPlay$.next({
+            currentTime: this.getCurrentTime(),
+            currentTimecode: this.getCurrentTimecode(),
+          });
+        },
+      });
 
-    fromEvent(this.videoElement, HTMLVideoElementEventKeys.PAUSE).pipe(takeUntil(this._videoEventBreaker$)).subscribe({
-      next: () => {
-        // PlaybackState.pausing can be either true (pause through API) or even false (pause initiated externally by browser with PIP close)
-        // Thus, we will not inspect this._playbackStateMachine!.pausing
-        let afterPauseSync = () => {
-          console.debug(`%cpause control sync start`, 'color: purple');
-          this._seekFromCurrentFrame(1).pipe(takeUntil(this._pausingBreaker$), takeUntil(this._seekBreaker$), take(1)).subscribe({
-            next: () => {
-              console.debug(`%cpause control sync end`, 'color: purple');
-              this.videoTimeChangeHandlerExecutor();
-              this.onPause$.next({
-                currentTime: this.getCurrentTime(),
-                currentTimecode: this.getCurrentTimecode()
-              })
-            }
-          })
-        }
+    fromEvent(this.videoElement, HTMLVideoElementEventKeys.PAUSE)
+      .pipe(takeUntil(this._videoEventBreaker$))
+      .subscribe({
+        next: () => {
+          // PlaybackState.pausing can be either true (pause through API) or even false (pause initiated externally by browser with PIP close)
+          // Thus, we will not inspect this._playbackStateMachine!.pausing
+          let afterPauseSync = () => {
+            console.debug(`%cpause control sync start`, 'color: purple');
+            this._seekFromCurrentFrame(1)
+              .pipe(takeUntil(this._pausingBreaker$), takeUntil(this._seekBreaker$), take(1))
+              .subscribe({
+                next: () => {
+                  console.debug(`%cpause control sync end`, 'color: purple');
+                  this.dispatchVideoTimeChange();
+                  this.onPause$.next({
+                    currentTime: this.getCurrentTime(),
+                    currentTimecode: this.getCurrentTimecode(),
+                  });
+                },
+              });
+          };
 
-        if (this._video!.correctedDuration && (this.getCurrentTime() < this._video!.correctedDuration)) {
-          this._seekToFrame(this.getCurrentTime() >= this._video!.correctedDuration ? this.getTotalFrames() : this.getCurrentFrame()).subscribe(() => {
-            afterPauseSync();
-          })
-        } else {
-          this.syncVideoFrames({}).subscribe(result => {
-            afterPauseSync();
-          })
-        }
-      }
-    })
+          if (this._video!.correctedDuration && this.getCurrentTime() < this._video!.correctedDuration) {
+            this._seekToFrame(this.getCurrentTime() >= this._video!.correctedDuration ? this.getTotalFrames() : this.getCurrentFrame()).subscribe(() => {
+              afterPauseSync();
+            });
+          } else {
+            this.syncVideoFrames({}).subscribe((result) => {
+              afterPauseSync();
+            });
+          }
+        },
+      });
 
-    fromEvent(this.videoElement, HTMLVideoElementEventKeys.WAITING).pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
-      this._playbackStateMachine!.waiting = true;
-    })
+    fromEvent(this.videoElement, HTMLVideoElementEventKeys.WAITING)
+      .pipe(takeUntil(this._videoEventBreaker$))
+      .subscribe((event) => {
+        this._playbackStateMachine!.waiting = true;
+      });
 
-    fromEvent(this.videoElement, HTMLVideoElementEventKeys.PROGRESS).pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
-      this.onBuffering$.next({
-        bufferedTimespans: this.getBufferedTimespans()
-      })
-    })
+    fromEvent(this.videoElement, HTMLVideoElementEventKeys.PROGRESS)
+      .pipe(takeUntil(this._videoEventBreaker$))
+      .subscribe((event) => {
+        this.onBuffering$.next({
+          bufferedTimespans: this.getBufferedTimespans(),
+        });
+      });
 
-    fromEvent(this.videoElement, HTMLVideoElementEventKeys.ENDED).pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
-      this.onEnded$.next({})
-    })
+    fromEvent(this.videoElement, HTMLVideoElementEventKeys.ENDED)
+      .pipe(takeUntil(this._videoEventBreaker$))
+      .subscribe((event) => {
+        this.onEnded$.next({});
+      });
 
-    fromEvent(this.videoElement, HTMLVideoElementEventKeys.VOLUMECHANGE).pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
-      this.onVolumeChange$.next({
-        volume: this.getVolume(),
-        muted: this.isMuted()
-      })
-    })
+    fromEvent(this.videoElement, HTMLVideoElementEventKeys.VOLUMECHANGE)
+      .pipe(takeUntil(this._videoEventBreaker$))
+      .subscribe((event) => {
+        this.onVolumeChange$.next({
+          volume: this.getVolume(),
+          muted: this.isMuted(),
+        });
+      });
 
-    fromEvent(this.videoElement, HTMLVideoElementEventKeys.RATECHANGE).pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
-      this.onPlaybackRateChange$.next({
-        playbackRate: this.getPlaybackRate()
-      })
-    })
+    fromEvent(this.videoElement, HTMLVideoElementEventKeys.RATECHANGE)
+      .pipe(takeUntil(this._videoEventBreaker$))
+      .subscribe((event) => {
+        this.onPlaybackRateChange$.next({
+          playbackRate: this.getPlaybackRate(),
+        });
+      });
 
     this._videoDomController.onFullscreenChange$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
       this.onFullscreenChange$.next(event);
-    })
+    });
 
     this._videoDomController.onVideoSafeZoneChange$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
       this.onVideoSafeZoneChange$.next(event);
-    })
+    });
 
     this._playbackStateMachine!.onChange$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
       this.onPlaybackState$.next(event);
-    })
+    });
 
     this.onPlay$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
-      this._playbackStateMachine!.setPlaying()
+      this._playbackStateMachine!.setPlaying();
       this._videoStalledCheckLastCurrentTime = void 0;
-    })
+    });
 
     this.onPause$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
       this._videoStalledCheckLastCurrentTime = void 0;
       this._playbackStateMachine!.setPaused();
-    })
+    });
 
     this.onSeeking$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
       this._playbackStateMachine!.seeking = true;
       latestSeekStartTime = performance.now();
-    })
+    });
 
     this.onSeeked$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
       this._playbackStateMachine!.seeking = false;
       this._playbackStateMachine!.waiting = false;
       latestSeekStartTime = void 0;
-    })
+    });
 
     this.onEnded$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
-      this._playbackStateMachine!.setEnded()
+      this._playbackStateMachine!.setEnded();
       this._videoStalledCheckLastCurrentTime = void 0;
-    })
+    });
 
-    interval(this._videoStalledCheckIntervalMs).pipe(takeUntil(this._videoEventBreaker$)).subscribe((value) => {
-      let currentTime = this.getCurrentTime();
+    interval(this._videoStalledCheckIntervalMs)
+      .pipe(takeUntil(this._videoEventBreaker$))
+      .subscribe((value) => {
+        let currentTime = this.getCurrentTime();
 
-      if (!this._videoStalledCheckLastCurrentTime) {
-        this._videoStalledCheckLastCurrentTime = currentTime;
-        return;
-      }
-
-      if (this._playbackStateMachine && this._playbackStateMachine.state.playing) {
-        let timeOffset = ((this._videoStalledCheckIntervalMs * 0.8) / 1000) * this.getPlaybackRate(); // in seconds
-        let comparisonTime = this._videoStalledCheckLastCurrentTime + timeOffset;
-
-        let isWaiting = currentTime < comparisonTime;
-        this._playbackStateMachine.waiting = isWaiting;
-
-        this._videoStalledCheckLastCurrentTime = currentTime
-      }
-
-      if (this._playbackStateMachine && !this._playbackStateMachine.state.playing && !isNullOrUndefined(latestSeekStartTime)) {
-        let isWaiting = !!latestSeekStartTime && (performance.now() - latestSeekStartTime) > this._videoPausedSeekBufferingThresholdMs;
-        if (isWaiting) { // set waiting only if seek operation is taking too long, onSeeked event will eventually reset waiting state
-          this._playbackStateMachine.waiting = true;
+        if (!this._videoStalledCheckLastCurrentTime) {
+          this._videoStalledCheckLastCurrentTime = currentTime;
+          return;
         }
-      }
-    })
+
+        if (this._playbackStateMachine && this._playbackStateMachine.state.playing) {
+          let timeOffset = ((this._videoStalledCheckIntervalMs * 0.8) / 1000) * this.getPlaybackRate(); // in seconds
+          let comparisonTime = this._videoStalledCheckLastCurrentTime + timeOffset;
+
+          let isWaiting = currentTime < comparisonTime;
+          this._playbackStateMachine.waiting = isWaiting;
+
+          this._videoStalledCheckLastCurrentTime = currentTime;
+        }
+
+        if (this._playbackStateMachine && !this._playbackStateMachine.state.playing && !isNullOrUndefined(latestSeekStartTime)) {
+          let isWaiting = !!latestSeekStartTime && performance.now() - latestSeekStartTime > this._videoPausedSeekBufferingThresholdMs;
+          if (isWaiting) {
+            // set waiting only if seek operation is taking too long, onSeeked event will eventually reset waiting state
+            this._playbackStateMachine.waiting = true;
+          }
+        }
+      });
   }
 
   getBufferedTimespans(): BufferedTimespan[] {
@@ -527,8 +542,8 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
     for (let i = 0; i < timeRanges.length; i++) {
       result.push({
         start: timeRanges.start(i),
-        end: timeRanges.end(i)
-      })
+        end: timeRanges.end(i),
+      });
     }
     return result;
   }
@@ -539,58 +554,58 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
         this._videoFrameCallbackHandle = this.videoElement.requestVideoFrameCallback((now, metadata) => {
           onVideoFrameCallback({
             now: now,
-            metadata: metadata
-          })
+            metadata: metadata,
+          });
         });
       } else {
-        console.debug('Cannot call requestVideoFrameCallback, videoElement not found')
+        console.debug('Cannot call requestVideoFrameCallback, videoElement not found');
       }
-    }
+    };
 
     let onVideoFrameCallback = (videoFrameCallbackData: VideoFrameCallbackData) => {
       this._videoFrameCallback$.next(videoFrameCallbackData);
       nextVideoFrameCallback();
-    }
+    };
 
     nextVideoFrameCallback();
   }
 
   private syncVideoFrames(syncConditions: SyncConditions): Observable<boolean> {
     console.debug('syncFrames - START', syncConditions);
-    return new Observable<boolean>(o$ => {
+    return new Observable<boolean>((o$) => {
       let syncBreaker$ = new BehaviorSubject<boolean>(false);
       let syncLoopVideoCallbackBreaker$ = new Subject<void>();
       let syncLoopIterationsLeft = this._syncLoopMaxIterations;
 
       this._seekBreaker$.pipe(takeUntil(syncLoopVideoCallbackBreaker$)).subscribe(() => {
-        console.debug(`%csyncFrames - seek breaker triggered`, 'color: gray')
+        console.debug(`%csyncFrames - seek breaker triggered`, 'color: gray');
         syncBreaker$.next(true);
         completeSync();
-      })
+      });
 
       let completeSync = () => {
-        nextCompleteSubject(syncLoopVideoCallbackBreaker$)
+        nextCompleteSubject(syncLoopVideoCallbackBreaker$);
         o$.next(true);
         o$.complete();
-        console.debug(`%csyncFrames - END`, 'color: gray')
-      }
+        console.debug(`%csyncFrames - END`, 'color: gray');
+      };
 
       let seek = (time: number) => {
         syncBreaker$.pipe(take(1)).subscribe((syncBreak) => {
           if (syncBreak) {
-            console.debug(`%csyncFrames - seek skipped, breaker already triggered`, 'color: gray')
+            console.debug(`%csyncFrames - seek skipped, breaker already triggered`, 'color: gray');
           } else {
-            this._seekTimeFireAndForget(time)
+            this._seekTimeFireAndForget(time);
           }
-        })
-      }
+        });
+      };
 
       /**
        * For now we want to check frame time tolerance only for fractional non-drop frame rates
        */
       let shouldCheckFrameTimeTolerance = () => {
-        return !this.getVideo()!.dropFrame && FrameRateUtil.isFrameRateFractional(this.getVideo()!.frameRate)
-      }
+        return !this.getVideo()!.dropFrame && FrameRateUtil.isFrameRateFractional(this.getVideo()!.frameRate);
+      };
 
       /**
        * Negative percentage indicates currentTime is behind actual video time
@@ -601,13 +616,13 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
         let currentTimeIdealVsRealDiff = this.calculateFrameToTime(currentTimeFrame) - currentTime;
         let frameDiffPercentage = Decimal.mul(currentTimeIdealVsRealDiff, 100).div(this.getVideo()!.frameDuration).toNumber();
         return frameDiffPercentage;
-      }
+      };
 
       if (this.isPlaying()) {
-        console.debug(`%csyncFrames - SKIPPED: video is playing`, 'color: gray')
+        console.debug(`%csyncFrames - SKIPPED: video is playing`, 'color: gray');
         completeSync();
-      } else if (this._video!.correctedDuration && (this._video!.correctedDuration <= this.getCurrentTime())) {
-        console.debug(`%csyncFrames - SKIPPED: video exceeded duration`, 'color: magenta')
+      } else if (this._video!.correctedDuration && this._video!.correctedDuration <= this.getCurrentTime()) {
+        console.debug(`%csyncFrames - SKIPPED: video exceeded duration`, 'color: magenta');
         completeSync();
       } else {
         let checkIfDone = (videoFrameCallbackData?: VideoFrameCallbackData) => {
@@ -626,7 +641,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
           // });
 
           if (this.isPlaying()) {
-            console.debug(`%csyncFrames - UNKNOWN: video is playing`, 'color: gray')
+            console.debug(`%csyncFrames - UNKNOWN: video is playing`, 'color: gray');
             return true;
           }
 
@@ -637,16 +652,16 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
 
           if (syncConditions.seekToFrame) {
             if (syncConditions.seekToFrame === currentTimeFrame) {
-              if ((currentTimeFrame === mediaTimeFrame) || !mediaTimeFrame) {
+              if (currentTimeFrame === mediaTimeFrame || !mediaTimeFrame) {
                 console.debug(`%csyncFrames - OK: ((currentTimeFrame[${currentTimeFrame}] === mediaTimeFrame[${mediaTimeFrame}]) || !mediaTimeFrame[${mediaTimeFrame}])`, 'color: green');
                 return true;
               }
             }
           } else {
-            if ((currentTimeFrame === mediaTimeFrame) || !mediaTimeFrame) {
+            if (currentTimeFrame === mediaTimeFrame || !mediaTimeFrame) {
               console.debug(`%csyncFrames - OK: currentTimeFrame[${currentTimeFrame}] === mediaTimeFrame[${mediaTimeFrame}]`, 'color: green', {
                 currentTime: currentTime,
-                mediaTime: mediaTime
+                mediaTime: mediaTime,
               });
 
               if (shouldCheckFrameTimeTolerance()) {
@@ -660,7 +675,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
           }
 
           return false;
-        }
+        };
 
         let seekToFrameTimeBaseline: number;
 
@@ -669,7 +684,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
           console.debug(`syncFrames.syncLoop - START (${syncLoopIteration})`, {
             syncConditions: syncConditions,
             videoFrameCallbackData: videoFrameCallbackData,
-            dropped: this.videoElement.getVideoPlaybackQuality()
+            dropped: this.videoElement.getVideoPlaybackQuality(),
           });
 
           if (this.isPlaying()) {
@@ -688,25 +703,32 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
           let mediaTimeFrame = mediaTime ? this.calculateTimeToFrame(mediaTime) : void 0;
 
           if (syncLoopIterationsLeft-- <= 0) {
-            console.debug(`%csyncFrames - TOO MANY SYNCs, EXITING.. : currentTime[${currentTime}], mediaTime[${mediaTime}], currentTimeFrame[${currentTimeFrame}], mediaTimeFrame[${mediaTimeFrame}]`, 'color: red');
+            console.debug(
+              `%csyncFrames - TOO MANY SYNCs, EXITING.. : currentTime[${currentTime}], mediaTime[${mediaTime}], currentTimeFrame[${currentTimeFrame}], mediaTimeFrame[${mediaTimeFrame}]`,
+              'color: red'
+            );
             completeSync();
             return;
           }
 
-          console.debug(`syncFrames - currentTime[${currentTime}|${this.formatToTimecode(currentTime)}], mediaTime[${mediaTime}|${mediaTime ? this.formatToTimecode(mediaTime) : void 0}], currentTimeFrame[${currentTimeFrame}], mediaTimeFrame[${mediaTimeFrame}], `)
+          console.debug(
+            `syncFrames - currentTime[${currentTime}|${this.formatToTimecode(currentTime)}], mediaTime[${mediaTime}|${mediaTime ? this.formatToTimecode(mediaTime) : void 0}], currentTimeFrame[${currentTimeFrame}], mediaTimeFrame[${mediaTimeFrame}], `
+          );
 
           if (syncConditions.seekToFrame) {
-
             if (!seekToFrameTimeBaseline) {
               seekToFrameTimeBaseline = currentTime;
             }
 
             if (syncConditions.seekToFrame === currentTimeFrame) {
-              if ((currentTimeFrame === mediaTimeFrame) || !mediaTimeFrame) {
+              if (currentTimeFrame === mediaTimeFrame || !mediaTimeFrame) {
                 console.debug(`%csyncFrames - OK: ((currentTimeFrame[${currentTimeFrame}] === mediaTimeFrame[${mediaTimeFrame}]) || !mediaTimeFrame[${mediaTimeFrame}])`, 'color: green');
                 completeSync();
               } else {
-                console.debug(`%csyncFrames - CORRECTION SEEK TO FRAME; currentTimeFrame[${currentTimeFrame}] ${currentTimeFrame > mediaTimeFrame ? '>' : '<'} mediaTimeFrame[${mediaTimeFrame}]`, 'color: red');
+                console.debug(
+                  `%csyncFrames - CORRECTION SEEK TO FRAME; currentTimeFrame[${currentTimeFrame}] ${currentTimeFrame > mediaTimeFrame ? '>' : '<'} mediaTimeFrame[${mediaTimeFrame}]`,
+                  'color: red'
+                );
 
                 let frameDiff = Math.abs(currentTimeFrame - mediaTimeFrame);
                 console.debug(`%csyncFrames - frameDiff: ${frameDiff}`, 'color: orange');
@@ -714,15 +736,19 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
                 // in first sync iteration seek without nudging (frameCorrectionTime = 0)
                 let frameCorrectionTime = syncLoopIteration === 0 ? 0 : this._syncStepCurrentTimeMediaTime * (currentTimeFrame > mediaTimeFrame ? 1 : -1);
 
-                seek(Decimal.add(currentTime, frameCorrectionTime).toNumber())
+                seek(Decimal.add(currentTime, frameCorrectionTime).toNumber());
               }
             } else {
-              console.debug(`%csyncFrames - CORRECTION SEEK TO FRAME; syncConditions.seekToFrame[${syncConditions.seekToFrame}] !== currentTimeFrame[${currentTimeFrame}] | seekToFrameTimeBaseline=${seekToFrameTimeBaseline}`, 'color: red');
+              console.debug(
+                `%csyncFrames - CORRECTION SEEK TO FRAME; syncConditions.seekToFrame[${syncConditions.seekToFrame}] !== currentTimeFrame[${currentTimeFrame}] | seekToFrameTimeBaseline=${seekToFrameTimeBaseline}`,
+                'color: red'
+              );
 
               let frameDiff = Math.abs(syncConditions.seekToFrame - currentTimeFrame);
-              let frameCorrectionTime = (frameDiff) * this._video!.frameDuration;
+              let frameCorrectionTime = frameDiff * this._video!.frameDuration;
 
-              let seekToDecimal = syncConditions.seekToFrame >= currentTimeFrame ? Decimal.add(seekToFrameTimeBaseline, frameCorrectionTime) : Decimal.sub(seekToFrameTimeBaseline, frameCorrectionTime);
+              let seekToDecimal =
+                syncConditions.seekToFrame >= currentTimeFrame ? Decimal.add(seekToFrameTimeBaseline, frameCorrectionTime) : Decimal.sub(seekToFrameTimeBaseline, frameCorrectionTime);
               let seekTo = seekToDecimal.toNumber();
 
               seekToFrameTimeBaseline = seekTo;
@@ -731,17 +757,16 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
               console.debug(`%csyncFrames - frameCorrectionTime: ${frameCorrectionTime}`, 'color: orange');
               console.debug(`%csyncFrames - seekTo: ${seekTo}`, 'color: orange');
 
-              seek(seekTo)
+              seek(seekTo);
             }
-
           } else {
-            if ((currentTimeFrame === mediaTimeFrame) || !mediaTimeFrame) {
+            if (currentTimeFrame === mediaTimeFrame || !mediaTimeFrame) {
               console.debug(`%csyncFrames - OK: currentTimeFrame[${currentTimeFrame}] === mediaTimeFrame[${mediaTimeFrame}]`, 'color: green');
 
               if (shouldCheckFrameTimeTolerance()) {
                 let currentFrameTimeTolerance = currentFrameTimeToleranceCheck();
                 // only seek if we have to seek forward, we don't want to seek backwards
-                if ((currentFrameTimeTolerance < 0) && (Math.abs(currentFrameTimeTolerance) > this._syncFineFrameTolerancePercent)) {
+                if (currentFrameTimeTolerance < 0 && Math.abs(currentFrameTimeTolerance) > this._syncFineFrameTolerancePercent) {
                   console.debug(`%c syncFrames - FINE FRAME TUNING`, 'color: blue');
                   // currentTime returned by video element lags behind actual currentTime, shake it up a bit
                   seek(currentTime);
@@ -751,18 +776,16 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
               } else {
                 completeSync();
               }
-
-
             } else {
               console.debug(`%csyncFrames - CORRECTION; currentTimeFrame[${currentTimeFrame}] ${currentTimeFrame > mediaTimeFrame ? '>' : '<'} mediaTimeFrame[${mediaTimeFrame}]`, 'color: red');
               if (syncLoopIteration === 0) {
                 // first sync loop iteration, give video element some more time to update mediaTime, thus repeat initial seek
-                seek(currentTime)
+                seek(currentTime);
               } else {
                 if (currentTimeFrame > mediaTimeFrame) {
-                  seek(Decimal.add(currentTime, this._syncStepCurrentTimeMediaTime).toNumber())
+                  seek(Decimal.add(currentTime, this._syncStepCurrentTimeMediaTime).toNumber());
                 } else if (mediaTime) {
-                  seek(mediaTime + this._syncStepCurrentTimeMediaTime)
+                  seek(mediaTime + this._syncStepCurrentTimeMediaTime);
                 }
               }
             }
@@ -771,13 +794,13 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
           console.debug('syncFrames.syncLoop - END');
 
           completeSync();
-        }
+        };
         this._videoFrameCallback$.pipe(delay(syncConditions.seekToFrame ? 0 : 0), takeUntil(syncLoopVideoCallbackBreaker$)).subscribe({
           next: (videoFrameCallbackData) => {
             console.debug('syncFrames.syncLoop - videoFrameCallback$ trigger', videoFrameCallbackData);
             syncLoop(videoFrameCallbackData);
-          }
-        })
+          },
+        });
       }
     });
   }
@@ -789,7 +812,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
 
   private seekTimeAndSync(newTime: number, syncConditions: SyncConditions = {}): Observable<boolean> {
     let timeBeforeSeek = this.getCurrentTime();
-    return new Observable<boolean>(o$ => {
+    return new Observable<boolean>((o$) => {
       // if we already have seek in progress, break previous seek operation
       if (this._playbackStateMachine!.seeking) {
         nextCompleteSubject(this._seekBreaker$);
@@ -799,53 +822,60 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
       if (!isNaN(newTime)) {
         newTime = this.constrainVideoTime(newTime);
 
-        fromEvent(this.videoElement, HTMLVideoElementEventKeys.SEEKING).pipe(takeUntil(this._seekBreaker$), take(1)).subscribe((event) => {
-          this.onSeeking$.next({
-            toTime: newTime,
-            toTimecode: this.formatToTimecode(newTime),
-            fromTime: timeBeforeSeek,
-            fromTimecode: this.formatToTimecode(timeBeforeSeek)
-          })
-        })
+        fromEvent(this.videoElement, HTMLVideoElementEventKeys.SEEKING)
+          .pipe(takeUntil(this._seekBreaker$), take(1))
+          .subscribe((event) => {
+            this.onSeeking$.next({
+              toTime: newTime,
+              toTimecode: this.formatToTimecode(newTime),
+              fromTime: timeBeforeSeek,
+              fromTimecode: this.formatToTimecode(timeBeforeSeek),
+            });
+          });
 
-        fromEvent(this.videoElement, HTMLVideoElementEventKeys.SEEKED).pipe(takeUntil(this._seekBreaker$), take(1)).subscribe((event) => {
-          this.syncVideoFrames(syncConditions).subscribe(result => {
+        fromEvent(this.videoElement, HTMLVideoElementEventKeys.SEEKED)
+          .pipe(takeUntil(this._seekBreaker$), take(1))
+          .subscribe((event) => {
+            this.syncVideoFrames(syncConditions).subscribe((result) => {
+              if (this._video!.correctedDuration && this._video!.correctedDuration > this.videoElement.duration) {
+                /**
+                 * If we land on exact time of the frame start at the end of video, there is the chance that we won't load the frame
+                 */
+                this._video!.correctedDuration = Number.isInteger(this.videoElement.duration * this._video!.frameRate)
+                  ? this.videoElement.duration - this._frameDurationSpillOverCorrection
+                  : this.videoElement.duration;
+              }
 
-            if (this._video!.correctedDuration && (this._video!.correctedDuration > this.videoElement.duration)) {
-              /**
-               * If we land on exact time of the frame start at the end of video, there is the chance that we won't load the frame
-               */
-              this._video!.correctedDuration = Number.isInteger(this.videoElement.duration * this._video!.frameRate) ? this.videoElement.duration - this._frameDurationSpillOverCorrection : this.videoElement.duration;
-            }
+              let finalizeSeek = () => {
+                this._playbackStateMachine!.seeking = false;
 
-            let finalizeSeek = () => {
-              this._playbackStateMachine!.seeking = false;
+                o$.next(true);
+                o$.complete();
 
-              o$.next(true);
-              o$.complete();
+                this.dispatchVideoTimeChange();
+              };
 
-              this.videoTimeChangeHandlerExecutor();
-            }
-
-            //Seeking to end of video stream if currentTime exceeded corrected duration
-            if (this._video!.correctedDuration && (this.getCurrentTime() > this._video!.correctedDuration)) {
-              this.seekTimeWithoutSync(this._video!.correctedDuration).pipe(takeUntil(this._seekBreaker$), take(1)).subscribe(() => {
-                this.onEnded$.next({})
+              //Seeking to end of video stream if currentTime exceeded corrected duration
+              if (this._video!.correctedDuration && this.getCurrentTime() > this._video!.correctedDuration) {
+                this.seekTimeWithoutSync(this._video!.correctedDuration)
+                  .pipe(takeUntil(this._seekBreaker$), take(1))
+                  .subscribe(() => {
+                    this.onEnded$.next({});
+                    finalizeSeek();
+                  });
+              } else {
+                this.onSeeked$.next({
+                  currentTime: this.getCurrentTime(),
+                  currentTimecode: this.getCurrentTimecode(),
+                  previousTime: timeBeforeSeek,
+                  previousTimecode: this.formatToTimecode(timeBeforeSeek),
+                });
                 finalizeSeek();
-              });
-            } else {
-              this.onSeeked$.next({
-                currentTime: this.getCurrentTime(),
-                currentTimecode: this.getCurrentTimecode(),
-                previousTime: timeBeforeSeek,
-                previousTimecode: this.formatToTimecode(timeBeforeSeek)
-              });
-              finalizeSeek();
-            }
-          })
-        })
+              }
+            });
+          });
 
-        console.debug(`Seeking to timestamp: ${newTime} \t ${this.formatToTimecode(newTime)}`)
+        console.debug(`Seeking to timestamp: ${newTime} \t ${this.formatToTimecode(newTime)}`);
         this.setCurrentTime(newTime);
       }
     });
@@ -853,7 +883,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
 
   private seekTimeWithoutSync(newTime: number): Observable<boolean> {
     let timeBeforeSeek = this.getCurrentTime();
-    return new Observable<boolean>(o$ => {
+    return new Observable<boolean>((o$) => {
       // do we have seek already in progress
       if (this._playbackStateMachine!.seeking) {
         nextCompleteSubject(this._seekBreaker$);
@@ -863,32 +893,36 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
       if (!isNaN(newTime)) {
         newTime = newTime < 0 ? 0 : newTime > this.getDuration() ? this.getDuration() : newTime;
 
-        fromEvent(this.videoElement, HTMLVideoElementEventKeys.SEEKING).pipe(takeUntil(this._seekBreaker$), take(1)).subscribe((event) => {
-          this.onSeeking$.next({
-            toTime: newTime,
-            toTimecode: this.formatToTimecode(newTime),
-            fromTime: timeBeforeSeek,
-            fromTimecode: this.formatToTimecode(timeBeforeSeek)
-          })
-        })
+        fromEvent(this.videoElement, HTMLVideoElementEventKeys.SEEKING)
+          .pipe(takeUntil(this._seekBreaker$), take(1))
+          .subscribe((event) => {
+            this.onSeeking$.next({
+              toTime: newTime,
+              toTimecode: this.formatToTimecode(newTime),
+              fromTime: timeBeforeSeek,
+              fromTimecode: this.formatToTimecode(timeBeforeSeek),
+            });
+          });
 
-        fromEvent(this.videoElement, HTMLVideoElementEventKeys.SEEKED).pipe(takeUntil(this._seekBreaker$), take(1)).subscribe((event) => {
-          this.onSeeked$.next({
-            currentTime: this.getCurrentTime(),
-            currentTimecode: this.getCurrentTimecode(),
-            previousTime: timeBeforeSeek,
-            previousTimecode: this.formatToTimecode(timeBeforeSeek)
-          })
+        fromEvent(this.videoElement, HTMLVideoElementEventKeys.SEEKED)
+          .pipe(takeUntil(this._seekBreaker$), take(1))
+          .subscribe((event) => {
+            this.onSeeked$.next({
+              currentTime: this.getCurrentTime(),
+              currentTimecode: this.getCurrentTimecode(),
+              previousTime: timeBeforeSeek,
+              previousTimecode: this.formatToTimecode(timeBeforeSeek),
+            });
 
-          this._playbackStateMachine!.seeking = false;
+            this._playbackStateMachine!.seeking = false;
 
-          o$.next(true);
-          o$.complete();
+            o$.next(true);
+            o$.complete();
 
-          this.videoTimeChangeHandlerExecutor();
-        })
+            this.dispatchVideoTimeChange();
+          });
 
-        console.debug(`Seeking to timestamp: ${newTime} \t ${this.formatToTimecode(newTime)}`)
+        console.debug(`Seeking to timestamp: ${newTime} \t ${this.formatToTimecode(newTime)}`);
 
         this.setCurrentTime(newTime);
       }
@@ -901,7 +935,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
       newTime = newTime < 0 ? 0 : newTime > this.getDuration() ? this.getDuration() : newTime;
       let seekDirection = newTime === currentTime ? SeekDirection.NONE : newTime > currentTime ? SeekDirection.FORWARD : SeekDirection.BACKWARD;
       let diffDecimal = Decimal.sub(currentTime, newTime).abs();
-      console.debug(`Seeking from currentTime[${currentTime}] to newTime[${newTime}], direction: ${seekDirection} ${diffDecimal.toNumber()}`)
+      console.debug(`Seeking from currentTime[${currentTime}] to newTime[${newTime}], direction: ${seekDirection} ${diffDecimal.toNumber()}`);
       this.setCurrentTime(newTime);
     }
   }
@@ -929,7 +963,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
     }
 
     let diff = Decimal.sub(currentTime, newTime).abs().toNumber();
-    console.debug(`Seeking from currentTime ${currentTime} to ${newTime}, direction: ${seekDirection} ${diff}`)
+    console.debug(`Seeking from currentTime ${currentTime} to ${newTime}, direction: ${seekDirection} ${diff}`);
 
     return this.seekTimeAndSync(newTime, syncConditions);
   }
@@ -940,15 +974,15 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
 
   private _seekToFrame(frame: number): Observable<boolean> {
     if (!this.isPlaying() && !isNaN(frame)) {
-      console.debug(`Seeking to frame: ${frame}`)
+      console.debug(`Seeking to frame: ${frame}`);
       if (frame <= 0) {
         return this.seekTimeAndSync(0, {});
       } else {
         let newTime = this.calculateFrameToTime(frame) + new Decimal(this._frameDurationSpillOverCorrection).toNumber();
         let frameNumberCheck = this.calculateTimeToFrame(newTime);
 
-        if (this._video!.correctedDuration && (frameNumberCheck !== frame && frame != this._video!.correctedDuration * this.getFrameRate())) {
-          console.error(`Frame numbers don't match. Wanted: ${frame}, calculated: ${frameNumberCheck}`)
+        if (this._video!.correctedDuration && frameNumberCheck !== frame && frame != this._video!.correctedDuration * this.getFrameRate()) {
+          console.error(`Frame numbers don't match. Wanted: ${frame}, calculated: ${frameNumberCheck}`);
           return of(false);
         } else {
           return this.seekTimeAndSync(newTime, {
@@ -956,9 +990,11 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
             seekToTime: newTime,
             currentTime: this.getCurrentTime(),
             newTimecode: this.formatToTimecode(newTime),
-          }).pipe(map((result) => {
-            return result;
-          }));
+          }).pipe(
+            map((result) => {
+              return result;
+            })
+          );
         }
       }
     } else {
@@ -974,14 +1010,20 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
     let currentFrame = this.getCurrentFrame();
     let seekToFrame = currentFrame + framesCount;
 
-    console.debug(`seekFromCurrentFrame - Current frame: ${currentFrame}, wanted frame: ${seekToFrame}`)
+    console.debug(`seekFromCurrentFrame - Current frame: ${currentFrame}, wanted frame: ${seekToFrame}`);
 
     if (currentFrame !== seekToFrame) {
       if (seekToFrame <= 0) {
         return this._seekToFrame(0);
-      } else if (this._video!.correctedDuration && (seekToFrame >= this.getTotalFrames() || seekToFrame >= this._video!.correctedDuration * this.getFrameRate() && !this._playbackStateMachine!.state.ended)) {
+      } else if (
+        this._video!.correctedDuration &&
+        (seekToFrame >= this.getTotalFrames() || (seekToFrame >= this._video!.correctedDuration * this.getFrameRate() && !this._playbackStateMachine!.state.ended))
+      ) {
         return this._seekToFrame(this._video!.correctedDuration * this.getFrameRate());
-      } else if (this._video!.correctedDuration && (seekToFrame >= this.getTotalFrames() || seekToFrame >= this._video!.correctedDuration * this.getFrameRate() && this._playbackStateMachine!.state.ended)) {
+      } else if (
+        this._video!.correctedDuration &&
+        (seekToFrame >= this.getTotalFrames() || (seekToFrame >= this._video!.correctedDuration * this.getFrameRate() && this._playbackStateMachine!.state.ended))
+      ) {
         return of(false);
       } else {
         let timeOffset = this.calculateFrameToTime(framesCount);
@@ -990,23 +1032,25 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
         return this.seekFromCurrentTimeAndSync(timeOffset, {
           seekToFrame: seekToFrame,
           currentTime: currentTime,
-          seekDirection: framesCount > 0 ? SeekDirection.FORWARD : SeekDirection.BACKWARD
-        }).pipe(map(result => {
-          return result;
-        }));
+          seekDirection: framesCount > 0 ? SeekDirection.FORWARD : SeekDirection.BACKWARD,
+        }).pipe(
+          map((result) => {
+            return result;
+          })
+        );
       }
     } else {
       return of(true);
     }
   }
 
-  private videoTimeChangeHandlerExecutor() {
+  dispatchVideoTimeChange(): void {
     let currentTime = this.getCurrentTime();
     let frame = this.calculateTimeToFrame(currentTime);
 
     this.onVideoTimeChange$.next({
       currentTime: currentTime,
-      frame: frame
+      frame: frame,
     });
   }
 
@@ -1014,9 +1058,9 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
     if (isNullOrUndefined(this._requestAnimationFrameId)) {
       this._requestAnimationFrameId = requestAnimationFrame((time) => {
         this.requestAnimationFrameExecutor(time);
-      })
+      });
     } else {
-      console.debug('requestAnimationFrame already initiated');
+      // console.debug('requestAnimationFrame already initiated');
     }
   }
 
@@ -1030,7 +1074,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   }
 
   private requestAnimationFrameExecutor(time: number) {
-    this._animationFrameCallback$.next(time)
+    this._animationFrameCallback$.next(time);
     this._requestAnimationFrameId = requestAnimationFrame((time) => {
       this.requestAnimationFrameExecutor(time);
     });
@@ -1069,57 +1113,61 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   }
 
   play(): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       if (this.isVideoLoaded() && !this.isPlaying()) {
         this._checkAndCancelPausing();
         // first start request video frame callback cycle
-        this.videoElement.play().then(() => {
-          // handled in HTMLVideoElementEventKeys.PLAYING event handler
-          nextCompleteObserver(observer);
-        }).catch((error) => {
-          errorCompleteObserver(observer, error)
-        });
+        this.videoElement
+          .play()
+          .then(() => {
+            // handled in HTMLVideoElementEventKeys.PLAYING event handler
+            nextCompleteObserver(observer);
+          })
+          .catch((error) => {
+            errorCompleteObserver(observer, error);
+          });
       } else {
         nextCompleteObserver(observer);
       }
-    })
+    });
   }
 
   pause(): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       if (this.isVideoLoaded() && this.isPlaying()) {
-
         let pauseApproximateTime = this.getCurrentTime();
         this._pausingBreaker$ = new Subject<void>();
         this._pausingBreaker$.pipe(take(1)).subscribe({
           next: () => {
-            console.debug(`%cpausing breaker triggered`, 'color: gray')
-            console.log(`%cpausing breaker triggered`, 'color: gray')
+            console.debug(`%cpausing breaker triggered`, 'color: gray');
+            console.log(`%cpausing breaker triggered`, 'color: gray');
             this.onPause$.next({
               currentTime: pauseApproximateTime,
-              currentTimecode: this.formatToTimecode(pauseApproximateTime)
+              currentTimecode: this.formatToTimecode(pauseApproximateTime),
             });
-          }
-        })
+          },
+        });
 
         this._playbackStateMachine!.setPausing();
 
-        this.onPause$.pipe(take(1)).subscribe({
-          next: () => {
-            nextCompleteObserver(observer);
-          }
-        }).add(() => {
-          if (this._pausingBreaker$) {
-            completeSubject(this._pausingBreaker$);
-          }
-        })
+        this.onPause$
+          .pipe(take(1))
+          .subscribe({
+            next: () => {
+              nextCompleteObserver(observer);
+            },
+          })
+          .add(() => {
+            if (this._pausingBreaker$) {
+              completeSubject(this._pausingBreaker$);
+            }
+          });
 
         this.videoElement.pause();
-
       } else {
         nextCompleteObserver(observer);
       }
-    })
+    });
   }
 
   private _checkAndCancelPausing() {
@@ -1130,20 +1178,21 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
 
   togglePlayPause(): Observable<void> {
     if (this.isPlaying()) {
-      return this.pause()
+      return this.pause();
     } else {
       return this.play();
     }
   }
 
   isPlaying() {
-    return this.isVideoLoaded()
-      && this.getCurrentTime() > 0
-      && this.getCurrentTime() < this.getDuration()
-      && !this.videoElement.paused // caution: when using default HTML video controls, when seeking while playing - video is actually paused for a moment
-      && !this.videoElement.ended
-      && (this.videoElement.readyState > this.videoElement.HAVE_CURRENT_DATA)
-      ;
+    return (
+      this.isVideoLoaded() &&
+      this.getCurrentTime() > 0 &&
+      this.getCurrentTime() < this.getDuration() &&
+      !this.videoElement.paused && // caution: when using default HTML video controls, when seeking while playing - video is actually paused for a moment
+      !this.videoElement.ended &&
+      this.videoElement.readyState > this.videoElement.HAVE_CURRENT_DATA
+    );
   }
 
   isPaused() {
@@ -1167,15 +1216,10 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   }
 
   setPlaybackRate(playbackRate: number): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       if (this.isVideoLoaded()) {
-
         try {
-          playbackRate = z.coerce.number()
-            .min(0.1)
-            .max(16)
-            .default(1)
-            .parse(playbackRate);
+          playbackRate = z.coerce.number().min(0.1).max(16).default(1).parse(playbackRate);
         } catch (e) {
           playbackRate = 1;
         }
@@ -1184,8 +1228,8 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
           this.onPlaybackRateChange$.pipe(take(1), timeout(60000), takeUntil(this._destroyed$)).subscribe({
             next: () => {
               nextCompleteObserver(observer);
-            }
-          })
+            },
+          });
         } else {
           nextCompleteObserver(observer);
         }
@@ -1193,11 +1237,10 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
         this.videoElement.playbackRate = playbackRate;
 
         // TODO we could wait for change event before resolution
-
       } else {
         nextCompleteObserver(observer);
       }
-    })
+    });
   }
 
   getVolume(): number {
@@ -1205,28 +1248,24 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   }
 
   setVolume(volume: number): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       if (this.isVideoLoaded()) {
         try {
-          volume = z.coerce.number()
-            .min(0)
-            .max(1)
-            .default(1)
-            .parse(volume);
+          volume = z.coerce.number().min(0).max(1).default(1).parse(volume);
 
           this.videoElement.volume = volume;
 
           // TODO we could wait for change event before resolution
 
-          nextCompleteObserver(observer)
+          nextCompleteObserver(observer);
         } catch (e) {
           // nop
-          nextCompleteObserver(observer)
+          nextCompleteObserver(observer);
         }
       } else {
         nextCompleteObserver(observer);
       }
-    })
+    });
   }
 
   /**
@@ -1259,46 +1298,41 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
 
     this.validateVideoLoaded();
 
-    frame = z.coerce.number()
-      .min(0)
-      .max(this.getTotalFrames())
-      .parse(frame);
+    frame = z.coerce.number().min(0).max(this.getTotalFrames()).parse(frame);
 
-    if (!this.isVideoLoaded() || this._playbackStateMachine!.state.ended && frame >= this.getCurrentFrame()) {
+    if (!this.isVideoLoaded() || (this._playbackStateMachine!.state.ended && frame >= this.getCurrentFrame())) {
       return of(false);
     }
 
     this._checkAndCancelPausing();
 
-    return passiveObservable<boolean>(observer => {
+    return passiveObservable<boolean>((observer) => {
       this._seekToFrame(frame).subscribe({
         next: (value) => nextCompleteObserver(observer, value),
-        error: (error) => errorCompleteObserver(observer, error)
-      })
-    })
+        error: (error) => errorCompleteObserver(observer, error),
+      });
+    });
   }
 
   seekFromCurrentFrame(framesCount: number): Observable<boolean> {
     this.validateVideoLoaded();
 
-    framesCount = z.coerce.number()
-      .parse(framesCount);
+    framesCount = z.coerce.number().parse(framesCount);
 
     this._checkAndCancelPausing();
 
-    return passiveObservable<boolean>(observer => {
+    return passiveObservable<boolean>((observer) => {
       this._seekFromCurrentFrame(framesCount).subscribe({
         next: (value) => nextCompleteObserver(observer, value),
-        error: (error) => errorCompleteObserver(observer, error)
-      })
-    })
+        error: (error) => errorCompleteObserver(observer, error),
+      });
+    });
   }
 
   seekFromCurrentTime(timeAmount: number): Observable<boolean> {
     this.validateVideoLoaded();
 
-    timeAmount = z.coerce.number()
-      .parse(timeAmount);
+    timeAmount = z.coerce.number().parse(timeAmount);
 
     return this.seekToTime(this.getCurrentTime() + timeAmount);
   }
@@ -1320,28 +1354,27 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
 
     this.validateVideoLoaded();
 
-    if (this._video!.correctedDuration && (!this.isVideoLoaded() || this._playbackStateMachine!.state.ended && time >= this._video!.correctedDuration)) {
+    if (this._video!.correctedDuration && (!this.isVideoLoaded() || (this._playbackStateMachine!.state.ended && time >= this._video!.correctedDuration))) {
       return of(false);
     }
 
-    time = z.coerce.number()
-      .parse(time);
+    time = z.coerce.number().parse(time);
 
-    if (this._video!.correctedDuration && (time > this._video!.correctedDuration)) {
+    if (this._video!.correctedDuration && time > this._video!.correctedDuration) {
       time = this._video!.correctedDuration;
     }
 
     this._checkAndCancelPausing();
 
-    return passiveObservable<boolean>(observer => {
+    return passiveObservable<boolean>((observer) => {
       this.seekTimeAndSync(time, {
         seekToTime: time,
-        seekDirection: time === this.getCurrentTime() ? SeekDirection.NONE : time > this.getCurrentTime() ? SeekDirection.FORWARD : SeekDirection.BACKWARD
+        seekDirection: time === this.getCurrentTime() ? SeekDirection.NONE : time > this.getCurrentTime() ? SeekDirection.FORWARD : SeekDirection.BACKWARD,
       }).subscribe({
         next: (value) => nextCompleteObserver(observer, value),
-        error: (error) => errorCompleteObserver(observer, error)
-      })
-    })
+        error: (error) => errorCompleteObserver(observer, error),
+      });
+    });
   }
 
   seekToTimecode(timecode: string): Observable<boolean> {
@@ -1355,10 +1388,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   seekToPercent(percent: number): Observable<boolean> {
     this.validateVideoLoaded();
 
-    let percentSafeParsed = z.coerce.number()
-      .min(0)
-      .max(100)
-      .safeParse(percent);
+    let percentSafeParsed = z.coerce.number().min(0).max(100).safeParse(percent);
 
     if (percentSafeParsed.success) {
       let timeToSeek: number;
@@ -1368,7 +1398,10 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
       } else if (percent === 100) {
         timeToSeek = this.getDuration();
       } else {
-        timeToSeek = new Decimal(this.getDuration()).mul(percent / 100).round().toNumber()
+        timeToSeek = new Decimal(this.getDuration())
+          .mul(percent / 100)
+          .round()
+          .toNumber();
       }
 
       return this.seekToTime(timeToSeek);
@@ -1380,7 +1413,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   formatToTimecode(time: number): string {
     this.validateVideoLoaded();
     time = Validators.videoTime()(time);
-    return TimecodeUtil.formatToTimecode(time, this.getVideo()!)
+    return TimecodeUtil.formatToTimecode(time, this.getVideo()!);
   }
 
   parseTimecodeToFrame(timecode: string): number {
@@ -1396,21 +1429,21 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   }
 
   mute(): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       if (this.isVideoLoaded()) {
         this.videoElement.muted = true;
       }
       nextCompleteObserver(observer);
-    })
+    });
   }
 
   unmute(): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       if (this.isVideoLoaded()) {
         this.videoElement.muted = false;
       }
       nextCompleteObserver(observer);
-    })
+    });
   }
 
   isMuted(): boolean {
@@ -1430,30 +1463,30 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   }
 
   toggleFullscreen(): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       if (this.isVideoLoaded()) {
         this._videoDomController.toggleFullscreen().subscribe({
           next: () => {
             nextCompleteObserver(observer);
           },
-          error: (error) => errorCompleteObserver(observer, error)
-        })
+          error: (error) => errorCompleteObserver(observer, error),
+        });
       } else {
         nextCompleteObserver(observer);
       }
-    })
+    });
   }
 
   getActiveAudioTrack(): OmakaseAudioTrack | undefined {
-    throw new Error('Method not implemented')
+    throw new Error('Method not implemented');
   }
 
   getAudioTracks(): OmakaseAudioTrack[] {
-    throw new Error('Method not implemented')
+    throw new Error('Method not implemented');
   }
 
   setActiveAudioTrack(id: string): Observable<void> {
-    throw new Error('Method not implemented')
+    throw new Error('Method not implemented');
   }
 
   isVideoLoaded(): boolean {
@@ -1461,37 +1494,37 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   }
 
   getHls(): Hls | undefined {
-    throw new Error('Unsupported or video not loaded with Hls.js')
+    throw new Error('Unsupported or video not loaded with Hls.js');
   }
 
   appendHelpMenuGroup(helpMenuGroup: HelpMenuGroup): Observable<void> {
-    return passiveObservable(observer => {
-      this._helpMenuGroups = [...this.getHelpMenuGroups(), helpMenuGroup]
+    return passiveObservable((observer) => {
+      this._helpMenuGroups = [...this.getHelpMenuGroups(), helpMenuGroup];
       this.onHelpMenuChange$.next({
-        helpMenuGroups: this.getHelpMenuGroups()
+        helpMenuGroups: this.getHelpMenuGroups(),
       });
       nextCompleteObserver(observer);
-    })
+    });
   }
 
   prependHelpMenuGroup(helpMenuGroup: HelpMenuGroup): Observable<void> {
-    return passiveObservable(observer => {
-      this._helpMenuGroups = [helpMenuGroup, ...this.getHelpMenuGroups()]
+    return passiveObservable((observer) => {
+      this._helpMenuGroups = [helpMenuGroup, ...this.getHelpMenuGroups()];
       this.onHelpMenuChange$.next({
-        helpMenuGroups: this.getHelpMenuGroups()
+        helpMenuGroups: this.getHelpMenuGroups(),
       });
       nextCompleteObserver(observer);
-    })
+    });
   }
 
   clearHelpMenuGroups(): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       this._helpMenuGroups = [];
       this.onHelpMenuChange$.next({
-        helpMenuGroups: this.getHelpMenuGroups()
+        helpMenuGroups: this.getHelpMenuGroups(),
       });
       nextCompleteObserver(observer);
-    })
+    });
   }
 
   getHelpMenuGroups(): HelpMenuGroup[] {
@@ -1500,6 +1533,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
 
   destroy() {
     this.destroyAudioContext();
+    this.destroyAudioRouter();
     this.destroyAudioPeakProcessorWorkletNode();
 
     this.removeAllSubtitlesTracks();
@@ -1536,14 +1570,12 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
       this.onSubtitlesRemove$,
       this.onSubtitlesShow$,
       this.onSubtitlesHide$
-    )
+    );
 
     nextCompleteSubject(this._destroyed$);
 
     // TODO better to do it in provider
-    destroyer(
-      this._videoDomController
-    )
+    destroyer(this._videoDomController);
 
     nullifier(
       this._videoDomController,
@@ -1553,7 +1585,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
 
       this._activeSubtitlesTrack,
       this._subtitlesTracks
-    )
+    );
   }
 
   addSafeZone(videoSafeZone: VideoSafeZone): Observable<VideoSafeZone> {
@@ -1590,14 +1622,39 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
 
   attachVideoWindow(): Observable<void> {
     throw new Error('I am not attachable');
+  }
 
+  enablePiP(): Observable<void> {
+    return passiveObservable((observer) => {
+      if (this.isVideoLoaded()) {
+        if (!document.pictureInPictureElement && document.pictureInPictureEnabled) {
+          this.getHTMLVideoElement().requestPictureInPicture();
+        }
+        nextCompleteObserver(observer);
+      } else {
+        errorCompleteObserver(observer, 'Video is not loaded');
+      }
+    });
+  }
+
+  disablePiP(): Observable<void> {
+    return passiveObservable((observer) => {
+      if (this.isVideoLoaded()) {
+        if (document.pictureInPictureElement && document.pictureInPictureEnabled) {
+          document.exitPictureInPicture();
+        }
+        nextCompleteObserver(observer);
+      } else {
+        errorCompleteObserver(observer, 'Video is not loaded');
+      }
+    });
   }
 
   private processEmbeddedSubtitles() {
     this.removeAllSubtitlesTracks().subscribe({
       next: () => {
         if (this._embeddedSubtitlesTracks && this._embeddedSubtitlesTracks.length > 0) {
-          let os$ = this._embeddedSubtitlesTracks.map(subtitlesVttTrack => this.createSubtitlesVttTrackInternal(subtitlesVttTrack));
+          let os$ = this._embeddedSubtitlesTracks.map((subtitlesVttTrack) => this.createSubtitlesVttTrackInternal(subtitlesVttTrack));
           forkJoin(os$).subscribe({
             next: (tracks: (SubtitlesVttTrack | undefined)[]) => {
               this.onSubtitlesLoaded$.next(this.createSubtitlesEvent());
@@ -1605,56 +1662,56 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
             error: (err) => {
               console.error(err);
               this.onSubtitlesLoaded$.next(this.createSubtitlesEvent());
-            }
-          })
+            },
+          });
         } else {
           this.onSubtitlesLoaded$.next(this.createSubtitlesEvent());
         }
-      }
-    })
+      },
+    });
   }
 
   createSubtitlesVttTrack(subtitlesVttTrack: SubtitlesVttTrack): Observable<SubtitlesVttTrack | undefined> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       if (this.isVideoLoaded()) {
         this.createSubtitlesVttTrackInternal(subtitlesVttTrack).subscribe({
           next: (value) => {
-            console.debug('Created subtitles track', subtitlesVttTrack)
-            nextCompleteObserver(observer, value)
+            console.debug('Created subtitles track', subtitlesVttTrack);
+            nextCompleteObserver(observer, value);
           },
           error: (error) => {
-            console.error(error)
+            console.error(error);
             errorCompleteObserver(observer, error);
-          }
-        })
+          },
+        });
       } else {
-        console.debug('Failed to create subtitles track, video not loaded', subtitlesVttTrack)
-        nextCompleteObserver(observer)
+        console.debug('Failed to create subtitles track, video not loaded', subtitlesVttTrack);
+        nextCompleteObserver(observer);
       }
-    })
+    });
   }
 
   protected createSubtitlesVttTrackInternal(subtitlesVttTrack: SubtitlesVttTrack): Observable<SubtitlesVttTrack | undefined> {
-    return new Observable<SubtitlesVttTrack>(observer => {
+    return new Observable<SubtitlesVttTrack>((observer) => {
       this.removeSubtitlesTrack(subtitlesVttTrack.id).subscribe({
         next: () => {
-          this._videoDomController.appendHTMLTrackElement(subtitlesVttTrack).subscribe(element => {
+          this._videoDomController.appendHTMLTrackElement(subtitlesVttTrack).subscribe((element) => {
             if (element) {
               this._subtitlesTracks.set(subtitlesVttTrack.id, subtitlesVttTrack);
               this.onSubtitlesCreate$.next(this.createSubtitlesEvent());
-              console.debug('Created subtitles track, track appended to DOM', subtitlesVttTrack)
-              nextCompleteObserver(observer, subtitlesVttTrack)
+              console.debug('Created subtitles track, track appended to DOM', subtitlesVttTrack);
+              nextCompleteObserver(observer, subtitlesVttTrack);
             } else {
-              let message = `Failed to create subtitles track, appending to DOM failed for ${JSON.stringify(subtitlesVttTrack)}`
-              console.debug(message)
+              let message = `Failed to create subtitles track, appending to DOM failed for ${JSON.stringify(subtitlesVttTrack)}`;
+              console.debug(message);
               errorCompleteObserver(observer, message);
             }
-          })
+          });
         },
         error: (error) => {
           errorCompleteObserver(observer, error);
-        }
-      })
+        },
+      });
     });
   }
 
@@ -1663,22 +1720,22 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   }
 
   removeAllSubtitlesTracks(): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       if (this._subtitlesTracks.size > 0) {
-        let all = [...this._subtitlesTracks.values()].map(p => this.removeSubtitlesTrack(p.id));
+        let all = [...this._subtitlesTracks.values()].map((p) => this.removeSubtitlesTrack(p.id));
         forkJoin(all).subscribe({
           next: () => {
-            nextCompleteObserver(observer)
-          }
-        })
+            nextCompleteObserver(observer);
+          },
+        });
       } else {
-        nextCompleteObserver(observer)
+        nextCompleteObserver(observer);
       }
-    })
+    });
   }
 
   removeSubtitlesTrack(id: string): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       if (this.isVideoLoaded()) {
         let track = this._subtitlesTracks.get(id);
         if (track) {
@@ -1686,13 +1743,13 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
           this._subtitlesTracks.delete(id);
 
           // remove existing track from HTML DOM
-          this._videoDomController.removeTextTrackById(track.id)
+          this._videoDomController.removeTextTrackById(track.id);
 
           this.onSubtitlesRemove$.next(this.createSubtitlesEvent());
         }
       }
       nextCompleteObserver(observer);
-    })
+    });
   }
 
   getActiveSubtitlesTrack(): SubtitlesVttTrack | undefined {
@@ -1700,7 +1757,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   }
 
   showSubtitlesTrack(id: string): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       if (this.isVideoLoaded()) {
         let textTracksList = this._videoDomController.getTextTrackList();
         if (textTracksList && textTracksList.length > 0) {
@@ -1727,11 +1784,11 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
         }
       }
       nextCompleteObserver(observer);
-    })
+    });
   }
 
   hideSubtitlesTrack(id: string): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       if (this.isVideoLoaded()) {
         let track = this._subtitlesTracks.get(id);
         if (track) {
@@ -1745,14 +1802,41 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
         }
       }
       nextCompleteObserver(observer);
-    })
+    });
   }
 
   private createSubtitlesEvent(): SubtitlesEvent {
     return {
       tracks: this.getSubtitlesTracks(),
-      currentTrack: this.getActiveSubtitlesTrack()
+      currentTrack: this.getActiveSubtitlesTrack(),
+    };
+  }
+
+  createAudioContext(contextOptions?: AudioContextOptions): Observable<void> {
+    return passiveObservable((observer) => {
+      this._createAudioContext(contextOptions);
+      nextCompleteObserver(observer);
+    });
+  }
+
+  protected _createAudioContext(contextOptions?: AudioContextOptions): AudioContext {
+    if (!this._audioContext) {
+      console.debug('Creating AudioContext');
+      this._audioContext = new AudioContext(contextOptions);
+      this.onPlay$.pipe(take(1)).subscribe({
+        next: () => {
+          if (this._audioContext?.state !== 'running') {
+            // this can be executed only after user gesture, so we have to bind it on some user gesture event (play) to enable it
+            this._audioContext?.resume().then((event) => {
+              console.debug('AudioContext resumed');
+            });
+          }
+        },
+      });
+    } else {
+      console.debug('AudioContext already created');
     }
+    return this._audioContext;
   }
 
   getAudioContext(): AudioContext | undefined {
@@ -1763,10 +1847,10 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
     return this._mediaElementAudioSource;
   }
 
-  createAudioContext(inputsNumber: number, outputsNumber?: number): Observable<void> {
+  createAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<void> {
     inputsNumber = Validators.audioChannelsNumber()(inputsNumber);
 
-    return this.createAudioContextWithOutputsResolver(inputsNumber, (maxChannelCount: number) => {
+    return this.createAudioRouterWithOutputsResolver(inputsNumber, (maxChannelCount: number) => {
       if (!isNullOrUndefined(outputsNumber)) {
         return outputsNumber!;
       } else {
@@ -1775,32 +1859,34 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
     });
   }
 
-  createAudioContextWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void> {
-    return passiveObservable(observer => {
-      if (this._audioContext) {
-        console.debug('AudioContext already created');
-        nextCompleteObserver(observer)
+  createAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void> {
+    return passiveObservable((observer) => {
+      if (this._audioChannelSplitterNode || this._audioChannelMergerNode) {
+        console.debug('Audio router already created');
+        nextCompleteObserver(observer);
       } else {
-        console.debug('Creating AudioContext');
+        console.debug('Creating audio router');
 
-        this._audioContext = new AudioContext();
         this._audioInputsNumber = inputsNumber;
 
-        this._mediaElementAudioSource = this._audioContext.createMediaElementSource(this.getHTMLVideoElement());
+        // ensure audio context exists
+        let audioContext = this._createAudioContext();
 
-        let audioDestinationNode: AudioDestinationNode = this._audioContext.destination;
+        this._mediaElementAudioSource = audioContext.createMediaElementSource(this.getHTMLVideoElement());
+
+        let audioDestinationNode: AudioDestinationNode = audioContext.destination;
         let maxChannelCount = audioDestinationNode.maxChannelCount; // the maximum number of channels that this hardware is capable of supporting
         this._audioOutputsNumber = outputsNumberResolver(maxChannelCount);
 
         console.debug('Configuring AudioContext with', {
           inputsNumber: this._audioOutputsNumber,
-          outputsNumber: this._audioOutputsNumber
+          outputsNumber: this._audioOutputsNumber,
         });
 
         this._mediaElementAudioSource.channelCountMode = 'max';
         this._mediaElementAudioSource.channelCount = this._audioInputsNumber;
-        this._audioChannelSplitterNode = this._audioContext.createChannelSplitter(this._audioInputsNumber);
-        this._audioChannelMergerNode = this._audioContext.createChannelMerger(this._audioOutputsNumber);
+        this._audioChannelSplitterNode = audioContext.createChannelSplitter(this._audioInputsNumber);
+        this._audioChannelMergerNode = audioContext.createChannelMerger(this._audioOutputsNumber);
 
         this._audioInputOutputNodes.clear();
         for (let inputNumber = 0; inputNumber < this._audioInputsNumber; inputNumber++) {
@@ -1810,68 +1896,57 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
             inputAudioInputOutputNodesByOutput.set(outputNumber, {
               inputNumber: inputNumber,
               outputNumber: outputNumber,
-              connected: false
-            })
+              connected: false,
+            });
           }
         }
 
-        this.routeAudioInputOutputNodes(AudioUtil.resolveDefaultAudioRouting(this._audioInputsNumber, this._audioOutputsNumber))
+        this.routeAudioInputOutputNodes(AudioUtil.resolveDefaultAudioRouting(this._audioInputsNumber, this._audioOutputsNumber));
 
         this._mediaElementAudioSource.connect(this._audioChannelSplitterNode);
 
         // connect silent gain node to prevent buffer overflows and stalls when audio isn't routed to destination
-        let silentGainNode = this._audioContext.createGain();
+        let silentGainNode = audioContext.createGain();
         silentGainNode.gain.value = 0; // Set gain to 0 (silent)
-        silentGainNode.connect(this._audioContext.destination);
+        silentGainNode.connect(audioContext.destination);
         this._audioChannelSplitterNode.connect(silentGainNode);
 
-        this._audioChannelMergerNode.connect(this._audioContext.destination);
+        this._audioChannelMergerNode.connect(audioContext.destination);
 
         this.onAudioContextChange$.next({
           audioInputsNumber: this._audioInputsNumber!,
           audioOutputsNumber: this._audioOutputsNumber!,
-          audioInputOutputNodes: this.getAudioInputOutputNodes()
-        })
-        nextCompleteObserver(observer)
-
-        this.onPlay$.pipe(take(1)).subscribe({
-          next: () => {
-            if (this._audioContext?.state !== 'running') {
-              // this can be executed only after user gesture, so we have to bind it on some user gesture event (play) to enable it
-              this._audioContext?.resume().then((event) => {
-                console.debug('AudioContext resumed');
-              })
-            }
-          }
-        })
+          audioInputOutputNodes: this.getAudioInputOutputNodes(),
+        });
+        nextCompleteObserver(observer);
       }
-    })
+    });
   }
 
   getAudioInputOutputNodes(): AudioInputOutputNode[][] {
-    return [...this._audioInputOutputNodes.values()].map(p => [...p.values()]);
+    return [...this._audioInputOutputNodes.values()].map((p) => [...p.values()]);
   }
 
   routeAudioInputOutputNodes(newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void> {
-    return passiveObservable(observer => {
-      newAudioInputOutputNodes.forEach(p => this._routeAudioInputOutputNode(p, false));
+    return passiveObservable((observer) => {
+      newAudioInputOutputNodes.forEach((p) => this._routeAudioInputOutputNode(p, false));
       this.onAudioRouting$.next({
-        audioInputOutputNodes: this.getAudioInputOutputNodes()
-      })
-      nextCompleteObserver(observer)
-    })
+        audioInputOutputNodes: this.getAudioInputOutputNodes(),
+      });
+      nextCompleteObserver(observer);
+    });
   }
 
   routeAudioInputOutputNode(newAudioInputOutputNode: AudioInputOutputNode): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       this._routeAudioInputOutputNode(newAudioInputOutputNode);
-      nextCompleteObserver(observer)
-    })
+      nextCompleteObserver(observer);
+    });
   }
 
   protected _routeAudioInputOutputNode(newNode: AudioInputOutputNode, emitEvent = true) {
     if (!this._audioInputOutputNodes.has(newNode.inputNumber)) {
-      console.debug(`Unknown audioInputOutputNode: ${JSON.stringify(newNode)}`)
+      console.debug(`Unknown audioInputOutputNode: ${JSON.stringify(newNode)}`);
       return;
     }
 
@@ -1893,8 +1968,8 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
           byOutput.set(newNode.outputNumber, newNode);
           if (emitEvent) {
             this.onAudioRouting$.next({
-              audioInputOutputNodes: this.getAudioInputOutputNodes()
-            })
+              audioInputOutputNodes: this.getAudioInputOutputNodes(),
+            });
           }
         } catch (e) {
           console.warn(e);
@@ -1908,12 +1983,15 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
       try {
         this._mediaElementAudioSource?.disconnect();
         if (this._audioContext.state !== 'closed') {
-          this._audioContext.close().then(() => {
-            console.debug('AudioContext closed')
-            this._audioContext = void 0;
-          }, reason => {
-            console.debug('Problem while closing AudioContext', reason)
-          })
+          this._audioContext.close().then(
+            () => {
+              console.debug('AudioContext closed');
+              this._audioContext = void 0;
+            },
+            (reason) => {
+              console.debug('Problem while closing AudioContext', reason);
+            }
+          );
         }
         this._audioChannelSplitterNode?.disconnect();
         this._audioChannelMergerNode?.disconnect();
@@ -1924,13 +2002,32 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
         this.onAudioContextChange$.next({
           audioInputsNumber: this._audioInputsNumber,
           audioOutputsNumber: this._audioOutputsNumber,
-          audioInputOutputNodes: this.getAudioInputOutputNodes()
-        })
+          audioInputOutputNodes: this.getAudioInputOutputNodes(),
+        });
       } catch (e) {
-        console.debug('Problems in disposing AudioContext', e)
+        console.debug('Problems in disposing AudioContext', e);
         console.debug(e);
       }
     }
+  }
+
+  protected destroyAudioRouter() {
+    try {
+      this._audioChannelSplitterNode?.disconnect();
+      this._audioChannelMergerNode?.disconnect();
+    } catch (e) {
+      console.debug(e);
+    }
+
+    this._audioInputsNumber = void 0;
+    this._audioOutputsNumber = void 0;
+    this._audioInputOutputNodes.clear();
+
+    this.onAudioContextChange$.next({
+      audioInputsNumber: this._audioInputsNumber,
+      audioOutputsNumber: this._audioOutputsNumber,
+      audioInputOutputNodes: this.getAudioInputOutputNodes(),
+    });
   }
 
   getAudioPeakProcessorWorkletNode(): AudioWorkletNode | undefined {
@@ -1938,14 +2035,14 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   }
 
   createAudioPeakProcessorWorkletNode(audioMeterStandard: AudioMeterStandard): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       if (this._audioPeakProcessorWorkletNode) {
         console.debug('AudioWorkletNode already exists');
         nextCompleteObserver(observer);
       } else {
         if (this._mediaElementAudioSource) {
           let createAudioWorkletNode: () => Observable<AudioWorkletNode> = () => {
-            return passiveObservable(observer => {
+            return passiveObservable((observer) => {
               let audioWorkletNodeName = `omp-${audioMeterStandard}-processor`; // name unique to omakase-player
               try {
                 let audioWorkletNode = new AudioWorkletNode(this._mediaElementAudioSource!.context, audioWorkletNodeName, {
@@ -1961,52 +2058,50 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
                 this._mediaElementAudioSource!.context.audioWorklet.addModule(objectURL).then(() => {
                   let audioWorkletNode = new AudioWorkletNode(this._mediaElementAudioSource!.context, audioWorkletNodeName, {
                     parameterData: {},
-                  })
+                  });
                   nextCompleteObserver(observer, audioWorkletNode);
-                })
+                });
               }
-            })
-          }
+            });
+          };
 
           createAudioWorkletNode().subscribe({
             next: (audioWorkletNode) => {
               this._audioPeakProcessorWorkletNode = audioWorkletNode;
               this._audioPeakProcessorWorkletNode.port.onmessage = (event: MessageEvent) => {
-                this.handleAudioPeakProcessorWorkletNodeMessage(event)
+                this.handleAudioPeakProcessorWorkletNodeMessage(event);
               };
-              this._mediaElementAudioSource!
-                .connect(this._audioPeakProcessorWorkletNode)
-                .connect(this._mediaElementAudioSource!.context.destination)
+              this._mediaElementAudioSource!.connect(this._audioPeakProcessorWorkletNode).connect(this._mediaElementAudioSource!.context.destination);
 
               this.onAudioWorkletNodeCreated$.next({
-                audioMeterStandard: audioMeterStandard
-              })
+                audioMeterStandard: audioMeterStandard,
+              });
 
               nextCompleteObserver(observer);
             },
             error: (error) => {
               errorCompleteObserver(observer, error);
-            }
-          })
+            },
+          });
         } else {
           nextCompleteObserver(observer);
         }
       }
-    })
+    });
   }
 
   protected handleAudioPeakProcessorWorkletNodeMessage = (event: MessageEvent) => {
     this.onAudioPeakProcessorWorkletNodeMessage$.next({
-      data: event.data
-    })
-  }
+      data: event.data,
+    });
+  };
 
   destroyAudioPeakProcessorWorkletNode() {
     if (this._audioPeakProcessorWorkletNode) {
       try {
         if (this._mediaElementAudioSource) {
           this._audioPeakProcessorWorkletNode.disconnect(this._mediaElementAudioSource.context.destination);
-          this._mediaElementAudioSource.disconnect(this._audioPeakProcessorWorkletNode)
+          this._mediaElementAudioSource.disconnect(this._audioPeakProcessorWorkletNode);
         }
         // this._audioPeakProcessorWorkletNode.port.postMessage('stop')  // TODO implement, this doesnt exist yet
         this._audioPeakProcessorWorkletNode.port.onmessage = null;
@@ -2014,7 +2109,7 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
         this._audioPeakProcessorWorkletNode = void 0;
         this.onAudioWorkletNodeCreated$.next(void 0);
       } catch (e) {
-        console.debug(e)
+        console.debug(e);
         if (this._audioPeakProcessorWorkletNode) {
           this._audioPeakProcessorWorkletNode.port.onmessage = null;
           this._audioPeakProcessorWorkletNode = void 0;
@@ -2025,17 +2120,19 @@ export abstract class VideoController<C extends VideoControllerConfig> implement
   }
 
   getThumbnailVttUrl(): string | undefined {
-      return this._thumbnailVttUrl;
+    return this._thumbnailVttUrl;
   }
 
   loadThumbnailVttUrl(thumbnailVttUrl: string): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       this._thumbnailVttUrl = thumbnailVttUrl;
-      this.onThumbnailVttUrlChanged$.next({ thumbnailVttUrl });
+      this.onThumbnailVttUrlChanged$.next({thumbnailVttUrl});
       this._videoDomController.loadThumbnailVtt(thumbnailVttUrl);
       nextCompleteObserver(observer);
-    })
+    });
   }
 
-
+  getHTMLAudioUtilElement(): HTMLAudioElement {
+    return this._videoDomController.getAudioUtilElement();
+  }
 }

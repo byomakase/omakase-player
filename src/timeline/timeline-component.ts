@@ -26,7 +26,6 @@ import {KonvaFactory} from '../factory/konva-factory';
 import {isNullOrUndefined} from '../util/object-util';
 import {nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
 
-
 export interface TimelineNodeStyle {
   backgroundFill?: string;
   backgroundOpacity?: number;
@@ -34,18 +33,16 @@ export interface TimelineNodeStyle {
 }
 
 export interface TimelineNodeConfig<S extends TimelineNodeStyle> extends ComponentConfig<S> {
-
   /**
    * If set to true node listens to events
    */
-  listening?: boolean
+  listening?: boolean;
 }
 
 /**
  * Custom component that can be added to Timeline
  */
 export interface TimelineNode extends KonvaComponent<TimelineNodeConfig<TimelineNodeStyle>, TimelineNodeStyle, Konva.Group>, OnMeasurementsChange {
-
   /**
    * Fires on mouse click
    */
@@ -72,7 +69,7 @@ export abstract class BaseTimelineNode<C extends TimelineNodeConfig<S>, S extend
 
   protected constructor(config: C) {
     super({
-      ...config
+      ...config,
     });
 
     this._group = KonvaFactory.createGroup();
@@ -81,49 +78,54 @@ export abstract class BaseTimelineNode<C extends TimelineNodeConfig<S>, S extend
       fill: this.style.backgroundFill,
       opacity: this.style.backgroundOpacity,
       cornerRadius: this.style.backgroundBorderRadius,
-      listening: false
+      listening: false,
     });
 
-    this._group.add(this._bgRect)
+    this._group.add(this._bgRect);
 
     if (this.config.listening) {
       this._group.on('click', (event) => {
         this.onClick$.next({
           mouseEvent: event.evt,
-          cancelableEvent: event
+          cancelableEvent: event,
         });
-      })
+      });
 
       this._group.on('mouseenter', (event) => {
         this.onMouseEnter$.next({
           mouseEvent: event.evt,
-          cancelableEvent: event
+          cancelableEvent: event,
         });
-      })
+      });
 
       this._group.on('mouseleave', (event) => {
         this.onMouseLeave$.next({
           mouseEvent: event.evt,
-          cancelableEvent: event
+          cancelableEvent: event,
         });
-      })
+      });
 
       this._group.on('mouseover', (event) => {
-        WindowUtil.cursor('pointer')
-      })
+        WindowUtil.cursor('pointer');
+      });
 
       this._group.on('mouseleave', (event) => {
-        WindowUtil.cursor('default')
-      })
+        WindowUtil.cursor('default');
+      });
     }
 
-    this._styleAdapter.onChange$.pipe(takeUntil(this._destroyed$), filter(p => !!p)).subscribe((styles) => {
-      this.onStyleChange();
-    })
+    this._styleAdapter.onChange$
+      .pipe(
+        takeUntil(this._destroyed$),
+        filter((p) => !!p)
+      )
+      .subscribe((styles) => {
+        this.onStyleChange();
+      });
   }
 
   onMeasurementsChange(): void {
-    this._bgRect.size(this._group.getSize())
+    this._bgRect.size(this._group.getSize());
   }
 
   protected override provideKonvaNode(): Konva.Group {
@@ -135,17 +137,14 @@ export abstract class BaseTimelineNode<C extends TimelineNodeConfig<S>, S extend
       fill: this.style.backgroundFill,
       opacity: this.style.backgroundOpacity,
       cornerRadius: this.style.backgroundBorderRadius,
-    })
+    });
   }
 
   override destroy() {
     super.destroy();
 
-    konvaUnlistener(
-      this._group
-    )
+    konvaUnlistener(this._group);
   }
-
 }
 
 export interface TextLabelStyle extends TimelineNodeStyle {
@@ -156,15 +155,14 @@ export interface TextLabelStyle extends TimelineNodeStyle {
   align?: 'left' | 'right' | 'center';
   verticalAlign?: 'top' | 'middle' | 'bottom';
   wrap?: 'word' | 'char' | 'none';
-  padding?: number,
-  offsetX?: number,
-  offsetY?: number,
-  opacity?: number,
+  padding?: number;
+  offsetX?: number;
+  offsetY?: number;
+  opacity?: number;
   textAreaStretch?: boolean;
 }
 
 export interface TextLabelConfig extends TimelineNodeConfig<TextLabelStyle> {
-
   /**
    * Text to display
    */
@@ -199,7 +197,7 @@ export class TextLabel extends BaseTimelineNode<TextLabelConfig, TextLabelStyle>
       offsetX: this.style.offsetX,
       offsetY: this.style.offsetY,
       opacity: this.style.opacity,
-    })
+    });
 
     this._group.add(this._konvaText);
   }
@@ -210,8 +208,8 @@ export class TextLabel extends BaseTimelineNode<TextLabelConfig, TextLabelStyle>
     if (isNullOrUndefined(this.style.textAreaStretch) || this.style.textAreaStretch === true) {
       this._konvaText.setAttrs({
         width: this._group.width(),
-        height: this._group.height()
-      })
+        height: this._group.height(),
+      });
     } else {
       let x: number = 0;
       switch (this.style.align) {
@@ -235,8 +233,8 @@ export class TextLabel extends BaseTimelineNode<TextLabelConfig, TextLabelStyle>
 
       this._konvaText.setAttrs({
         x: x,
-        y: y
-      })
+        y: y,
+      });
     }
   }
 
@@ -254,8 +252,8 @@ export class TextLabel extends BaseTimelineNode<TextLabelConfig, TextLabelStyle>
       padding: this.style.padding,
       offsetX: this.style.offsetX,
       offsetY: this.style.offsetY,
-      opacity: this.style.opacity
-    })
+      opacity: this.style.opacity,
+    });
   }
 
   /**
@@ -272,27 +270,24 @@ export class TextLabel extends BaseTimelineNode<TextLabelConfig, TextLabelStyle>
   }
 }
 
-
-export interface ImageButtonStyle extends TimelineNodeStyle {
-
-}
+export interface ImageButtonStyle extends TimelineNodeStyle {}
 
 export type ImageButtonImageConfig = {
   /**
    * Image source
    */
-  src: string,
+  src: string;
 
   /**
    * Image width
    */
-  width?: number,
+  width?: number;
 
   /**
    * Image height
    */
-  height?: number
-}
+  height?: number;
+};
 
 export interface ImageButtonConfig extends TimelineNodeConfig<ImageButtonStyle>, ImageButtonImageConfig {
   /**
@@ -303,12 +298,12 @@ export interface ImageButtonConfig extends TimelineNodeConfig<ImageButtonStyle>,
   /**
    * Image width
    */
-  width?: number,
+  width?: number;
 
   /**
    * Image height
    */
-  height?: number
+  height?: number;
 }
 
 /**
@@ -327,15 +322,16 @@ export class ImageButton extends BaseTimelineNode<ImageButtonConfig, ImageButton
       },
     });
 
-    this._loadImageQueue.pipe(takeUntil(this._destroyed$))
+    this._loadImageQueue
+      .pipe(takeUntil(this._destroyed$))
       .pipe(concatMap((config) => this.loadImage(config)))
       .subscribe();
 
-    this.setImage(this.config)
+    this.setImage(this.config);
   }
 
   private loadImage(imageButtonImageConfig: ImageButtonImageConfig): Observable<ImageButtonImageConfig | undefined> {
-    return passiveObservable<ImageButtonImageConfig | undefined>(observer => {
+    return passiveObservable<ImageButtonImageConfig | undefined>((observer) => {
       ImageUtil.createKonvaImage(imageButtonImageConfig.src).subscribe({
         next: (image) => {
           if (this._konvaImage) {
@@ -347,25 +343,25 @@ export class ImageButton extends BaseTimelineNode<ImageButtonConfig, ImageButton
           this._konvaImage.setAttrs({
             width: imageButtonImageConfig.width ? imageButtonImageConfig.width : image.getAttrs().image.naturalWidth,
             height: imageButtonImageConfig.height ? imageButtonImageConfig.height : image.getAttrs().image.naturalHeight,
-          })
+          });
 
           this._group.add(this._konvaImage);
 
           nextCompleteObserver(observer, {
             src: imageButtonImageConfig.src,
             width: this._konvaImage.width(),
-            height: this._konvaImage.height()
-          })
+            height: this._konvaImage.height(),
+          });
         },
         error: (err) => {
           if (this._konvaImage) {
             this._konvaImage.destroy();
           }
           console.error(err);
-          nextCompleteObserver(observer)
-        }
-      })
-    })
+          nextCompleteObserver(observer);
+        },
+      });
+    });
   }
 
   /**
@@ -376,33 +372,3 @@ export class ImageButton extends BaseTimelineNode<ImageButtonConfig, ImageButton
     this._loadImageQueue.next(config);
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

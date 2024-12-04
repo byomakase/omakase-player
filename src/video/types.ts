@@ -22,56 +22,55 @@ type ExtractType<T, K extends keyof T> = T[K];
 type ExtractReturnType<T, K extends keyof T> = T[K] extends (...args: any[]) => infer R ? R : never;
 type ExtractParameterTypes<T, K extends keyof T> = T[K] extends (...args: infer A) => any ? A : never;
 
-
 type ExtractPropertyTypes<T, K extends keyof T> = {
-  requestType: UnwrapObservable<ExtractType<T, K>>,
-  responseType: ExtractType<T, K>
-}
+  requestType: UnwrapObservable<ExtractType<T, K>>;
+  responseType: ExtractType<T, K>;
+};
 
 type ExtractMethodTypes<T, K extends keyof T> = {
-  requestType: ExtractParameterTypes<T, K>,
-  responseType: ExtractReturnType<T, K>
-}
+  requestType: ExtractParameterTypes<T, K>;
+  responseType: ExtractReturnType<T, K>;
+};
 
 export type HandshakeChannelActionsMap = OmpBroadcastChannelActionsMap<{
   'DetachedControllerProxy.connect': {
     requestType: {
-      proxyId: string
-    },
+      proxyId: string;
+    };
     responseType: {
-      proxyId: string,
-      messageChannelId: string
-    }
-  },
+      proxyId: string;
+      messageChannelId: string;
+    };
+  };
   'DetachedControllerProxy.connected': {
     requestType: {
-      proxyId: string,
-      messageChannelId: string
-    },
+      proxyId: string;
+      messageChannelId: string;
+    };
     responseType: {
-      proxyId: string
-    }
-  },
+      proxyId: string;
+    };
+  };
   'DetachedControllerProxy.heartbeat': {
     requestType: {
-      proxyId: string,
-      heartbeat: number
-    },
+      proxyId: string;
+      heartbeat: number;
+    };
     responseType: {
-      proxyId: string,
-      heartbeat: number
-    }
-  }
-}>
+      proxyId: string;
+      heartbeat: number;
+    };
+  };
+}>;
 
 export type MessageChannelActionsMap = OmpBroadcastChannelActionsMap<{
   // property types
-  'VideoControllerApi.onVideoLoading$': ExtractPropertyTypes<VideoControllerApi, 'onVideoLoading$'>
-  'VideoControllerApi.onVideoLoaded$': ExtractPropertyTypes<VideoControllerApi, 'onVideoLoaded$'>,
-  'VideoControllerApi.onPlay$': ExtractPropertyTypes<VideoControllerApi, 'onPlay$'>,
-  'VideoControllerApi.onPause$': ExtractPropertyTypes<VideoControllerApi, 'onPause$'>,
-  'VideoControllerApi.onVideoTimeChange$': ExtractPropertyTypes<VideoControllerApi, 'onVideoTimeChange$'>,
-  'VideoControllerApi.onSeeking$': ExtractPropertyTypes<VideoControllerApi, 'onSeeking$'>,
+  'VideoControllerApi.onVideoLoading$': ExtractPropertyTypes<VideoControllerApi, 'onVideoLoading$'>;
+  'VideoControllerApi.onVideoLoaded$': ExtractPropertyTypes<VideoControllerApi, 'onVideoLoaded$'>;
+  'VideoControllerApi.onPlay$': ExtractPropertyTypes<VideoControllerApi, 'onPlay$'>;
+  'VideoControllerApi.onPause$': ExtractPropertyTypes<VideoControllerApi, 'onPause$'>;
+  'VideoControllerApi.onVideoTimeChange$': ExtractPropertyTypes<VideoControllerApi, 'onVideoTimeChange$'>;
+  'VideoControllerApi.onSeeking$': ExtractPropertyTypes<VideoControllerApi, 'onSeeking$'>;
   'VideoControllerApi.onSeeked$': ExtractPropertyTypes<VideoControllerApi, 'onSeeked$'>;
   'VideoControllerApi.onBuffering$': ExtractPropertyTypes<VideoControllerApi, 'onBuffering$'>;
   'VideoControllerApi.onEnded$': ExtractPropertyTypes<VideoControllerApi, 'onEnded$'>;
@@ -83,7 +82,7 @@ export type MessageChannelActionsMap = OmpBroadcastChannelActionsMap<{
   'VideoControllerApi.onVideoSafeZoneChange$': ExtractPropertyTypes<VideoControllerApi, 'onVideoSafeZoneChange$'>;
   'VideoControllerApi.onPlaybackRateChange$': ExtractPropertyTypes<VideoControllerApi, 'onPlaybackRateChange$'>;
   'VideoControllerApi.onHelpMenuChange$': ExtractPropertyTypes<VideoControllerApi, 'onHelpMenuChange$'>;
-  'VideoControllerApi.onPlaybackState$': ExtractPropertyTypes<VideoControllerApi, 'onPlaybackState$'>,
+  'VideoControllerApi.onPlaybackState$': ExtractPropertyTypes<VideoControllerApi, 'onPlaybackState$'>;
   'VideoControllerApi.onAudioLoaded$': ExtractPropertyTypes<VideoControllerApi, 'onAudioLoaded$'>;
   'VideoControllerApi.onSubtitlesLoaded$': ExtractPropertyTypes<VideoControllerApi, 'onSubtitlesLoaded$'>;
   'VideoControllerApi.onSubtitlesCreate$': ExtractPropertyTypes<VideoControllerApi, 'onSubtitlesCreate$'>;
@@ -97,44 +96,45 @@ export type MessageChannelActionsMap = OmpBroadcastChannelActionsMap<{
   'VideoControllerApi.onThumbnailVttUrlChanged$': ExtractPropertyTypes<VideoControllerApi, 'onThumbnailVttUrlChanged$'>;
 
   // method types
-  'VideoControllerApi.loadVideoInternal': ExtractMethodTypes<VideoControllerApi, 'loadVideoInternal'>,
-  'VideoControllerApi.loadVideo': ExtractMethodTypes<VideoControllerApi, 'loadVideo'>,
-  'VideoControllerApi.reloadVideo': ExtractMethodTypes<VideoControllerApi, 'reloadVideo'>,
-  'VideoControllerApi.setVolume': ExtractMethodTypes<VideoControllerApi, 'setVolume'>
-  'VideoControllerApi.setPlaybackRate': ExtractMethodTypes<VideoControllerApi, 'setPlaybackRate'>
-  'VideoControllerApi.play': ExtractMethodTypes<VideoControllerApi, 'play'>
-  'VideoControllerApi.pause': ExtractMethodTypes<VideoControllerApi, 'pause'>
-  'VideoControllerApi.togglePlayPause': ExtractMethodTypes<VideoControllerApi, 'togglePlayPause'>
-  'VideoControllerApi.seekToFrame': ExtractMethodTypes<VideoControllerApi, 'seekToFrame'>
-  'VideoControllerApi.seekFromCurrentFrame': ExtractMethodTypes<VideoControllerApi, 'seekFromCurrentFrame'>
-  'VideoControllerApi.seekFromCurrentTime': ExtractMethodTypes<VideoControllerApi, 'seekFromCurrentTime'>
-  'VideoControllerApi.seekPreviousFrame': ExtractMethodTypes<VideoControllerApi, 'seekPreviousFrame'>
-  'VideoControllerApi.seekNextFrame': ExtractMethodTypes<VideoControllerApi, 'seekNextFrame'>
-  'VideoControllerApi.seekToTime': ExtractMethodTypes<VideoControllerApi, 'seekToTime'>
-  'VideoControllerApi.seekToTimecode': ExtractMethodTypes<VideoControllerApi, 'seekToTimecode'>
-  'VideoControllerApi.seekToPercent': ExtractMethodTypes<VideoControllerApi, 'seekToPercent'>
-  'VideoControllerApi.mute': ExtractMethodTypes<VideoControllerApi, 'mute'>
-  'VideoControllerApi.unmute': ExtractMethodTypes<VideoControllerApi, 'unmute'>
-  'VideoControllerApi.toggleMuteUnmute': ExtractMethodTypes<VideoControllerApi, 'toggleMuteUnmute'>
-  'VideoControllerApi.toggleFullscreen': ExtractMethodTypes<VideoControllerApi, 'toggleFullscreen'>
-  'VideoControllerApi.appendHelpMenuGroup': ExtractMethodTypes<VideoControllerApi, 'appendHelpMenuGroup'>
-  'VideoControllerApi.prependHelpMenuGroup': ExtractMethodTypes<VideoControllerApi, 'prependHelpMenuGroup'>
-  'VideoControllerApi.clearHelpMenuGroups': ExtractMethodTypes<VideoControllerApi, 'clearHelpMenuGroups'>
-  'VideoControllerApi.addSafeZone': ExtractMethodTypes<VideoControllerApi, 'addSafeZone'>
-  'VideoControllerApi.removeSafeZone': ExtractMethodTypes<VideoControllerApi, 'removeSafeZone'>
-  'VideoControllerApi.clearSafeZones': ExtractMethodTypes<VideoControllerApi, 'clearSafeZones'>
-  'VideoControllerApi.createSubtitlesVttTrack': ExtractMethodTypes<VideoControllerApi, 'createSubtitlesVttTrack'>
-  'VideoControllerApi.hideSubtitlesTrack': ExtractMethodTypes<VideoControllerApi, 'hideSubtitlesTrack'>
-  'VideoControllerApi.removeAllSubtitlesTracks': ExtractMethodTypes<VideoControllerApi, 'removeAllSubtitlesTracks'>
-  'VideoControllerApi.removeSubtitlesTrack': ExtractMethodTypes<VideoControllerApi, 'removeSubtitlesTrack'>
-  'VideoControllerApi.showSubtitlesTrack': ExtractMethodTypes<VideoControllerApi, 'showSubtitlesTrack'>
-  'VideoControllerApi.setActiveAudioTrack': ExtractMethodTypes<VideoControllerApi, 'setActiveAudioTrack'>
-  'VideoControllerApi.createAudioContext': ExtractMethodTypes<VideoControllerApi, 'createAudioContext'>
-  'VideoControllerApi.routeAudioInputOutputNode': ExtractMethodTypes<VideoControllerApi, 'routeAudioInputOutputNode'>
-  'VideoControllerApi.routeAudioInputOutputNodes': ExtractMethodTypes<VideoControllerApi, 'routeAudioInputOutputNodes'>
-  'VideoControllerApi.createAudioPeakProcessorWorkletNode': ExtractMethodTypes<VideoControllerApi, 'createAudioPeakProcessorWorkletNode'>
-  'VideoControllerApi.loadThumbnailVttUrl': ExtractMethodTypes<VideoControllerApi, 'loadThumbnailVttUrl'>
+  'VideoControllerApi.loadVideoInternal': ExtractMethodTypes<VideoControllerApi, 'loadVideoInternal'>;
+  'VideoControllerApi.loadVideo': ExtractMethodTypes<VideoControllerApi, 'loadVideo'>;
+  'VideoControllerApi.reloadVideo': ExtractMethodTypes<VideoControllerApi, 'reloadVideo'>;
+  'VideoControllerApi.setVolume': ExtractMethodTypes<VideoControllerApi, 'setVolume'>;
+  'VideoControllerApi.setPlaybackRate': ExtractMethodTypes<VideoControllerApi, 'setPlaybackRate'>;
+  'VideoControllerApi.play': ExtractMethodTypes<VideoControllerApi, 'play'>;
+  'VideoControllerApi.pause': ExtractMethodTypes<VideoControllerApi, 'pause'>;
+  'VideoControllerApi.togglePlayPause': ExtractMethodTypes<VideoControllerApi, 'togglePlayPause'>;
+  'VideoControllerApi.seekToFrame': ExtractMethodTypes<VideoControllerApi, 'seekToFrame'>;
+  'VideoControllerApi.seekFromCurrentFrame': ExtractMethodTypes<VideoControllerApi, 'seekFromCurrentFrame'>;
+  'VideoControllerApi.seekFromCurrentTime': ExtractMethodTypes<VideoControllerApi, 'seekFromCurrentTime'>;
+  'VideoControllerApi.seekPreviousFrame': ExtractMethodTypes<VideoControllerApi, 'seekPreviousFrame'>;
+  'VideoControllerApi.seekNextFrame': ExtractMethodTypes<VideoControllerApi, 'seekNextFrame'>;
+  'VideoControllerApi.seekToTime': ExtractMethodTypes<VideoControllerApi, 'seekToTime'>;
+  'VideoControllerApi.seekToTimecode': ExtractMethodTypes<VideoControllerApi, 'seekToTimecode'>;
+  'VideoControllerApi.seekToPercent': ExtractMethodTypes<VideoControllerApi, 'seekToPercent'>;
+  'VideoControllerApi.mute': ExtractMethodTypes<VideoControllerApi, 'mute'>;
+  'VideoControllerApi.unmute': ExtractMethodTypes<VideoControllerApi, 'unmute'>;
+  'VideoControllerApi.toggleMuteUnmute': ExtractMethodTypes<VideoControllerApi, 'toggleMuteUnmute'>;
+  'VideoControllerApi.toggleFullscreen': ExtractMethodTypes<VideoControllerApi, 'toggleFullscreen'>;
+  'VideoControllerApi.appendHelpMenuGroup': ExtractMethodTypes<VideoControllerApi, 'appendHelpMenuGroup'>;
+  'VideoControllerApi.prependHelpMenuGroup': ExtractMethodTypes<VideoControllerApi, 'prependHelpMenuGroup'>;
+  'VideoControllerApi.clearHelpMenuGroups': ExtractMethodTypes<VideoControllerApi, 'clearHelpMenuGroups'>;
+  'VideoControllerApi.addSafeZone': ExtractMethodTypes<VideoControllerApi, 'addSafeZone'>;
+  'VideoControllerApi.removeSafeZone': ExtractMethodTypes<VideoControllerApi, 'removeSafeZone'>;
+  'VideoControllerApi.clearSafeZones': ExtractMethodTypes<VideoControllerApi, 'clearSafeZones'>;
+  'VideoControllerApi.createSubtitlesVttTrack': ExtractMethodTypes<VideoControllerApi, 'createSubtitlesVttTrack'>;
+  'VideoControllerApi.hideSubtitlesTrack': ExtractMethodTypes<VideoControllerApi, 'hideSubtitlesTrack'>;
+  'VideoControllerApi.removeAllSubtitlesTracks': ExtractMethodTypes<VideoControllerApi, 'removeAllSubtitlesTracks'>;
+  'VideoControllerApi.removeSubtitlesTrack': ExtractMethodTypes<VideoControllerApi, 'removeSubtitlesTrack'>;
+  'VideoControllerApi.showSubtitlesTrack': ExtractMethodTypes<VideoControllerApi, 'showSubtitlesTrack'>;
+  'VideoControllerApi.setActiveAudioTrack': ExtractMethodTypes<VideoControllerApi, 'setActiveAudioTrack'>;
+  'VideoControllerApi.createAudioContext': ExtractMethodTypes<VideoControllerApi, 'createAudioContext'>;
+  'VideoControllerApi.createAudioRouter': ExtractMethodTypes<VideoControllerApi, 'createAudioRouter'>;
+  'VideoControllerApi.routeAudioInputOutputNode': ExtractMethodTypes<VideoControllerApi, 'routeAudioInputOutputNode'>;
+  'VideoControllerApi.routeAudioInputOutputNodes': ExtractMethodTypes<VideoControllerApi, 'routeAudioInputOutputNodes'>;
+  'VideoControllerApi.createAudioPeakProcessorWorkletNode': ExtractMethodTypes<VideoControllerApi, 'createAudioPeakProcessorWorkletNode'>;
+  'VideoControllerApi.loadThumbnailVttUrl': ExtractMethodTypes<VideoControllerApi, 'loadThumbnailVttUrl'>;
 
   // sent from DetachedVideoController to RemoteVideoController
-  'VideoControllerApi.attachVideoWindow': ExtractMethodTypes<VideoControllerApi, 'attachVideoWindow'>
-}>
+  'VideoControllerApi.attachVideoWindow': ExtractMethodTypes<VideoControllerApi, 'attachVideoWindow'>;
+}>;

@@ -19,64 +19,51 @@ import {TimecodeUtil} from './util/timecode-util';
 import {Video} from './video';
 
 export class Validators {
-
   public static id(): (value: string) => string {
     return (value: string) => {
-      return z.coerce.string()
-        .min(1)
-        .max(100)
-        .parse(value);
-    }
+      return z.coerce.string().min(1).max(100).parse(value);
+    };
   }
 
   public static description(): (value: string) => string {
     return (value: string) => {
-      return z.coerce.string()
-        .max(1000)
-        .parse(value);
-    }
+      return z.coerce.string().max(1000).parse(value);
+    };
   }
 
   public static boolean(): (value: boolean) => boolean {
     return (value: boolean) => {
-      return z.coerce.boolean()
-        .parse(value);
-    }
+      return z.coerce.boolean().parse(value);
+    };
   }
 
   public static url(): (value: string) => string {
     return (value: string) => {
-      return z.coerce.string()
-        .url()
-        .parse(value);
-    }
+      return z.coerce.string().url().parse(value);
+    };
   }
 
   public static videoTime(): (value: number) => number {
     return (value: number) => {
-      return z.coerce.number()
-        .min(0)
-        .parse(value);
-    }
+      return z.coerce.number().min(0).parse(value);
+    };
   }
 
   public static videoTimecode(): (value: string, video: Video) => string {
     return (value: string, video: Video) => {
       let timecodeObject = TimecodeUtil.parseTimecodeToTimecodeObject(value);
       if (timecodeObject.dropFrame !== video.dropFrame) {
-        throw new Error(`Timecode format provided (${value}) is in ${timecodeObject.dropFrame ? 'drop-frame' : 'no drop-frame'} format and doesn't match video (${video.dropFrame ? 'drop-frame' : 'no drop-frame'})`);
+        throw new Error(
+          `Timecode format provided (${value}) is in ${timecodeObject.dropFrame ? 'drop-frame' : 'no drop-frame'} format and doesn't match video (${video.dropFrame ? 'drop-frame' : 'no drop-frame'})`
+        );
       }
       return value;
-    }
+    };
   }
 
   public static audioChannelsNumber(): (value: number) => number {
     return (value: number) => {
-      return z.coerce.number()
-        .min(1)
-        .max(32)
-        .parse(value);
-    }
+      return z.coerce.number().min(1).max(32).parse(value);
+    };
   }
-
 }

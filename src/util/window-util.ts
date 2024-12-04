@@ -15,7 +15,6 @@
  */
 
 export class WindowUtil {
-
   static resetCursorStyle() {
     this.cursor('default');
   }
@@ -32,5 +31,4 @@ export class WindowUtil {
   static close() {
     return window.close();
   }
-
 }

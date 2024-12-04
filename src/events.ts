@@ -23,7 +23,6 @@ export type OmakaseEventKey<T extends OmakaseEventMap<any>> = keyof T;
 export type OmakaseEventListener<T> = (event: T) => void;
 
 export interface OmakaseEventEmitter<T extends OmakaseEventMap<any>> {
-
   on<K extends OmakaseEventKey<T>>(eventKey: K, handler: OmakaseEventListener<T[K]>): void;
 
   off<K extends OmakaseEventKey<T>>(eventKey: K, handler: OmakaseEventListener<T[K]>): void;

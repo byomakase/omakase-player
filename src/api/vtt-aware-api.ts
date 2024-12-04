@@ -69,7 +69,6 @@ export interface VttAwareApi<Q extends OmakaseVttCue, T extends OmakaseVttFile<Q
 export type DownsampleStrategy = 'none' | 'drop' | 'max' | 'min' | 'avg';
 
 export interface DownsampleConfig {
-
   /**
    * Period for downsampling in milliseconds
    */
@@ -79,11 +78,9 @@ export interface DownsampleConfig {
    * Strategy for downsampling (supported values: none, drop, min, max, and avg)
    */
   downsampleStrategy: DownsampleStrategy;
-
 }
 
 export interface VttLoadOptions {
-
   /**
    * Axios configuration for VTT fetch request
    */
@@ -93,5 +90,4 @@ export interface VttLoadOptions {
    * Donwsampling configuration
    */
   downsampleConfig?: DownsampleConfig;
-
 }

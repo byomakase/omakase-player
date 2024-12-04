@@ -55,9 +55,9 @@ const configDefault: Omit<OgChartLaneItemConfig, 'cue' | 'value' | 'valueScale' 
     fillLinearGradientColorStops: Constants.FILL_LINEAR_GRADIENT_AUDIO_PEAK,
     paddingX: 2,
     paddingY: 2,
-    scaleRatio: 1
-  }
-}
+    scaleRatio: 1,
+  },
+};
 
 export class OgChartLaneItem extends BaseKonvaComponent<OgChartLaneItemConfig, OgChartLaneItemStyle, Konva.Group> {
   public readonly onClick$: Subject<ChartCueEvent> = new Subject<ChartCueEvent>();
@@ -84,11 +84,11 @@ export class OgChartLaneItem extends BaseKonvaComponent<OgChartLaneItemConfig, O
       width: this.config.width,
       height: this.style.height,
       visible: this.style.visible,
-      listening: this.config.listening
+      listening: this.config.listening,
     });
 
-    if ((this.style.paddingX) >= this.config.width) {
-      throw new Error('Horizontal padding is larger than width')
+    if (this.style.paddingX >= this.config.width) {
+      throw new Error('Horizontal padding is larger than width');
     }
 
     let clipGroup = new Konva.Group({
@@ -102,13 +102,15 @@ export class OgChartLaneItem extends BaseKonvaComponent<OgChartLaneItemConfig, O
     let valueHeightExactDecimal = valueRatioDecimal.mul(this._group.height());
     let valueHeightExact = valueHeightExactDecimal.toNumber();
 
-    clipGroup.add(KonvaFactory.createRect({
-      width: this._group.width(),
-      height: this._group.height(),
-      fillLinearGradientColorStops: this.style.fillLinearGradientColorStops,
-      fillLinearGradientStartPoint: {x: 0, y: 0},
-      fillLinearGradientEndPoint: {x: 0, y: this._group.height()},
-    }))
+    clipGroup.add(
+      KonvaFactory.createRect({
+        width: this._group.width(),
+        height: this._group.height(),
+        fillLinearGradientColorStops: this.style.fillLinearGradientColorStops,
+        fillLinearGradientStartPoint: {x: 0, y: 0},
+        fillLinearGradientEndPoint: {x: 0, y: this._group.height()},
+      })
+    );
 
     let circleWidth = this.config.width - this.style.paddingX;
     let circleMaxRadius = circleWidth / 2;
@@ -123,8 +125,12 @@ export class OgChartLaneItem extends BaseKonvaComponent<OgChartLaneItemConfig, O
     clipGroup.clipFunc((ctx) => {
       let circleX = circleMaxRadius + this.style.paddingX / 2;
       for (let i = 0; i < numOfCircles; i++) {
-
-        let circleRadius = new Decimal(1 - this.style.scaleRatio).div(maxNumOfCircles).mul((maxNumOfCircles - i)).plus(this.style.scaleRatio).mul(circleMaxRadius).toNumber();
+        let circleRadius = new Decimal(1 - this.style.scaleRatio)
+          .div(maxNumOfCircles)
+          .mul(maxNumOfCircles - i)
+          .plus(this.style.scaleRatio)
+          .mul(circleMaxRadius)
+          .toNumber();
 
         // let yFromTop = i * (circleMaxRadius * 2 + this.style.paddingY) + circleMaxRadius;
         let yFromTop = i * (circleMaxRadius * 2 + this.style.paddingY) + circleRadius;
@@ -134,7 +140,7 @@ export class OgChartLaneItem extends BaseKonvaComponent<OgChartLaneItemConfig, O
         // ctx.arc(circleX, y, circleMaxRadius, 0, Constants.TWO_PI_RADIANS, false);
         ctx.arc(circleX, y, circleRadius, 0, Constants.TWO_PI_RADIANS, false);
       }
-    })
+    });
   }
 
   protected provideKonvaNode(): Konva.Group {
@@ -144,8 +150,8 @@ export class OgChartLaneItem extends BaseKonvaComponent<OgChartLaneItemConfig, O
   set barPosition(position: WithOptionalPartial<Position, 'y'>) {
     this._group.position({
       x: position.x,
-      y: 0
-    })
+      y: 0,
+    });
   }
 
   get barPosition(): Position {
@@ -158,8 +164,6 @@ export class OgChartLaneItem extends BaseKonvaComponent<OgChartLaneItemConfig, O
 
   override destroy() {
     super.destroy();
-    nullifier(
-      this._cue
-    );
+    nullifier(this._cue);
   }
 }

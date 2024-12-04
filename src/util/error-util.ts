@@ -22,7 +22,7 @@ export function parseErrorMessage(error: unknown): string {
   if (typeof error === 'string') {
     message = error;
   } else if (error instanceof ZodError) {
-    message = (error as ZodError).errors.map(p => p.message).join('. ');
+    message = (error as ZodError).errors.map((p) => p.message).join('. ');
   } else if (error instanceof Error) {
     message = error.message;
   } else {
@@ -35,7 +35,7 @@ export function parseErrorMessage(error: unknown): string {
 export function zodErrorMapOverload(message: string): Partial<ParseParams> {
   return {
     errorMap: (issue, ctx) => {
-      return {message}
-    }
-  }
+      return {message};
+    },
+  };
 }

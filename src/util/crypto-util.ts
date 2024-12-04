@@ -19,17 +19,17 @@ import {map, Observable} from 'rxjs';
 import {fromPromise} from 'rxjs/internal/observable/innerFrom';
 
 export class CryptoUtil {
-
   public static uuid(): string {
     return crypto.randomUUID();
   }
 
   public static digest(text: string): Observable<string> {
-    return fromPromise(crypto.subtle.digest('SHA-256', StringUtil.toArrayBuffer(text))).pipe(map((hashBuffer) => {
-      let hashArray = Array.from(new Uint8Array(hashBuffer));
-      let hashHex = hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
-      return hashHex;
-    }))
+    return fromPromise(crypto.subtle.digest('SHA-256', StringUtil.toArrayBuffer(text))).pipe(
+      map((hashBuffer) => {
+        let hashArray = Array.from(new Uint8Array(hashBuffer));
+        let hashHex = hashArray.map((byte) => byte.toString(16).padStart(2, '0')).join('');
+        return hashHex;
+      })
+    );
   }
-
 }

@@ -21,28 +21,20 @@ import {ColorUtil} from './color-util';
 import {KonvaFactory} from '../factory/konva-factory';
 
 export class ShapeUtil {
-  static createGoldenRatioWedge(config: {
-    x: number,
-    y: number,
-    height: number,
-    color: string
-  }): Konva.Line {
-    let b = new Decimal(config.height).div(Constants.GOLDEN_RATIO + 1).toDecimalPlaces(2).toNumber();
+  static createGoldenRatioWedge(config: {x: number; y: number; height: number; color: string}): Konva.Line {
+    let b = new Decimal(config.height)
+      .div(Constants.GOLDEN_RATIO + 1)
+      .toDecimalPlaces(2)
+      .toNumber();
     let a = config.height - b;
     let halfWidth = a / 2;
     return new Konva.Line({
-      points: [
-        config.x - halfWidth, config.y,
-        config.x + halfWidth, config.y,
-        config.x + halfWidth, config.y + a,
-        config.x, config.y + a + b,
-        config.x - halfWidth, config.y + a,
-      ],
+      points: [config.x - halfWidth, config.y, config.x + halfWidth, config.y, config.x + halfWidth, config.y + a, config.x, config.y + a + b, config.x - halfWidth, config.y + a],
       fill: config.color,
       stroke: config.color,
       closed: true,
-      listening: false
-    })
+      listening: false,
+    });
   }
 
   static createDebugRect(fill?: string) {

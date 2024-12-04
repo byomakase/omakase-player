@@ -17,10 +17,7 @@
 import {Video} from '../video';
 
 export class InitSegmentUtil {
-
   static isInitSegment(video: Video, time: number): boolean {
-    return !!video.initSegmentTimeOffset && (time >= 0 && time < video.initSegmentTimeOffset);
+    return !!video.initSegmentTimeOffset && time >= 0 && time < video.initSegmentTimeOffset;
   }
-
-
 }

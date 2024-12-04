@@ -17,14 +17,13 @@
 import {VideoControllerApi} from './video-controller-api';
 import {TypedOmpBroadcastChannel} from '../common/omp-broadcast-channel';
 import {HandshakeChannelActionsMap, MessageChannelActionsMap} from './types';
-import {BehaviorSubject, catchError, filter, interval, Observable, Subject, takeUntil, timeout, timer} from 'rxjs';
+import {BehaviorSubject, catchError, filter, interval, Observable, Subject, take, takeUntil, timeout, timer} from 'rxjs';
 import {Constants} from '../constants';
 import {CryptoUtil} from '../util/crypto-util';
 import {nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {destroyer} from '../util/destroy-util';
 import {OmakasePlayer} from '../omakase-player';
 import {Alert} from '../alerts/model';
-import {WindowUtil} from '../util/window-util';
 import {
   AudioContextChangeEvent,
   AudioLoadedEvent,
@@ -33,6 +32,7 @@ import {
   AudioSwitchedEvent,
   AudioWorkletNodeCreatedEvent,
   HelpMenuGroup,
+  OmpVideoWindowPlaybackError,
   SubtitlesCreateEvent,
   SubtitlesEvent,
   SubtitlesLoadedEvent,
@@ -52,11 +52,24 @@ import {
   VideoSeekingEvent,
   VideoTimeChangeEvent,
   VideoVolumeEvent,
-  VideoWindowPlaybackStateChangeEvent
+  VideoWindowPlaybackStateChangeEvent,
 } from '../types';
 import {AudioInputOutputNode, AudioMeterStandard, PlaybackState, Video, VideoLoadOptions, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
 import {BufferedTimespan} from './video-controller';
 import Hls from 'hls.js';
+import {BlobUtil} from '../util/blob-util';
+// @ts-ignore
+import ompSyncWatchdogProcessor from '../worker/omp-sync-watchdog-processor.js?raw';
+import {WindowUtil} from '../util/window-util';
+
+interface OutboundLatest {
+  heartbeat?: number;
+  videoTimeChangeEvent?: VideoTimeChangeEvent;
+}
+
+interface InboundLatest {
+  heartbeat?: number;
+}
 
 export class DetachedVideoController implements VideoControllerApi {
   private readonly _proxyId;
@@ -66,12 +79,28 @@ export class DetachedVideoController implements VideoControllerApi {
 
   private _messageChannel: TypedOmpBroadcastChannel<MessageChannelActionsMap> | undefined;
 
+  private _disconnecting = false;
   private _connectionRetryInterval = 1000;
   private _maxConnectionAttempts = 10;
   private _heartbeatInterval = 1000;
   private _heartbeatTimeout = 2000;
+  private _maxHeartbeatTimeouts = 3;
+  private _heartbeatTimeoutNumber = 0;
 
-  private _connectionBreaker$ = new Subject<void>();
+  private _outboundLatest: OutboundLatest = {
+    heartbeat: void 0,
+    videoTimeChangeEvent: void 0,
+  };
+
+  private _inboundLatest: InboundLatest = {
+    heartbeat: void 0,
+  };
+
+  protected _syncWatchdogWorklet?: AudioWorkletNode;
+  protected _onSyncWatchdogMessage$ = new Subject<MessageEvent>();
+
+  private _handshakeChannelBreaker$ = new Subject<void>();
+  private _messageChannelBreaker$ = new Subject<void>();
   private _destroyed$ = new Subject<void>();
 
   constructor(videoController: VideoControllerApi) {
@@ -82,17 +111,20 @@ export class DetachedVideoController implements VideoControllerApi {
     this._proxyId = CryptoUtil.uuid();
 
     this.startConnectLoop();
+
+    this.createSyncWatchdog();
   }
 
   private startConnectLoop() {
-    nextCompleteSubject(this._connectionBreaker$);
-    this._connectionBreaker$ = new Subject();
+    nextCompleteSubject(this._handshakeChannelBreaker$);
+    this._handshakeChannelBreaker$ = new Subject();
 
     let connectionAttempt = 1;
     let connect = () => {
-      this._handshakeChannel.sendAndObserveResponse('DetachedControllerProxy.connect', {proxyId: this._proxyId})
+      this._handshakeChannel
+        .sendAndObserveResponse('DetachedControllerProxy.connect', {proxyId: this._proxyId})
         // .pipe(filter(p => p.proxyId === this._proxyId))
-        .pipe(takeUntil(this._connectionBreaker$))
+        .pipe(takeUntil(this._handshakeChannelBreaker$))
         .pipe(timeout(this._connectionRetryInterval))
         .subscribe({
           next: (response) => {
@@ -100,9 +132,13 @@ export class DetachedVideoController implements VideoControllerApi {
 
             this.openMessageChannel(response.messageChannelId);
 
-            this._handshakeChannel.sendAndObserveResponse(`DetachedControllerProxy.connected`, {proxyId: this._proxyId, messageChannelId: this._messageChannel!.channelId})
-              .pipe(filter(p => p.proxyId === this._proxyId))
-              .pipe(takeUntil(this._connectionBreaker$))
+            this._handshakeChannel
+              .sendAndObserveResponse(`DetachedControllerProxy.connected`, {
+                proxyId: this._proxyId,
+                messageChannelId: this._messageChannel!.channelId,
+              })
+              .pipe(filter((p) => p.proxyId === this._proxyId))
+              .pipe(takeUntil(this._handshakeChannelBreaker$))
               .subscribe({
                 next: (response) => {
                   console.debug(`Connection established response received, proxy is now connected, proxyId: ${this._proxyId}`);
@@ -111,56 +147,73 @@ export class DetachedVideoController implements VideoControllerApi {
                 error: (error) => {
                   console.error(error);
                   this.disconnect();
-                }
-              })
-
+                },
+              });
           },
           error: (error) => {
             console.error(error);
-            console.debug(`Could not connect yet, attempt no ${connectionAttempt}`)
+            console.debug(`Could not connect yet, attempt no ${connectionAttempt}`);
             if (connectionAttempt > this._maxConnectionAttempts) {
               console.debug(`Could not connect, quitting`);
-              this.disconnect()
+              this.disconnect();
             } else {
-              connectionAttempt++
-              connect()
+              connectionAttempt++;
+              connect();
             }
-          }
-        })
-    }
+          },
+        });
+    };
     connect();
   }
 
   private startHeartbeatLoop() {
     timer(0, this._heartbeatInterval)
-      .pipe(takeUntil(this._connectionBreaker$), takeUntil(this._destroyed$)).subscribe({
-      next: (heartbeat) => {
-        this._handshakeChannel.sendAndObserveResponse(`DetachedControllerProxy.heartbeat`, {proxyId: this._proxyId, heartbeat: heartbeat})
-          .pipe(filter(p => p.proxyId === this._proxyId))
-          .pipe(takeUntil(this._connectionBreaker$))
-          .pipe(timeout(this._heartbeatTimeout))
-          .subscribe({
-            next: (response) => {
-              // console.debug(`Heartbeat response: ${response}`);
-            },
-            error: (error) => {
-              console.error(error);
-              console.debug(`Heartbeat timeout !`);
-              this.disconnect();
-            }
-          })
-      }
-    })
+      .pipe(takeUntil(this._handshakeChannelBreaker$), takeUntil(this._destroyed$))
+      .subscribe({
+        next: (num) => {
+          this.sendHeartBeat();
+        },
+      });
+  }
+
+  private sendHeartBeat() {
+    let heartbeat = new Date().getTime();
+    this._handshakeChannel
+      .sendAndObserveResponse(`DetachedControllerProxy.heartbeat`, {proxyId: this._proxyId, heartbeat: heartbeat})
+      .pipe(filter((p) => p.proxyId === this._proxyId))
+      .pipe(takeUntil(this._handshakeChannelBreaker$))
+      .pipe(timeout(this._heartbeatTimeout))
+      .subscribe({
+        next: (response) => {
+          this._inboundLatest.heartbeat = heartbeat;
+          this._heartbeatTimeoutNumber = 0;
+          // console.debug(`Heartbeat response: ${response}`);
+        },
+        error: (error) => {
+          console.error(error);
+
+          this._heartbeatTimeoutNumber++;
+          console.debug(`Heartbeat timeout no: ${this._heartbeatTimeoutNumber}`);
+          if (this._heartbeatTimeoutNumber >= this._maxHeartbeatTimeouts) {
+            console.debug(`Maximum heartheat timeouts reached (${this._maxHeartbeatTimeouts}), disconnecting..`);
+            this.disconnect();
+          }
+        },
+      });
+    this._outboundLatest.heartbeat = heartbeat;
   }
 
   private disconnect() {
-    if (this._videoController.isPlaying()) {
-      this._videoController.pause();
-    }
+    this._disconnecting = true;
 
     destroyer(this._handshakeChannel, this._messageChannel);
 
-    nextCompleteSubject(this._connectionBreaker$);
+    nextCompleteSubject(this._messageChannelBreaker$);
+    nextCompleteSubject(this._handshakeChannelBreaker$);
+
+    if (this._videoController.isPlaying()) {
+      this._videoController.pause();
+    }
 
     OmakasePlayer.instance.alerts.error(`Connection to host window lost`);
 
@@ -169,438 +222,633 @@ export class DetachedVideoController implements VideoControllerApi {
 
     let intervalInstance = interval(1000).subscribe({
       next: (value) => {
-        if ((closeCountdown - value) <= 0) {
+        if (closeCountdown - value <= 0) {
           intervalInstance.unsubscribe();
-          WindowUtil.close();
+          try {
+            WindowUtil.close();
+          } catch (e) {
+            OmakasePlayer.instance.alerts.warn(`Connection lost. Please close this window.`);
+          }
         } else {
           if (alert) {
             OmakasePlayer.instance.alerts.dismiss(alert.id);
           }
-          alert = OmakasePlayer.instance.alerts.warn(`Closing in ${closeCountdown - value}`)
+          alert = OmakasePlayer.instance.alerts.warn(`Closing in ${closeCountdown - value}`);
         }
+      },
+    });
+  }
+
+  createSyncWatchdog(): Observable<void> {
+    return passiveObservable((observer) => {
+      if (this._syncWatchdogWorklet) {
+        console.debug('OmpDetachedPlayerProcessor already exists');
+        nextCompleteObserver(observer);
+      } else {
+        this.createAudioContext().subscribe({
+          next: () => {
+            let mediaElementAudioSource = this.getAudioContext()!.createMediaElementSource(this.getHTMLAudioUtilElement());
+
+            let worklet$ = new Subject<AudioWorkletNode>();
+
+            const workletName = 'omp-sync-watchdog-processor';
+            try {
+              let audioWorkletNode = new AudioWorkletNode(mediaElementAudioSource.context, workletName, {
+                parameterData: {},
+              });
+              nextCompleteSubject(worklet$, audioWorkletNode);
+            } catch (e) {
+              let objectURL = BlobUtil.createObjectURL(BlobUtil.createBlob([ompSyncWatchdogProcessor], {type: 'application/javascript'}));
+              mediaElementAudioSource.context.audioWorklet.addModule(objectURL).then(() => {
+                let audioWorkletNode = new AudioWorkletNode(mediaElementAudioSource.context, workletName, {
+                  parameterData: {},
+                });
+                nextCompleteSubject(worklet$, audioWorkletNode);
+              });
+            }
+
+            worklet$.subscribe((worklet) => {
+              this._syncWatchdogWorklet = worklet;
+
+              this._syncWatchdogWorklet.port.onmessage = (event: MessageEvent) => {
+                this._onSyncWatchdogMessage$.next(event);
+              };
+
+              mediaElementAudioSource.connect(this._syncWatchdogWorklet).connect(mediaElementAudioSource.context.destination);
+
+              let silentGainNode = this.getAudioContext()!.createGain();
+              silentGainNode.gain.value = 0; // Set gain to 0 (silent)
+              silentGainNode.connect(mediaElementAudioSource.context.destination);
+
+              mediaElementAudioSource.connect(silentGainNode);
+
+              let lastVideoTimeChangeEvent: VideoTimeChangeEvent | undefined;
+              this.onVideoTimeChange$
+                .pipe(filter((p) => !this._disconnecting))
+                .pipe(takeUntil(this._destroyed$))
+                .subscribe({
+                  next: (event) => {
+                    lastVideoTimeChangeEvent = event;
+                  },
+                });
+
+              this._onSyncWatchdogMessage$.pipe(filter((p) => !this._disconnecting)).subscribe({
+                next: (event) => {
+                  let now = new Date().getTime();
+                  let isPlaying = this.isPlaying();
+                  let currentFrame = this.getCurrentFrame();
+                  let whenPlaying = isPlaying && lastVideoTimeChangeEvent && this.getVideo() && currentFrame - lastVideoTimeChangeEvent.frame > 1;
+                  let whenNotPlaying = !isPlaying && lastVideoTimeChangeEvent && this.getVideo() && currentFrame !== lastVideoTimeChangeEvent.frame;
+
+                  if (whenPlaying || whenNotPlaying) {
+                    // call dispatchVideoTimeChange if when playing getCurrentFrame() and lastVideoTimeChangeEvent differ in more than 1 frame, or are not equal if playback is stopped
+                    // console.debug(`dispatchVideoTimeChange, frame diff ${currentFrame} - ${lastVideoTimeChangeEvent?.frame}`)
+                    this.dispatchVideoTimeChange();
+                  }
+
+                  // send heartbeat if difference between last send heartbeat and now is >= (this._heartbeatInterval + this._heartbeatInterval * 0.1)
+                  if (this._inboundLatest.heartbeat && this._outboundLatest.heartbeat && now - this._outboundLatest.heartbeat >= this._heartbeatInterval + this._heartbeatInterval * 0.1) {
+                    this.sendHeartBeat();
+                  }
+                },
+              });
+            });
+            nextCompleteObserver(observer);
+          },
+        });
       }
-    })
+    });
   }
 
   private openMessageChannel(channelId: string) {
     this._messageChannel = new TypedOmpBroadcastChannel<MessageChannelActionsMap>(channelId);
 
+    this._messageChannelBreaker$.pipe(take(1)).subscribe({
+      next: () => {
+        console.debug('Message channel closed');
+      },
+    });
+
     // only message push
 
-    this._videoController.onVideoLoading$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onVideoLoading$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onVideoLoading$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onVideoLoaded$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onVideoLoaded$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onVideoLoaded$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onVideoTimeChange$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onVideoTimeChange$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onVideoTimeChange$', value);
-      }
-    })
+        this._outboundLatest.videoTimeChangeEvent = value;
+      },
+    });
 
-    this._videoController.onPlay$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onPlay$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onPlay$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onPause$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onPause$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onPause$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onSeeking$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onSeeking$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onSeeking$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onSeeked$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onSeeked$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onSeeked$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onEnded$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onEnded$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onEnded$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onAudioSwitched$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onAudioSwitched$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onAudioSwitched$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onAudioLoaded$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onAudioLoaded$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onAudioLoaded$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onAudioContextChange$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onAudioContextChange$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onAudioContextChange$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onAudioPeakProcessorWorkletNodeMessage$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onAudioPeakProcessorWorkletNodeMessage$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onAudioPeakProcessorWorkletNodeMessage$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onAudioWorkletNodeCreated$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onAudioWorkletNodeCreated$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onAudioWorkletNodeCreated$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onAudioRouting$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onAudioRouting$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onAudioRouting$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onVideoError$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onVideoError$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onVideoError$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onBuffering$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onBuffering$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onBuffering$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onVolumeChange$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onVolumeChange$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onVolumeChange$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onFullscreenChange$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onFullscreenChange$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onFullscreenChange$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onVideoSafeZoneChange$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onVideoSafeZoneChange$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onVideoSafeZoneChange$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onPlaybackState$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onPlaybackState$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onPlaybackState$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onHelpMenuChange$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onHelpMenuChange$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onHelpMenuChange$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onVideoWindowPlaybackStateChange$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onVideoWindowPlaybackStateChange$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onVideoWindowPlaybackStateChange$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onSubtitlesLoaded$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onSubtitlesLoaded$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onSubtitlesLoaded$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onSubtitlesCreate$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onSubtitlesCreate$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onSubtitlesCreate$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onSubtitlesRemove$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onSubtitlesRemove$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onSubtitlesRemove$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onSubtitlesShow$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onSubtitlesShow$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onSubtitlesShow$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onSubtitlesHide$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onSubtitlesHide$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onSubtitlesHide$', value);
-      }
-    })
+      },
+    });
 
-    this._videoController.onThumbnailVttUrlChanged$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._videoController.onThumbnailVttUrlChanged$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onThumbnailVttUrlChanged$', value);
-      }
-    })
+      },
+    });
 
     // listen to messages and handle replies
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.loadVideoInternal').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.loadVideoInternal(request[0], request[1], request[2], request[3]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.loadVideoInternal')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.loadVideoInternal(request[0], request[1], request[2], request[3]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.loadVideo').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.loadVideo(request[0], request[1], request[2]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.loadVideo')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.loadVideo(request[0], request[1], request[2]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.reloadVideo').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.reloadVideo())
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.reloadVideo')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.reloadVideo());
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.togglePlayPause').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.togglePlayPause().pipe(catchError(error => {
-          console.error(error)
-          if (this.isPermissionsCheck(error)) {
-            OmakasePlayer.instance.alerts.info(`Please initate playback in this window`, {autodismiss: true, duration: 3000})
-          }
-          throw error;
-        })))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.togglePlayPause')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(
+            this._videoController.togglePlayPause().pipe(
+              catchError((error) => {
+                console.error(error);
+                if (this.isPermissionsCheck(error)) {
+                  OmakasePlayer.instance.alerts.info(`Please initate playback in this window`, {
+                    autodismiss: true,
+                    duration: 3000,
+                  });
+                }
+                throw new OmpVideoWindowPlaybackError(`play`);
+              })
+            )
+          );
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.seekToFrame').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.seekToFrame(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.seekToFrame')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.seekToFrame(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.seekFromCurrentFrame').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.seekFromCurrentFrame(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.seekFromCurrentFrame')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.seekFromCurrentFrame(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.seekFromCurrentTime').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.seekFromCurrentTime(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.seekFromCurrentTime')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.seekFromCurrentTime(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.seekPreviousFrame').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.seekPreviousFrame())
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.seekPreviousFrame')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.seekPreviousFrame());
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.seekNextFrame').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.seekNextFrame())
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.seekNextFrame')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.seekNextFrame());
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.seekToTime').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.seekToTime(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.seekToTime')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.seekToTime(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.seekToTimecode').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.seekToTimecode(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.seekToTimecode')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.seekToTimecode(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.seekToPercent').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.seekToPercent(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.seekToPercent')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.seekToPercent(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.toggleFullscreen').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.toggleFullscreen().pipe(catchError(error => {
-          console.error(error)
-          if (this.isPermissionsCheck(error)) {
-            OmakasePlayer.instance.alerts.info(`Please initate toggle fullscreen action in this window`, {autodismiss: true, duration: 3000})
-          }
-          throw error;
-        })))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.toggleFullscreen')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(
+            this._videoController.toggleFullscreen().pipe(
+              catchError((error) => {
+                console.error(error);
+                if (this.isPermissionsCheck(error)) {
+                  OmakasePlayer.instance.alerts.info(`Please initate toggle fullscreen action in this window`, {
+                    autodismiss: true,
+                    duration: 3000,
+                  });
+                }
+                throw new OmpVideoWindowPlaybackError(`toggleFullscreen`);
+              })
+            )
+          );
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.play').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.play().pipe(catchError(error => {
-          console.error(error)
-          if (this.isPermissionsCheck(error)) {
-            OmakasePlayer.instance.alerts.info(`Please initate playback in this window`, {autodismiss: true, duration: 3000})
-          }
-          throw error;
-        })))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.play')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(
+            this._videoController.play().pipe(
+              catchError((error) => {
+                console.error(error);
+                if (this.isPermissionsCheck(error)) {
+                  OmakasePlayer.instance.alerts.info(`Please initate playback in this window`, {
+                    autodismiss: true,
+                    duration: 3000,
+                  });
+                }
+                throw new OmpVideoWindowPlaybackError(`play`);
+              })
+            )
+          );
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.pause').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.pause())
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.pause')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.pause());
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.setVolume').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.setVolume(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.setVolume')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.setVolume(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.setPlaybackRate').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.setPlaybackRate(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.setPlaybackRate')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.setPlaybackRate(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.mute').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.mute())
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.mute')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.mute());
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.unmute').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.unmute())
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.unmute')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.unmute());
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.toggleMuteUnmute').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.toggleMuteUnmute())
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.toggleMuteUnmute')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.toggleMuteUnmute());
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.addSafeZone').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.addSafeZone(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.addSafeZone')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.addSafeZone(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.removeSafeZone').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.removeSafeZone(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.removeSafeZone')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.removeSafeZone(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.clearSafeZones').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.clearSafeZones())
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.clearSafeZones')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.clearSafeZones());
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.appendHelpMenuGroup').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.appendHelpMenuGroup(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.appendHelpMenuGroup')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.appendHelpMenuGroup(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.prependHelpMenuGroup').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.prependHelpMenuGroup(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.prependHelpMenuGroup')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.prependHelpMenuGroup(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.clearHelpMenuGroups').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.clearHelpMenuGroups())
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.clearHelpMenuGroups')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.clearHelpMenuGroups());
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.createSubtitlesVttTrack').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.createSubtitlesVttTrack(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.createSubtitlesVttTrack')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.createSubtitlesVttTrack(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.hideSubtitlesTrack').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.hideSubtitlesTrack(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.hideSubtitlesTrack')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.hideSubtitlesTrack(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.removeAllSubtitlesTracks').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.removeAllSubtitlesTracks())
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.removeAllSubtitlesTracks')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.removeAllSubtitlesTracks());
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.removeSubtitlesTrack').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.removeSubtitlesTrack(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.removeSubtitlesTrack')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.removeSubtitlesTrack(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.showSubtitlesTrack').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.showSubtitlesTrack(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.showSubtitlesTrack')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.showSubtitlesTrack(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.setActiveAudioTrack').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.setActiveAudioTrack(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.setActiveAudioTrack')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.setActiveAudioTrack(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.createAudioContext').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.createAudioContext(request[0], request[1]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.createAudioContext')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.createAudioContext(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.routeAudioInputOutputNode').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.routeAudioInputOutputNode(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.createAudioRouter')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.createAudioRouter(request[0], request[1]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.routeAudioInputOutputNodes').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.routeAudioInputOutputNodes(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.routeAudioInputOutputNode')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.routeAudioInputOutputNode(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.createAudioPeakProcessorWorkletNode').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.createAudioPeakProcessorWorkletNode(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.routeAudioInputOutputNodes')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.routeAudioInputOutputNodes(request[0]));
+        },
+      });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.loadThumbnailVttUrl').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this._videoController.loadThumbnailVttUrl(request[0]))
-      }
-    })
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.createAudioPeakProcessorWorkletNode')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.createAudioPeakProcessorWorkletNode(request[0]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.loadThumbnailVttUrl')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.loadThumbnailVttUrl(request[0]));
+        },
+      });
   }
 
   private isPermissionsCheck(error: any): boolean {
     // return error.name === 'TypeError' && error.message === 'Permissions check failed';
-    return (error.name === 'TypeError' || error.name === 'NotAllowedError'); // chrome throws TypeError, safari throws NotAllowedError
+    return error.name === 'TypeError' || error.name === 'NotAllowedError'; // chrome throws TypeError, safari throws NotAllowedError
   }
 
   destroy() {
@@ -738,7 +986,7 @@ export class DetachedVideoController implements VideoControllerApi {
   }
 
   calculateTimeToFrame(time: number): number {
-    return this._videoController.calculateTimeToFrame(time)
+    return this._videoController.calculateTimeToFrame(time);
   }
 
   clearSafeZones(): Observable<void> {
@@ -857,6 +1105,10 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.loadVideoInternal(sourceUrl, frameRate, options, optionsInternal);
   }
 
+  dispatchVideoTimeChange(): void {
+    return this._videoController.dispatchVideoTimeChange();
+  }
+
   loadVideo(sourceUrl: string, frameRate: number | string, options?: VideoLoadOptions): Observable<Video> {
     return this._videoController.loadVideo(sourceUrl, frameRate, options);
   }
@@ -866,7 +1118,7 @@ export class DetachedVideoController implements VideoControllerApi {
   }
 
   mute(): Observable<void> {
-    return this._videoController.mute()
+    return this._videoController.mute();
   }
 
   parseTimecodeToFrame(timecode: string): number {
@@ -886,15 +1138,15 @@ export class DetachedVideoController implements VideoControllerApi {
   }
 
   prependHelpMenuGroup(helpMenuGroup: HelpMenuGroup): Observable<void> {
-    return this._videoController.prependHelpMenuGroup(helpMenuGroup)
+    return this._videoController.prependHelpMenuGroup(helpMenuGroup);
   }
 
   clearHelpMenuGroups(): Observable<void> {
-    return this._videoController.clearHelpMenuGroups()
+    return this._videoController.clearHelpMenuGroups();
   }
 
   removeSafeZone(id: string): Observable<void> {
-    return this._videoController.removeSafeZone(id)
+    return this._videoController.removeSafeZone(id);
   }
 
   seekFromCurrentFrame(framesCount: number): Observable<boolean> {
@@ -930,15 +1182,15 @@ export class DetachedVideoController implements VideoControllerApi {
   }
 
   setActiveAudioTrack(id: string): Observable<void> {
-    return this._videoController.setActiveAudioTrack(id)
+    return this._videoController.setActiveAudioTrack(id);
   }
 
   setPlaybackRate(playbackRate: number): Observable<void> {
-    return this._videoController.setPlaybackRate(playbackRate)
+    return this._videoController.setPlaybackRate(playbackRate);
   }
 
   setVolume(volume: number): Observable<void> {
-    return this._videoController.setVolume(volume)
+    return this._videoController.setVolume(volume);
   }
 
   toggleFullscreen(): Observable<void> {
@@ -946,7 +1198,7 @@ export class DetachedVideoController implements VideoControllerApi {
   }
 
   toggleMuteUnmute(): Observable<void> {
-    return this._videoController.toggleMuteUnmute()
+    return this._videoController.toggleMuteUnmute();
   }
 
   togglePlayPause(): Observable<void> {
@@ -954,7 +1206,7 @@ export class DetachedVideoController implements VideoControllerApi {
   }
 
   unmute(): Observable<void> {
-    return this._videoController.unmute()
+    return this._videoController.unmute();
   }
 
   getVideoWindowPlaybackState(): VideoWindowPlaybackState {
@@ -975,13 +1227,14 @@ export class DetachedVideoController implements VideoControllerApi {
 
   // sent to host
   attachVideoWindow(): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       this._messageChannel!.sendAndObserveResponse('VideoControllerApi.attachVideoWindow').subscribe({
         next: (value) => {
-          nextCompleteObserver(observer)
-        }
-      })
-    })
+          this.disconnect();
+          nextCompleteObserver(observer);
+        },
+      });
+    });
   }
 
   createSubtitlesVttTrack(subtitlesVttTrack: SubtitlesVttTrack): Observable<SubtitlesVttTrack | undefined> {
@@ -1005,7 +1258,7 @@ export class DetachedVideoController implements VideoControllerApi {
   }
 
   removeSubtitlesTrack(id: string): Observable<void> {
-    return this._videoController.removeSubtitlesTrack(id)
+    return this._videoController.removeSubtitlesTrack(id);
   }
 
   showSubtitlesTrack(id: string): Observable<void> {
@@ -1013,12 +1266,16 @@ export class DetachedVideoController implements VideoControllerApi {
   }
 
   // endregion
-  createAudioContext(inputsNumber: number, outputsNumber?: number): Observable<void> {
-    return this._videoController.createAudioContext(inputsNumber, outputsNumber);
+  createAudioContext(contextOptions?: AudioContextOptions): Observable<void> {
+    return this._videoController.createAudioContext(contextOptions);
   }
 
-  createAudioContextWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void> {
-    return this._videoController.createAudioContextWithOutputsResolver(inputsNumber, outputsNumberResolver);
+  createAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<void> {
+    return this._videoController.createAudioRouter(inputsNumber, outputsNumber);
+  }
+
+  createAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void> {
+    return this._videoController.createAudioRouterWithOutputsResolver(inputsNumber, outputsNumberResolver);
   }
 
   getAudioInputOutputNodes(): AudioInputOutputNode[][] {
@@ -1042,12 +1299,22 @@ export class DetachedVideoController implements VideoControllerApi {
   }
 
   getThumbnailVttUrl(): string | undefined {
-      return this._videoController.getThumbnailVttUrl();
+    return this._videoController.getThumbnailVttUrl();
   }
 
   loadThumbnailVttUrl(thumbnailVttUrl: string): Observable<void> {
-      return this._videoController.loadThumbnailVttUrl(thumbnailVttUrl);
+    return this._videoController.loadThumbnailVttUrl(thumbnailVttUrl);
   }
 
+  enablePiP(): Observable<void> {
+    return this._videoController.enablePiP();
+  }
 
+  getHTMLAudioUtilElement(): HTMLAudioElement {
+    return this._videoController.getHTMLAudioUtilElement();
+  }
+
+  disablePiP(): Observable<void> {
+    return this._videoController.disablePiP();
+  }
 }

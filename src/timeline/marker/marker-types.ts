@@ -16,7 +16,7 @@
 
 import {Verticals} from '../../common/measurement';
 
-export type MarkerRender = 'lane' | 'spanning'
+export type MarkerRender = 'lane' | 'spanning';
 export type MarkerSymbolType = 'none' | 'square' | 'triangle' | 'circle';
 
 export interface MarkerStyle {
@@ -29,8 +29,8 @@ export interface MarkerStyle {
 }
 
 export interface MarkerHandleStyle {
-  color: string,
-  symbolType: MarkerSymbolType,
+  color: string;
+  symbolType: MarkerSymbolType;
   symbolSize: number;
   lineStrokeWidth: number;
   lineOpacity: number;
@@ -47,5 +47,5 @@ export const MARKER_STYLE_DEFAULT: MarkerStyle = {
   symbolType: 'square',
   symbolSize: 20,
   lineStrokeWidth: 1,
-  lineOpacity: 0.7
-}
+  lineOpacity: 0.7,
+};

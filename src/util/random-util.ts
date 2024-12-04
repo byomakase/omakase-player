@@ -18,13 +18,12 @@ import Konva from 'konva';
 import {ColorUtil} from './color-util';
 
 export class RandomUtil {
-
   static randomCircle(maxX: number, maxY: number): Konva.Circle {
     return new Konva.Circle({
       x: maxX * Math.random(),
       y: maxY * Math.random(),
       radius: 50,
-      fill: ColorUtil.randomHexColor()
+      fill: ColorUtil.randomHexColor(),
     });
   }
 
@@ -35,5 +34,4 @@ export class RandomUtil {
   static randomDecimal(min: number, max: number) {
     return Math.random() * (max - min) + min;
   }
-
 }

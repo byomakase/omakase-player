@@ -43,7 +43,7 @@ import {
   VideoSeekingEvent,
   VideoTimeChangeEvent,
   VideoVolumeEvent,
-  VideoWindowPlaybackStateChangeEvent
+  VideoWindowPlaybackStateChangeEvent,
 } from '../types';
 import {PlaybackState, Video, VideoLoadOptions} from './index';
 import {nextCompleteSubject} from '../util/rxjs-util';
@@ -101,7 +101,7 @@ export class SwitchableVideoController implements VideoControllerApi {
   destroy() {
     nextCompleteSubject(this._eventBreaker$);
     nextCompleteSubject(this._destroyed$);
-    destroyer(this._videoController)
+    destroyer(this._videoController);
   }
 
   protected switchToController(videoController: VideoControllerApi) {
@@ -117,179 +117,178 @@ export class SwitchableVideoController implements VideoControllerApi {
     videoController.onVideoLoaded$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onVideoLoaded$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onVideoLoading$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onVideoLoading$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onPlay$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onPlay$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onPause$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onPause$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onVideoTimeChange$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onVideoTimeChange$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onSeeking$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onSeeking$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onSeeked$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onSeeked$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onBuffering$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onBuffering$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onEnded$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onEnded$.next(value);
-      }
-    })
+      },
+    });
 
     // we have to skip first value as it is behaviour subject
     videoController.onAudioLoaded$.pipe(skip(0), takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onAudioLoaded$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onAudioSwitched$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onAudioSwitched$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onAudioContextChange$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onAudioContextChange$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onAudioRouting$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onAudioRouting$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onAudioPeakProcessorWorkletNodeMessage$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onAudioPeakProcessorWorkletNodeMessage$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onAudioWorkletNodeCreated$.pipe(skip(0), takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onAudioWorkletNodeCreated$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onVideoError$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onVideoError$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onVolumeChange$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onVolumeChange$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onFullscreenChange$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onFullscreenChange$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onVideoSafeZoneChange$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onVideoSafeZoneChange$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onPlaybackRateChange$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onPlaybackRateChange$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onHelpMenuChange$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onHelpMenuChange$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onVideoWindowPlaybackStateChange$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onVideoWindowPlaybackStateChange$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onPlaybackState$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onPlaybackState$.next(value);
-      }
-    })
+      },
+    });
 
     // we have to skip first value as it is behaviour subject
     videoController.onSubtitlesLoaded$.pipe(skip(0), takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onSubtitlesLoaded$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onSubtitlesCreate$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onSubtitlesCreate$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onSubtitlesHide$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onSubtitlesHide$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onSubtitlesRemove$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onSubtitlesRemove$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onSubtitlesShow$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onSubtitlesShow$.next(value);
-      }
-    })
+      },
+    });
 
     videoController.onThumbnailVttUrlChanged$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onThumbnailVttUrlChanged$.next(value);
-      }
-    })
-
+      },
+    });
   }
 
   addSafeZone(videoSafeZone: VideoSafeZone): Observable<VideoSafeZone> {
@@ -305,7 +304,7 @@ export class SwitchableVideoController implements VideoControllerApi {
   }
 
   calculateTimeToFrame(time: number): number {
-    return this._videoController.calculateTimeToFrame(time)
+    return this._videoController.calculateTimeToFrame(time);
   }
 
   clearSafeZones(): Observable<void> {
@@ -424,6 +423,10 @@ export class SwitchableVideoController implements VideoControllerApi {
     return this._videoController.loadVideoInternal(sourceUrl, frameRate, options, optionsInternal);
   }
 
+  dispatchVideoTimeChange(): void {
+    return this._videoController.dispatchVideoTimeChange();
+  }
+
   loadVideo(sourceUrl: string, frameRate: number | string, options?: VideoLoadOptions): Observable<Video> {
     return this._videoController.loadVideo(sourceUrl, frameRate, options);
   }
@@ -433,7 +436,7 @@ export class SwitchableVideoController implements VideoControllerApi {
   }
 
   mute(): Observable<void> {
-    return this._videoController.mute()
+    return this._videoController.mute();
   }
 
   parseTimecodeToFrame(timecode: string): number {
@@ -453,15 +456,15 @@ export class SwitchableVideoController implements VideoControllerApi {
   }
 
   prependHelpMenuGroup(helpMenuGroup: HelpMenuGroup): Observable<void> {
-    return this._videoController.prependHelpMenuGroup(helpMenuGroup)
+    return this._videoController.prependHelpMenuGroup(helpMenuGroup);
   }
 
   clearHelpMenuGroups(): Observable<void> {
-    return this._videoController.clearHelpMenuGroups()
+    return this._videoController.clearHelpMenuGroups();
   }
 
   removeSafeZone(id: string): Observable<void> {
-    return this._videoController.removeSafeZone(id)
+    return this._videoController.removeSafeZone(id);
   }
 
   seekFromCurrentFrame(framesCount: number): Observable<boolean> {
@@ -497,15 +500,15 @@ export class SwitchableVideoController implements VideoControllerApi {
   }
 
   setActiveAudioTrack(id: string): Observable<void> {
-    return this._videoController.setActiveAudioTrack(id)
+    return this._videoController.setActiveAudioTrack(id);
   }
 
   setPlaybackRate(playbackRate: number): Observable<void> {
-    return this._videoController.setPlaybackRate(playbackRate)
+    return this._videoController.setPlaybackRate(playbackRate);
   }
 
   setVolume(volume: number): Observable<void> {
-    return this._videoController.setVolume(volume)
+    return this._videoController.setVolume(volume);
   }
 
   toggleFullscreen(): Observable<void> {
@@ -513,7 +516,7 @@ export class SwitchableVideoController implements VideoControllerApi {
   }
 
   toggleMuteUnmute(): Observable<void> {
-    return this._videoController.toggleMuteUnmute()
+    return this._videoController.toggleMuteUnmute();
   }
 
   togglePlayPause(): Observable<void> {
@@ -521,7 +524,7 @@ export class SwitchableVideoController implements VideoControllerApi {
   }
 
   unmute(): Observable<void> {
-    return this._videoController.unmute()
+    return this._videoController.unmute();
   }
 
   getVideoWindowPlaybackState(): VideoWindowPlaybackState {
@@ -565,19 +568,23 @@ export class SwitchableVideoController implements VideoControllerApi {
   }
 
   removeSubtitlesTrack(id: string): Observable<void> {
-    return this._videoController.removeSubtitlesTrack(id)
+    return this._videoController.removeSubtitlesTrack(id);
   }
 
   showSubtitlesTrack(id: string): Observable<void> {
     return this._videoController.showSubtitlesTrack(id);
   }
 
-  createAudioContext(inputsNumber: number, outputsNumber?: number): Observable<void> {
-    return this._videoController.createAudioContext(inputsNumber, outputsNumber);
+  createAudioContext(contextOptions?: AudioContextOptions): Observable<void> {
+    return this._videoController.createAudioContext(contextOptions);
   }
 
-  createAudioContextWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void> {
-    return this._videoController.createAudioContextWithOutputsResolver(inputsNumber, outputsNumberResolver);
+  createAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<void> {
+    return this._videoController.createAudioRouter(inputsNumber, outputsNumber);
+  }
+
+  createAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void> {
+    return this._videoController.createAudioRouterWithOutputsResolver(inputsNumber, outputsNumberResolver);
   }
 
   getAudioInputOutputNodes(): AudioInputOutputNode[][] {
@@ -601,12 +608,22 @@ export class SwitchableVideoController implements VideoControllerApi {
   }
 
   getThumbnailVttUrl(): string | undefined {
-      return this._videoController.getThumbnailVttUrl();
+    return this._videoController.getThumbnailVttUrl();
   }
 
   loadThumbnailVttUrl(thumbnailVttUrl: string): Observable<void> {
     return this._videoController.loadThumbnailVttUrl(thumbnailVttUrl);
   }
 
-}
+  getHTMLAudioUtilElement(): HTMLAudioElement {
+    return this._videoController.getHTMLAudioUtilElement();
+  }
 
+  enablePiP(): Observable<void> {
+    return this._videoController.enablePiP();
+  }
+
+  disablePiP(): Observable<void> {
+    return this._videoController.disablePiP();
+  }
+}

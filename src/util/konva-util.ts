@@ -18,7 +18,7 @@ import Konva from 'konva';
 
 export class KonvaUtil {
   public static unlisten(...nodes: (Konva.Node | undefined)[]) {
-    nodes.forEach(node => {
+    nodes.forEach((node) => {
       if (node) {
         try {
           for (let eventListenersKey in node.eventListeners) {
@@ -28,7 +28,7 @@ export class KonvaUtil {
           console.error(e);
         }
       }
-    })
+    });
   }
 }
 

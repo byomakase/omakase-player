@@ -26,7 +26,7 @@ import {completeUnsubscribeSubjects} from '../../util/rxjs-util';
 import {StringUtil} from '../../util/string-util';
 import {konvaUnlistener} from '../../util/konva-util';
 import {MarkerHandleVerticals, MarkerStyle} from './marker-types';
-import { MarkerApi } from '../../api/marker-api';
+import {MarkerApi} from '../../api/marker-api';
 import {CryptoUtil} from '../../util/crypto-util';
 
 export interface MarkerConfig<T extends TimeObservation, S extends MarkerStyle> extends ComponentConfig<S> {
@@ -61,7 +61,10 @@ export interface Marker extends MarkerApi, KonvaComponent<MarkerConfig<any, any>
   set style(s: MarkerStyle);
 }
 
-export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConfig<T, S>, S extends MarkerStyle, E extends MarkerChangeEvent> extends BaseKonvaComponent<C, S, Konva.Group> implements Marker {
+export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConfig<T, S>, S extends MarkerStyle, E extends MarkerChangeEvent>
+  extends BaseKonvaComponent<C, S, Konva.Group>
+  implements Marker
+{
   public readonly onClick$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
   public readonly onMouseEnter$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
   public readonly onMouseLeave$: Subject<MarkerEvent> = new Subject<MarkerEvent>();
@@ -93,24 +96,24 @@ export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConf
     this._group = new Konva.Group();
 
     this._group.on('click', (event) => {
-      this.onClick$.next({})
-    })
+      this.onClick$.next({});
+    });
 
     this._group.on('mouseenter', (event) => {
-      this.onMouseEnter$.next({})
-    })
+      this.onMouseEnter$.next({});
+    });
 
     this._group.on('mouseleave', (event) => {
-      this.onMouseLeave$.next({})
-    })
+      this.onMouseLeave$.next({});
+    });
 
     this._group.on('mouseover', (event) => {
-      this.onMouseOver$.next({})
-    })
+      this.onMouseOver$.next({});
+    });
 
     this._group.on('mouseout', (event) => {
-      this.onMouseOut$.next({})
-    })
+      this.onMouseOut$.next({});
+    });
   }
 
   protected provideKonvaNode(): Konva.Group {
@@ -130,18 +133,9 @@ export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConf
 
     this.onDestroy$.next({});
 
-    konvaUnlistener(
-      this._group
-    )
+    konvaUnlistener(this._group);
 
-    completeUnsubscribeSubjects(
-      this.onChange$,
-      this.onClick$,
-      this.onMouseEnter$,
-      this.onMouseLeave$,
-      this.onMouseOver$,
-      this.onMouseOut$
-    )
+    completeUnsubscribeSubjects(this.onChange$, this.onClick$, this.onMouseEnter$, this.onMouseLeave$, this.onMouseOver$, this.onMouseOut$);
   }
 
   attachToTimeline(timeline: Timeline, markerLane: MarkerLane) {
@@ -162,26 +156,26 @@ export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConf
         return {
           area: {
             y: 0,
-            height: timelineTimecodedRect.height
+            height: timelineTimecodedRect.height,
           },
           handle: {
-            y: timecodedRect.y + (timecodedRect.height / 2),
-            height: 0
-          }
-        }
+            y: timecodedRect.y + timecodedRect.height / 2,
+            height: 0,
+          },
+        };
       case 'lane':
         return {
           area: {
             y: timecodedRect.y,
-            height: timecodedRect.height
+            height: timecodedRect.height,
           },
           handle: {
             y: timecodedRect.height / 2,
-            height: 0
-          }
-        }
+            height: 0,
+          },
+        };
       default:
-        throw new Error('Marker renderType incorrect')
+        throw new Error('Marker renderType incorrect');
     }
   }
 
@@ -193,7 +187,7 @@ export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConf
     let newX = this._timeline.constrainTimelinePosition(newPosition.x);
     return {
       x: newX,
-      y: this.getMarkerHandleVerticals().area.y  // restrict vertical movement
+      y: this.getMarkerHandleVerticals().area.y, // restrict vertical movement
     };
   }
 
@@ -239,5 +233,4 @@ export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConf
   set data(data: Record<string, any> | undefined) {
     this._data = data;
   }
-
 }

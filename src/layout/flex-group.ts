@@ -20,11 +20,11 @@ import {Align, Direction, Justify, Overflow, Wrap} from 'yoga-layout';
 import {YogaProvider} from '../common/yoga-provider';
 
 export interface FlexGroupConfig extends FlexNodeConfig {
-  flexWrap?: FlexWrap,
-  flexDirection?: FlexDirection,
-  justifyContent?: FlexJustifyContent
-  alignItems?: FlexAlign,
-  alignContent?: FlexAlign
+  flexWrap?: FlexWrap;
+  flexDirection?: FlexDirection;
+  justifyContent?: FlexJustifyContent;
+  alignItems?: FlexAlign;
+  alignContent?: FlexAlign;
 }
 
 export interface FlexGroupContentNode<T extends FlexContentNode> extends FlexContentNode {
@@ -48,29 +48,29 @@ export abstract class BaseFlexGroup<C extends FlexGroupConfig, T extends FlexGro
     super.processOptions();
 
     if (this._config.flexWrap) {
-      this.setFlexWrap(this._config.flexWrap)
+      this.setFlexWrap(this._config.flexWrap);
     } else {
-      this.setFlexWrap('WRAP_NO_WRAP')
+      this.setFlexWrap('WRAP_NO_WRAP');
     }
 
     if (this._config.flexDirection) {
-      this.setFlexDirection(this._config.flexDirection)
+      this.setFlexDirection(this._config.flexDirection);
     } else {
-      this.setFlexDirection('FLEX_DIRECTION_ROW')
+      this.setFlexDirection('FLEX_DIRECTION_ROW');
     }
 
     if (this._config.justifyContent) {
-      this.setJustifyContent(this._config.justifyContent)
+      this.setJustifyContent(this._config.justifyContent);
     } else {
-      this.setJustifyContent('JUSTIFY_FLEX_START')
+      this.setJustifyContent('JUSTIFY_FLEX_START');
     }
 
     if (this._config.alignItems) {
-      this.setAlignItems(this._config.alignItems)
+      this.setAlignItems(this._config.alignItems);
     }
 
     if (this._config.alignContent) {
-      this.setAlignContent(this._config.alignContent)
+      this.setAlignContent(this._config.alignContent);
     }
   }
 
@@ -81,23 +81,23 @@ export abstract class BaseFlexGroup<C extends FlexGroupConfig, T extends FlexGro
   }
 
   addChildren(...flexNodes: FlexNode<any>[]): BaseFlexGroup<C, T> {
-    flexNodes.forEach(flexNode => {
+    flexNodes.forEach((flexNode) => {
       this.addChildInternal(flexNode, this._children.length, false);
-    })
+    });
     this.refreshLayoutFromRoot();
     return this;
   }
 
   addChildInternal(flexNode: FlexNode<any>, index: number, refreshLayout: boolean = true): BaseFlexGroup<C, T> {
     if (flexNode === void 0) {
-      throw new Error(`Flex node is undefined`)
+      throw new Error(`Flex node is undefined`);
     }
 
-    if (this._children.find(p => p === flexNode)) {
-      throw new Error(`Flex node already added as a child`)
+    if (this._children.find((p) => p === flexNode)) {
+      throw new Error(`Flex node already added as a child`);
     }
 
-    this._children.splice(index, 0, flexNode)
+    this._children.splice(index, 0, flexNode);
     this._yogaNode.insertChild(flexNode.yogaNode, index);
 
     flexNode.setParent(this);
@@ -120,11 +120,11 @@ export abstract class BaseFlexGroup<C extends FlexGroupConfig, T extends FlexGro
 
   protected _removeChild(flexNode: FlexNode<any>, refreshLayout: boolean) {
     if (flexNode === void 0) {
-      throw new Error(`Flex node is undefined`)
+      throw new Error(`Flex node is undefined`);
     }
 
-    let index = this._children.findIndex(p => p === flexNode);
-    this._children.splice(index, 1)
+    let index = this._children.findIndex((p) => p === flexNode);
+    this._children.splice(index, 1);
     this._yogaNode.removeChild(flexNode.yogaNode);
 
     this._contentNode.removeContentChild(flexNode.contentNode);
@@ -141,20 +141,20 @@ export abstract class BaseFlexGroup<C extends FlexGroupConfig, T extends FlexGro
     let layout = this.getLayout();
 
     if (this._children.length > 0) {
-      this._children.forEach(child => {
+      this._children.forEach((child) => {
         child.refreshLayout();
-      })
+      });
     }
 
-    this._contentNode.updateLayout(layout)
+    this._contentNode.updateLayout(layout);
 
     return this;
   }
 
   override destroy(): void {
-    this._children.forEach(child => {
+    this._children.forEach((child) => {
       child.destroy();
-    })
+    });
     super.destroy();
   }
 
@@ -186,5 +186,4 @@ export abstract class BaseFlexGroup<C extends FlexGroupConfig, T extends FlexGro
   getChildren(): FlexNode<any>[] {
     return this._children;
   }
-
 }

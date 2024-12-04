@@ -16,14 +16,16 @@
 
 export class ColorUtil {
   static randomHexColor(): string {
-    return `#${Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0')}`;
+    return `#${Math.floor(Math.random() * 0xffffff)
+      .toString(16)
+      .padStart(6, '0')}`;
   }
 
   static inverseFillGradient(gradient: (string | number)[]) {
-    return gradient.map(p => (typeof p === 'number') ? (1 - p) : p)
+    return gradient.map((p) => (typeof p === 'number' ? 1 - p : p));
   }
 
-  static hexToRgb(hex: string): { r: number, g: number, b: number } | undefined {
+  static hexToRgb(hex: string): {r: number; g: number; b: number} | undefined {
     // Remove the leading '#' if present
     hex = hex.replace(/^#/, '');
 
@@ -50,7 +52,7 @@ export class ColorUtil {
     return {r, g, b};
   }
 
-  static getLuminance({r, g, b}: { r: number, g: number, b: number }): number {
+  static getLuminance({r, g, b}: {r: number; g: number; b: number}): number {
     // Normalize the RGB values to the range [0, 1]
     const normalize = (value: number) => value / 255;
     r = normalize(r);
@@ -69,7 +71,7 @@ export class ColorUtil {
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   }
 
-  static rgbToHex({r, g, b}: { r: number, g: number, b: number }): string {
+  static rgbToHex({r, g, b}: {r: number; g: number; b: number}): string {
     const componentToHex = (c: number) => {
       const hex = c.toString(16);
       return hex.length === 1 ? '0' + hex : hex;
@@ -94,23 +96,18 @@ export class ColorUtil {
 
     if (rgb) {
       const adjust = (value: number, percentage: number) => {
-        return percentage >= 0
-          ? value + (255 - value) * (percentage / 100)
-          : value * (1 + (percentage / 100));
+        return percentage >= 0 ? value + (255 - value) * (percentage / 100) : value * (1 + percentage / 100);
       };
 
       const adjustedRgb = {
         r: Math.round(adjust(rgb.r, percent)),
         g: Math.round(adjust(rgb.g, percent)),
-        b: Math.round(adjust(rgb.b, percent))
+        b: Math.round(adjust(rgb.b, percent)),
       };
 
       return ColorUtil.rgbToHex(adjustedRgb);
-
     } else {
       return hex;
     }
   }
-
-
 }

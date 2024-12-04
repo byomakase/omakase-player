@@ -31,7 +31,6 @@ import {ConfigWithOptionalStyle} from '../layout';
 import {AuthenticationData} from '../authentication/model';
 
 export interface OmakasePlayerApi extends Api, OmakaseEventEmitter<OmakasePlayerEventMap> {
-
   /**
    * Loads new video
    * @param videoSourceUrl Video manifest URL

@@ -33,17 +33,13 @@ export class KonvaFlexContentNode implements FlexContentNode {
       width: layout.width,
       height: layout.height,
       x: layout.left,
-      y: layout.top
-    })
+      y: layout.top,
+    });
   }
 
   destroy(): void {
-    destroyer(
-      this._konvaNode
-    )
-    nullifier(
-      this._konvaNode
-    )
+    destroyer(this._konvaNode);
+    nullifier(this._konvaNode);
   }
 
   get konvaNode(): Konva.Group | Konva.Shape {
@@ -59,14 +55,14 @@ export class KonvaFlexItem<T extends KonvaFlexContentNode> extends BaseFlexNode<
   }
 
   static of(config: FlexNodeConfig, konvaNode: Konva.Group | Konva.Shape): KonvaFlexItem<KonvaFlexContentNode> {
-    return new KonvaFlexItem(config, new KonvaFlexContentNode(konvaNode))
+    return new KonvaFlexItem(config, new KonvaFlexContentNode(konvaNode));
   }
 }
 
 export interface KonvaFlexGroupContentNodeConfig {
-  konvaNode: Konva.Group,
-  konvaBgNode?: Konva.Rect,
-  clip?: boolean
+  konvaNode: Konva.Group;
+  konvaBgNode?: Konva.Rect;
+  clip?: boolean;
 }
 
 export class KonvaFlexGroupContentNode implements FlexGroupContentNode<KonvaFlexContentNode> {
@@ -83,8 +79,8 @@ export class KonvaFlexGroupContentNode implements FlexGroupContentNode<KonvaFlex
       this._konvaBgNode.setAttrs({
         listening: false,
         perfectDrawEnabled: false,
-      })
-      this._konvaNode.add(this._konvaBgNode)
+      });
+      this._konvaNode.add(this._konvaBgNode);
     }
   }
 
@@ -94,21 +90,20 @@ export class KonvaFlexGroupContentNode implements FlexGroupContentNode<KonvaFlex
       height: layout.height,
       x: layout.left,
       y: layout.top,
-    })
+    });
 
     if (this._config.clip) {
       this._konvaNode.clipFunc((ctx) => {
-        ctx.rect(0, 0, layout.width, layout.height)
-      })
+        ctx.rect(0, 0, layout.width, layout.height);
+      });
     }
 
     if (this._konvaBgNode) {
       this._konvaBgNode.setAttrs({
         width: layout.width,
         height: layout.height,
-      })
+      });
     }
-
   }
 
   addContentChild(flexContentNode: KonvaFlexContentNode, index: number) {
@@ -118,7 +113,7 @@ export class KonvaFlexGroupContentNode implements FlexGroupContentNode<KonvaFlex
   }
 
   removeContentChild(flexContentNode: KonvaFlexContentNode) {
-    let children = this._konvaNode.getChildren(p => p === flexContentNode.konvaNode);
+    let children = this._konvaNode.getChildren((p) => p === flexContentNode.konvaNode);
     if (children && children.length === 1) {
       let child = children[0];
       child.destroy();
@@ -128,9 +123,7 @@ export class KonvaFlexGroupContentNode implements FlexGroupContentNode<KonvaFlex
   destroy(): void {
     if (this._konvaNode) {
       this._konvaNode.destroy();
-      nullifier(
-        this._konvaNode
-      )
+      nullifier(this._konvaNode);
     }
   }
 
@@ -143,9 +136,7 @@ export class KonvaFlexGroupContentNode implements FlexGroupContentNode<KonvaFlex
   }
 }
 
-export interface KonvaFlexGroupConfig extends FlexGroupConfig, KonvaFlexGroupContentNodeConfig {
-
-}
+export interface KonvaFlexGroupConfig extends FlexGroupConfig, KonvaFlexGroupContentNodeConfig {}
 
 export class KonvaFlexGroup extends BaseFlexGroup<FlexGroupConfig, KonvaFlexGroupContentNode> {
   constructor(config: FlexGroupConfig, contentNode: KonvaFlexGroupContentNode) {
@@ -153,6 +144,6 @@ export class KonvaFlexGroup extends BaseFlexGroup<FlexGroupConfig, KonvaFlexGrou
   }
 
   static of(config: KonvaFlexGroupConfig): KonvaFlexGroup {
-    return new KonvaFlexGroup(config, new KonvaFlexGroupContentNode(config))
+    return new KonvaFlexGroup(config, new KonvaFlexGroupContentNode(config));
   }
 }

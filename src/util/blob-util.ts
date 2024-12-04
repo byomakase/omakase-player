@@ -15,7 +15,6 @@
  */
 
 export class BlobUtil {
-
   private static _blobs: Set<string> = new Set();
 
   static createBlob(blobParts: BlobPart[], options?: BlobPropertyBag): Blob {

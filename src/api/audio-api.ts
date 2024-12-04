@@ -78,6 +78,12 @@ export interface AudioApi extends Api {
 
   /**
    * Creates AudioContext. {@link AudioContext}.resume() is invoked on first video play
+   * @param contextOptions
+   */
+  createAudioContext(contextOptions?: AudioContextOptions): Observable<void>;
+
+  /**
+   * Creates AudioSplitterNode and AudioMergerMode configured for routing between {@link inputsNumber} and {@link outputsNumber}.
    *
    * @param inputsNumber Number of input channels. Implicitly created {@link ChannelSplitterNode} is configured with {@link inputsNumber}.
    * @param outputsNumber Number of output channels. Implicitly created {@link ChannelMergerNode} is configured with {@link outputsNumber}. If not provided {@link outputsNumber} is resolved by calling defaultAudioOutputsResolver function:
@@ -95,15 +101,15 @@ export interface AudioApi extends Api {
    * }
    * </pre>
    */
-  createAudioContext(inputsNumber: number, outputsNumber?: number): Observable<void>;
+  createAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<void>;
 
   /**
    * Creates AudioContext. {@link AudioContext}.resume() is invoked on first video play
    *
-   * @param inputsNumber See {@link createAudioContext}
+   * @param inputsNumber See {@link createAudioRouter}
    * @param outputsNumberResolver Function to resolve outputsNumber. Provides {@link AudioContext}.destination.maxChannelCount as input argument
    */
-  createAudioContextWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void>;
+  createAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void>;
 
   /**
    * @returns Matrix of {@link AudioInputOutputNode}s

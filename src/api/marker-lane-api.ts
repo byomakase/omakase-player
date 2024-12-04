@@ -25,8 +25,6 @@ import {ConfigWithOptionalStyle} from '../layout';
 import {MarkerAwareApi} from './marker-aware-api';
 
 export interface MarkerLaneApi extends MarkerAwareApi, VttAwareApi<MarkerVttCue, MarkerVttFile> {
-
-
   /**
    *  Fires on marker focus
    *  @readonly

@@ -50,8 +50,8 @@ const configDefault: Omit<AudioTrackLaneItemConfig, 'audioVttCue' | 'x' | 'width
     visible: true,
     maxSampleFillLinearGradientColorStops: Constants.FILL_LINEAR_GRADIENT_AUDIO_PEAK,
     minSampleFillLinearGradientColorStops: ColorUtil.inverseFillGradient(Constants.FILL_LINEAR_GRADIENT_AUDIO_PEAK),
-  }
-}
+  },
+};
 
 export class AudioTrackLaneItem extends BaseKonvaComponent<AudioTrackLaneItemConfig, AudioTrackLaneItemStyle, Konva.Group> implements HasRectMeasurement {
   private _group: Konva.Group;
@@ -97,8 +97,8 @@ export class AudioTrackLaneItem extends BaseKonvaComponent<AudioTrackLaneItemCon
       fillLinearGradientColorStops: this.style.maxSampleFillLinearGradientColorStops,
       perfectDrawEnabled: false,
       shadowForStrokeEnabled: false,
-      hitStrokeWidth: 0
-    })
+      hitStrokeWidth: 0,
+    });
 
     this._minSampleBar = KonvaFactory.createRect({
       x: 0,
@@ -112,11 +112,11 @@ export class AudioTrackLaneItem extends BaseKonvaComponent<AudioTrackLaneItemCon
       fillLinearGradientColorStops: this.style.minSampleFillLinearGradientColorStops,
       perfectDrawEnabled: false,
       shadowForStrokeEnabled: false,
-      hitStrokeWidth: 0
-    })
+      hitStrokeWidth: 0,
+    });
 
-    this._group.add(this._maxSampleBar)
-    this._group.add(this._minSampleBar)
+    this._group.add(this._maxSampleBar);
+    this._group.add(this._minSampleBar);
   }
 
   protected provideKonvaNode(): Konva.Group {
@@ -124,18 +124,25 @@ export class AudioTrackLaneItem extends BaseKonvaComponent<AudioTrackLaneItemCon
   }
 
   private resolveMaxSampleBarHeight() {
-    return new Decimal(this._vttCue.maxSample).mul(this.style.height / 2).toDecimalPlaces(2).toNumber()
+    return new Decimal(this._vttCue.maxSample)
+      .mul(this.style.height / 2)
+      .toDecimalPlaces(2)
+      .toNumber();
   }
 
   private resolveMinSampleBarHeight() {
-    return new Decimal(this._vttCue.minSample).abs().mul(this.style.height / 2).toDecimalPlaces(2).toNumber()
+    return new Decimal(this._vttCue.minSample)
+      .abs()
+      .mul(this.style.height / 2)
+      .toDecimalPlaces(2)
+      .toNumber();
   }
 
   setPosition(position: WithOptionalPartial<Position, 'y'>) {
     this._group.position({
       x: position.x,
-      y: 0
-    })
+      y: 0,
+    });
   }
 
   getPosition(): Position {
@@ -149,7 +156,7 @@ export class AudioTrackLaneItem extends BaseKonvaComponent<AudioTrackLaneItemCon
   getRect(): RectMeasurement {
     return {
       ...this.getPosition(),
-      ...this.getDimension()
+      ...this.getDimension(),
     };
   }
 
@@ -160,8 +167,6 @@ export class AudioTrackLaneItem extends BaseKonvaComponent<AudioTrackLaneItemCon
   override destroy() {
     super.destroy();
 
-    nullifier(
-      this._vttCue
-    )
+    nullifier(this._vttCue);
   }
 }

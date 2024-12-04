@@ -53,9 +53,9 @@ const configDefault: Omit<BarChartLaneItemConfig, 'cue' | 'value' | 'valueScale'
     visible: true,
     fillLinearGradientColorStops: Constants.FILL_LINEAR_GRADIENT_AUDIO_PEAK,
     paddingX: 2,
-    cornerRadius: 0
-  }
-}
+    cornerRadius: 0,
+  },
+};
 
 export class BarChartLaneItem extends BaseKonvaComponent<BarChartLaneItemConfig, BarChartLaneItemStyle, Konva.Group> {
   public readonly onClick$: Subject<ChartCueEvent> = new Subject<ChartCueEvent>();
@@ -82,11 +82,11 @@ export class BarChartLaneItem extends BaseKonvaComponent<BarChartLaneItemConfig,
       width: this.config.width,
       height: this.style.height,
       visible: this.style.visible,
-      listening: this.config.listening
+      listening: this.config.listening,
     });
 
-    if ((this.style.paddingX) >= this.config.width) {
-      throw new Error('Horizontal padding is larger than width')
+    if (this.style.paddingX >= this.config.width) {
+      throw new Error('Horizontal padding is larger than width');
     }
 
     let barGroup = new Konva.Group({
@@ -99,22 +99,24 @@ export class BarChartLaneItem extends BaseKonvaComponent<BarChartLaneItemConfig,
     let valueRatioDecimal = new Decimal(this.config.value).div(this.config.valueScale);
     let valueHeightExact = valueRatioDecimal.mul(this._group.height()).toNumber();
 
-    barGroup.add(KonvaFactory.createRect({
-      x: this.style.paddingX / 2,
-      y: barGroup.height() - valueHeightExact,
-      width: barGroup.width() - this.style.paddingX,
-      height: valueHeightExact,
-      fillLinearGradientColorStops: this.style.fillLinearGradientColorStops,
-      fillLinearGradientStartPoint: {x: 0, y: -(barGroup.height() - valueHeightExact)},
-      fillLinearGradientEndPoint: {x: 0, y: valueHeightExact},
-      cornerRadius: [this.style.cornerRadius, this.style.cornerRadius, this.style.cornerRadius, this.style.cornerRadius],
-    }))
+    barGroup.add(
+      KonvaFactory.createRect({
+        x: this.style.paddingX / 2,
+        y: barGroup.height() - valueHeightExact,
+        width: barGroup.width() - this.style.paddingX,
+        height: valueHeightExact,
+        fillLinearGradientColorStops: this.style.fillLinearGradientColorStops,
+        fillLinearGradientStartPoint: {x: 0, y: -(barGroup.height() - valueHeightExact)},
+        fillLinearGradientEndPoint: {x: 0, y: valueHeightExact},
+        cornerRadius: [this.style.cornerRadius, this.style.cornerRadius, this.style.cornerRadius, this.style.cornerRadius],
+      })
+    );
 
     this._group.on('click', (event) => {
       this.onClick$.next({
-        cue: this._cue
-      })
-    })
+        cue: this._cue,
+      });
+    });
   }
 
   protected provideKonvaNode(): Konva.Group {
@@ -124,8 +126,8 @@ export class BarChartLaneItem extends BaseKonvaComponent<BarChartLaneItemConfig,
   set barPosition(position: WithOptionalPartial<Position, 'y'>) {
     this._group.position({
       x: position.x,
-      y: 0
-    })
+      y: 0,
+    });
   }
 
   get barPosition(): Position {
@@ -138,8 +140,6 @@ export class BarChartLaneItem extends BaseKonvaComponent<BarChartLaneItemConfig,
 
   override destroy() {
     super.destroy();
-    nullifier(
-      this._cue
-    );
+    nullifier(this._cue);
   }
 }

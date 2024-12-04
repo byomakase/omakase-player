@@ -45,7 +45,7 @@ import {
   VideoSeekingEvent,
   VideoTimeChangeEvent,
   VideoVolumeEvent,
-  VideoWindowPlaybackStateChangeEvent
+  VideoWindowPlaybackStateChangeEvent,
 } from '../types';
 import {PlaybackState, Video, VideoLoadOptions} from './index';
 import {BufferedTimespan} from './video-controller';
@@ -96,110 +96,131 @@ export class RemoteVideoController implements VideoControllerApi {
     this._messageChannel = messageChannel;
     this._attachVideoWindowHook = attachVideoWindowHook;
 
-    this._messageChannel.createRequestResponseStream('VideoControllerApi.attachVideoWindow').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: ([request, sendResponseHook]) => {
-        sendResponseHook(this.attachVideoWindow())
-      }
-    })
+    this._messageChannel
+      .createRequestResponseStream('VideoControllerApi.attachVideoWindow')
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this.attachVideoWindow());
+        },
+      });
 
-    this._messageChannel.createRequestStream('VideoControllerApi.onVideoLoaded$').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: (value) => {
-        this._get_onVideoLoaded$.next(value)
-        this._currentTime = 0;
-      }
-    })
+    this._messageChannel
+      .createRequestStream('VideoControllerApi.onVideoLoaded$')
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: (value) => {
+          this._get_onVideoLoaded$.next(value);
+          this._currentTime = 0;
+        },
+      });
 
-    this._messageChannel.createRequestStream('VideoControllerApi.onSubtitlesLoaded$').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: (value) => this._get_onSubtitlesLoaded$.next(value)
-    })
+    this._messageChannel
+      .createRequestStream('VideoControllerApi.onSubtitlesLoaded$')
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: (value) => this._get_onSubtitlesLoaded$.next(value),
+      });
 
-    this._messageChannel.createRequestStream('VideoControllerApi.onAudioWorkletNodeCreated$').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: (value) => this._get_onAudioWorkletNodeCreated$.next(value)
-    })
+    this._messageChannel
+      .createRequestStream('VideoControllerApi.onAudioWorkletNodeCreated$')
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: (value) => this._get_onAudioWorkletNodeCreated$.next(value),
+      });
 
-    this._messageChannel.createRequestStream('VideoControllerApi.onAudioLoaded$').pipe(takeUntil(this._destroyed$)).subscribe({
-      next: (value) => this._get_onAudioLoaded$.next(value)
-    })
+    this._messageChannel
+      .createRequestStream('VideoControllerApi.onAudioLoaded$')
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: (value) => this._get_onAudioLoaded$.next(value),
+      });
 
     this.onPlaybackState$.pipe(takeUntil(this._destroyed$)).subscribe({
       next: (value) => {
         this._playbackState = value;
-      }
-    })
+      },
+    });
 
     this.onPlaybackRateChange$.pipe(takeUntil(this._destroyed$)).subscribe({
       next: (value) => {
         this._videoElementPlaybackRate = value.playbackRate;
-      }
-    })
+      },
+    });
 
     this.onVideoTimeChange$.pipe(takeUntil(this._destroyed$)).subscribe({
       next: (value) => {
         this._currentTime = value.currentTime;
-      }
-    })
+      },
+    });
 
     this.onVolumeChange$.pipe(takeUntil(this._destroyed$)).subscribe({
       next: (value) => {
         this._videoElementVolume = value.volume;
-        this._videoElementMuted = value.muted
-      }
-    })
+        this._videoElementMuted = value.muted;
+      },
+    });
 
     this.onBuffering$.pipe(takeUntil(this._destroyed$)).subscribe({
       next: (value) => {
         this._bufferedTimespans = value.bufferedTimespans;
-      }
-    })
+      },
+    });
 
-    merge(this.onSubtitlesLoaded$, this.onSubtitlesCreate$, this.onSubtitlesRemove$, this.onSubtitlesShow$, this.onSubtitlesHide$).pipe(takeUntil(this._destroyed$)).subscribe({
-      next: (event) => {
-        if (event) {
-          this._subtitlesTracks = event.tracks;
-          this._activeSubtitlesTrack = event.currentTrack
-        }
-      }
-    })
+    merge(this.onSubtitlesLoaded$, this.onSubtitlesCreate$, this.onSubtitlesRemove$, this.onSubtitlesShow$, this.onSubtitlesHide$)
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: (event) => {
+          if (event) {
+            this._subtitlesTracks = event.tracks;
+            this._activeSubtitlesTrack = event.currentTrack;
+          }
+        },
+      });
 
-    merge(this.onAudioLoaded$, this.onAudioSwitched$).pipe(takeUntil(this._destroyed$)).subscribe({
-      next: (value) => {
-        if (value) {
-          this._activeAudioTrack = value.activeAudioTrack;
-        }
-      }
-    })
+    merge(this.onAudioLoaded$, this.onAudioSwitched$)
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: (value) => {
+          if (value) {
+            this._activeAudioTrack = value.activeAudioTrack;
+          }
+        },
+      });
 
-    merge(this.onAudioContextChange$, this.onAudioRouting$).pipe(takeUntil(this._destroyed$)).subscribe({
-      next: (value) => {
-        if (value) {
-          this._audioInputOutputNodes = value.audioInputOutputNodes;
-        }
-      }
-    })
+    merge(this.onAudioContextChange$, this.onAudioRouting$)
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: (value) => {
+          if (value) {
+            this._audioInputOutputNodes = value.audioInputOutputNodes;
+          }
+        },
+      });
 
     this.onFullscreenChange$.pipe(takeUntil(this._destroyed$)).subscribe({
       next: (value) => {
         this._documentFullscreen = value.fullscreen;
-      }
-    })
+      },
+    });
 
     this.onVideoSafeZoneChange$.pipe(takeUntil(this._destroyed$)).subscribe({
       next: (value) => {
         this._videoSafeZones = value.videoSafeZones;
-      }
-    })
+      },
+    });
 
     this.onHelpMenuChange$.pipe(takeUntil(this._destroyed$)).subscribe({
       next: (value) => {
         this._videoHelpMenuGroups = value.helpMenuGroups;
-      }
-    })
+      },
+    });
 
     this.onThumbnailVttUrlChanged$.pipe(takeUntil(this._destroyed$)).subscribe({
       next: (value) => {
         this._thumbnailVttUrl = value?.thumbnailVttUrl;
-      }
-    })
+      },
+    });
   }
 
   get onVideoLoaded$(): BehaviorSubject<VideoLoadedEvent | undefined> {
@@ -314,20 +335,24 @@ export class RemoteVideoController implements VideoControllerApi {
     return this._get_onAudioWorkletNodeCreated$;
   }
 
-  get onThumbnailVttUrlChanged$(): Observable<ThumnbailVttUrlChangedEvent| undefined> {
+  get onThumbnailVttUrlChanged$(): Observable<ThumnbailVttUrlChangedEvent | undefined> {
     return this._messageChannel.createRequestStream('VideoControllerApi.onThumbnailVttUrlChanged$');
   }
 
   loadVideoInternal(sourceUrl: string, frameRate: number | string, options: VideoLoadOptions | undefined, optionsInternal: VideoLoadOptionsInternal): Observable<Video> {
-    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.loadVideoInternal', [sourceUrl, frameRate, options, optionsInternal])))
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.loadVideoInternal', [sourceUrl, frameRate, options, optionsInternal])));
+  }
+
+  dispatchVideoTimeChange(): void {
+    throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
   }
 
   loadVideo(sourceUrl: string, frameRate: string | number, options?: VideoLoadOptions | undefined): Observable<Video> {
-    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.loadVideo', [sourceUrl, frameRate, options])))
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.loadVideo', [sourceUrl, frameRate, options])));
   }
 
   reloadVideo(): Observable<Video> {
-    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.reloadVideo')))
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.reloadVideo')));
   }
 
   getPlaybackState(): PlaybackState | undefined {
@@ -426,7 +451,7 @@ export class RemoteVideoController implements VideoControllerApi {
   }
 
   togglePlayPause(): Observable<void> {
-    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.togglePlayPause')))
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.togglePlayPause')));
   }
 
   seekToFrame(frame: number): Observable<boolean> {
@@ -464,7 +489,7 @@ export class RemoteVideoController implements VideoControllerApi {
   formatToTimecode(time: number): string {
     this.validateVideoLoaded();
     time = Validators.videoTime()(time);
-    return TimecodeUtil.formatToTimecode(time, this.getVideo()!)
+    return TimecodeUtil.formatToTimecode(time, this.getVideo()!);
   }
 
   parseTimecodeToFrame(timecode: string): number {
@@ -619,12 +644,16 @@ export class RemoteVideoController implements VideoControllerApi {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.setActiveAudioTrack', [id])));
   }
 
-  createAudioContext(inputsNumber: number, outputsNumber?: number): Observable<void> {
-    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.createAudioContext', [inputsNumber, outputsNumber])));
+  createAudioContext(contextOptions?: AudioContextOptions): Observable<void> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.createAudioContext', [contextOptions])));
   }
 
-  createAudioContextWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void> {
-    throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode.');
+  createAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<void> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.createAudioRouter', [inputsNumber, outputsNumber])));
+  }
+
+  createAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void> {
+    throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
   }
 
   getAudioInputOutputNodes(): AudioInputOutputNode[][] {
@@ -640,7 +669,7 @@ export class RemoteVideoController implements VideoControllerApi {
   }
 
   getAudioPeakProcessorWorkletNode(): AudioWorkletNode | undefined {
-    throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode.');
+    throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
   }
 
   createAudioPeakProcessorWorkletNode(audioMeterStandard: AudioMeterStandard): Observable<void> {
@@ -648,11 +677,22 @@ export class RemoteVideoController implements VideoControllerApi {
   }
 
   getThumbnailVttUrl(): string | undefined {
-    return this._thumbnailVttUrl;   
+    return this._thumbnailVttUrl;
   }
 
   loadThumbnailVttUrl(thumbnailVttUrl: string): Observable<void> {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.loadThumbnailVttUrl', [thumbnailVttUrl])));
   }
 
+  getHTMLAudioUtilElement(): HTMLAudioElement {
+    throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
+  }
+
+  enablePiP(): Observable<void> {
+    throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
+  }
+
+  disablePiP(): Observable<void> {
+    throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
+  }
 }

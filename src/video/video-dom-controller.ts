@@ -35,6 +35,8 @@ import {ThumbnailVttFile} from '../vtt';
 import {AuthUtil} from '../util/auth-util';
 import 'media-chrome';
 import '../components';
+// @ts-ignore
+import silentWavBase64 from '../../assets/silent.wav.base64.txt?raw';
 
 const domClasses = {
   player: 'omakase-player',
@@ -44,6 +46,8 @@ const domClasses = {
   video: 'omakase-video',
   videoControls: 'omakase-video-controls',
   timecodeContainer: 'timecode-container',
+
+  audioUtil: `omakase-audio-util-${CryptoUtil.uuid()}`,
 
   buttonOverlayPlay: 'omakase-button-play',
   buttonOverlayPause: 'omakase-button-pause',
@@ -88,17 +92,16 @@ const domClasses = {
   mediaChromeCurrentTimecode: 'media-chrome-current-timecode',
   mediaChromePreviewTimecode: 'media-chrome-preview-timecode',
   mediaChromePreviewThumbnail: 'media-chrome-preview-thumbnail',
-  mediaChromePreviewWrapper: 'media-chrome-preview-wrapper'
-
-}
+  mediaChromePreviewWrapper: 'media-chrome-preview-wrapper',
+};
 
 export type MediaChromeVisibility = 'disabled' | 'enabled' | 'fullscreen-only';
 
 export interface VideoDomControllerConfig {
   playerHTMLElementId: string;
-  crossorigin: 'anonymous' | 'use-credentials',
-  detachedPlayer: boolean,
-  mediaChrome: MediaChromeVisibility,
+  crossorigin: 'anonymous' | 'use-credentials';
+  detachedPlayer: boolean;
+  mediaChrome: MediaChromeVisibility;
   mediaChromeHTMLElementId?: string;
   thumbnailVttUrl?: string;
   thumbnailFn?: (time: number) => string | undefined;
@@ -108,8 +111,8 @@ export const VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT: VideoDomControllerConfig = {
   playerHTMLElementId: 'omakase-player',
   crossorigin: 'anonymous',
   detachedPlayer: false,
-  mediaChrome: 'disabled'
-}
+  mediaChrome: 'disabled',
+};
 
 export class VideoDomController implements VideoDomControllerApi {
   public readonly onFullscreenChange$: Subject<VideoFullscreenChangeEvent> = new Subject<VideoFullscreenChangeEvent>();
@@ -123,7 +126,18 @@ export class VideoDomController implements VideoDomControllerApi {
   protected _videoController!: VideoControllerApi;
   protected _videoEventBreaker$!: Subject<void>;
 
+  /**
+   * Main video element
+   * @protected
+   */
   protected _videoElement!: HTMLVideoElement;
+
+  /**
+   * Silent audio element, used for keepalive
+   * @protected
+   */
+  protected _audioUtilElement!: HTMLAudioElement;
+
   protected _mediaControllerElement!: MediaController;
   protected _divPlayerWrapper!: HTMLElement;
   protected _divButtonOverlayPlay!: HTMLElement;
@@ -169,17 +183,21 @@ export class VideoDomController implements VideoDomControllerApi {
 
   protected _videoSafeZones: VideoSafeZone[] = [];
 
+  protected _silentWavUrl?: string;
+
   constructor(config: Partial<VideoDomControllerConfig>) {
     this._config = {
       ...VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT,
-      ...config
+      ...config,
     };
 
     this._divPlayer = DomUtil.getElementById<HTMLElement>(this._config.playerHTMLElementId);
 
     if (!this._divPlayer) {
-      throw new Error(`DOM <div> for player not found. ID provided: ${this._config.playerHTMLElementId}`)
+      throw new Error(`DOM <div> for player not found. ID provided: ${this._config.playerHTMLElementId}`);
     }
+
+    this._silentWavUrl = `data:${'audio/wav'};base64,${silentWavBase64}`;
 
     this.createDom();
 
@@ -190,9 +208,9 @@ export class VideoDomController implements VideoDomControllerApi {
         this._divPlayer.classList.remove(domClasses.playerFullscreen);
       }
       this.onFullscreenChange$.next({
-        fullscreen: this.isFullscreen()
-      })
-    }
+        fullscreen: this.isFullscreen(),
+      });
+    };
 
     Fullscreen.on('change', this._fullscreenChangeHandler);
   }
@@ -200,8 +218,7 @@ export class VideoDomController implements VideoDomControllerApi {
   private createDom() {
     this._divPlayer.classList.add(`${domClasses.player}`);
 
-    this._divPlayer.innerHTML =
-      `<div class="${domClasses.playerWrapper} media-chrome-${this._config.mediaChrome}">
+    this._divPlayer.innerHTML = `<div class="${domClasses.playerWrapper} media-chrome-${this._config.mediaChrome}">
           <media-controller>
               <video slot="media" class="${domClasses.video}" playsinline=""></video>
               <div slot="centered-chrome" class="${domClasses.videoControls}" noautohide>
@@ -243,10 +260,16 @@ export class VideoDomController implements VideoDomControllerApi {
 
           <div class="${domClasses.errorMessage} d-none">
           </div>
-      </div>`
+
+          <audio controls loop class="${domClasses.audioUtil} d-none">
+            <source src="${this._silentWavUrl}">
+          </audio>
+      </div>`;
 
     this._videoElement = this.getPlayerElement<HTMLVideoElement>(domClasses.video);
     this._videoElement.crossOrigin = this._config.crossorigin;
+
+    this._audioUtilElement = this.getPlayerElement<HTMLAudioElement>(domClasses.audioUtil);
 
     this._divPlayerWrapper = this.getPlayerElement<HTMLElement>(domClasses.playerWrapper);
     this._divButtonOverlayPlay = this.getPlayerElement<HTMLElement>(domClasses.buttonOverlayPlay);
@@ -289,12 +312,11 @@ export class VideoDomController implements VideoDomControllerApi {
     if (this._config.mediaChromeHTMLElementId) {
       const mediaChromeTemplate = DomUtil.getElementById<HTMLTemplateElement>(this._config.mediaChromeHTMLElementId);
       if (!mediaChromeTemplate) {
-        throw new Error(`DOM <template> for media chrome template not found. ID provided: ${this._config.mediaChromeHTMLElementId}`)
+        throw new Error(`DOM <template> for media chrome template not found. ID provided: ${this._config.mediaChromeHTMLElementId}`);
       }
       return mediaChromeTemplate.innerHTML;
     }
-    const defaultMediaChromeTemplate =
-      `<div style="display:none" class="${domClasses.timecodeContainer} d-none" slot="middle-chrome" noautohide>
+    const defaultMediaChromeTemplate = `<div style="display:none" class="${domClasses.timecodeContainer} d-none" slot="middle-chrome" noautohide>
           <omakase-time-display class="${domClasses.mediaChromeCurrentTimecode}"></omakase-time-display>
       </div>
       <media-control-bar style="display:none" class="upper-control-bar">
@@ -364,14 +386,14 @@ export class VideoDomController implements VideoDomControllerApi {
   }
 
   private showElements(...element: HTMLElement[]): VideoDomController {
-    element.forEach(element => {
+    element.forEach((element) => {
       if (element.classList.contains('d-none')) {
-        element.classList.remove('d-none')
+        element.classList.remove('d-none');
       }
       if (!element.classList.contains('d-block')) {
-        element.classList.add('d-block')
+        element.classList.add('d-block');
       }
-    })
+    });
     return this;
   }
 
@@ -380,34 +402,36 @@ export class VideoDomController implements VideoDomControllerApi {
   }
 
   private hideElements(...element: HTMLElement[]): VideoDomController {
-    element.forEach(element => {
+    element.forEach((element) => {
       if (element.classList.contains('d-block')) {
-        element.classList.remove('d-block')
+        element.classList.remove('d-block');
       }
       if (!element.classList.contains('d-none')) {
-        element.classList.add('d-none')
+        element.classList.add('d-none');
       }
-    })
+    });
     return this;
   }
 
   private onHelpMenuChangeHandler(event: VideoHelpMenuChangeEvent) {
     let helpMenuGroups = event.helpMenuGroups;
     if (helpMenuGroups.length > 0) {
-      this.showElements(this._divHelp)
-      this._divHelpMenu.innerHTML = helpMenuGroups.map(helpMenuGroup => {
-        let items = `${helpMenuGroup.items.map(helpMenuItem => `<div class="omakase-help-item"><span class="float-start">${helpMenuItem.name}</span><span class="float-end">${helpMenuItem.description}</span></div>`).join('')}`
-        return `<div class="omakase-help-group">
+      this.showElements(this._divHelp);
+      this._divHelpMenu.innerHTML = helpMenuGroups
+        .map((helpMenuGroup) => {
+          let items = `${helpMenuGroup.items.map((helpMenuItem) => `<div class="omakase-help-item"><span class="float-start">${helpMenuItem.name}</span><span class="float-end">${helpMenuItem.description}</span></div>`).join('')}`;
+          return `<div class="omakase-help-group">
                             <div class="omakase-help-group-title">
                               <span>${helpMenuGroup.name}</span>
                             </div>
                             ${items}
                         </div>
-                        `
-      }).join('');
+                        `;
+        })
+        .join('');
     } else {
       this._divHelpMenu.innerHTML = ``;
-      this.hideElements(this._divHelp)
+      this.hideElements(this._divHelp);
     }
   }
 
@@ -419,23 +443,27 @@ export class VideoDomController implements VideoDomControllerApi {
   }
 
   toggleFullscreen(): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       try {
         if (Fullscreen.isFullscreenEnabled()) {
           if (this.isFullscreen()) {
-            Fullscreen.exitFullscreen().then(() => {
-              nextCompleteObserver(observer);
-            }).catch(error => {
-              console.error(error);
-              errorCompleteObserver(observer, error);
-            })
+            Fullscreen.exitFullscreen()
+              .then(() => {
+                nextCompleteObserver(observer);
+              })
+              .catch((error) => {
+                console.error(error);
+                errorCompleteObserver(observer, error);
+              });
           } else {
-            Fullscreen.requestFullscreen(this._config.mediaChrome === 'disabled' ? this._videoElement : this._mediaControllerElement).then(() => {
-              nextCompleteObserver(observer);
-            }).catch(error => {
-              console.error(error);
-              errorCompleteObserver(observer, error);
-            })
+            Fullscreen.requestFullscreen(this._config.mediaChrome === 'disabled' ? this._videoElement : this._mediaControllerElement)
+              .then(() => {
+                nextCompleteObserver(observer);
+              })
+              .catch((error) => {
+                console.error(error);
+                errorCompleteObserver(observer, error);
+              });
           }
         } else {
           nextCompleteObserver(observer);
@@ -444,26 +472,25 @@ export class VideoDomController implements VideoDomControllerApi {
         console.trace(e);
         observer.error(e);
       }
-    })
+    });
   }
 
   clearSafeZones(): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       this._divSafeZoneWrapper.innerHTML = '';
       this._videoSafeZones = [];
       this.onVideoSafeZoneChange$.next({
-        videoSafeZones: this.getSafeZones()
-      })
+        videoSafeZones: this.getSafeZones(),
+      });
       nextCompleteObserver(observer);
-    })
+    });
   }
 
   addSafeZone(videoSafeZone: VideoSafeZone): Observable<VideoSafeZone> {
-    return passiveObservable<VideoSafeZone>(observer => {
-
+    return passiveObservable<VideoSafeZone>((observer) => {
       if (isNullOrUndefined(videoSafeZone.id)) {
         videoSafeZone.id = CryptoUtil.uuid();
-      } else if (this._videoSafeZones.find(p => p.id === videoSafeZone.id)) {
+      } else if (this._videoSafeZones.find((p) => p.id === videoSafeZone.id)) {
         throw new Error(`Safe zone with id ${videoSafeZone.id} already exists`);
       }
 
@@ -492,11 +519,10 @@ export class VideoDomController implements VideoDomControllerApi {
           safeZoneHeight = height * (videoSafeZone.scalePercent / 100);
         }
 
-        let yPercent = (((height - safeZoneHeight) / 2) / height) * 100;
-        let xPercent = (((width - safeZoneWidth) / 2) / width) * 100;
+        let yPercent = ((height - safeZoneHeight) / 2 / height) * 100;
+        let xPercent = ((width - safeZoneWidth) / 2 / width) * 100;
 
-        videoSafeZone.topRightBottomLeftPercent = [yPercent, xPercent, yPercent, xPercent]
-
+        videoSafeZone.topRightBottomLeftPercent = [yPercent, xPercent, yPercent, xPercent];
       } else {
         throw new Error(`topRightBottomLeftPercent or aspectRatio must be provided`);
       }
@@ -505,8 +531,8 @@ export class VideoDomController implements VideoDomControllerApi {
         videoSafeZone.topRightBottomLeftPercent[0] ? videoSafeZone.topRightBottomLeftPercent[0] : 0,
         videoSafeZone.topRightBottomLeftPercent[1] ? videoSafeZone.topRightBottomLeftPercent[1] : 0,
         videoSafeZone.topRightBottomLeftPercent[2] ? videoSafeZone.topRightBottomLeftPercent[2] : 0,
-        videoSafeZone.topRightBottomLeftPercent[3] ? videoSafeZone.topRightBottomLeftPercent[3] : 0
-      ]
+        videoSafeZone.topRightBottomLeftPercent[3] ? videoSafeZone.topRightBottomLeftPercent[3] : 0,
+      ];
 
       let htmlElement: HTMLElement = DomUtil.createElement<'div'>('div');
       htmlElement.id = videoSafeZone.htmlId!;
@@ -521,48 +547,51 @@ export class VideoDomController implements VideoDomControllerApi {
       this._videoSafeZones.push(videoSafeZone);
 
       this.onVideoSafeZoneChange$.next({
-        videoSafeZones: this.getSafeZones()
-      })
+        videoSafeZones: this.getSafeZones(),
+      });
 
       observer.next(videoSafeZone);
       observer.complete();
-    })
+    });
   }
 
   removeSafeZone(id: string): Observable<void> {
-    return passiveObservable(observer => {
-      let videoSafeZone = this._videoSafeZones.find(p => p.id === id);
+    return passiveObservable((observer) => {
+      let videoSafeZone = this._videoSafeZones.find((p) => p.id === id);
       if (videoSafeZone) {
         let element = DomUtil.getElementById<HTMLElement>(videoSafeZone.htmlId!);
         if (element) {
           element.remove();
         }
-        this._videoSafeZones.splice(this._videoSafeZones.findIndex(p => p.id === id), 1);
+        this._videoSafeZones.splice(
+          this._videoSafeZones.findIndex((p) => p.id === id),
+          1
+        );
         this.onVideoSafeZoneChange$.next({
-          videoSafeZones: this.getSafeZones()
-        })
+          videoSafeZones: this.getSafeZones(),
+        });
       }
       nextCompleteObserver(observer);
-    })
+    });
   }
 
   getSafeZones(): VideoSafeZone[] {
     return this._videoSafeZones;
   }
 
-  loadThumbnailVtt(vttUrl: string,) {
-    return passiveObservable(observer => {
+  loadThumbnailVtt(vttUrl: string) {
+    return passiveObservable((observer) => {
       const options: VttLoadOptions = {};
       if (AuthUtil.authentication) {
         options.axiosConfig = AuthUtil.getAuthorizedAxiosConfig(vttUrl, AuthUtil.authentication);
       }
-      this._vttAdapter.loadVtt(vttUrl, options).subscribe(vttFile => {
+      this._vttAdapter.loadVtt(vttUrl, options).subscribe((vttFile) => {
         if (vttFile && this._previewThumbnail) {
           this._previewThumbnail.vttFile = vttFile;
           nextCompleteObserver(observer);
         }
-      })
-    })
+      });
+    });
   }
 
   attachVideoController(videoController: VideoControllerApi) {
@@ -574,28 +603,47 @@ export class VideoDomController implements VideoDomControllerApi {
 
     this._videoElement.controls = false;
 
-    let allOverlayButtons = [this._divButtonOverlayPlay, this._divButtonOverlayPause, this._divButtonOverlayLoading, this._divButtonOverlayReplay, this._divButtonOverlayError, this._divButtonOverlayAttach];
+    let allOverlayButtons = [
+      this._divButtonOverlayPlay,
+      this._divButtonOverlayPause,
+      this._divButtonOverlayLoading,
+      this._divButtonOverlayReplay,
+      this._divButtonOverlayError,
+      this._divButtonOverlayAttach,
+    ];
 
     let clearShowTemporaryOnMouseMoveTimeoutId = () => {
       if (this._showTemporaryOnMouseMoveTimeoutId) {
         clearTimeout(this._showTemporaryOnMouseMoveTimeoutId);
       }
-    }
+    };
 
     if (this._config.detachedPlayer) {
-      race(fromEvent(window, 'unload'), fromEvent(window, 'beforeunload')).pipe(takeUntil(this._videoEventBreaker$)).subscribe({
-        next: (event) => {
-          this._videoController.attachVideoWindow().subscribe({
-            next: () => {
-              console.debug('Attached before closing, closing..')
-            }
-          })
-        }
-      })
+      race(fromEvent(window, 'unload'), fromEvent(window, 'beforeunload'))
+        .pipe(takeUntil(this._videoEventBreaker$))
+        .subscribe({
+          next: (event) => {
+            this._videoController.attachVideoWindow().subscribe({
+              next: () => {
+                console.debug('Attached before closing, closing..');
+              },
+            });
+          },
+        });
     }
 
     if (!videoController.isDetachVideoWindowEnabled() && this._buttonDetach) {
-      this.hideElements(this._buttonDetach);
+      this._videoController.getHTMLVideoElement().addEventListener('enterpictureinpicture', (event) => {
+        if (event instanceof PictureInPictureEvent) {
+          this._buttonDetach!.className = domClasses.mediaChromeAttach;
+        }
+      });
+
+      this._videoController.getHTMLVideoElement().addEventListener('leavepictureinpicture', (event) => {
+        if (event instanceof PictureInPictureEvent) {
+          this._buttonDetach!.className = domClasses.mediaChromeDetach;
+        }
+      });
     }
 
     if (this._currentTimecode) {
@@ -612,219 +660,273 @@ export class VideoDomController implements VideoDomControllerApi {
       this._previewThumbnail.thumbnailFn = this._config.thumbnailFn;
     }
 
-    fromEvent<MouseEvent>(this._divPlayerWrapper, 'mousemove').pipe(takeUntil(this._videoEventBreaker$), filter(p => this._videoController.getVideoWindowPlaybackState() === 'attached')).subscribe({
-      next: (event) => {
-        if (this._videoController.isVideoLoaded() && !(this._videoController.getPlaybackState()!.ended || this._videoController.getPlaybackState()!.waiting || this._videoController.getPlaybackState()!.seeking)) {
-          let playControlToShow = this._videoController.isPlaying() ? this._divButtonOverlayPause : this._divButtonOverlayPlay;
-          clearShowTemporaryOnMouseMoveTimeoutId();
-          this.hideElements(this._divButtonOverlayPause, this._divButtonOverlayPlay)
-            .showElements(playControlToShow, this._divButtonHelp)
+    fromEvent<MouseEvent>(this._divPlayerWrapper, 'mousemove')
+      .pipe(
+        takeUntil(this._videoEventBreaker$),
+        filter((p) => this._videoController.getVideoWindowPlaybackState() === 'attached')
+      )
+      .subscribe({
+        next: (event) => {
+          if (
+            this._videoController.isVideoLoaded() &&
+            !(this._videoController.getPlaybackState()!.ended || this._videoController.getPlaybackState()!.waiting || this._videoController.getPlaybackState()!.seeking)
+          ) {
+            let playControlToShow = this._videoController.isPlaying() ? this._divButtonOverlayPause : this._divButtonOverlayPlay;
+            clearShowTemporaryOnMouseMoveTimeoutId();
+            this.hideElements(this._divButtonOverlayPause, this._divButtonOverlayPlay).showElements(playControlToShow, this._divButtonHelp);
 
-          if (this._config.detachedPlayer) {
-            this.showElements(this._divSectionBottomRight)
-          }
-
-          this._showTemporaryOnMouseMoveTimeoutId = setTimeout(() => {
-            this.hideElements(playControlToShow)
-              .hideElements(this._divSectionBottomRight)
-
-            if (!this.isShown(this._divHelpMenu)) {
-              this.hideElements(this._divButtonHelp, this._divHelpMenu)
+            if (this._config.detachedPlayer) {
+              this.showElements(this._divSectionBottomRight);
             }
-          }, 1000)
-        }
-      }
-    })
 
-    fromEvent<MouseEvent>(this._divPlayerWrapper, 'mouseleave').pipe(takeUntil(this._videoEventBreaker$)).subscribe({
-      next: (event) => {
-        this.hideElements(this._divButtonOverlayPlay, this._divButtonOverlayPause)
-          .hideElements(this._divButtonHelp, this._divHelpMenu)
-          .hideElements(this._divSectionBottomRight)
-      }
-    })
+            this._showTemporaryOnMouseMoveTimeoutId = setTimeout(() => {
+              this.hideElements(playControlToShow).hideElements(this._divSectionBottomRight);
 
-    fromEvent<MouseEvent>(this._divPlayerWrapper, 'click').pipe(takeUntil(this._videoEventBreaker$)).subscribe({
-      next: (event) => {
-        if (this._videoController.isVideoLoaded()) {
-          if (![this._divButtonHelp, this._divButtonOverlayError, this._divErrorMessage, this._divButtonAttach, this._divButtonFullscreen].find(p => p === event.target) && !this._divAlerts.contains(event.target as HTMLElement)) {
-            if (this._videoController.getVideoWindowPlaybackState() !== 'detached') {
-              if (!this._videoController.isFullscreen() && this._config.mediaChrome !== 'enabled') {
-                this._videoController.togglePlayPause().subscribe()
+              if (!this.isShown(this._divHelpMenu)) {
+                this.hideElements(this._divButtonHelp, this._divHelpMenu);
               }
-            } else {
-              this._videoController.attachVideoWindow();
+            }, 1000);
+          }
+        },
+      });
+
+    fromEvent<MouseEvent>(this._divPlayerWrapper, 'mouseleave')
+      .pipe(takeUntil(this._videoEventBreaker$))
+      .subscribe({
+        next: (event) => {
+          this.hideElements(this._divButtonOverlayPlay, this._divButtonOverlayPause).hideElements(this._divButtonHelp, this._divHelpMenu).hideElements(this._divSectionBottomRight);
+        },
+      });
+
+    fromEvent<MouseEvent>(this._divPlayerWrapper, 'click')
+      .pipe(takeUntil(this._videoEventBreaker$))
+      .subscribe({
+        next: (event) => {
+          if (this._videoController.isVideoLoaded()) {
+            if (
+              ![this._divButtonHelp, this._divButtonOverlayError, this._divErrorMessage, this._divButtonAttach, this._divButtonFullscreen].find((p) => p === event.target) &&
+              !this._divAlerts.contains(event.target as HTMLElement)
+            ) {
+              if (this._videoController.getVideoWindowPlaybackState() !== 'detached') {
+                if (!this._videoController.isFullscreen() && this._config.mediaChrome !== 'enabled') {
+                  this._videoController.togglePlayPause().subscribe();
+                }
+              } else {
+                this._videoController.attachVideoWindow();
+              }
             }
           }
-        }
-      }
-    })
+        },
+      });
 
     if (this._buttonForward) {
-      fromEvent<MouseEvent>(this._buttonForward, 'click').pipe(takeUntil(this._videoEventBreaker$)).subscribe({
-        next: (event) => {
-          this._videoController.seekNextFrame().subscribe();
-        }
-      })
+      fromEvent<MouseEvent>(this._buttonForward, 'click')
+        .pipe(takeUntil(this._videoEventBreaker$))
+        .subscribe({
+          next: (event) => {
+            this._videoController.seekNextFrame().subscribe();
+          },
+        });
     }
     if (this._buttonRewind) {
-      fromEvent<MouseEvent>(this._buttonRewind, 'click').pipe(takeUntil(this._videoEventBreaker$)).subscribe({
-        next: (event) => {
-          this._videoController.seekPreviousFrame().subscribe();
-        }
-      })
+      fromEvent<MouseEvent>(this._buttonRewind, 'click')
+        .pipe(takeUntil(this._videoEventBreaker$))
+        .subscribe({
+          next: (event) => {
+            this._videoController.seekPreviousFrame().subscribe();
+          },
+        });
     }
     if (this._buttonFastForward) {
-      fromEvent<MouseEvent>(this._buttonFastForward, 'click').pipe(takeUntil(this._videoEventBreaker$)).subscribe({
-        next: (event) => {
-          this._videoController.seekFromCurrentFrame(10).subscribe();
-        }
-      })
+      fromEvent<MouseEvent>(this._buttonFastForward, 'click')
+        .pipe(takeUntil(this._videoEventBreaker$))
+        .subscribe({
+          next: (event) => {
+            this._videoController.seekFromCurrentFrame(10).subscribe();
+          },
+        });
     }
     if (this._buttonFastRewind) {
-      fromEvent<MouseEvent>(this._buttonFastRewind, 'click').pipe(takeUntil(this._videoEventBreaker$)).subscribe({
-        next: (event) => {
-          this._videoController.seekFromCurrentFrame(-10).subscribe();
-        }
-      })
+      fromEvent<MouseEvent>(this._buttonFastRewind, 'click')
+        .pipe(takeUntil(this._videoEventBreaker$))
+        .subscribe({
+          next: (event) => {
+            this._videoController.seekFromCurrentFrame(-10).subscribe();
+          },
+        });
     }
     if (this._buttonDetach) {
-      fromEvent<MouseEvent>(this._buttonDetach, 'click').pipe(takeUntil(this._videoEventBreaker$)).subscribe({
-        next: (event) => {
-          this._videoController.detachVideoWindow();
-        }
-      })
+      fromEvent<MouseEvent>(this._buttonDetach, 'click')
+        .pipe(takeUntil(this._videoEventBreaker$))
+        .subscribe({
+          next: (event) => {
+            if (this._videoController.isDetachVideoWindowEnabled()) {
+              this._videoController.detachVideoWindow();
+            } else {
+              this.togglePIP();
+            }
+          },
+        });
     }
     if (this._buttonAttach) {
-      fromEvent<MouseEvent>(this._buttonAttach, 'click').pipe(takeUntil(this._videoEventBreaker$)).subscribe({
-        next: (event) => {
-          this._videoController.attachVideoWindow();
-        }
-      })
+      fromEvent<MouseEvent>(this._buttonAttach, 'click')
+        .pipe(takeUntil(this._videoEventBreaker$))
+        .subscribe({
+          next: (event) => {
+            this._videoController.attachVideoWindow();
+          },
+        });
     }
     if (this._buttonBitc) {
-      fromEvent<MouseEvent>(this._buttonBitc, 'click').pipe(takeUntil(this._videoEventBreaker$)).subscribe({
-        next: (event) => {
-          this._bitcEnabled = !this._bitcEnabled;
-          if (this._bitcEnabled) {
-            this.showElements(this._divTimecode!);
-          } else {
-            this.hideElements(this._divTimecode!);
-          }
-          this._buttonBitc!.classList.remove(this._bitcEnabled ? domClasses.mediaChromeBitcDisabled : domClasses.mediaChromeBitcEnabled);
-          this._buttonBitc!.classList.add(this._bitcEnabled ? domClasses.mediaChromeBitcEnabled : domClasses.mediaChromeBitcDisabled);
-          this._tooltipBitc!.innerHTML = this._bitcEnabled ? 'Hide timecode' : 'Show timecode';
-        }
-      })
+      fromEvent<MouseEvent>(this._buttonBitc, 'click')
+        .pipe(takeUntil(this._videoEventBreaker$))
+        .subscribe({
+          next: (event) => {
+            this._bitcEnabled = !this._bitcEnabled;
+            if (this._bitcEnabled) {
+              this.showElements(this._divTimecode!);
+            } else {
+              this.hideElements(this._divTimecode!);
+            }
+            this._buttonBitc!.classList.remove(this._bitcEnabled ? domClasses.mediaChromeBitcDisabled : domClasses.mediaChromeBitcEnabled);
+            this._buttonBitc!.classList.add(this._bitcEnabled ? domClasses.mediaChromeBitcEnabled : domClasses.mediaChromeBitcDisabled);
+            this._tooltipBitc!.innerHTML = this._bitcEnabled ? 'Hide timecode' : 'Show timecode';
+          },
+        });
     }
     if (this._timeRangeControl) {
       this._timeRangeControl.onSeek$.pipe(takeUntil(this._videoEventBreaker$)).subscribe({
         next: (time) => {
           this._videoController.seekToTime(time);
-        }
-      })
+        },
+      });
     }
 
     // prevents video context menu
-    fromEvent<MouseEvent>(this._videoElement, 'contextmenu').pipe(takeUntil(this._videoEventBreaker$)).subscribe({
-      next: (event) => {
-        event.preventDefault();
-      }
-    })
+    fromEvent<MouseEvent>(this._videoElement, 'contextmenu')
+      .pipe(takeUntil(this._videoEventBreaker$))
+      .subscribe({
+        next: (event) => {
+          event.preventDefault();
+        },
+      });
 
-    this._videoController.onVideoLoading$.pipe(takeUntil(this._videoEventBreaker$), filter(p => this._videoController.getVideoWindowPlaybackState() === 'attached')).subscribe({
-      next: (event) => {
-        this.hideElements(...allOverlayButtons)
-          .hideElements(this._divErrorMessage)
-          .showElements(this._divButtonOverlayLoading)
-          .showElements(this._divBackgroundImage)
-      }
-    })
-
-    this._videoController.onVideoLoaded$.pipe(takeUntil(this._videoEventBreaker$), filter(p => this._videoController.getVideoWindowPlaybackState() === 'attached')).subscribe({
-      next: (videoLoaded) => {
-        this.hideElements(...allOverlayButtons)
-          .hideElements(this._divErrorMessage)
-          .hideElements(this._divBackgroundImage)
-        if (!videoLoaded) {
-          this.showElements(this._divButtonOverlayLoading)
-            .showElements(this._divBackgroundImage)
-        }
-
-        if (this._config.thumbnailVttUrl) {
-          this.loadThumbnailVtt(this._config.thumbnailVttUrl);
-        }
-      }
-    })
-
-    this._videoController.onPlaybackState$.pipe(takeUntil(this._videoEventBreaker$), filter(p => this._videoController.getVideoWindowPlaybackState() === 'attached')).subscribe({
-      next: (state) => {
-        clearShowTemporaryOnMouseMoveTimeoutId();
-        if (state.waiting && state.playing) {
+    this._videoController.onVideoLoading$
+      .pipe(
+        takeUntil(this._videoEventBreaker$),
+        filter((p) => this._videoController.getVideoWindowPlaybackState() === 'attached')
+      )
+      .subscribe({
+        next: (event) => {
           this.hideElements(...allOverlayButtons)
             .hideElements(this._divErrorMessage)
             .showElements(this._divButtonOverlayLoading)
-        } else if (state.playing) {
+            .showElements(this._divBackgroundImage);
+        },
+      });
+
+    this._videoController.onVideoLoaded$
+      .pipe(
+        takeUntil(this._videoEventBreaker$),
+        filter((p) => this._videoController.getVideoWindowPlaybackState() === 'attached')
+      )
+      .subscribe({
+        next: (videoLoaded) => {
           this.hideElements(...allOverlayButtons)
             .hideElements(this._divErrorMessage)
-          if (state.seeking && state.waiting) {
-            this.showElements(this._divButtonOverlayLoading)
+            .hideElements(this._divBackgroundImage);
+          if (!videoLoaded) {
+            this.showElements(this._divButtonOverlayLoading).showElements(this._divBackgroundImage);
           }
-        } else if (state.paused) {
-          this.hideElements(...allOverlayButtons)
-            .hideElements(this._divErrorMessage)
-          if (state.seeking && state.waiting) {
-            this.showElements(this._divButtonOverlayLoading)
-          } else if (state.ended) {
-            this.showElements(this._divButtonOverlayReplay)
+
+          if (this._config.thumbnailVttUrl) {
+            this.loadThumbnailVtt(this._config.thumbnailVttUrl);
           }
-        } else if (state.seeking && state.waiting) {
-          this.hideElements(...allOverlayButtons)
-            .hideElements(this._divErrorMessage)
-            .showElements(this._divButtonOverlayLoading)
-        }
-      }
-    })
+        },
+      });
+
+    this._videoController.onPlaybackState$
+      .pipe(
+        takeUntil(this._videoEventBreaker$),
+        filter((p) => this._videoController.getVideoWindowPlaybackState() === 'attached')
+      )
+      .subscribe({
+        next: (state) => {
+          clearShowTemporaryOnMouseMoveTimeoutId();
+          if (state.waiting && state.playing) {
+            this.hideElements(...allOverlayButtons)
+              .hideElements(this._divErrorMessage)
+              .showElements(this._divButtonOverlayLoading);
+          } else if (state.playing) {
+            this.hideElements(...allOverlayButtons).hideElements(this._divErrorMessage);
+            if (state.seeking && state.waiting) {
+              this.showElements(this._divButtonOverlayLoading);
+            }
+          } else if (state.paused) {
+            this.hideElements(...allOverlayButtons).hideElements(this._divErrorMessage);
+            if (state.seeking && state.waiting) {
+              this.showElements(this._divButtonOverlayLoading);
+            } else if (state.ended) {
+              this.showElements(this._divButtonOverlayReplay);
+            }
+          } else if (state.seeking && state.waiting) {
+            this.hideElements(...allOverlayButtons)
+              .hideElements(this._divErrorMessage)
+              .showElements(this._divButtonOverlayLoading);
+          }
+        },
+      });
 
     this._videoController.onVideoError$.pipe(takeUntil(this._videoEventBreaker$)).subscribe({
       next: (event) => {
         this.hideElements(...allOverlayButtons)
           .hideElements(this._divBackgroundImage)
-          .showElements(this._divErrorMessage, this._divButtonOverlayError)
+          .showElements(this._divErrorMessage, this._divButtonOverlayError);
         this._divErrorMessage.innerHTML = event.message ? event.message : '';
-      }
-    })
+      },
+    });
 
     // help menu
-    fromEvent<MouseEvent>(this._divButtonHelp, 'click').pipe(takeUntil(this._videoEventBreaker$)).subscribe({
-      next: (event) => {
-        if (event.target === this._divButtonHelp) {
-          if (this.isShown(this._divHelpMenu)) {
-            this.hideElements(this._divHelpMenu)
-          } else {
-            this.showElements(this._divHelpMenu)
+    fromEvent<MouseEvent>(this._divButtonHelp, 'click')
+      .pipe(takeUntil(this._videoEventBreaker$))
+      .subscribe({
+        next: (event) => {
+          if (event.target === this._divButtonHelp) {
+            if (this.isShown(this._divHelpMenu)) {
+              this.hideElements(this._divHelpMenu);
+            } else {
+              this.showElements(this._divHelpMenu);
+            }
           }
-        }
-      }
-    })
+        },
+      });
 
-    fromEvent<MouseEvent>(this._divButtonAttach, 'click').pipe(takeUntil(this._videoEventBreaker$)).subscribe({
-      next: (event) => {
-        this._videoController.attachVideoWindow();
-      }
-    })
+    fromEvent<MouseEvent>(this._divButtonAttach, 'click')
+      .pipe(takeUntil(this._videoEventBreaker$))
+      .subscribe({
+        next: (event) => {
+          this._videoController.attachVideoWindow();
+        },
+      });
 
-    fromEvent<MouseEvent>(this._divButtonFullscreen, 'click').pipe(takeUntil(this._videoEventBreaker$)).subscribe({
-      next: (event) => {
-        this._videoController.toggleFullscreen();
-      }
-    })
+    fromEvent<MouseEvent>(this._divButtonFullscreen, 'click')
+      .pipe(takeUntil(this._videoEventBreaker$))
+      .subscribe({
+        next: (event) => {
+          this._videoController.toggleFullscreen();
+        },
+      });
 
-    this._videoController.onHelpMenuChange$.pipe(takeUntil(this._videoEventBreaker$), filter(p => this._videoController.getVideoWindowPlaybackState() === 'attached')).subscribe({
-      next: (event) => {
-        this.onHelpMenuChangeHandler(event);
-      }
-    })
+    this._videoController.onHelpMenuChange$
+      .pipe(
+        takeUntil(this._videoEventBreaker$),
+        filter((p) => this._videoController.getVideoWindowPlaybackState() === 'attached')
+      )
+      .subscribe({
+        next: (event) => {
+          this.onHelpMenuChangeHandler(event);
+        },
+      });
 
     this._videoController.onVideoWindowPlaybackStateChange$.pipe(takeUntil(this._videoEventBreaker$)).subscribe({
       next: (event) => {
@@ -833,31 +935,37 @@ export class VideoDomController implements VideoDomControllerApi {
             .hideElements(this._divBackgroundImage)
             .hideElements(this._divSafeZoneWrapper)
             .showElements(this._divDetachedBackground)
-            .showElements(this._divButtonOverlayAttach)
+            .showElements(this._divButtonOverlayAttach);
 
           this._divPlayer.classList.add(domClasses.playerDetached);
-
         } else if (this._videoController.getVideoWindowPlaybackState() === 'detaching' || this._videoController.getVideoWindowPlaybackState() === 'attaching') {
           this.hideElements(...allOverlayButtons)
             .hideElements(this._divBackgroundImage)
             .showElements(this._divBackgroundImage)
             .showElements(this._divSafeZoneWrapper)
-            .showElements(this._divButtonOverlayLoading)
+            .showElements(this._divButtonOverlayLoading);
         } else if (this._videoController.getVideoWindowPlaybackState() === 'attached') {
           this.hideElements(...allOverlayButtons)
             .hideElements(this._divBackgroundImage)
             .hideElements(this._divDetachedBackground)
-            .showElements(this._divSafeZoneWrapper)
+            .showElements(this._divSafeZoneWrapper);
 
           this._divPlayer.classList.remove(domClasses.playerDetached);
         }
-      }
-    })
+      },
+    });
+  }
 
+  private togglePIP() {
+    this._buttonDetach!.className === domClasses.mediaChromeDetach ? this._videoController.enablePiP() : this._videoController.disablePiP();
   }
 
   getVideoElement(): HTMLVideoElement {
     return this._videoElement;
+  }
+
+  getAudioUtilElement(): HTMLAudioElement {
+    return this._audioUtilElement;
   }
 
   destroy() {
@@ -871,12 +979,8 @@ export class VideoDomController implements VideoDomControllerApi {
       Fullscreen.off('change', this._fullscreenChangeHandler);
     }
 
-    nullifier(
-      this._videoController,
-      this._videoElement
-    )
+    nullifier(this._videoController, this._videoElement);
   }
-
 
   private static createHTMLTrackElement(omakaseTextTrack: OmakaseTextTrack): HTMLTrackElement {
     let element: HTMLTrackElement = DomUtil.createElement<'track'>('track');
@@ -890,34 +994,36 @@ export class VideoDomController implements VideoDomControllerApi {
   }
 
   appendHTMLTrackElement(omakaseTextTrack: OmakaseTextTrack): Observable<HTMLTrackElement | undefined> {
-    return new Observable<HTMLTrackElement>(o$ => {
+    return new Observable<HTMLTrackElement>((o$) => {
       let track = VideoDomController.createHTMLTrackElement(omakaseTextTrack);
 
-      fromEvent(track, 'load').pipe(take(1)).subscribe({
-        next: (event) => {
-          o$.next(track);
-          o$.complete();
-        },
-        error: (error) => {
-          console.debug('Something went wrong adding subtitles tracks')
+      fromEvent(track, 'load')
+        .pipe(take(1))
+        .subscribe({
+          next: (event) => {
+            o$.next(track);
+            o$.complete();
+          },
+          error: (error) => {
+            console.debug('Something went wrong adding subtitles tracks');
 
-          o$.next(void 0);
-          o$.complete();
-        }
-      })
+            o$.next(void 0);
+            o$.complete();
+          },
+        });
 
       this._videoElement.appendChild(track);
 
-      let textTrack = this.getTextTrackById(track.id)
+      let textTrack = this.getTextTrackById(track.id);
       if (textTrack) {
         textTrack.mode = 'hidden'; // this line somehow triggers cues loading and thus we can catch 'load' event and complete the observable
       } else {
-        console.debug('Something went wrong adding subtitles tracks')
+        console.debug('Something went wrong adding subtitles tracks');
 
         o$.next(void 0);
         o$.complete();
       }
-    })
+    });
   }
 
   getTextTrackList(): TextTrackList | undefined {
@@ -941,7 +1047,7 @@ export class VideoDomController implements VideoDomControllerApi {
     let domTextTrack = this.getTextTrackById(id);
     if (domTextTrack) {
       domTextTrack.mode = 'disabled';
-      this._videoElement.querySelectorAll<'track'>('track').forEach(trackElement => {
+      this._videoElement.querySelectorAll<'track'>('track').forEach((trackElement) => {
         if (trackElement.getAttribute('id') === id && trackElement.parentElement) {
           trackElement.parentElement.removeChild(trackElement);
         }

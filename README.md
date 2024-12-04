@@ -203,7 +203,7 @@ omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8', 25).subscribe({
 ```
 
 Due to security and usability policies, most modern browsers require a user interaction before allowing certain actions, such as video autoplay or fullscreen initiation. 
-It could be that on-time-only user interaction (such as clicking on play button in detached player) is needed before video playback or switching to fullscreen playback after video detaching.   
+It could be that one-time-only user interaction (such as clicking on play button in detached player) is needed before video playback or switching to fullscreen playback after video detaching.   
 
 
 ### Hls.js
@@ -260,12 +260,12 @@ omakasePlayer.audio.setActiveAudioTrack(audioTracks[1].id);
 
 ```
 
-### AudioContext and audio routing
+### Audio routing
 
 ```javascript
 
-// creates AudioContext with 2 inputs and 4 outputs
-omakasePlayer.audio.createAudioContext(2, 4);
+// creates AudioContext with AudioSplitterNode and AudioMergerMode configured for routing between 2 inputs and 4 outputs
+omakasePlayer.audio.createAudioRouter(2, 4); 
 
 // connects 1st output with 2nd output
 omakasePlayer.audio.routeAudioInputOutputNode({

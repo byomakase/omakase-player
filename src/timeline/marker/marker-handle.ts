@@ -23,8 +23,8 @@ import {MarkerHandleStyle, MarkerHandleVerticals} from './marker-types';
 export interface MarkerHandleConfig<S extends MarkerHandleStyle> extends ComponentConfig<S> {
   x: number;
   editable: boolean;
-  verticalsProviderFn: () => MarkerHandleVerticals,
-  dragPositionConstrainerFn: (newPosition: Position) => Position
+  verticalsProviderFn: () => MarkerHandleVerticals;
+  dragPositionConstrainerFn: (newPosition: Position) => Position;
 }
 
 export interface MarkerHandle<C extends MarkerHandleConfig<S>, S extends MarkerHandleStyle> extends KonvaComponent<C, S, Konva.Group> {
@@ -51,12 +51,10 @@ export abstract class BaseMarkerHandle<C extends MarkerHandleConfig<S>, S extend
 
   private _editable: boolean;
   private _verticalsProviderFn: () => MarkerHandleVerticals;
-  private _dragPositionConstrainerFn: (newPosition: Position) => Position
+  private _dragPositionConstrainerFn: (newPosition: Position) => Position;
 
-  onDrag: (markerHandleGroup: Konva.Group) => void = (markerHandleGroup) => {
-  };
-  onDragEnd: (markerHandleGroup: Konva.Group) => void = (markerHandleGroup) => {
-  };
+  onDrag: (markerHandleGroup: Konva.Group) => void = (markerHandleGroup) => {};
+  onDragEnd: (markerHandleGroup: Konva.Group) => void = (markerHandleGroup) => {};
 
   protected constructor(config: C) {
     super(config);
@@ -67,19 +65,16 @@ export abstract class BaseMarkerHandle<C extends MarkerHandleConfig<S>, S extend
 
     this._group = new Konva.Group({
       x: this.config.x,
-      draggable: this._editable
+      draggable: this._editable,
     });
 
     this._line = new Konva.Line({
       stroke: this.style.color,
       strokeWidth: this.style.lineStrokeWidth,
       opacity: this.style.lineOpacity,
-      points: [
-        0, 0,
-        0, 0
-      ],
-      listening: false
-    })
+      points: [0, 0, 0, 0],
+      listening: false,
+    });
 
     this._handleGroup = new Konva.Group({
       x: 0,
@@ -94,43 +89,43 @@ export abstract class BaseMarkerHandle<C extends MarkerHandleConfig<S>, S extend
           scaleX: 1.5,
           scaleY: 1.5,
           duration: 0.1,
-        })
-        WindowUtil.cursor('grab')
+        });
+        WindowUtil.cursor('grab');
       }
-    })
+    });
 
     this._handleGroup.on('mouseleave', () => {
       if (this._editable) {
         this._handleGroup.to({
           scaleX: 1,
           scaleY: 1,
-          duration: 0.1
-        })
-        WindowUtil.cursor('default')
+          duration: 0.1,
+        });
+        WindowUtil.cursor('default');
       }
-    })
+    });
 
-    this._group.add(this._line)
-    this._group.add(this._handleGroup)
+    this._group.add(this._line);
+    this._group.add(this._handleGroup);
 
     this._group.on('dragstart', (event) => {
       if (!this._editable) {
-        event.target.stopDrag()
+        event.target.stopDrag();
       } else {
-        WindowUtil.cursor('grabbing')
+        WindowUtil.cursor('grabbing');
       }
-    })
+    });
 
     this._group.on('dragmove', (event) => {
-      this._group.setAttrs(this._dragPositionConstrainerFn(this._group.getPosition()))
+      this._group.setAttrs(this._dragPositionConstrainerFn(this._group.getPosition()));
       this.onDrag(this._group);
-    })
+    });
 
     this._group.on('dragend', (event) => {
-      this._group.setAttrs(this._dragPositionConstrainerFn(this._group.getPosition()))
+      this._group.setAttrs(this._dragPositionConstrainerFn(this._group.getPosition()));
       this.onDragEnd(this._group);
-      WindowUtil.cursor('default')
-    })
+      WindowUtil.cursor('default');
+    });
   }
 
   protected provideKonvaNode(): Konva.Group {
@@ -156,40 +151,36 @@ export abstract class BaseMarkerHandle<C extends MarkerHandleConfig<S>, S extend
 
   setPosition(position: Position) {
     this._group.setAttrs({
-      ...position
+      ...position,
     });
 
     let verticals = this._verticalsProviderFn();
 
     this._group.setAttrs({
       y: verticals.area.y,
-    })
+    });
 
     this._line.setAttrs({
-      points: [
-        0, 0,
-        0, verticals.area.height
-      ],
-    })
+      points: [0, 0, 0, verticals.area.height],
+    });
 
     this._handleGroup.setAttrs({
-      y: verticals.handle.y
-    })
+      y: verticals.handle.y,
+    });
   }
 
   setColor(color: string) {
     this.style.color = color;
     this._line.setAttrs({
-      stroke: this.style.color
-    })
+      stroke: this.style.color,
+    });
     this._symbol.setAttrs({
-      fill: this.style.color
-    })
+      fill: this.style.color,
+    });
   }
 
   set editable(value: boolean) {
     this._editable = value;
     this._group.draggable(this._editable);
   }
-
 }

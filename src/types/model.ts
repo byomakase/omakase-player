@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-export interface TimeObservation {
-
-}
+export interface TimeObservation {}
 
 export interface MomentObservation extends TimeObservation {
   time: number;

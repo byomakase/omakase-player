@@ -20,4 +20,3 @@ export type {MarkerLaneConfig, MarkerLaneStyle} from './marker-lane';
 export {MomentMarker} from './moment-marker';
 export {PeriodMarker} from './period-marker';
 export type {PeriodMarkerStyle} from './period-marker';
-

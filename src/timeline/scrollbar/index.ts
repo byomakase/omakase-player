@@ -14,5 +14,5 @@
  * limitations under the License.
  */
 
-export {ScrollbarLane} from './scrollbar-lane'
-export {TimelineScrollbar} from './scrollbar-flex'
+export {ScrollbarLane} from './scrollbar-lane';
+export {TimelineScrollbar} from './scrollbar-flex';

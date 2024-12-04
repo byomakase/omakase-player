@@ -18,7 +18,6 @@ import {SubtitlesController} from './subtitles-controller';
 import {VideoControllerApi} from '../video';
 
 export class SubtitlesHlsController extends SubtitlesController {
-
   constructor(videoController: VideoControllerApi) {
     super(videoController);
   }

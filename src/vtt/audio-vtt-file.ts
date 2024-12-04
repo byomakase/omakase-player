@@ -23,7 +23,6 @@ import {DownsampleStrategy, VttLoadOptions} from '../api/vtt-aware-api';
 import {DownsampledVttFile} from './downsampled-vtt-file';
 
 export class AudioVttFile extends DownsampledVttFile<AudioVttCue> {
-
   protected override _supportedDownsampleStrategies: DownsampleStrategy[] = ['none', 'avg', 'max', 'min', 'drop'];
 
   protected constructor(url: string, options: VttLoadOptions) {
@@ -45,16 +44,16 @@ export class AudioVttFile extends DownsampledVttFile<AudioVttCue> {
           {
             measurement: 'min',
             value: `${minSample}`,
-            comment: 'SAMPLED'
+            comment: 'SAMPLED',
           },
           {
             measurement: 'max',
             value: `${maxSample}`,
-            comment: 'SAMPLED'
-          }
-        ]
-      }
-    }
+            comment: 'SAMPLED',
+          },
+        ],
+      },
+    };
   }
 
   private getMaxMinSample(cues: AudioVttCue[]): [number, number] {
@@ -83,9 +82,11 @@ export class AudioVttFile extends DownsampledVttFile<AudioVttCue> {
 
   static create(url: string, options: VttLoadOptions): Observable<AudioVttFile> {
     let instance = new AudioVttFile(url, options);
-    return instance.fetch().pipe(map(result => {
-      return instance;
-    }))
+    return instance.fetch().pipe(
+      map((result) => {
+        return instance;
+      })
+    );
   }
 
   protected mapCue(vttCueParsed: VttCueParsed, cueExtension: OmakaseVttCueExtension | undefined, index: number): AudioVttCue {
@@ -93,8 +94,8 @@ export class AudioVttFile extends DownsampledVttFile<AudioVttCue> {
     let maxSampleText: string | undefined;
 
     if (cueExtension && cueExtension.rows && cueExtension.rows.length > 0) {
-      minSampleText = cueExtension.rows.find(p => p.measurement === 'min')?.value;
-      maxSampleText = cueExtension.rows.find(p => p.measurement === 'max')?.value;
+      minSampleText = cueExtension.rows.find((p) => p.measurement === 'min')?.value;
+      maxSampleText = cueExtension.rows.find((p) => p.measurement === 'max')?.value;
     } else {
       let splitted = vttCueParsed.text.split(',');
       minSampleText = splitted[0];
@@ -107,17 +108,9 @@ export class AudioVttFile extends DownsampledVttFile<AudioVttCue> {
       startTime: new Decimal(vttCueParsed.start).toDecimalPlaces(3).toNumber(),
       endTime: new Decimal(vttCueParsed.end).toDecimalPlaces(3).toNumber(),
       text: vttCueParsed.text,
-      minSample: z.coerce.number()
-        .min(-1)
-        .max(0)
-        .catch(0)
-        .parse(minSampleText),
-      maxSample: z.coerce.number()
-        .min(0)
-        .max(1)
-        .catch(0)
-        .parse(maxSampleText),
-      extension: cueExtension
-    }
+      minSample: z.coerce.number().min(-1).max(0).catch(0).parse(minSampleText),
+      maxSample: z.coerce.number().min(0).max(1).catch(0).parse(maxSampleText),
+      extension: cueExtension,
+    };
   }
 }

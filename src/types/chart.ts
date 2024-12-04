@@ -48,16 +48,8 @@ export interface LineChartCue extends OmakaseChartCue {
   value: number;
 }
 
-export interface OgChartCue extends BarChartCue {
+export interface OgChartCue extends BarChartCue {}
 
-}
+export interface OgChart extends OmakaseChart<OgChartCue> {}
 
-export interface OgChart extends OmakaseChart<OgChartCue> {
-
-}
-
-export interface BarChart extends OmakaseChart<BarChartCue> {
-
-}
-
-
+export interface BarChart extends OmakaseChart<BarChartCue> {}

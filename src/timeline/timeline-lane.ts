@@ -56,18 +56,18 @@ export interface TimelineLaneStyle {
   height: number;
   marginBottom?: number;
 
-  backgroundFill?: string,
-  backgroundOpacity?: number,
+  backgroundFill?: string;
+  backgroundOpacity?: number;
   descriptionTextFill?: string;
   descriptionTextFontSize?: number;
   descriptionTextYOffset?: number;
 
-  leftBackgroundFill?: string,
-  leftBackgroundOpacity?: number,
-  leftPaddingLeft?: number,
-  leftPaddingRight?: number,
-  rightBackgroundFill?: string,
-  rightBackgroundOpacity?: number,
+  leftBackgroundFill?: string;
+  leftBackgroundOpacity?: number;
+  leftPaddingLeft?: number;
+  leftPaddingRight?: number;
+  rightBackgroundFill?: string;
+  rightBackgroundOpacity?: number;
 }
 
 export const TIMELINE_LANE_STYLE_DEFAULT: TimelineLaneStyle = {
@@ -76,20 +76,20 @@ export const TIMELINE_LANE_STYLE_DEFAULT: TimelineLaneStyle = {
   backgroundOpacity: 1,
   descriptionTextFill: '#1c1c1c',
   descriptionTextFontSize: 15,
-}
+};
 
 export const TIMELINE_LANE_CONFIG_DEFAULT: WithRequired<TimelineLaneConfig<TimelineLaneStyle>, 'layoutEasingDuration'> = {
   style: TIMELINE_LANE_STYLE_DEFAULT,
   layoutEasingDuration: 300,
-  minimized: false
-}
+  minimized: false,
+};
 
 export const VTT_DOWNSAMPLE_CONFIG_DEFAULT: DownsampleConfig = {
   downsamplePeriod: 1000,
-  downsampleStrategy: 'none'
-}
+  downsampleStrategy: 'none',
+};
 
-type DefaultStyleOverrides = Pick<WithOptionalPartial<TimelineLaneConfig<any>, 'style'>, 'style'>
+type DefaultStyleOverrides = Pick<WithOptionalPartial<TimelineLaneConfig<any>, 'style'>, 'style'>;
 
 // Omit<T, keyof SelectRequired<TimelineLaneConfig<any>>> - selects only non-required properties
 // DefaultStyleOverrides - marks style as non-required and all its members as non-required
@@ -102,40 +102,39 @@ export function timelineLaneComposeConfig<T extends Pick<TimelineLaneConfig<any>
     ...config,
     style: {
       ...configDefault.style,
-      ...config.style
-    }
-  }
+      ...config.style,
+    },
+  };
 }
 
 export interface TimelineLaneComponentConfig {
   /**
    * {@link TimelineNode} to add
    */
-  timelineNode: TimelineNode,
+  timelineNode: TimelineNode;
 
   /**
    * Justify to start or end
    */
-  justify: 'start' | 'end',
+  justify: 'start' | 'end';
 
   /**
    * Width
    */
-  width: number,
+  width: number;
 
   /**
    * Height
    */
-  height: number
+  height: number;
 
   /**
    * Margins: [top, right, bottom, left]
    */
-  margin?: number[] // top, right, bottom, left
+  margin?: number[]; // top, right, bottom, left
 }
 
 export interface TimelineCueSubscriptionConfig {
-
   /**
    * How often (in seconds) to update cues array
    */
@@ -150,7 +149,6 @@ export interface TimelineCueSubscriptionConfig {
    * Maximum count of cues in the array
    */
   maxCount?: number;
-
 }
 
 export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extends TimelineLaneStyle> implements TimelineLaneApi {
@@ -179,7 +177,6 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
     this._config = config;
     this._styleAdapter = new StyleAdapter<S>(this._config.style);
 
-
     this._id = StringUtil.isNullUndefinedOrWhitespace(this._config.id) ? CryptoUtil.uuid() : Validators.id()(this._config.id!);
 
     if (this._config.description) {
@@ -189,19 +186,24 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
     this._leftBgRect = KonvaFactory.createRect({
       fill: this._styleAdapter.style.leftBackgroundFill ? this._styleAdapter.style.leftBackgroundFill : this._styleAdapter.style.backgroundFill,
       opacity: this._styleAdapter.style.leftBackgroundOpacity ? this._styleAdapter.style.leftBackgroundOpacity : this._styleAdapter.style.backgroundOpacity,
-    })
+    });
 
     this._rightBgRect = KonvaFactory.createRect({
       fill: this._styleAdapter.style.rightBackgroundFill ? this._styleAdapter.style.rightBackgroundFill : this._styleAdapter.style.backgroundFill,
       opacity: this._styleAdapter.style.rightBackgroundOpacity ? this._styleAdapter.style.rightBackgroundOpacity : this._styleAdapter.style.backgroundOpacity,
-    })
+    });
 
     this._mainLeftFlexGroup = this.createMainLeftFlexGroup();
     this._mainRightFlexGroup = this.createMainRightFlexGroup();
 
-    this._styleAdapter.onChange$.pipe(takeUntil(this._destroyed$), filter(p => !!p)).subscribe((styles) => {
-      this.onStyleChange();
-    })
+    this._styleAdapter.onChange$
+      .pipe(
+        takeUntil(this._destroyed$),
+        filter((p) => !!p)
+      )
+      .subscribe((styles) => {
+        this.onStyleChange();
+      });
   }
 
   protected abstract settleLayout(): void;
@@ -211,13 +213,13 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
     this._videoController = videoController;
 
     // react on timeline zoom
-    this._timeline.onZoom$.pipe(takeUntil(this._destroyed$)).subscribe(event => {
+    this._timeline.onZoom$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
       this.settleLayout();
-    })
+    });
 
     this._timeline.onStyleChange$.pipe(takeUntil(this._destroyed$)).subscribe((timelineStyle) => {
       this.onStyleChange();
-    })
+    });
   }
 
   protected createMainLeftFlexGroup(): KonvaFlexGroup {
@@ -230,13 +232,13 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
         .spacing(this.style.marginBottom ? this.style.marginBottom : 0, 'EDGE_BOTTOM')
         .build(),
       justifyContent: 'JUSTIFY_FLEX_START',
-    })
+    });
 
     this._mainLeftStartJustified = KonvaFlexGroup.of({
       konvaNode: KonvaFactory.createGroup(),
       konvaBgNode: KonvaFactory.createRect({
         fill: 'red',
-        opacity: 0
+        opacity: 0,
       }),
       clip: true,
       height: '100%',
@@ -244,15 +246,14 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
       justifyContent: 'JUSTIFY_FLEX_START',
       alignItems: 'ALIGN_CENTER',
       positionType: 'POSITION_TYPE_ABSOLUTE',
-      paddings: FlexSpacingBuilder.instance()
-        .spacing(5, 'EDGE_START').build()
-    })
+      paddings: FlexSpacingBuilder.instance().spacing(5, 'EDGE_START').build(),
+    });
 
     this._mainLeftEndJustified = KonvaFlexGroup.of({
       konvaNode: KonvaFactory.createGroup(),
       konvaBgNode: KonvaFactory.createRect({
         fill: 'blue',
-        opacity: 0
+        opacity: 0,
       }),
       clip: true,
       height: '100%',
@@ -261,10 +262,8 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
       justifyContent: 'JUSTIFY_FLEX_START',
       alignItems: 'ALIGN_CENTER',
       positionType: 'POSITION_TYPE_ABSOLUTE',
-      paddings: FlexSpacingBuilder.instance()
-        .spacing(5, 'EDGE_START')
-        .build()
-    })
+      paddings: FlexSpacingBuilder.instance().spacing(5, 'EDGE_START').build(),
+    });
 
     if (StringUtil.isNonEmpty(this._description)) {
       // if description is to be updated, we will move this outside if
@@ -272,7 +271,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
         konvaNode: KonvaFactory.createGroup(),
         konvaBgNode: KonvaFactory.createRect({
           fill: 'blue',
-          opacity: 0
+          opacity: 0,
         }),
         clip: true,
         height: '100%',
@@ -281,13 +280,10 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
         justifyContent: 'JUSTIFY_FLEX_START',
         alignItems: 'ALIGN_CENTER',
         positionType: 'POSITION_TYPE_ABSOLUTE',
-        paddings: FlexSpacingBuilder.instance()
-          .spacing(5, 'EDGE_START')
-          .build()
-      })
+        paddings: FlexSpacingBuilder.instance().spacing(5, 'EDGE_START').build(),
+      });
 
-      flexGroup
-        .addChild(this._mainLeftDescription);
+      flexGroup.addChild(this._mainLeftDescription);
 
       this._descriptionTextLabel = new TextLabel({
         text: this._description,
@@ -299,22 +295,22 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
           offsetY: this._styleAdapter.style.descriptionTextYOffset,
           align: 'right',
           verticalAlign: 'middle',
-        }
-      })
+        },
+      });
 
-      let flexItem = new KonvaFlexItem({
-        width: '100%',
-        height: '100%',
-        flexGrow: 1
-      }, new KonvaComponentFlexContentNode(this._descriptionTextLabel))
+      let flexItem = new KonvaFlexItem(
+        {
+          width: '100%',
+          height: '100%',
+          flexGrow: 1,
+        },
+        new KonvaComponentFlexContentNode(this._descriptionTextLabel)
+      );
 
-      this._mainLeftDescription
-        .addChild(flexItem)
+      this._mainLeftDescription.addChild(flexItem);
     }
 
-    flexGroup
-      .addChild(this._mainLeftStartJustified)
-      .addChild(this._mainLeftEndJustified)
+    flexGroup.addChild(this._mainLeftStartJustified).addChild(this._mainLeftEndJustified);
 
     return flexGroup;
   }
@@ -329,8 +325,8 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
       margins: FlexSpacingBuilder.instance()
         .spacing(this.style.marginBottom ? this.style.marginBottom : 0, 'EDGE_BOTTOM')
         .build(),
-      justifyContent: 'JUSTIFY_FLEX_START'
-    })
+      justifyContent: 'JUSTIFY_FLEX_START',
+    });
   }
 
   onMeasurementsChange() {
@@ -342,31 +338,40 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
       this._descriptionTextLabel.style = {
         fontFamily: this._timeline?.style.textFontFamily,
         fontStyle: this._timeline?.style.textFontStyle,
-      }
+      };
     }
 
     this._leftBgRect.setAttrs({
       fill: this._styleAdapter.style.leftBackgroundFill ? this._styleAdapter.style.leftBackgroundFill : this._styleAdapter.style.backgroundFill,
       opacity: this._styleAdapter.style.leftBackgroundOpacity ? this._styleAdapter.style.leftBackgroundOpacity : this._styleAdapter.style.backgroundOpacity,
-    })
+    });
 
     this._rightBgRect.setAttrs({
       fill: this._styleAdapter.style.rightBackgroundFill ? this._styleAdapter.style.rightBackgroundFill : this._styleAdapter.style.backgroundFill,
       opacity: this._styleAdapter.style.rightBackgroundOpacity ? this._styleAdapter.style.leftBackgroundOpacity : this._styleAdapter.style.backgroundOpacity,
     });
 
-    [this.mainLeftFlexGroup, this.mainRightFlexGroup].forEach(p => {
+    // removed from style updates to enable bulk minimize / maximize
+    // this.updateLayoutDimensions({
+    //   height: this.style.height,
+    //   marginBottom: this.style.marginBottom ? this.style.marginBottom : 0
+    // })
+  }
+
+  updateLayoutDimensions(refreshLayout: boolean = true) {
+    [this.mainLeftFlexGroup, this.mainRightFlexGroup].forEach((p) => {
       let marginFlexSpacing = FlexSpacingBuilder.instance()
         .spacing(this.style.marginBottom ? this.style.marginBottom : 0, 'EDGE_BOTTOM')
         .build();
 
       p.setHeightAndMargins(this.style.height, marginFlexSpacing, false); // refreshLayout = false because we want refresh to occurr when both left and right panel layouts were recalculated
-    })
-    this._timeline?.settleLayout();
+    });
+    if (refreshLayout) {
+      this._timeline?.settleLayout();
+    }
   }
 
-  clearContent() {
-  }
+  clearContent() {}
 
   getTimecodedRect(): RectMeasurement {
     let layout = this.mainRightFlexGroup.getLayout();
@@ -375,12 +380,12 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
       x: 0,
       y: layout.top,
       width: timelineTimecodedDimension ? timelineTimecodedDimension.width : 0,
-      height: layout.height
+      height: layout.height,
     };
   }
 
   getTimecodedPointerPosition(): Position | undefined {
-    return this._timeline ? this._timeline.getTimecodedFloatingRelativePointerPosition() : void 0
+    return this._timeline ? this._timeline.getTimecodedFloatingRelativePointerPosition() : void 0;
   }
 
   getTimecodedPointerPositionTime(): number {
@@ -400,18 +405,19 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
   }
 
   addTimelineNode(config: TimelineLaneComponentConfig): TimelineNode {
-    let flexItem = new KonvaFlexItem({
-      width: config.width,
-      height: config.height,
-      margins: config.margin ? FlexSpacingBuilder.instance().topRightBottomLeft(config.margin).build() : void 0,
-    }, new KonvaComponentFlexContentNode(config.timelineNode))
+    let flexItem = new KonvaFlexItem(
+      {
+        width: config.width,
+        height: config.height,
+        margins: config.margin ? FlexSpacingBuilder.instance().topRightBottomLeft(config.margin).build() : void 0,
+      },
+      new KonvaComponentFlexContentNode(config.timelineNode)
+    );
 
     if (config.justify === 'start') {
-      this._mainLeftStartJustified
-        .addChild(flexItem)
+      this._mainLeftStartJustified.addChild(flexItem);
     } else {
-      this._mainLeftEndJustified
-        .addChild(flexItem)
+      this._mainLeftEndJustified.addChild(flexItem);
     }
 
     return config.timelineNode;
@@ -421,19 +427,29 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
     return this.getTimecodedRect().height === 0;
   }
 
-  minimize() {
+  minimizeInternal(refreshLayout: boolean = true) {
     this.style = {
       height: 0,
-      marginBottom: 0
+      marginBottom: 0,
     } as Partial<S>;
+    this.updateLayoutDimensions(refreshLayout)
   }
 
-  maximize() {
+  maximizeInternal(refreshLayout: boolean = true) {
     // revert to inital style from config
     this.style = {
       height: this._config.style.height,
-      marginBottom: this._config.style.marginBottom ? this._config.style.marginBottom : 0
+      marginBottom: this._config.style.marginBottom ? this._config.style.marginBottom : 0,
     } as Partial<S>;
+    this.updateLayoutDimensions(refreshLayout)
+  }
+
+  minimize() {
+    this.minimizeInternal();
+  }
+
+  maximize() {
+    this.maximizeInternal()
   }
 
   minimizeEased(): Observable<void> {
@@ -441,7 +457,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
       throw new Error('Timeline lane not added to timeline');
     }
 
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       let layout = this._mainLeftFlexGroup.getLayout();
       let marginBottom = this._styleAdapter.style.marginBottom ? this._styleAdapter.style.marginBottom : 0;
       animate({
@@ -450,20 +466,19 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
         endValue: 0,
         onUpdateHandler: (frame, value) => {
           let newHeight = Math.round(value);
-          let newMargin = new Decimal(marginBottom).mul(newHeight).div(this._styleAdapter.style.height).toDecimalPlaces(0).toNumber()
+          let newMargin = new Decimal(marginBottom).mul(newHeight).div(this._styleAdapter.style.height).toDecimalPlaces(0).toNumber();
 
           this.style = {
             height: newHeight,
-            marginBottom: newMargin
+            marginBottom: newMargin,
           } as Partial<S>;
-
         },
         onCompleteHandler: (frame, value) => {
           this.minimize();
           nextCompleteObserver(observer);
-        }
-      })
-    })
+        },
+      });
+    });
   }
 
   maximizeEased(): Observable<void> {
@@ -471,7 +486,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
       throw new Error('Timeline lane not added to timeline');
     }
 
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       let layout = this._mainLeftFlexGroup.getLayout();
       let marginBottom = this._styleAdapter.style.marginBottom ? this._styleAdapter.style.marginBottom : 0;
       animate({
@@ -480,19 +495,19 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
         endValue: this._config.style.height, // revert to inital style from config
         onUpdateHandler: (frame, value) => {
           let newHeight = Math.round(value);
-          let newMargin = new Decimal(marginBottom).mul(newHeight).div(this._styleAdapter.style.height).toDecimalPlaces(0).toNumber()
+          let newMargin = new Decimal(marginBottom).mul(newHeight).div(this._styleAdapter.style.height).toDecimalPlaces(0).toNumber();
 
           this.style = {
             height: newHeight,
-            marginBottom: newMargin
+            marginBottom: newMargin,
           } as Partial<S>;
         },
         onCompleteHandler: (frame, value) => {
           this.maximize();
           nextCompleteObserver(observer);
-        }
-      })
-    })
+        },
+      });
+    });
   }
 
   toggleMinimizeMaximize() {
@@ -529,17 +544,10 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
   destroy() {
     this.clearContent();
 
-    destroyer(
-      this.mainLeftFlexGroup,
-      this.mainRightFlexGroup
-    )
+    destroyer(this.mainLeftFlexGroup, this.mainRightFlexGroup);
 
     nextCompleteSubject(this._destroyed$);
 
-    nullifier(
-      this._config,
-      this._styleAdapter
-    )
+    nullifier(this._config, this._styleAdapter);
   }
-
 }

@@ -45,10 +45,13 @@ const configDefault: Omit<SubtitlesLaneItemConfig, 'subtitlesLane' | 'cues' | 'x
     fill: 'rgba(255,73,145)',
     opacity: 1,
     visible: true,
-  }
-}
+  },
+};
 
-export class SubtitlesLaneItem extends BaseKonvaComponent<SubtitlesLaneItemConfig, SubtitlesLaneItemStyle, Konva.Group> implements OnMeasurementsChange, HasRectMeasurement, Comparable<SubtitlesLaneItem> {
+export class SubtitlesLaneItem
+  extends BaseKonvaComponent<SubtitlesLaneItemConfig, SubtitlesLaneItemStyle, Konva.Group>
+  implements OnMeasurementsChange, HasRectMeasurement, Comparable<SubtitlesLaneItem>
+{
   public readonly onClick$: Subject<SubtitlesChartEvent> = new Subject<SubtitlesChartEvent>();
 
   private _group: Konva.Group;
@@ -57,7 +60,7 @@ export class SubtitlesLaneItem extends BaseKonvaComponent<SubtitlesLaneItemConfi
 
   private _subtitlesLane: SubtitlesLane;
 
-  constructor(config: ConfigWithOptionalStyle<SubtitlesLaneItemConfig>,) {
+  constructor(config: ConfigWithOptionalStyle<SubtitlesLaneItemConfig>) {
     super({
       ...configDefault,
       ...config,
@@ -77,7 +80,7 @@ export class SubtitlesLaneItem extends BaseKonvaComponent<SubtitlesLaneItemConfi
       width: this.config.width,
       height: this.style.height,
       visible: this.style.visible,
-      listening: this.config.listening
+      listening: this.config.listening,
     });
 
     this._bgRect = KonvaFactory.createRect({
@@ -89,23 +92,23 @@ export class SubtitlesLaneItem extends BaseKonvaComponent<SubtitlesLaneItemConfi
       opacity: this.style.opacity,
       perfectDrawEnabled: false,
       shadowForStrokeEnabled: false,
-      hitStrokeWidth: 0
-    })
+      hitStrokeWidth: 0,
+    });
 
-    this._group.add(this._bgRect)
+    this._group.add(this._bgRect);
 
     this._group.on('click', (event) => {
       let cue = this.findCueOnTime(this._subtitlesLane.getTimecodedPointerPositionTime());
       if (cue) {
         this.onClick$.next({
-          cue: cue
+          cue: cue,
         });
       }
     });
   }
 
   protected findCueOnTime(timelinePositionTime: number): OmakaseTextTrackCue | undefined {
-    return this._cues.find(cue => timelinePositionTime >= cue.startTime && timelinePositionTime <= cue.endTime);
+    return this._cues.find((cue) => timelinePositionTime >= cue.startTime && timelinePositionTime <= cue.endTime);
   }
 
   protected provideKonvaNode(): Konva.Group {
@@ -127,22 +130,22 @@ export class SubtitlesLaneItem extends BaseKonvaComponent<SubtitlesLaneItemConfi
   getRect(): RectMeasurement {
     return {
       ...this.getPosition(),
-      ...this.getDimension()
+      ...this.getDimension(),
     };
   }
 
   getHorizontals(): Horizontals {
     return {
       x: this._group.x(),
-      width: this._group.width()
-    }
+      width: this._group.width(),
+    };
   }
 
   setHorizontals(horizontals: Horizontals) {
     this._group.setAttrs({
       x: horizontals.x,
-      width: horizontals.width
-    })
+      width: horizontals.width,
+    });
     this.onMeasurementsChange();
   }
 
@@ -152,19 +155,17 @@ export class SubtitlesLaneItem extends BaseKonvaComponent<SubtitlesLaneItemConfi
 
   setVisible(visible: boolean) {
     this.style = {
-      visible: visible
+      visible: visible,
     };
     this._group.visible(visible);
   }
 
   compareTo(o: SubtitlesLaneItem): number {
-    return this._cues && o ? JSON.stringify(this.getCues()) === JSON.stringify(o.getCues()) ? 0 : -1 : -1;
+    return this._cues && o ? (JSON.stringify(this.getCues()) === JSON.stringify(o.getCues()) ? 0 : -1) : -1;
   }
 
   override destroy() {
     super.destroy();
-    nullifier(
-      this._cues
-    );
+    nullifier(this._cues);
   }
 }

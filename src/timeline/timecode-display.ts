@@ -30,16 +30,14 @@ export interface TimecodeDisplayStyle {
   width: number;
   height: number;
 
-  visible: boolean,
+  visible: boolean;
 
   fontSize?: number;
   fill?: string;
-  offsetY?: number,
+  offsetY?: number;
 }
 
-export interface TimecodeDisplayConfig extends ComponentConfig<TimecodeDisplayStyle> {
-
-}
+export interface TimecodeDisplayConfig extends ComponentConfig<TimecodeDisplayStyle> {}
 
 const configDefault: TimecodeDisplayConfig = {
   style: {
@@ -52,8 +50,8 @@ const configDefault: TimecodeDisplayConfig = {
     fontSize: 20,
     fill: '#0d0f05',
     offsetY: -3,
-  }
-}
+  },
+};
 
 export class TimecodeDisplay extends BaseKonvaComponent<TimecodeDisplayConfig, TimecodeDisplayStyle, Konva.Group> implements OnMeasurementsChange, HasRectMeasurement {
   private _timeline: TimelineApi;
@@ -98,7 +96,7 @@ export class TimecodeDisplay extends BaseKonvaComponent<TimecodeDisplayConfig, T
       visible: true,
       align: 'left',
       verticalAlign: 'middle',
-      offsetY: this.style.offsetY
+      offsetY: this.style.offsetY,
     });
 
     this._group.add(this._text);
@@ -107,19 +105,29 @@ export class TimecodeDisplay extends BaseKonvaComponent<TimecodeDisplayConfig, T
       this._text.setAttrs({
         fontFamily: this._timeline.style.textFontFamily,
         fontStyle: this._timeline.style.textFontStyle,
-      })
-    })
+      });
+    });
 
-    this._styleAdapter.onChange$.pipe(takeUntil(this._destroyed$), filter(p => !!p)).subscribe((styles) => {
-      this._text.setAttrs({
-        fontSize: styles.fontSize,
-        fill: styles.fill
-      })
-    })
+    this._styleAdapter.onChange$
+      .pipe(
+        takeUntil(this._destroyed$),
+        filter((p) => !!p)
+      )
+      .subscribe((styles) => {
+        this._text.setAttrs({
+          fontSize: styles.fontSize,
+          fill: styles.fill,
+        });
+      });
 
-    this._videoController.onVideoLoaded$.pipe(filter(p => !!p), takeUntil(this._destroyed$)).subscribe((event) => {
-      this.onVideoLoadedEvent(event!);
-    })
+    this._videoController.onVideoLoaded$
+      .pipe(
+        filter((p) => !!p),
+        takeUntil(this._destroyed$)
+      )
+      .subscribe((event) => {
+        this.onVideoLoadedEvent(event!);
+      });
   }
 
   protected provideKonvaNode(): Konva.Group {
@@ -128,8 +136,8 @@ export class TimecodeDisplay extends BaseKonvaComponent<TimecodeDisplayConfig, T
 
   onMeasurementsChange() {
     this._text.size({
-      ...this._group.size()
-    })
+      ...this._group.size(),
+    });
   }
 
   private fireVideoEventStreamBreaker() {
@@ -144,18 +152,17 @@ export class TimecodeDisplay extends BaseKonvaComponent<TimecodeDisplayConfig, T
 
     this._videoController.onVideoTimeChange$.pipe(takeUntil(this._videoEventStreamBreaker$)).subscribe((event) => {
       this._text.text(this._videoController.formatToTimecode(event.currentTime));
-    })
+    });
   }
 
   setVisible(visible: boolean) {
     this.style = {
-      visible: visible
-    }
+      visible: visible,
+    };
     this._group.visible(visible);
   }
 
   getRect(): RectMeasurement {
     return this._group.getClientRect();
   }
-
 }

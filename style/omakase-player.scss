@@ -70,6 +70,7 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
     }
 
     .omakase-video-controls {
+      z-index: 1;
       .omakase-video-safe-zone-wrapper {
         position: absolute;
         left: 0;
@@ -92,7 +93,6 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
           -moz-box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5);
         }
       }
-
     }
 
     .omakase-help {
@@ -206,8 +206,8 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
         display: flex;
         width: 400px;
         min-height: 44px;
-        background-color: rgba(#3A3D4B, 0.7);
-        border: 1px #3A3D4B;
+        background-color: rgba(#3a3d4b, 0.7);
+        border: 1px #3a3d4b;
         border-radius: 5px;
         padding: 10px;
         margin-bottom: 10px;
@@ -238,11 +238,11 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
         }
 
         &.warning {
-          color: #FDF5AD;
+          color: #fdf5ad;
         }
 
         &.info {
-          color: #CACFEA;
+          color: #cacfea;
         }
 
         &.error {
@@ -256,7 +256,8 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
             display: none;
           }
 
-          .alert-text, .omakase-alert-icon {
+          .alert-text,
+          .omakase-alert-icon {
             filter: blur(2px);
             overflow: hidden;
             white-space: nowrap;
@@ -276,10 +277,8 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
         .alert-close {
           cursor: pointer;
         }
-
       }
     }
-
   }
 }
 
@@ -295,7 +294,9 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
   }
 }
 
-.media-chrome-disabled, .omakase-player-detached, :not(.omakase-player-fullscreen) > .media-chrome-fullscreen-only {
+.media-chrome-disabled,
+.omakase-player-detached,
+:not(.omakase-player-fullscreen) > .media-chrome-fullscreen-only {
   media-controller {
     > *:not(video, .omakase-video-controls) {
       display: none;
@@ -303,7 +304,8 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
   }
 }
 
-:not(.omakase-player-detached) > .media-chrome-enabled, .omakase-player-fullscreen > .media-chrome-fullscreen-only {
+:not(.omakase-player-detached) > .media-chrome-enabled,
+.omakase-player-fullscreen > .media-chrome-fullscreen-only {
   media-controller > *:not(video, .d-none) {
     display: block !important;
     &.lower-control-bar {
@@ -313,15 +315,15 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
 }
 
 :not(.omakase-player-detached) > .media-chrome-enabled {
-    .omakase-help {
-      display: none !important;
-    }
-    .omakase-section-bottom-right {
-      display: none !important;
-    }
-    .omakase-video-safe-zone-wrapper {
-      pointer-events: none;
-    }
+  .omakase-help {
+    display: none !important;
+  }
+  .omakase-section-bottom-right {
+    display: none !important;
+  }
+  .omakase-video-safe-zone-wrapper {
+    pointer-events: none;
+  }
 }
 
 media-controller {
@@ -331,6 +333,7 @@ media-controller {
 
   --media-control-background: transparent;
   --media-control-hover-background: transparent;
+  --media-tooltip-display: none;
 
   --padding-size-default: 5px;
   --icon-size-default: 28px;
@@ -344,7 +347,7 @@ media-controller {
   --thumbnail-margin-default: 10px;
   --preview-font-size-default: 14px;
   --preview-line-height-default: 18px;
-  --time-range-height-default: 20px;
+  --time-range-height-default: 22px;
   --controls-height-default: 40px;
   --controls-bottom-padding-default: 10px;
   --controls-left-padding-default: 10px;
@@ -355,12 +358,15 @@ media-controller {
 
   container: media-chrome / inline-size;
 
+  * {
+    box-shadow: none;
+  }
+
   omakase-time-range {
     width: 100%;
   }
 
   .omakase-overlay-buttons {
-
     pointer-events: none;
 
     .omakase-video-overlay-button {
@@ -410,7 +416,6 @@ media-controller {
     .omakase-overlay-button-attach {
       background-image: url(/images/attach.svg);
     }
-
   }
 
   .media-chrome-button {
@@ -424,7 +429,9 @@ media-controller {
 
     media-tooltip {
       opacity: 0;
-      transition: opacity .3s, max-width 0s 9s;
+      transition:
+        opacity 0.3s,
+        max-width 0s 9s;
     }
 
     span {
@@ -432,7 +439,8 @@ media-controller {
       height: var(--icon-size, var(--icon-size-default));
       background-size: 100%;
 
-      &.media-chrome-bitc-enabled, &.media-chrome-bitc-disabled {
+      &.media-chrome-bitc-enabled,
+      &.media-chrome-bitc-disabled {
         width: var(--bitc-width, var(--bitc-width-default));
         margin-top: var(--bitc-margin, var(--bitc-margin-default));
         margin-right: var(--padding-size, var(--padding-size-default));
@@ -445,7 +453,7 @@ media-controller {
     position: absolute;
     top: 6%;
     text-align: center;
-  
+
     omakase-time-display {
       color: white;
       line-height: var(--timecode-line-height, var(--timecode-line-height-default));
@@ -524,7 +532,6 @@ media-controller {
   }
 
   .upper-control-bar {
-
     padding: 0 var(--padding-size, var(--padding-size-default));
 
     omakase-time-range {
@@ -541,7 +548,6 @@ media-controller {
     }
 
     omakase-preview-thumbnail {
-
       img {
         width: var(--thumbnail-width, var(--thumbnail-width-default));
         border: var(--thumbnail-border, var(--thumbnail-border-default)) solid white;
@@ -550,11 +556,10 @@ media-controller {
         margin-bottom: var(--thumbnail-margin, var(--thumbnail-margin-default));
       }
 
-      img[src=""] {
+      img[src=''] {
         display: none;
       }
     }
-
   }
 
   .lower-control-bar {
@@ -573,7 +578,7 @@ media-controller {
         width: 0;
         overflow: hidden;
         margin-left: -10px;
-        height: var(--time-range-height, var(--time-range-height-default))
+        height: var(--time-range-height, var(--time-range-height-default));
       }
       &:hover {
         media-volume-range {
@@ -590,7 +595,6 @@ media-controller {
       justify-self: end;
       padding-right: var(--controls-right-padding, var(--controls-right-padding-default));
     }
-
   }
 
   @container (inline-size < 400px) {
@@ -600,44 +604,59 @@ media-controller {
   }
 
   @container (inline-size < 600px) {
-
     * {
-      --padding-size: calc(var(--padding-size-default) * 0.75);
-      --icon-size: calc(var(--icon-size-default)  * 0.75);
-      --bitc-width: calc(var(--bitc-width-default) * 0.75);
-      --bitc-margin: calc(var(--bitc-margin-default) * 0.75) ;
-      --timecode-font-size: calc(var(--timecode-font-size-default) * 0.75);
-      --timecode-line-height: calc(var(--timecode-line-height-default) * 0.75);
-      --thumbnail-width: calc(var(--thumbnail-width-default) * 0.75);
-      --thumbnail-border: calc(var(--thumbnail-border-default) * 0.75);
-      --thumbnail-shadow: calc(var(--thumbnail-shadow-default) * 0.75);
-      --thumbnail-margin: calc(var(--thumbnail-margin-default) * 0.75);
-      --preview-font-size: calc(var(--preview-font-size-default) * 0.75);
-      --preview-line-height: calc(var(--preview-line-height-default) * 0.75);
-      --time-range-height: calc(var(--time-range-height-default) * 0.75);
-      --controls-height: calc(var(--controls-height-default) * 0.75);
-      --controls-bottom-padding: calc(var(--controls-bottom-padding-default) * 0.75);
+      --padding-size: calc(var(--padding-size-default) * 0.5);
+      --icon-size: calc(var(--icon-size-default) * 0.85);
+      --bitc-width: calc(var(--bitc-width-default) * 0.85);
+      --bitc-margin: calc(var(--bitc-margin-default) * 0.85);
+      --timecode-font-size: calc(var(--timecode-font-size-default) * 0.85);
+      --timecode-line-height: calc(var(--timecode-line-height-default) * 0.85);
+      --thumbnail-width: calc(var(--thumbnail-width-default) * 0.85);
+      --thumbnail-border: calc(var(--thumbnail-border-default) * 0.85);
+      --thumbnail-shadow: calc(var(--thumbnail-shadow-default) * 0.85);
+      --thumbnail-margin: calc(var(--thumbnail-margin-default) * 0.85);
+      --preview-font-size: calc(var(--preview-font-size-default) * 0.85);
+      --preview-line-height: calc(var(--preview-line-height-default) * 0.85);
+      --time-range-height: calc(var(--time-range-height-default) * 0.85);
+      --controls-height: calc(var(--controls-height-default) * 0.85);
+      --controls-bottom-padding: calc(var(--controls-bottom-padding-default) * 0.85);
       --controls-left-padding: 10px;
       --controls-right-padding: 9px;
       --volume-container-width: 120px;
       --volume-range-width: 60px;
-      --center-control-size: calc(var(--center-control-size-default) * 0.75);
+      --center-control-size: calc(var(--center-control-size-default) * 0.85);
     }
   }
 
-  @container (inline-size > 1000px) {
+  @container (inline-size > 1200px) {
+    * {
+      --padding-size: calc(var(--padding-size-default) * 1.125);
+      --icon-size: calc(var(--icon-size-default) * 1.125);
+      --bitc-width: calc(var(--bitc-width-default) * 1.125);
+      --bitc-margin: calc(var(--bitc-margin-default) * 1.125);
+      --timecode-font-size: calc(var(--timecode-font-size-default) * 1.125);
+      --timecode-line-height: calc(var(--timecode-line-height-default) * 1.125);
+      --time-range-height: calc(var(--time-range-height-default) * 1.125);
+      --controls-height: calc(var(--controls-height-default) * 1.125);
+      --controls-bottom-padding: calc(var(--controls-bottom-padding-default) * 1.125);
+      --volume-container-width: calc(var(--volume-container-width-default) * 1.125);
+      --volume-range-width: calc(var(--volume-range-width-default) * 1.125);
+      --center-control-size: calc(var(--center-control-size-default) * 1.125);
+    }
+  }
 
+  @container (inline-size > 1600px) {
     * {
       --media-range-thumb-height: 14px;
       --media-range-thumb-width: 14px;
       --media-range-thumb-border-radius: 14px;
       --media-control-height: 36px;
       --media-range-track-height: 6px;
-      
+
       --padding-size: calc(var(--padding-size-default) * 1.25);
       --icon-size: calc(var(--icon-size-default) * 1.25);
       --bitc-width: calc(var(--bitc-width-default) * 1.25);
-      --bitc-margin: calc(var(--bitc-margin-default) * 1.25) ;
+      --bitc-margin: calc(var(--bitc-margin-default) * 1.25);
       --timecode-font-size: calc(var(--timecode-font-size-default) * 1.25);
       --timecode-line-height: calc(var(--timecode-line-height-default) * 1.25);
       --time-range-height: calc(var(--time-range-height-default) * 1.25);
@@ -649,8 +668,7 @@ media-controller {
     }
   }
 
-  @container (inline-size > 1600px) {
-
+  @container (inline-size > 2400px) {
     * {
       --media-range-thumb-height: 16px;
       --media-range-thumb-width: 16px;
@@ -662,7 +680,7 @@ media-controller {
       --padding-size: calc(var(--padding-size-default) * 1.5);
       --icon-size: calc(var(--icon-size-default) * 1.5);
       --bitc-width: calc(var(--bitc-width-default) * 1.5);
-      --bitc-margin: calc(var(--bitc-margin-default) * 1.5) ;
+      --bitc-margin: calc(var(--bitc-margin-default) * 1.5);
       --timecode-font-size: calc(var(--timecode-font-size-default) * 1.5);
       --timecode-line-height: calc(var(--timecode-line-height-default) * 1.5);
       --thumbnail-width: calc(var(--thumbnail-width-default) * 1.25);
@@ -679,16 +697,19 @@ media-controller {
     }
   }
 
-  @container (inline-size > 2400px) {
-
+  @container (inline-size > 4000px) {
     * {
-      --media-range-thumb-height: 20px;
-      --media-range-thumb-width: 20px;
-      --media-range-thumb-border-radius: 20px;
+      --media-range-thumb-height: 24px;
+      --media-range-thumb-width: 24px;
+      --media-range-thumb-border-radius: 24px;
       --media-control-height: 48px;
-      --media-range-track-height: 10px;
+      --media-range-track-height: 12px;
       --media-font-size: 24px;
 
+      --padding-size: calc(var(--padding-size-default) * 2);
+      --icon-size: calc(var(--icon-size-default) * 2);
+      --bitc-width: calc(var(--bitc-width-default) * 2);
+      --bitc-margin: calc(var(--bitc-margin-default) * 2);
       --timecode-font-size: calc(var(--timecode-font-size-default) * 2);
       --timecode-line-height: calc(var(--timecode-line-height-default) * 2);
       --thumbnail-width: calc(var(--thumbnail-width-default) * 1.5);
@@ -696,39 +717,13 @@ media-controller {
       --thumbnail-shadow: calc(var(--thumbnail-shadow-default) * 1.5);
       --preview-font-size: calc(var(--preview-font-size-default) * 1.5);
       --preview-line-height: calc(var(--preview-line-height-default) * 1.5);
+      --time-range-height: calc(var(--time-range-height-default) * 2);
+      --controls-height: calc(var(--controls-height-default) * 2);
+      --controls-bottom-padding: calc(var(--controls-bottom-padding-default) * 2);
+      --volume-container-width: calc(var(--volume-container-width-default) * 2);
+      --volume-range-width: calc(var(--volume-range-width-default) * 2);
+      --volume-range-margin: calc(var(--volume-range-margin-default) * 2);
       --center-control-size: calc(var(--center-control-size-default) * 1.5);
     }
   }
-
-  @container (inline-size > 4000px) {
-
-    * {
-      --media-range-thumb-height: 32px;
-      --media-range-thumb-width: 32px;
-      --media-range-thumb-border-radius: 32px;
-      --media-control-height: 48px;
-      --media-range-track-height: 16px;
-      --media-font-size: 36px;
-
-      --padding-size: calc(var(--padding-size-default) * 3);
-      --icon-size: calc(var(--icon-size-default) * 3);
-      --bitc-width: calc(var(--bitc-width-default) * 3);
-      --bitc-margin: calc(var(--bitc-margin-default) * 3) ;
-      --timecode-font-size: calc(var(--timecode-font-size-default) * 3);
-      --timecode-line-height: calc(var(--timecode-line-height-default) * 3);
-      --thumbnail-width: calc(var(--thumbnail-width-default) * 2);
-      --thumbnail-border: calc(var(--thumbnail-border-default) * 2);
-      --thumbnail-shadow: calc(var(--thumbnail-shadow-default) * 2);
-      --preview-font-size: calc(var(--preview-font-size-default) * 2);
-      --preview-line-height: calc(var(--preview-line-height-default) * 2);
-      --time-range-height: calc(var(--time-range-height-default) * 3);
-      --controls-height: calc(var(--controls-height-default) * 3);
-      --controls-bottom-padding: calc(var(--controls-bottom-padding-default) * 3);
-      --volume-container-width: calc(var(--volume-container-width-default) * 3);
-      --volume-range-width: calc(var(--volume-range-width-default) * 3);
-      --volume-range-margin: calc(var(--volume-range-margin-default) * 3);
-      --center-control-size: calc(var(--center-control-size-default) * 2);
-    }
-  }
-
 }

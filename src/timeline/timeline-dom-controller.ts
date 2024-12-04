@@ -28,7 +28,7 @@ const domClasses = {
   timelineOverlay: 'omakase-timeline-overlay',
   timelineCanvas: 'omakase-timeline-canvas',
   timelineTimecode: 'omakase-timeline-timecode',
-}
+};
 
 export class TimelineDomController implements Destroyable {
   private _timeline: Timeline;
@@ -46,26 +46,26 @@ export class TimelineDomController implements Destroyable {
     this._timeline = timeline;
 
     if (StringUtil.isNullUndefinedOrWhitespace(this._timeline.config.timelineHTMLElementId)) {
-      throw new Error(`Timeline <div> id not provided`)
+      throw new Error(`Timeline <div> id not provided`);
     }
 
     this._divTimeline = DomUtil.getElementById<HTMLElement>(this._timeline.config.timelineHTMLElementId);
 
     if (!this._divTimeline) {
-      throw new Error(`Could not find HTML element id=${this._timeline.config.timelineHTMLElementId}`)
+      throw new Error(`Could not find HTML element id=${this._timeline.config.timelineHTMLElementId}`);
     }
 
     this.createDom();
 
     this.videoController = videoController;
 
-    this._timeline.onReady$.pipe(filter(p => !!p)).subscribe((event) => {
+    this._timeline.onReady$.pipe(filter((p) => !!p)).subscribe((event) => {
       this.settleDom();
-    })
+    });
 
-    this._videoController.onVideoLoaded$.pipe(filter(p => !!p)).subscribe((event) => {
+    this._videoController.onVideoLoaded$.pipe(filter((p) => !!p)).subscribe((event) => {
       this.settleDom();
-    })
+    });
   }
 
   private createDom() {
@@ -94,16 +94,16 @@ export class TimelineDomController implements Destroyable {
       let position: Position = this._timeline.getScrubberLane().mainLeftFlexGroup.contentNode.konvaNode.absolutePosition();
       let dimension: Dimension = {
         width: this._timeline.getScrubberLane().mainLeftFlexGroup.contentNode.konvaNode.width(),
-        height: this._timeline.getScrubberLane().mainLeftFlexGroup.contentNode.konvaNode.height()
+        height: this._timeline.getScrubberLane().mainLeftFlexGroup.contentNode.konvaNode.height(),
       };
 
-      this._divTimelineTimecode.style.top = `${position.y}px`
-      this._divTimelineTimecode.style.left = `${position.x}px`
-      this._divTimelineTimecode.style.width = `${dimension.width}px`
-      this._divTimelineTimecode.style.height = `${dimension.height}px`
+      this._divTimelineTimecode.style.top = `${position.y}px`;
+      this._divTimelineTimecode.style.left = `${position.x}px`;
+      this._divTimelineTimecode.style.width = `${dimension.width}px`;
+      this._divTimelineTimecode.style.height = `${dimension.height}px`;
 
-      this._divTimelineTimecode.style.fontStyle = `${this._timeline.style.textFontStyle}`
-      this._divTimelineTimecode.style.fontFamily = `${this._timeline.style.textFontFamily}`
+      this._divTimelineTimecode.style.fontStyle = `${this._timeline.style.textFontStyle}`;
+      this._divTimelineTimecode.style.fontFamily = `${this._timeline.style.textFontFamily}`;
     } else {
       this.setDivTimelineTimecode('');
     }
@@ -114,7 +114,7 @@ export class TimelineDomController implements Destroyable {
 
     this._videoController.onVideoTimeChange$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
       this.refreshTimecode();
-    })
+    });
   }
 
   private refreshTimecode() {
@@ -137,7 +137,6 @@ export class TimelineDomController implements Destroyable {
     nextCompleteSubject(this._destroyed$);
     this.cleanDom();
   }
-
 
   get divTimeline(): HTMLElement {
     return this._divTimeline;

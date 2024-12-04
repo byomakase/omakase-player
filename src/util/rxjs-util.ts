@@ -22,7 +22,7 @@ export function passiveObservable<T = void>(subscribe: (this: Observable<T>, sub
 }
 
 export function simplePassiveObservable<T = void>(value?: T): Observable<T> {
-  return passiveObservable(observer => nextCompleteObserver(observer, value as T));
+  return passiveObservable((observer) => nextCompleteObserver(observer, value as T));
 }
 
 export function nextCompleteObserver(observer: Observer<any>, value?: any) {
@@ -41,12 +41,8 @@ export function errorCompleteObserver(observer: Observer<any>, error: any) {
 
 export function nextCompleteSubject(subject: Subject<any>, value?: any) {
   if (subject) {
-    if (subject.closed) {
-      //console.debug('subject is already closed')
-    } else {
-      subject.next(value);
-      subject.complete();
-    }
+    subject.next(value);
+    subject.complete();
   } else {
     //console.debug('subject is undefined or null')
   }
@@ -65,15 +61,15 @@ export function completeSubject(subject: Subject<any>) {
 }
 
 export function completeSubjects(...subjects: Subject<any>[]) {
-  subjects.forEach(subject => {
+  subjects.forEach((subject) => {
     completeSubject(subject);
-  })
+  });
 }
 
 export function unsubscribeSubjects(...subjects: Subject<any>[]) {
-  subjects.forEach(subject => {
+  subjects.forEach((subject) => {
     unsubscribeSubject(subject);
-  })
+  });
 }
 
 export function completeUnsubscribeSubjects(...subjects: Subject<any>[]) {

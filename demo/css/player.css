@@ -40,13 +40,13 @@ body {
   width: 200px;
   height: 394px;
   float: left;
-  background-color: #EEEFEE;
+  background-color: #eeefee;
 }
 
 .peak-meter {
   width: 200px;
   height: 394px;
-  background-color: #EEEFEE;
+  background-color: #eeefee;
 }
 
 .vu-meter-labels {
@@ -64,7 +64,6 @@ body {
   display: inline-block;
 }
 
-
 .player-stats {
   width: 360px;
   height: 465px;
@@ -72,7 +71,6 @@ body {
   font-size: 14px;
   padding-left: 100px;
 }
-
 
 .marker-list-empty {
   padding: 10px;
@@ -95,16 +93,16 @@ body {
 }
 
 .marker-color {
-  position:absolute;
-  width:5px;
-  height:47px
+  position: absolute;
+  width: 5px;
+  height: 47px;
 }
 
 .marker-remove {
   position: absolute;
   top: 5px;
   right: 11px;
-  cursor:pointer;
+  cursor: pointer;
   color: #235067;
 }
 
@@ -194,26 +192,25 @@ body {
   padding-right: 10px;
 }
 
-
 /** Player CSS **/
 .omakase-player {
-  display: block
+  display: block;
 }
 
 .omakase-player .d-none {
-  display: none
+  display: none;
 }
 
 .omakase-player .d-block {
-  display: block
+  display: block;
 }
 
 .omakase-player .float-start {
-  float: left !important
+  float: left !important;
 }
 
 .omakase-player .float-end {
-  float: right !important
+  float: right !important;
 }
 
 .omakase-player .omakase-player-wrapper {
@@ -237,7 +234,7 @@ body {
       top: 0;
       bottom: 0;
 
-      outline: 2px solid #6AC7F6;
+      outline: 2px solid #6ac7f6;
       box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.85);
       -webkit-box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.85);
       -moz-box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.85);
@@ -252,7 +249,7 @@ body {
 .omakase-player .omakase-player-wrapper .omakase-video {
   display: block;
   width: 100%;
-  opacity: 100%
+  opacity: 100%;
 }
 
 .omakase-player .omakase-player-wrapper .omakase-video-controls .omakase-overlay-buttons .omakase-video-overlay-button {
@@ -266,33 +263,33 @@ body {
   bottom: 0;
   margin: auto;
   background-size: contain;
-  background-position: center
+  background-position: center;
 }
 
 .omakase-player .omakase-player-wrapper .omakase-video-controls .omakase-overlay-buttons .omakase-button-play {
-  background-image: url(../images/o-play.svg)
+  background-image: url(../images/o-play.svg);
 }
 
 .omakase-player .omakase-player-wrapper .omakase-video-controls .omakase-overlay-buttons .omakase-button-pause {
-  background-image: url(../images/o-pause.svg)
+  background-image: url(../images/o-pause.svg);
 }
 
 .omakase-player .omakase-player-wrapper .omakase-video-controls .omakase-overlay-buttons .omakase-button-replay {
-  background-image: url(../images/o-replay.svg)
+  background-image: url(../images/o-replay.svg);
 }
 
 .omakase-player .omakase-player-wrapper .omakase-video-controls .omakase-overlay-buttons .omakase-button-loading {
   background-image: url(../images/o-loading.svg);
-  animation: loading 3s linear infinite
+  animation: loading 3s linear infinite;
 }
 
 @keyframes loading {
   0% {
-    transform: rotate(0)
+    transform: rotate(0);
   }
 
   to {
-    transform: rotate(360deg)
+    transform: rotate(360deg);
   }
 }
 
@@ -300,13 +297,13 @@ body {
   font-size: 13px;
   position: absolute;
   right: 20px;
-  top: 20px
+  top: 20px;
 }
 
 .omakase-player .omakase-player-wrapper .omakase-help .omakase-help-dropdown {
   position: absolute;
   right: 0;
-  top: 0
+  top: 0;
 }
 
 .omakase-player .omakase-player-wrapper .omakase-help .omakase-help-dropdown .omakase-help-button {
@@ -319,40 +316,57 @@ body {
   padding: 0;
   width: 30px;
   height: 30px;
-  margin: 0 0 5px
+  margin: 0 0 5px;
 }
 
 .omakase-player .omakase-player-wrapper .omakase-help .omakase-help-dropdown .omakase-help-menu {
   z-index: 100;
   position: absolute;
   right: 0;
-  width: 400px
+  width: 400px;
 }
 
-.omakase-player .omakase-player-wrapper .omakase-help .omakase-help-dropdown .omakase-help-menu .omakase-help-group-title {
+.omakase-player
+  .omakase-player-wrapper
+  .omakase-help
+  .omakase-help-dropdown
+  .omakase-help-menu
+  .omakase-help-group-title {
   background: rgb(2, 171, 141);
   display: block;
   padding: 5px 10px;
   color: #fff;
   font-weight: 700;
-  text-align: left
+  text-align: left;
 }
 
 .omakase-player .omakase-player-wrapper .omakase-help .omakase-help-dropdown .omakase-help-menu .omakase-help-group {
   overflow-y: scroll;
   display: block;
   height: 200px;
-  background: rgba(2, 171, 141, .2)
+  background: rgba(2, 171, 141, 0.2);
 }
 
-.omakase-player .omakase-player-wrapper .omakase-help .omakase-help-dropdown .omakase-help-menu .omakase-help-group .omakase-help-item {
+.omakase-player
+  .omakase-player-wrapper
+  .omakase-help
+  .omakase-help-dropdown
+  .omakase-help-menu
+  .omakase-help-group
+  .omakase-help-item {
   display: list-item;
   padding: 5px 10px;
-  color: #fff
+  color: #fff;
 }
 
-.omakase-player .omakase-player-wrapper .omakase-help .omakase-help-dropdown .omakase-help-menu .omakase-help-group .omakase-help-item:hover {
-  background-color: #a93232
+.omakase-player
+  .omakase-player-wrapper
+  .omakase-help
+  .omakase-help-dropdown
+  .omakase-help-menu
+  .omakase-help-group
+  .omakase-help-item:hover {
+  background-color: #a93232;
 }
 
 .prevent-select {
@@ -366,7 +380,6 @@ body {
   background-color: #235067;
   margin-bottom: 10px;
   padding-right: 20px;
-
 }
 
 .header span {
@@ -397,7 +410,7 @@ body {
   width: 400px;
   max-height: 44px;
   background-color: rgba(58, 61, 75, 0.7);
-  border: 1px solid #3A3D4B;
+  border: 1px solid #3a3d4b;
   border-radius: 5px;
   padding: 10px;
   margin-bottom: 10px;
@@ -429,11 +442,11 @@ body {
 }
 
 .omakase-player-alerts .omakase-alert.warning {
-  color: #FDF5AD;
+  color: #fdf5ad;
 }
 
 .omakase-player-alerts .omakase-alert.info {
-  color: #CACFEA;
+  color: #cacfea;
 }
 
 .omakase-player-alerts .omakase-alert.error {
@@ -484,7 +497,7 @@ body {
 }
 
 .legend-box {
-  background-color: #E9F7FF;
+  background-color: #e9f7ff;
   width: 150px;
   height: 100px;
   position: relative;

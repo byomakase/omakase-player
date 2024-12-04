@@ -41,29 +41,25 @@ export interface ThumbnailVttCue extends OmakaseVttCue {
   url: string;
 }
 
-export interface SubtitlesVttCue extends OmakaseVttCue {
-
-}
+export interface SubtitlesVttCue extends OmakaseVttCue {}
 
 export interface AudioVttCue extends OmakaseVttCue {
   minSample: number;
   maxSample: number;
 }
 
-export interface MarkerVttCue extends OmakaseVttCue {
-
-}
+export interface MarkerVttCue extends OmakaseVttCue {}
 
 export interface LineChartVttCue extends OmakaseVttCue {
-  value: number
+  value: number;
 }
 
 export interface BarChartVttCue extends OmakaseVttCue {
-  value: number
+  value: number;
 }
 
 export interface OgChartVttCue extends OmakaseVttCue {
-  value: number
+  value: number;
 }
 
 export interface OmakaseVttCueExtension {

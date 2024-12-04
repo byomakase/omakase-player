@@ -55,5 +55,5 @@ export const markerListDefaultTemplates = {
           </div>
         `,
   empty: `No markers defined`,
-  loading: 'Loading...'
+  loading: 'Loading...',
 };

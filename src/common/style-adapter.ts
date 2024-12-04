@@ -23,7 +23,7 @@ export class StyleAdapter<T> {
 
   constructor(style: T) {
     this.style = {
-      ...style
+      ...style,
     };
   }
 
@@ -35,7 +35,7 @@ export class StyleAdapter<T> {
     let oldStringified = JSON.stringify(this._style);
     this._style = {
       ...this._style,
-      ...value
+      ...value,
     };
     if (oldStringified !== JSON.stringify(this._style)) {
       this.onChange$.next(this._style);

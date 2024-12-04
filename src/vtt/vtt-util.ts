@@ -31,7 +31,6 @@ import {UrlUtil} from '../util/url-util';
 const webvttParseOptions = {strict: true, meta: true};
 
 export class VttUtil {
-
   static parseVtt(vttText: string): VttFileParsed {
     let vttFileParsed: VttFileParsed = webvtt.parse(vttText, webvttParseOptions);
 
@@ -42,36 +41,38 @@ export class VttUtil {
   }
 
   static fetchFromM3u8SegmentedConcat(m3u8Url: string, axiosConfig?: AxiosRequestConfig, authentication?: AuthenticationData): Observable<string | undefined> {
-    return M3u8File.create(m3u8Url, axiosConfig, authentication).pipe(switchMap(m3u8File => {
-      return VttUtil.fetchFromM3u8FileSegmentedConcat(m3u8File, axiosConfig, authentication);
-    }))
+    return M3u8File.create(m3u8Url, axiosConfig, authentication).pipe(
+      switchMap((m3u8File) => {
+        return VttUtil.fetchFromM3u8FileSegmentedConcat(m3u8File, axiosConfig, authentication);
+      })
+    );
   }
 
   static fetchFromM3u8FileSegmentedConcat(m3u8File: M3u8File, axiosConfig?: AxiosRequestConfig, authentication?: AuthenticationData): Observable<string | undefined> {
     if (m3u8File.m3u8Parsed) {
       let vttRootUrl = m3u8File.url.substring(0, m3u8File.url.lastIndexOf('/'));
 
-      let vttUrls = m3u8File.m3u8Parsed.lines
-        .filter(p => p.type === 'URI')
-        .map(p => UrlUtil.isUrlAbsolute(p.content) ? p.content : `${vttRootUrl}/${p.content}`)
+      let vttUrls = m3u8File.m3u8Parsed.lines.filter((p) => p.type === 'URI').map((p) => (UrlUtil.isUrlAbsolute(p.content) ? p.content : `${vttRootUrl}/${p.content}`));
 
-      return VttUtil.fetchSegmentedConcat(vttUrls, axiosConfig, authentication)
+      return VttUtil.fetchSegmentedConcat(vttUrls, axiosConfig, authentication);
     } else {
       return of(void 0);
     }
   }
 
   static fetchSegmentedConcat(urls: string[], axiosConfig?: AxiosRequestConfig, authentication?: AuthenticationData): Observable<string | undefined> {
-    let vttTexts$ = urls.map(url => {
+    let vttTexts$ = urls.map((url) => {
       let authAxiosConfig: AxiosRequestConfig | undefined = undefined;
       if (!axiosConfig && authentication) {
         authAxiosConfig = AuthUtil.getAuthorizedAxiosConfig(url, authentication);
       }
-      return from(httpGet<string, AxiosRequestConfig>(url, axiosConfig ?? authAxiosConfig)).pipe(map(result => result.data))
-    })
-    return forkJoin(vttTexts$).pipe(map(vttTexts => {
-      return VttUtil.concatSegmented(vttTexts);
-    }))
+      return from(httpGet<string, AxiosRequestConfig>(url, axiosConfig ?? authAxiosConfig)).pipe(map((result) => result.data));
+    });
+    return forkJoin(vttTexts$).pipe(
+      map((vttTexts) => {
+        return VttUtil.concatSegmented(vttTexts);
+      })
+    );
   }
 
   static concatSegmented(vttTexts: string[]): string | undefined {
@@ -84,9 +85,9 @@ export class VttUtil {
         vttTexts
           .filter((p, index) => index !== 0)
           .forEach((vttText, index) => {
-            let vttFileParsed: VttFileParsed = webvtt.parse(vttText, webvttParseOptions)
-            first.cues = first.cues.concat(vttFileParsed.cues)
-          })
+            let vttFileParsed: VttFileParsed = webvtt.parse(vttText, webvttParseOptions);
+            first.cues = first.cues.concat(vttFileParsed.cues);
+          });
         return webvtt.compile(first);
       }
     } else {
@@ -101,21 +102,20 @@ export class VttUtil {
   static parseVttCueExtension(cue: VttCueParsed, extensionVersion: OmakaseWebVttExtensionVersion): OmakaseVttCueExtension | undefined {
     if (StringUtil.isNonEmpty(cue.text)) {
       let textRows = cue.text.split(/\r?\n|\r|\n/g);
-      let extensionRows: VttCueExtensionRow[] | undefined = textRows.map(row => {
+      let extensionRows: VttCueExtensionRow[] | undefined = textRows.map((row) => {
         let valueRegexArray = row.match(/(?:^|[^:=])([^:=]+)/);
-        let measurementRegexArray = row.match(/(?<=:MEASUREMENT=)[^:]+/)
-        let commentRegexArray = row.match(/(?<=:COMMENT=)[^:]+/)
+        let measurementRegexArray = row.match(/(?<=:MEASUREMENT=)[^:]+/);
+        let commentRegexArray = row.match(/(?<=:COMMENT=)[^:]+/);
         return {
           value: valueRegexArray ? valueRegexArray[0] : void 0,
           measurement: measurementRegexArray ? measurementRegexArray[0] : void 0,
-          comment: commentRegexArray ? commentRegexArray[0] : void 0
-        }
-      })
+          comment: commentRegexArray ? commentRegexArray[0] : void 0,
+        };
+      });
       return {
-        rows: extensionRows
-      }
+        rows: extensionRows,
+      };
     }
     return void 0;
   }
-
 }

@@ -19,7 +19,6 @@ import {Observable} from 'rxjs';
 import {ClickEvent, MouseEnterEvent, MouseLeaveEvent, MouseMoveEvent, MouseOutEvent, MouseOverEvent} from '../types';
 
 export interface ScrubberLaneApi extends Api {
-
   /**
    * Fires on click
    * @readonly
@@ -55,5 +54,4 @@ export interface ScrubberLaneApi extends Api {
    * @readonly
    */
   onMouseLeave$: Observable<MouseLeaveEvent>;
-
 }

@@ -31,5 +31,3 @@ export class StringUtil {
     return encoder.encode(str).buffer;
   }
 }
-
-

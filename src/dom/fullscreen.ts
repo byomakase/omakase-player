@@ -44,17 +44,9 @@ export interface FullscreenDocument {
   mozCancelFullScreen?: Document['exitFullscreen'];
   msExitFullscreen?: Document['exitFullscreen'];
 
-  addEventListener<K extends keyof FullscreenDocumentEventMap>(
-    type: K,
-    listener: (this: Document, ev: FullscreenDocumentEventMap[K]) => unknown,
-    options?: boolean | AddEventListenerOptions
-  ): void;
+  addEventListener<K extends keyof FullscreenDocumentEventMap>(type: K, listener: (this: Document, ev: FullscreenDocumentEventMap[K]) => unknown, options?: boolean | AddEventListenerOptions): void;
 
-  removeEventListener<K extends keyof FullscreenDocumentEventMap>(
-    type: K,
-    listener: (this: Document, ev: FullscreenDocumentEventMap[K]) => unknown,
-    options?: boolean | EventListenerOptions
-  ): void;
+  removeEventListener<K extends keyof FullscreenDocumentEventMap>(type: K, listener: (this: Document, ev: FullscreenDocumentEventMap[K]) => unknown, options?: boolean | EventListenerOptions): void;
 }
 
 export interface FullscreenDocumentEventMap {
@@ -72,39 +64,20 @@ export interface FullscreenDocumentEventMap {
 export class Fullscreen {
   public static isFullscreenEnabled() {
     const _document = document as FullscreenDocument;
-    return (
-      _document.fullscreenEnabled ||
-      _document.webkitFullscreenEnabled ||
-      !!_document.webkitCancelFullScreen ||
-      _document.mozFullScreenEnabled ||
-      _document.msFullscreenEnabled ||
-      false
-    );
+    return _document.fullscreenEnabled || _document.webkitFullscreenEnabled || !!_document.webkitCancelFullScreen || _document.mozFullScreenEnabled || _document.msFullscreenEnabled || false;
   }
 
   public static isFullscreen(): boolean {
     const _document = document as FullscreenDocument;
-    return !!(
-      _document.fullscreenElement ||
-      _document.webkitFullscreenElement ||
-      _document.webkitCurrentFullScreenElement ||
-      _document.mozFullScreenElement ||
-      _document.msFullscreenElement ||
-      null
-    )
+    return !!(_document.fullscreenElement || _document.webkitFullscreenElement || _document.webkitCurrentFullScreenElement || _document.mozFullScreenElement || _document.msFullscreenElement || null);
   }
 
   public static requestFullscreen(element: Element | null, options?: FullscreenOptions | undefined): Promise<void> {
     const target = (element ?? document.documentElement) as FullscreenElement;
-    const method =
-      target.requestFullscreen ||
-      target.webkitRequestFullscreen ||
-      target.webkitRequestFullScreen ||
-      target.mozRequestFullScreen ||
-      target.msRequestFullscreen;
+    const method = target.requestFullscreen || target.webkitRequestFullscreen || target.webkitRequestFullScreen || target.mozRequestFullScreen || target.msRequestFullscreen;
 
     if (!method) {
-      throw new Error('Unsupported')
+      throw new Error('Unsupported');
     }
 
     return method.call(target, options);
@@ -112,15 +85,10 @@ export class Fullscreen {
 
   public static exitFullscreen(): Promise<void> {
     const _document = document as FullscreenDocument;
-    const method =
-      _document.exitFullscreen ||
-      _document.webkitExitFullscreen ||
-      _document.webkitCancelFullScreen ||
-      _document.mozCancelFullScreen ||
-      _document.msExitFullscreen;
+    const method = _document.exitFullscreen || _document.webkitExitFullscreen || _document.webkitCancelFullScreen || _document.mozCancelFullScreen || _document.msExitFullscreen;
 
     if (!method) {
-      throw new Error('Unsupported')
+      throw new Error('Unsupported');
     }
 
     return method.call(_document);
@@ -131,16 +99,11 @@ export class Fullscreen {
 
     const _document = document as FullscreenDocument;
 
-    if ('exitFullscreen' in _document)
-      return ['fullscreenchange', 'fullscreenerror'];
-    if ('webkitExitFullscreen' in _document)
-      return ['webkitfullscreenchange', 'webkitfullscreenerror'];
-    if ('webkitCancelFullScreen' in _document)
-      return ['webkitfullscreenchange', 'webkitfullscreenerror'];
-    if ('mozCancelFullScreen' in _document)
-      return ['mozfullscreenchange', 'mozfullscreenerror'];
-    if ('msExitFullscreen' in _document)
-      return ['MSFullscreenChange', 'MSFullscreenError'];
+    if ('exitFullscreen' in _document) return ['fullscreenchange', 'fullscreenerror'];
+    if ('webkitExitFullscreen' in _document) return ['webkitfullscreenchange', 'webkitfullscreenerror'];
+    if ('webkitCancelFullScreen' in _document) return ['webkitfullscreenchange', 'webkitfullscreenerror'];
+    if ('mozCancelFullScreen' in _document) return ['mozfullscreenchange', 'mozfullscreenerror'];
+    if ('msExitFullscreen' in _document) return ['MSFullscreenChange', 'MSFullscreenError'];
 
     return null;
   }
@@ -166,5 +129,4 @@ export class Fullscreen {
 
     (document as FullscreenDocument).removeEventListener(eventName, callback);
   }
-
 }

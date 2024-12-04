@@ -20,7 +20,6 @@ import {StageConfig} from 'konva/lib/Stage';
 import {LayerConfig} from 'konva/lib/Layer';
 
 export class KonvaFactory {
-
   static createStage(config: StageConfig): Konva.Stage {
     return new Konva.Stage(config);
   }
@@ -30,11 +29,11 @@ export class KonvaFactory {
   }
 
   static createGroup(config?: GroupConfig): Konva.Group {
-    return new Konva.Group(config)
+    return new Konva.Group(config);
   }
 
   static createRect(config?: Konva.RectConfig): Konva.Rect {
-    return new Konva.Rect(config)
+    return new Konva.Rect(config);
   }
 
   static createEventCatcherRect(config: Konva.RectConfig = {}) {

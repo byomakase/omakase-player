@@ -24,7 +24,7 @@ import {StringUtil} from '../util/string-util';
 import {VttLoadOptions} from '../api/vtt-aware-api';
 
 export enum OmakaseWebVttExtensionVersion {
-  V1_0 = 'V1.0'
+  V1_0 = 'V1.0',
 }
 
 export interface OmakaseRemoteVttFile<T extends OmakaseVttCue> extends OmakaseVttFile<T> {
@@ -49,7 +49,7 @@ export interface OmakaseVttFile<T extends OmakaseVttCue> {
    * @param startTime
    * @param endTime
    */
-  findCues(startTime: number, endTime: number | undefined): T[]
+  findCues(startTime: number, endTime: number | undefined): T[];
 }
 
 export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements OmakaseVttFile<T> {
@@ -58,9 +58,7 @@ export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements Oma
   protected _cuesByStartTime: Map<number, T[]> = new Map<number, T[]>();
   protected _cuesStartTimesSorted: number[] = [];
 
-  protected constructor() {
-
-  }
+  protected constructor() {}
 
   protected abstract mapCue(vttCueParsed: VttCueParsed, cueExtension: OmakaseVttCueExtension | undefined, index: number): T;
 
@@ -70,10 +68,12 @@ export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements Oma
 
       this._extensionVersion = this.resolveExtensionVersion(vttFileParsed);
 
-      this.downsampleCues(vttFileParsed.cues.map((parsedCue, index) => {
-        let cueExtension = this._extensionVersion ? VttUtil.parseVttCueExtension(parsedCue, this._extensionVersion) : void 0;
-        return this.mapCue(parsedCue, cueExtension, index);
-      })).forEach(cue => {
+      this.downsampleCues(
+        vttFileParsed.cues.map((parsedCue, index) => {
+          let cueExtension = this._extensionVersion ? VttUtil.parseVttCueExtension(parsedCue, this._extensionVersion) : void 0;
+          return this.mapCue(parsedCue, cueExtension, index);
+        })
+      ).forEach((cue) => {
         this._cues.push(cue);
         this._cuesStartTimesSorted.push(cue.startTime);
 
@@ -81,10 +81,9 @@ export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements Oma
         cuesWithStartTime = cuesWithStartTime ? cuesWithStartTime.concat(cue) : [cue];
 
         this._cuesByStartTime.set(cue.startTime, cuesWithStartTime);
-      })
+      });
 
       this.refreshSorted();
-
     } catch (e) {
       console.error(e);
     }
@@ -147,9 +146,9 @@ export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements Oma
         if (cueStartTime <= endTime) {
           let cues = this._cuesByStartTime.get(cueStartTime);
           if (cues) {
-            cues.forEach(cue => {
+            cues.forEach((cue) => {
               resultCues.add(cue);
-            })
+            });
           }
         } else {
           break;
@@ -161,7 +160,7 @@ export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements Oma
   }
 
   findNearestCue(time: number): T | undefined {
-    const cues = this._cues.sort((a, b) => this.getCueDistance(a, time) - this.getCueDistance(b, time))
+    const cues = this._cues.sort((a, b) => this.getCueDistance(a, time) - this.getCueDistance(b, time));
     return cues[0];
   }
 
@@ -195,15 +194,15 @@ export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements Oma
     }
 
     // Return the closest between startIndex and endIndex
-    return (time - this._cuesStartTimesSorted[endIndex] <= this._cuesStartTimesSorted[startIndex] - time)
-      ? endIndex
-      : startIndex;
+    return time - this._cuesStartTimesSorted[endIndex] <= this._cuesStartTimesSorted[startIndex] - time ? endIndex : startIndex;
   }
 
   private refreshSorted() {
-    [this._cuesStartTimesSorted].forEach(cuesKeys => cuesKeys.sort((a, b) => {
-      return a - b;
-    }));
+    [this._cuesStartTimesSorted].forEach((cuesKeys) =>
+      cuesKeys.sort((a, b) => {
+        return a - b;
+      })
+    );
   }
 
   private getCueDistance(cue: T, time: number) {
@@ -215,7 +214,6 @@ export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements Oma
       return time - cue.endTime;
     }
   }
-
 }
 
 export abstract class BaseOmakaseRemoteVttFile<T extends OmakaseVttCue> extends BaseOmakaseVttFile<T> implements OmakaseRemoteVttFile<T> {
@@ -229,18 +227,20 @@ export abstract class BaseOmakaseRemoteVttFile<T extends OmakaseVttCue> extends 
   }
 
   fetch(): Observable<boolean> {
-    return from(httpGet<string, AxiosRequestConfig>(this.url, this._axiosConfig)).pipe(map(result => {
-      let vttFileText = result.data;
+    return from(httpGet<string, AxiosRequestConfig>(this.url, this._axiosConfig)).pipe(
+      map((result) => {
+        let vttFileText = result.data;
 
-      try {
-        this.parseAndPopulate(vttFileText);
+        try {
+          this.parseAndPopulate(vttFileText);
 
-        return true;
-      } catch (e) {
-        console.error(e);
-        return false;
-      }
-    }))
+          return true;
+        } catch (e) {
+          console.error(e);
+          return false;
+        }
+      })
+    );
   }
 
   get url(): string {

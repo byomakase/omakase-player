@@ -17,9 +17,8 @@
 import {Destroyable} from '../types';
 
 export class DestroyUtil {
-
   public static destroy(...destroyables: (Destroyable | undefined)[]) {
-    destroyables.forEach(destroyable => {
+    destroyables.forEach((destroyable) => {
       if (destroyable) {
         try {
           destroyable.destroy();
@@ -27,11 +26,11 @@ export class DestroyUtil {
           // console.error(e);
         }
       }
-    })
+    });
   }
 
   public static nullify(...nullifiables: any[]) {
-    nullifiables.forEach(nullifiable => {
+    nullifiables.forEach((nullifiable) => {
       if (nullifiable) {
         try {
           // @ts-ignore
@@ -40,9 +39,8 @@ export class DestroyUtil {
           console.error(e);
         }
       }
-    })
+    });
   }
-
 }
 
 export function nullifier(...nullifiables: any[]) {

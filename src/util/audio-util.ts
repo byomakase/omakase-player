@@ -17,82 +17,84 @@
 import {AudioInputOutputNode} from '../video/model';
 
 export class AudioUtil {
-
   public static resolveDefaultAudioRouting(inputsNumber: number, outputsNumber: number): AudioInputOutputNode[] {
     if (inputsNumber && outputsNumber) {
       if ((inputsNumber === 2 && outputsNumber === 2) || (inputsNumber === 2 && outputsNumber === 6) || (inputsNumber === 6 && outputsNumber === 6)) {
-        return [...Array(inputsNumber).keys()].map(p => ({
+        return [...Array(inputsNumber).keys()].map((p) => ({
           inputNumber: p,
           outputNumber: p,
-          connected: true
-        }))
-      } else if ((inputsNumber === 6 && outputsNumber === 8)) {
-        return [...Array(inputsNumber).keys()].map(p => {
-          return {
-            inputNumber: p,
-            outputNumber: p
-          }
-        }).concat([
-          {
-            inputNumber: 4,
-            outputNumber: 6
-          },
-          {
-            inputNumber: 5,
-            outputNumber: 7
-          }
-        ]).map(p => ({
-          ...p,
-          connected: true
-        }))
+          connected: true,
+        }));
+      } else if (inputsNumber === 6 && outputsNumber === 8) {
+        return [...Array(inputsNumber).keys()]
+          .map((p) => {
+            return {
+              inputNumber: p,
+              outputNumber: p,
+            };
+          })
+          .concat([
+            {
+              inputNumber: 4,
+              outputNumber: 6,
+            },
+            {
+              inputNumber: 5,
+              outputNumber: 7,
+            },
+          ])
+          .map((p) => ({
+            ...p,
+            connected: true,
+          }));
       } else if (inputsNumber === 6 && outputsNumber === 2) {
         return [
           {
             inputNumber: 0,
-            outputNumber: 0
+            outputNumber: 0,
           },
           {
             inputNumber: 1,
-            outputNumber: 1
+            outputNumber: 1,
           },
           {
             inputNumber: 2,
-            outputNumber: 0
+            outputNumber: 0,
           },
           {
             inputNumber: 2,
-            outputNumber: 1
+            outputNumber: 1,
           },
           {
             inputNumber: 4,
-            outputNumber: 0
+            outputNumber: 0,
           },
           {
             inputNumber: 5,
-            outputNumber: 1
-          }
-        ].map(p => ({
+            outputNumber: 1,
+          },
+        ].map((p) => ({
           ...p,
-          connected: true
-        }))
+          connected: true,
+        }));
       } else if (outputsNumber === 1) {
-        return [...Array(inputsNumber).keys()].map(p => ({
+        return [...Array(inputsNumber).keys()].map((p) => ({
           inputNumber: p,
           outputNumber: 0,
-          connected: true
-        }))
+          connected: true,
+        }));
       } else if (inputsNumber === 1 && outputsNumber <= 2) {
-        return [...Array(outputsNumber).keys()].map(p => ({
+        return [...Array(outputsNumber).keys()].map((p) => ({
           inputNumber: 0,
           outputNumber: p,
-          connected: true
-        }))
+          connected: true,
+        }));
       } else if (inputsNumber === 1 && outputsNumber >= 6) {
-        return [0, 1, 2, 4, 5].map(p => ({
+        return [0, 1, 2, 4, 5].map((p) => ({
           inputNumber: 0,
           outputNumber: p,
-          connected: true
-        }))
+          connected: true,
+        }));
       }
     }
     return [];

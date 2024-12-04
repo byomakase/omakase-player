@@ -22,7 +22,7 @@ import {nextCompleteSubject} from '../util/rxjs-util';
 import {destroyer, nullifier} from '../util/destroy-util';
 
 export interface ComponentConfig<S> {
-  style: S
+  style: S;
 }
 
 /**
@@ -55,15 +55,11 @@ export abstract class BaseKonvaComponent<C extends ComponentConfig<S>, S, T exte
   protected abstract provideKonvaNode(): T;
 
   destroy() {
-    destroyer(
-      this._konvaNode
-    )
+    destroyer(this._konvaNode);
 
     nextCompleteSubject(this._destroyed$);
 
-    nullifier(
-      this._konvaNode
-    )
+    nullifier(this._konvaNode);
   }
 
   get config(): C {
@@ -84,6 +80,4 @@ export abstract class BaseKonvaComponent<C extends ComponentConfig<S>, S, T exte
   set style(value: Partial<S>) {
     this._styleAdapter.style = value;
   }
-
-
 }

@@ -32,14 +32,13 @@ import {
   VideoSeekingEvent,
   VideoTimeChangeEvent,
   VideoVolumeEvent,
-  VideoWindowPlaybackStateChangeEvent
+  VideoWindowPlaybackStateChangeEvent,
 } from '../types';
 import Hls from 'hls.js';
 import {Video, VideoLoadOptions} from '../video';
 import {VideoSafeZone, VideoWindowPlaybackState} from '../video/model';
 
 export interface VideoApi extends Api {
-
   /**
    * Fires on video load start.
    * @readonly
@@ -190,7 +189,7 @@ export interface VideoApi extends Api {
   /**
    * @returns video playback rate
    */
-  getPlaybackRate(): number
+  getPlaybackRate(): number;
 
   /**
    * Sets video playback rate
@@ -300,37 +299,37 @@ export interface VideoApi extends Api {
    *
    * @param percent
    */
-  seekToPercent(percent: number): Observable<boolean>
+  seekToPercent(percent: number): Observable<boolean>;
 
   /**
    * Formats video timestamp to HH:MM:SS:FF
    * @param time Video media time in seconds
    */
-  formatToTimecode(time: number): string
+  formatToTimecode(time: number): string;
 
   /**
    * Converts timestamp in format HH:MM:SS:FF to frame
    * @param timecode
    */
-  parseTimecodeToFrame(timecode: string): number
+  parseTimecodeToFrame(timecode: string): number;
 
   /**
    * Converts timestamp in format HH:MM:SS:FF to time in seconds
    * @param timecode
    */
-  parseTimecodeToTime(timecode: string): number
+  parseTimecodeToTime(timecode: string): number;
 
   /**
    * @returns video frame number
    * @param time Video timestamp in seconds
    */
-  calculateTimeToFrame(time: number): number
+  calculateTimeToFrame(time: number): number;
 
   /**
    * @returns video timestamp in seconds
    * @param frameNumber Video frame number
    */
-  calculateFrameToTime(frameNumber: number): number
+  calculateFrameToTime(frameNumber: number): number;
 
   /**
    * Video mute
@@ -454,5 +453,13 @@ export interface VideoApi extends Api {
    */
   attachVideoWindow(): Observable<void>;
 
+  /**
+   * Enables picture in picture mode
+   */
+  enablePiP(): Observable<void>;
 
+  /**
+   * Disables picture in picture mode
+   */
+  disablePiP(): Observable<void>;
 }

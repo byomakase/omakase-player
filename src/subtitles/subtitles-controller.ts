@@ -60,22 +60,22 @@ export class SubtitlesController implements SubtitlesApi, Destroyable {
   }
 
   removeAllTracks(): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       this._videoController.removeAllSubtitlesTracks().subscribe({
         next: () => {
           nextCompleteObserver(observer);
-        }
-      })
+        },
+      });
     });
   }
 
   removeTrack(id: string): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       this._videoController.removeSubtitlesTrack(id).subscribe({
         next: () => {
           nextCompleteObserver(observer);
-        }
-      })
+        },
+      });
     });
   }
 
@@ -84,83 +84,81 @@ export class SubtitlesController implements SubtitlesApi, Destroyable {
   }
 
   showTrack(id: string): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       this._videoController.showSubtitlesTrack(id).subscribe({
         next: () => {
           nextCompleteObserver(observer);
-        }
-      })
+        },
+      });
     });
   }
 
   showActiveTrack(): Observable<void> {
-    return passiveObservable((observer => {
+    return passiveObservable((observer) => {
       let activeTrack = this.getActiveTrack();
       if (activeTrack) {
         this.showTrack(activeTrack.id).subscribe({
           next: () => {
             nextCompleteObserver(observer);
-          }
+          },
         });
       } else {
         nextCompleteObserver(observer);
       }
-    }))
+    });
   }
 
   hideTrack(id: string): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       this._videoController.hideSubtitlesTrack(id).subscribe({
         next: () => {
           nextCompleteObserver(observer);
-        }
-      })
-    })
+        },
+      });
+    });
   }
 
   hideActiveTrack(): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       let activeTrack = this.getActiveTrack();
       if (activeTrack) {
         this.hideTrack(activeTrack.id).subscribe({
           next: () => {
             nextCompleteObserver(observer);
-          }
-        })
+          },
+        });
       } else {
         nextCompleteObserver(observer);
       }
-    })
+    });
   }
 
   toggleShowHideActiveTrack(): Observable<void> {
-    return passiveObservable(observer => {
+    return passiveObservable((observer) => {
       let activeTrack = this.getActiveTrack();
       if (activeTrack) {
         if (activeTrack.hidden) {
           this.showActiveTrack().subscribe({
             next: () => {
               nextCompleteObserver(observer);
-            }
+            },
           });
         } else {
           this.hideActiveTrack().subscribe({
             next: () => {
               nextCompleteObserver(observer);
-            }
+            },
           });
         }
       } else {
         nextCompleteObserver(observer);
       }
-    })
+    });
   }
 
   destroy() {
     nextCompleteSubject(this._destroyed$);
 
-    nullifier(
-      this._videoController
-    )
+    nullifier(this._videoController);
   }
 }

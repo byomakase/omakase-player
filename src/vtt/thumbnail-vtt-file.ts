@@ -24,7 +24,6 @@ import {DownsampledVttFile} from './downsampled-vtt-file';
 const isUrlAbsouteRegex = /^(http(s):\/\/.)[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)$/;
 
 export class ThumbnailVttFile extends DownsampledVttFile<ThumbnailVttCue> {
-
   protected override _supportedDownsampleStrategies: DownsampleStrategy[] = ['none', 'drop'];
 
   protected constructor(url: string, options: VttLoadOptions) {
@@ -38,15 +37,17 @@ export class ThumbnailVttFile extends DownsampledVttFile<ThumbnailVttCue> {
       startTime: startTime,
       endTime: endTime,
       text: `SAMPLED`,
-      url: cues[0].url
-    }
+      url: cues[0].url,
+    };
   }
 
   static create(url: string, options: VttLoadOptions): Observable<ThumbnailVttFile> {
     let instance = new ThumbnailVttFile(url, options);
-    return instance.fetch().pipe(map(result => {
-      return instance;
-    }))
+    return instance.fetch().pipe(
+      map((result) => {
+        return instance;
+      })
+    );
   }
 
   protected mapCue(vttCueParsed: VttCueParsed, cueExtension: OmakaseVttCueExtension | undefined, index: number): ThumbnailVttCue {
@@ -57,8 +58,8 @@ export class ThumbnailVttFile extends DownsampledVttFile<ThumbnailVttCue> {
       endTime: new Decimal(vttCueParsed.end).toDecimalPlaces(3).toNumber(),
       text: vttCueParsed.text,
       url: this.resolveThumbnailUrl(vttCueParsed),
-      extension: cueExtension
-    }
+      extension: cueExtension,
+    };
   }
 
   private resolveThumbnailUrl(vttCueParsed: VttCueParsed): string {
@@ -67,7 +68,7 @@ export class ThumbnailVttFile extends DownsampledVttFile<ThumbnailVttCue> {
 
   private createThumbnailUrlFromRelativeUrl(relativePath: string) {
     if (this.url.lastIndexOf('/') > 2) {
-      return `${this.url.substring(0, this.url.lastIndexOf('/'))}/${relativePath}`
+      return `${this.url.substring(0, this.url.lastIndexOf('/'))}/${relativePath}`;
     } else {
       // cannot resolve absolute url :(
       return relativePath;
@@ -77,5 +78,4 @@ export class ThumbnailVttFile extends DownsampledVttFile<ThumbnailVttCue> {
   private isUrlAbsolute(url: string) {
     return isUrlAbsouteRegex.test(url);
   }
-
 }

@@ -26,7 +26,7 @@ export interface TimelineApi extends Api {
    * Fires when Timeline is ready and all timeline lanes are created. Initial value is undefined.
    * @readonly
    */
-  onReady$: BehaviorSubject<TimelineReadyEvent | undefined>
+  onReady$: BehaviorSubject<TimelineReadyEvent | undefined>;
 
   /**
    *  Fires on Timeline scroll
@@ -80,7 +80,7 @@ export interface TimelineApi extends Api {
   /**
    * @returns true if visible, false if not visible
    */
-  get descriptionPaneVisible(): boolean
+  get descriptionPaneVisible(): boolean;
 
   /**
    * Timeline zoom
@@ -90,20 +90,20 @@ export interface TimelineApi extends Api {
 
   /**
    * Timeline zoom
-   * @param percent number between 100 and TimelineConfig.zoomMax
+   * @param percent number between 100 and {@link TimelineConfig.zoomMax}
    * @param zoomFocusPercent in range from 0 - timeline start or first timestamp, to 100 - timeline end or last timestamop
    */
   zoomTo(percent: number, zoomFocusPercent: number | undefined): number;
 
   /**
    * Timeline zoom
-   * @param percent number between 100 and TimelineConfig.zoomMax
+   * @param percent number between 100 and {@link TimelineConfig.zoomMax}
    */
   zoomToEased(percent: number): Observable<number>;
 
   /**
    * Timeline zoom
-   * @param percent number between 100 and TimelineConfig.zoomMax
+   * @param percent number between 100 and {@link TimelineConfig.zoomMax}
    * @param zoomFocusPercent in range from 0 - timeline start or first timestamp, to 100 - timeline end or last timestamop
    */
   zoomToEased(percent: number, zoomFocusPercent: number | undefined): Observable<number>;
@@ -114,7 +114,7 @@ export interface TimelineApi extends Api {
   zoomInEased(): Observable<number>;
 
   /**
-   * Zoom out. Zoom scale in single method call is defined with TimelineConfig.zoomScale
+   * Zoom out. Zoom scale in single method call is defined with {@link TimelineConfig.zoomScale}
    */
   zoomOutEased(): Observable<number>;
 
@@ -140,27 +140,27 @@ export interface TimelineApi extends Api {
   scrollToPlayheadEased(): Observable<number>;
 
   /**
-   * Adds instantiated TimelineLane to timeline
+   * Adds {@link TimelineLaneApi} instance to timeline
    * @param timelineLane
    */
   addTimelineLane(timelineLane: TimelineLaneApi): TimelineLaneApi;
 
   /**
-   * Adds instantiated TimelineLane to timeline
+   * Adds {@link TimelineLaneApi} instance to timeline
    * @param timelineLane
    * @param index
    */
   addTimelineLaneAtIndex(timelineLane: TimelineLaneApi, index: number): TimelineLaneApi;
 
   /**
-   * Removes TimelineLane by id
-   * @param id
+   * Removes {@link TimelineLaneApi} instance by id
+   * @param id {@link TimelineLaneApi.id}
    */
   removeTimelineLane(id: string): void;
 
   /**
-   * Removes TimelineLane's by ids
-   * @param ids
+   * Removes {@link TimelineLaneApi} instances by ids
+   * @param ids {@link TimelineLaneApi.id}s
    */
   removeTimelineLanes(ids: string[]): void;
 
@@ -170,19 +170,19 @@ export interface TimelineApi extends Api {
   removeAllTimelineLanes(): void;
 
   /**
-   * Adds multiple instantiated TimelineLane-s to timeline
+   * Adds multiple instantiated {@link TimelineLaneApi} instances to timeline
    * @param timelineLanes
    */
   addTimelineLanes(timelineLanes: TimelineLaneApi[]): TimelineLaneApi[];
 
   /**
-   * @returns all TimelineLane-s
+   * @returns all {@link TimelineLaneApi} instances
    */
   getTimelineLanes(): TimelineLaneApi[];
 
   /**
-   * @returns single TimelineLane
-   * @param id TimelineLane.id
+   * @returns single {@link TimelineLaneApi} instance
+   * @param id {@link TimelineLaneApi.id}
    */
   getTimelineLane<T extends TimelineLaneApi>(id: string): T | undefined;
 
@@ -220,6 +220,18 @@ export interface TimelineApi extends Api {
    * Load ThumbnailVttFile by url
    */
   loadThumbnailVttFile(vttFile: ThumbnailVttFile): void;
+
+  /**
+   * Minimize timeline lanes
+   * @param timelineLanes
+   */
+  minimizeTimelineLanes(timelineLanes: TimelineLaneApi[]): void;
+
+  /**
+   * Maximize timeline lanes
+   * @param timelineLanes
+   */
+  maximizeTimelineLanes(timelineLanes: TimelineLaneApi[]): void;
 
   /**
    * Recalculates and settles layout, called on window resize event

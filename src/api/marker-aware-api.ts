@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import { Observable } from 'rxjs';
-import { Api } from './api';
-import { MarkerCreateEvent, MarkerDeleteEvent, MarkerInitEvent, MarkerUpdateEvent } from '../types';
-import { MarkerApi } from './marker-api';
+import {Observable} from 'rxjs';
+import {Api} from './api';
+import {MarkerCreateEvent, MarkerDeleteEvent, MarkerInitEvent, MarkerUpdateEvent} from '../types';
+import {MarkerApi} from './marker-api';
 
 export interface MarkerAwareApi extends Api {
   /**

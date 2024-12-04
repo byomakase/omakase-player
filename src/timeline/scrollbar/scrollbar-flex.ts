@@ -33,7 +33,7 @@ export class ScrollbarFlexContentNode extends KonvaComponentFlexContentNode<Scro
 
   override updateLayout(layout: Layout) {
     super.updateLayout(layout);
-    this.component.updateScrollHandle(this._scrollableHorizontally)
+    this.component.updateScrollHandle(this._scrollableHorizontally);
   }
 }
 
@@ -62,14 +62,14 @@ export class TimelineScrollbar extends ScrollbarFlexItem {
         if (!this._timelineZoomInProgress) {
           this._scrollbar.updateScrollHandle(this._timeline);
         }
-      }
-    })
+      },
+    });
 
     this._scrollbar.onScroll$.pipe(takeUntil(this._destroyed$)).subscribe({
       next: (event) => {
         this._timeline.scrollHorizontallyToPercent(this._scrollbar.getScrollHandlePercent());
-      }
-    })
+      },
+    });
 
     this._scrollbar.onZoom$.pipe(takeUntil(this._destroyed$)).subscribe({
       next: (event) => {
@@ -77,8 +77,8 @@ export class TimelineScrollbar extends ScrollbarFlexItem {
         this._timeline.zoomTo(event.zoomPercent, event.zoomFocus);
         this._timeline.scrollHorizontallyToPercent(this._scrollbar.getScrollHandlePercent());
         this._timelineZoomInProgress = false;
-      }
-    })
+      },
+    });
   }
 
   override destroy() {

@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-import { MarkerApi, MarkerStyle, MarkerTimeObservation } from '../api/marker-api';
-import { MarkerAwareApi } from '../api/marker-aware-api';
-import { MomentObservation, PeriodObservation, TimeObservation } from '../types';
-import { CryptoUtil } from '../util/crypto-util';
+import {MarkerApi, MarkerStyle, MarkerTimeObservation} from '../api/marker-api';
+import {MarkerAwareApi} from '../api/marker-aware-api';
+import {MomentObservation, PeriodObservation, TimeObservation} from '../types';
+import {CryptoUtil} from '../util/crypto-util';
 
 export class MarkerListItem implements MarkerApi {
-
   readonly id: string;
   private _source: MarkerAwareApi;
   private _name?: string;
@@ -31,7 +30,7 @@ export class MarkerListItem implements MarkerApi {
 
   constructor(initData: Partial<MarkerApi> = {}, source: MarkerAwareApi) {
     this.id = initData.id ?? CryptoUtil.uuid();
-    this._style = initData.style ?? { color: '#000' };
+    this._style = initData.style ?? {color: '#000'};
     this._name = initData.name;
     this._timeObservation = initData.timeObservation ?? {};
     this._data = initData.data;

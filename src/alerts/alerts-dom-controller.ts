@@ -23,9 +23,7 @@ export class AlertsDomController {
   private _maxAlertCount = 5;
   private _maxStackCount = 3;
 
-  constructor(
-    alertsController: AlertsController
-  ) {
+  constructor(alertsController: AlertsController) {
     this._alertsController = alertsController;
   }
 

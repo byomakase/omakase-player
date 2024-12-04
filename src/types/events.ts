@@ -49,103 +49,87 @@ export const OmakasePlayerEvents: OmakasePlayerEventsType = {
   OMAKASE_MARKER_LIST_UPDATE: 'omakaseMarkerListUpdate',
   OMAKASE_MARKER_LIST_CREATE: 'omakaseMarkerListCreate',
   OMAKASE_MARKER_LIST_INIT: 'omakaseMarkerListInit',
-}
+};
 
-export type OmakasePlayerEventsType = OmakasePlayerEventsMappingType<OmakasePlayerEventMap>
+export type OmakasePlayerEventsType = OmakasePlayerEventsMappingType<OmakasePlayerEventMap>;
 
 export type OmakasePlayerEventsMappingType<T> = {
-  [K in keyof T as Uppercase<CamelToSnakeCase<string & K>>]: K
-}
+  [K in keyof T as Uppercase<CamelToSnakeCase<string & K>>]: K;
+};
 
-export type OmakasePlayerEventMap = VideoEventMap & AudioEventMap & SubtitlesEventMap & TimelineEventMap & MarkerListEventMap
+export type OmakasePlayerEventMap = VideoEventMap & AudioEventMap & SubtitlesEventMap & TimelineEventMap & MarkerListEventMap;
 
 export type VideoEventMap = {
-  'omakaseVideoLoading': VideoLoadingEvent,
-  'omakaseVideoLoaded': VideoLoadedEvent | undefined,
-  'omakaseVideoPlay': VideoPlayEvent,
-  'omakaseVideoPause': VideoPlayEvent,
-  'omakaseVideoTimeChange': VideoTimeChangeEvent,
-  'omakaseVideoSeeking': VideoSeekingEvent,
-  'omakaseVideoSeeked': VideoSeekedEvent,
-  'omakaseVideoEnded': VideoEndedEvent,
-  'omakaseVideoAudioSwitched': AudioEvent,
-  'omakaseVideoBuffering': VideoBufferingEvent
-}
+  omakaseVideoLoading: VideoLoadingEvent;
+  omakaseVideoLoaded: VideoLoadedEvent | undefined;
+  omakaseVideoPlay: VideoPlayEvent;
+  omakaseVideoPause: VideoPlayEvent;
+  omakaseVideoTimeChange: VideoTimeChangeEvent;
+  omakaseVideoSeeking: VideoSeekingEvent;
+  omakaseVideoSeeked: VideoSeekedEvent;
+  omakaseVideoEnded: VideoEndedEvent;
+  omakaseVideoAudioSwitched: AudioEvent;
+  omakaseVideoBuffering: VideoBufferingEvent;
+};
 
 export type AudioEventMap = {
-  'omakaseAudioSwitched': AudioEvent,
+  omakaseAudioSwitched: AudioEvent;
   // TODO omakaseAudioLoaded event
-}
+};
 
 export type SubtitlesEventMap = {
-  'omakaseSubtitlesLoaded': SubtitlesLoadedEvent | undefined,
-  'omakaseSubtitlesCreate': SubtitlesCreateEvent,
-  'omakaseSubtitlesRemove': SubtitlesEvent,
-  'omakaseSubtitlesShow': SubtitlesEvent,
-  'omakaseSubtitlesHide': SubtitlesEvent
-}
+  omakaseSubtitlesLoaded: SubtitlesLoadedEvent | undefined;
+  omakaseSubtitlesCreate: SubtitlesCreateEvent;
+  omakaseSubtitlesRemove: SubtitlesEvent;
+  omakaseSubtitlesShow: SubtitlesEvent;
+  omakaseSubtitlesHide: SubtitlesEvent;
+};
 
 export type TimelineEventMap = {
-  'omakaseTimelineScroll': TimelineScrollEvent,
-  'omakaseTimelineZoom': TimelineZoomEvent
-}
+  omakaseTimelineScroll: TimelineScrollEvent;
+  omakaseTimelineZoom: TimelineZoomEvent;
+};
 
 export type MarkerListEventMap = {
-  'omakaseMarkerListAction': MarkerListActionEvent,
-  'omakaseMarkerListClick': MarkerListClickEvent,
-  'omakaseMarkerListDelete': MarkerListDeleteEvent,
-  'omakaseMarkerListUpdate': MarkerListUpdateEvent,
-  'omakaseMarkerListInit': MarkerListInitEvent,
-  'omakaseMarkerListCreate': MarkerListCreateEvent,
-}
+  omakaseMarkerListAction: MarkerListActionEvent;
+  omakaseMarkerListClick: MarkerListClickEvent;
+  omakaseMarkerListDelete: MarkerListDeleteEvent;
+  omakaseMarkerListUpdate: MarkerListUpdateEvent;
+  omakaseMarkerListInit: MarkerListInitEvent;
+  omakaseMarkerListCreate: MarkerListCreateEvent;
+};
 
-export interface OmakaseEvent {
-
-}
+export interface OmakaseEvent {}
 
 export interface OmakaseCancelableEvent {
   cancelableEvent: {
-    cancelBubble: boolean
-  }
+    cancelBubble: boolean;
+  };
 }
 
 // region general
 
 export interface OmakaseMouseEvent extends OmakaseEvent, OmakaseCancelableEvent {
-  mouseEvent: MouseEvent
+  mouseEvent: MouseEvent;
 }
 
-export interface ClickEvent extends OmakaseMouseEvent {
+export interface ClickEvent extends OmakaseMouseEvent {}
 
-}
+export interface MouseEnterEvent extends OmakaseMouseEvent {}
 
-export interface MouseEnterEvent extends OmakaseMouseEvent {
+export interface MouseMoveEvent extends OmakaseMouseEvent {}
 
-}
+export interface MouseLeaveEvent extends OmakaseMouseEvent {}
 
-export interface MouseMoveEvent extends OmakaseMouseEvent {
+export interface MouseOutEvent extends OmakaseMouseEvent {}
 
-}
-
-export interface MouseLeaveEvent extends OmakaseMouseEvent {
-
-}
-
-export interface MouseOutEvent extends OmakaseMouseEvent {
-
-}
-
-export interface MouseOverEvent extends OmakaseMouseEvent {
-
-}
+export interface MouseOverEvent extends OmakaseMouseEvent {}
 
 // endregion
 
 // region video
 
-export interface VideoEvent extends OmakaseEvent {
-
-}
+export interface VideoEvent extends OmakaseEvent {}
 
 export interface VideoLoadingEvent extends VideoEvent {
   sourceUrl: string;
@@ -183,7 +167,7 @@ export interface VideoTimeChangeEvent extends VideoEvent {
   /**
    * Current frame
    */
-  frame: number
+  frame: number;
 }
 
 export interface VideoSeekingEvent extends VideoEvent {
@@ -231,7 +215,7 @@ export interface VideoSeekedEvent extends VideoEvent {
 }
 
 export interface VideoBufferingEvent extends VideoEvent {
-  bufferedTimespans: BufferedTimespan[]
+  bufferedTimespans: BufferedTimespan[];
 }
 
 export interface VideoVolumeEvent extends VideoEvent {
@@ -253,43 +237,38 @@ export interface VideoPlaybackRateEvent extends VideoEvent {
   playbackRate: number;
 }
 
-export interface VideoEndedEvent extends VideoEvent {
-
-}
+export interface VideoEndedEvent extends VideoEvent {}
 
 export interface VideoHelpMenuChangeEvent extends VideoEvent {
-  helpMenuGroups: HelpMenuGroup[]
+  helpMenuGroups: HelpMenuGroup[];
 }
 
 export interface VideoFullscreenChangeEvent extends VideoEvent {
-  fullscreen: boolean
+  fullscreen: boolean;
 }
 
 export interface VideoSafeZoneChangeEvent extends VideoEvent {
-  videoSafeZones: VideoSafeZone[]
+  videoSafeZones: VideoSafeZone[];
 }
 
 export interface VideoWindowPlaybackStateChangeEvent extends VideoEvent {
-  videoWindowPlaybackState: VideoWindowPlaybackState
+  videoWindowPlaybackState: VideoWindowPlaybackState;
 }
 
-export type VideoErrorType = 'VIDEO_LOAD_ERROR' | 'VIDEO_ERROR'
+export type VideoErrorType = 'VIDEO_LOAD_ERROR' | 'VIDEO_ERROR';
 
 export interface VideoErrorEvent extends VideoEvent {
   type: VideoErrorType;
   message?: string;
 }
 
-export interface AudioEvent extends OmakaseEvent {
-
-}
+export interface AudioEvent extends OmakaseEvent {}
 
 export interface AudioLoadedEvent extends AudioEvent {
-
   /**
    * Audio tracks
    */
-  audioTracks: OmakaseAudioTrack[]
+  audioTracks: OmakaseAudioTrack[];
 
   /**
    * Audio track
@@ -298,29 +277,28 @@ export interface AudioLoadedEvent extends AudioEvent {
 }
 
 export interface AudioSwitchedEvent extends AudioEvent {
-
   /**
    * Audio track
    */
-  activeAudioTrack: OmakaseAudioTrack
+  activeAudioTrack: OmakaseAudioTrack;
 }
 
 export interface AudioRoutingEvent extends AudioEvent {
-  audioInputOutputNodes: AudioInputOutputNode[][]
+  audioInputOutputNodes: AudioInputOutputNode[][];
 }
 
 export interface AudioContextChangeEvent extends AudioEvent {
   audioInputsNumber?: number;
   audioOutputsNumber?: number;
-  audioInputOutputNodes: AudioInputOutputNode[][]
+  audioInputOutputNodes: AudioInputOutputNode[][];
 }
 
 export interface AudioWorkletNodeCreatedEvent extends AudioEvent {
-  audioMeterStandard: AudioMeterStandard
+  audioMeterStandard: AudioMeterStandard;
 }
 
 export interface AudioPeakProcessorWorkletNodeMessageEvent extends AudioEvent {
-  data: any
+  data: any;
 }
 
 // endregion
@@ -328,17 +306,13 @@ export interface AudioPeakProcessorWorkletNodeMessageEvent extends AudioEvent {
 // region subtitles
 
 export interface SubtitlesEvent extends OmakaseEvent {
-  tracks: SubtitlesVttTrack[],
-  currentTrack: SubtitlesVttTrack | undefined
+  tracks: SubtitlesVttTrack[];
+  currentTrack: SubtitlesVttTrack | undefined;
 }
 
-export interface SubtitlesLoadedEvent extends SubtitlesEvent {
+export interface SubtitlesLoadedEvent extends SubtitlesEvent {}
 
-}
-
-export interface SubtitlesCreateEvent extends SubtitlesEvent {
-
-}
+export interface SubtitlesCreateEvent extends SubtitlesEvent {}
 
 export interface SubtitlesChartEvent extends OmakaseEvent {
   cue?: OmakaseTextTrackCue;
@@ -348,13 +322,9 @@ export interface SubtitlesChartEvent extends OmakaseEvent {
 
 // region timeline
 
-export interface TimelineEvent extends OmakaseEvent {
+export interface TimelineEvent extends OmakaseEvent {}
 
-}
-
-export interface TimelineReadyEvent extends TimelineEvent {
-
-}
+export interface TimelineReadyEvent extends TimelineEvent {}
 
 export interface TimelineZoomEvent extends TimelineEvent {
   zoomPercent: number;
@@ -385,9 +355,7 @@ export interface PlayheadMoveEvent extends TimelineEvent {
 
 // region scrollbar
 
-export interface ScrollbarEvent extends OmakaseEvent {
-
-}
+export interface ScrollbarEvent extends OmakaseEvent {}
 
 export interface ScrollbarScrollEvent extends ScrollbarEvent {
   scrollPercent: number;
@@ -403,20 +371,16 @@ export interface ScrollbarZoomEvent extends ScrollbarEvent {
 // region thumbnail
 
 export interface ThumbnailEvent extends OmakaseEvent {
-  thumbnail: Thumbnail
+  thumbnail: Thumbnail;
 }
 
 // endregion
 
 // region marker
 
-export interface MarkerEvent extends OmakaseEvent {
+export interface MarkerEvent extends OmakaseEvent {}
 
-}
-
-export interface MarkerChangeEvent extends MarkerEvent {
-
-}
+export interface MarkerChangeEvent extends MarkerEvent {}
 
 export interface MarkerFocusEvent extends MarkerEvent {
   marker: MarkerApi;
@@ -434,25 +398,27 @@ export interface MarkerUpdateEvent extends MarkerEvent {
   marker: MarkerApi;
 }
 
+export interface MarkerSelectedEvent extends MarkerEvent {
+  marker?: MarkerApi;
+}
+
 export interface MarkerInitEvent extends MarkerEvent {
   markers: MarkerApi[];
 }
 
 export interface MomentMarkerChangeEvent extends MarkerChangeEvent {
-  timeObservation: MomentObservation
+  timeObservation: MomentObservation;
 }
 
 export interface PeriodMarkerChangeEvent extends MarkerChangeEvent {
-  timeObservation: PeriodObservation
+  timeObservation: PeriodObservation;
 }
 
 // endregion
 
 // region charts
 
-export interface ChartEvent extends OmakaseEvent {
-
-}
+export interface ChartEvent extends OmakaseEvent {}
 
 export interface ChartCueEvent extends ChartEvent {
   cue: OmakaseChartCue;
@@ -462,35 +428,37 @@ export interface ChartCueEvent extends ChartEvent {
 
 // region marker list
 
-export interface MarkerListEvent extends OmakaseEvent {
-
-}
+export interface MarkerListEvent extends OmakaseEvent {}
 
 export interface MarkerListClickEvent extends MarkerListEvent {
-  marker: MarkerApi
+  marker: MarkerApi;
 }
 
 export interface MarkerListDeleteEvent extends MarkerListEvent {
-  marker: MarkerApi
+  marker: MarkerApi;
 }
 
 export interface MarkerListUpdateEvent extends MarkerListEvent {
-  marker: MarkerApi
+  marker: MarkerApi;
 }
 
 export interface MarkerListCreateEvent extends MarkerListEvent {
-  marker: MarkerApi
+  marker: MarkerApi;
 }
 
 export interface MarkerListInitEvent extends MarkerListEvent {
-  markers: MarkerApi[]
+  markers: MarkerApi[];
 }
 
 export interface MarkerListActionEvent extends MarkerListEvent {
-  marker: MarkerApi
-  action: string
+  marker: MarkerApi;
+  action: string;
+}
+
+export interface MarkerListSelectedEvent extends MarkerListEvent {
+  marker?: MarkerApi;
 }
 
 export interface ThumnbailVttUrlChangedEvent extends VideoEvent {
-  thumbnailVttUrl?: string
+  thumbnailVttUrl?: string;
 }

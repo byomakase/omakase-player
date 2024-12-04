@@ -17,9 +17,7 @@
 import HLS from 'parse-hls';
 
 export class M3u8Parser {
-  constructor() {
-
-  }
+  constructor() {}
 
   static parse(content: string): HLS {
     return HLS.parse(content);

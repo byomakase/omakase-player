@@ -59,12 +59,16 @@ export class AudioController implements AudioApi, Destroyable {
     return this._videoController.getMediaElementAudioSourceNode();
   }
 
-  createAudioContext(inputsNumber: number, outputsNumber?: number): Observable<void> {
-    return this._videoController.createAudioContext(inputsNumber, outputsNumber);
+  createAudioContext(contextOptions?: AudioContextOptions): Observable<void> {
+    return this._videoController.createAudioContext(contextOptions);
   }
 
-  createAudioContextWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void> {
-    return this._videoController.createAudioContextWithOutputsResolver(inputsNumber, outputsNumberResolver);
+  createAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<void> {
+    return this._videoController.createAudioRouter(inputsNumber, outputsNumber);
+  }
+
+  createAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void> {
+    return this._videoController.createAudioRouterWithOutputsResolver(inputsNumber, outputsNumberResolver);
   }
 
   getAudioInputOutputNodes(): AudioInputOutputNode[][] {
@@ -83,9 +87,5 @@ export class AudioController implements AudioApi, Destroyable {
     return this._videoController.createAudioPeakProcessorWorkletNode(audioMeterStandard);
   }
 
-  destroy() {
-
-  }
-
-
+  destroy() {}
 }

@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-import {Position, RectMeasurement} from '../common/measurement';
+import {Position, RectMeasurement} from '../common';
 
 export class MeasurementUtil {
   static isPositionInRect(position: Position, rect: RectMeasurement): boolean {
-    return position.x >= rect.x && (position.x <= (rect.x + rect.width))
-      && position.y >= rect.y && (position.y <= (rect.y + rect.height))
+    return position.x >= rect.x && position.x <= rect.x + rect.width && position.y >= rect.y && position.y <= rect.y + rect.height;
   }
 }

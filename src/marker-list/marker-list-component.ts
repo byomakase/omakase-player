@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import { Subject } from 'rxjs';
-import { VideoControllerApi } from '../video/video-controller-api';
-import { MarkerListItem } from './marker-list-item';
-import { markerListDefaultTemplates } from './marker-list-templates';
+import {Subject} from 'rxjs';
+import {VideoControllerApi} from '../video/video-controller-api';
+import {MarkerListItem} from './marker-list-item';
+import {markerListDefaultTemplates} from './marker-list-templates';
 
 const classes = {
   markerListBody: 'omakase-marker-list-body',
@@ -25,7 +25,7 @@ const classes = {
 };
 
 export class MarkerListComponent extends HTMLElement {
-  onAction$: Subject<{ marker: MarkerListItem; action: string }> = new Subject();
+  onAction$: Subject<{marker: MarkerListItem; action: string}> = new Subject();
   onRemove$: Subject<MarkerListItem> = new Subject();
   onClick$: Subject<MarkerListItem> = new Subject();
 
@@ -40,7 +40,7 @@ export class MarkerListComponent extends HTMLElement {
 
   constructor() {
     super();
-    this.attachShadow({ mode: 'open' });
+    this.attachShadow({mode: 'open'});
 
     const style = document.createElement('style');
     style.innerHTML = markerListDefaultTemplates.style;
@@ -175,7 +175,12 @@ export class MarkerListComponent extends HTMLElement {
         return 0;
       }
     });
-    return sortedMarkers.find((m) => m.start !== undefined && markerItem.start !== undefined && (m.start > markerItem.start || (m.start === markerItem.start && m.end !== undefined && markerItem.end !== undefined && m.end > markerItem.end)));
+    return sortedMarkers.find(
+      (m) =>
+        m.start !== undefined &&
+        markerItem.start !== undefined &&
+        (m.start > markerItem.start || (m.start === markerItem.start && m.end !== undefined && markerItem.end !== undefined && m.end > markerItem.end))
+    );
   }
 
   private renderList() {
@@ -214,13 +219,13 @@ export class MarkerListComponent extends HTMLElement {
     const clone = document.importNode(template.content, true);
     this.setMarkerSlotValues(clone, item);
     const actionSlots = clone.querySelectorAll<HTMLElement>('[slot^="action"]');
-    actionSlots.forEach(actionSlot => {
+    actionSlots.forEach((actionSlot) => {
       const action = actionSlot.getAttribute('slot')!.replace('action-', '');
       actionSlot.onclick = (e: MouseEvent) => {
         e.stopPropagation();
-        this.onAction$.next({ marker: item, action });
+        this.onAction$.next({marker: item, action});
       };
-    })
+    });
     const removeSlot = clone.querySelector<HTMLElement>('[slot="remove"]');
     if (removeSlot) {
       removeSlot.onclick = (e: MouseEvent) => {
@@ -266,12 +271,12 @@ export class MarkerListComponent extends HTMLElement {
       durationSlot.innerHTML = item.duration !== undefined ? this._videoController!.formatToTimecode(item.duration) : '';
     }
     const customSlots = element.querySelectorAll<HTMLElement>('[slot^="data"]');
-    customSlots.forEach(customSlot => {
+    customSlots.forEach((customSlot) => {
       const attributeName = customSlot.getAttribute('slot')!.replace('data-', '');
       if (item.data) {
         customSlot.innerHTML = item.data[attributeName];
       }
-    })
+    });
   }
 
   private removeMarkerFromDom(item: MarkerListItem) {

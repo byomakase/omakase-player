@@ -22,56 +22,56 @@ import Decimal from 'decimal.js';
 import {VideoDomControllerApi} from './video-dom-controller-api';
 import {nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
 
-export interface VideoNativeControllerConfig extends VideoControllerConfig {
-
-}
+export interface VideoNativeControllerConfig extends VideoControllerConfig {}
 
 export const VIDEO_NATIVE_CONTROLLER_CONFIG_DEFAULT: Omit<VideoNativeControllerConfig, 'videoDomController'> = {
-  ...VIDEO_CONTROLLER_CONFIG_DEFAULT
-}
+  ...VIDEO_CONTROLLER_CONFIG_DEFAULT,
+};
 
 export class VideoNativeController extends VideoController<VideoNativeControllerConfig> {
-
   constructor(config: VideoNativeControllerConfig, videoDomController: VideoDomControllerApi) {
-    super({
-      ...VIDEO_NATIVE_CONTROLLER_CONFIG_DEFAULT,
-      ...config
-    }, videoDomController);
+    super(
+      {
+        ...VIDEO_NATIVE_CONTROLLER_CONFIG_DEFAULT,
+        ...config,
+      },
+      videoDomController
+    );
   }
 
   loadVideoUsingLoader(sourceUrl: string, frameRate: number, options?: VideoLoadOptions): Observable<Video> {
-    return passiveObservable<Video>(observer => {
+    return passiveObservable<Video>((observer) => {
       let videoLoadedData$ = fromEvent(this.videoElement, HTMLVideoElementEventKeys.LOADEDDATA).pipe(first());
 
-      forkJoin([videoLoadedData$]).pipe(first()).subscribe(result => {
-        let duration: number;
-        if (options && options.duration !== void 0) {
-          duration = z.coerce.number().parse(options.duration);
-          duration = duration ? duration : this.videoElement.duration;
-        } else {
-          duration = this.videoElement.duration;
-        }
+      forkJoin([videoLoadedData$])
+        .pipe(first())
+        .subscribe((result) => {
+          let duration: number;
+          if (options && options.duration !== void 0) {
+            duration = z.coerce.number().parse(options.duration);
+            duration = duration ? duration : this.videoElement.duration;
+          } else {
+            duration = this.videoElement.duration;
+          }
 
-        let dropFrame = options && options.dropFrame !== void 0 ? options.dropFrame : false;
+          let dropFrame = options && options.dropFrame !== void 0 ? options.dropFrame : false;
 
-        let video: Video = {
-          sourceUrl: sourceUrl,
-          frameRate: frameRate,
-          dropFrame: dropFrame,
-          duration: duration,
-          totalFrames: Decimal.mul(duration, frameRate).ceil().toNumber(),
-          frameDuration: Decimal.div(1, frameRate).toNumber(),
-          audioOnly: false
-        }  // TODO adjust for audio only
+          let video: Video = {
+            sourceUrl: sourceUrl,
+            frameRate: frameRate,
+            dropFrame: dropFrame,
+            duration: duration,
+            totalFrames: Decimal.mul(duration, frameRate).ceil().toNumber(),
+            frameDuration: Decimal.div(1, frameRate).toNumber(),
+            audioOnly: false,
+            // initSegmentTimeOffset: Decimal.div(2, frameRate).toNumber() // TODO manually, how to identify initSegment ????
+          }; // TODO adjust for audio only
 
-        nextCompleteObserver(observer, video);
-      })
+          nextCompleteObserver(observer, video);
+        });
 
       this.videoElement.src = sourceUrl;
       this.videoElement.load(); // TODO in progressive watch for load event and then complete observable
-
-
-    })
+    });
   }
-
 }

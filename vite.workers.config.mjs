@@ -14,19 +14,18 @@
  * limitations under the License.
  */
 
-import {resolve} from 'path'
-import {defineConfig} from 'vite'
-import dtsPlugin from "vite-plugin-dts";
+import {resolve} from 'path';
+import {defineConfig} from 'vite';
+import dtsPlugin from 'vite-plugin-dts';
 
 const outputNames = {
   omp_peak_sample_processor: 'omp-peak-sample-processor.js',
   omp_true_peak_processor: 'omp-true-peak-processor.js',
+  omp_sync_watchdog_processor: 'omp-sync-watchdog-processor.js',
 };
 
 export default defineConfig({
-  plugins: [
-    dtsPlugin()
-  ],
+  plugins: [dtsPlugin()],
   build: {
     sourcemap: false,
     emptyOutDir: false,
@@ -34,16 +33,17 @@ export default defineConfig({
     lib: {
       // Specify multiple entry points
       entry: {
-        omp_peak_sample_processor: resolve(__dirname, 'src/worker/omp-peak-sample-processor.ts'),   // First entry point
-        omp_true_peak_processor: resolve(__dirname, 'src/worker/omp-true-peak-processor.ts'),  // Second entry point
+        omp_peak_sample_processor: resolve(__dirname, 'src/worker/omp-peak-sample-processor.ts'),
+        omp_true_peak_processor: resolve(__dirname, 'src/worker/omp-true-peak-processor.ts'),
+        omp_sync_watchdog_processor: resolve(__dirname, 'src/worker/omp-sync-watchdog-processor.ts'),
       },
-      formats: ['es'],  // Only output ES format
+      formats: ['es'], // Only output ES format
       name: 'OmpWorkers', // Global name if needed
       // fileName: (format, entryName) => `${entryName}.js`, // Use entry name for file name
       fileName: (format, entryName) => {
         return `${outputNames[entryName]}` || `${entryName}.js`; // Fallback to entryName if not found
-      }
+      },
     },
     rollupOptions: {},
   },
-})
+});

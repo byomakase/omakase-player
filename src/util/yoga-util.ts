@@ -27,7 +27,7 @@ export class YogaUtil {
           // console.error(e);
         }
       }
-    })
+    });
   }
 }
 

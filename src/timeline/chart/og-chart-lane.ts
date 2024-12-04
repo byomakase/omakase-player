@@ -37,10 +37,10 @@ export interface OgChartLaneConfig extends VttTimelineLaneConfig<OgChartLaneStyl
 
   valueMin?: number;
   valueMax?: number;
-  valueTransformFn?: (value: number) => number,
-  itemProcessFn?: (item: OgChartLaneItem, index: number) => void,
+  valueTransformFn?: (value: number) => number;
+  itemProcessFn?: (item: OgChartLaneItem, index: number) => void;
 
-  valueInterpolationStrategy?: 'average' | 'max'
+  valueInterpolationStrategy?: 'average' | 'max';
 }
 
 export interface OgChartLaneStyle extends TimelineLaneStyle {
@@ -66,9 +66,9 @@ const configDefault: OgChartLaneConfig = {
     interpolationWidth: 10,
     itemFillLinearGradientColorStops: Constants.FILL_LINEAR_GRADIENT_AUDIO_PEAK,
     itemPadding: 1,
-    itemScaleRatio: 1
-  }
-}
+    itemScaleRatio: 1,
+  },
+};
 
 export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneStyle, OgChartVttCue, OgChartVttFile> implements OgChartLaneApi {
   protected readonly _vttAdapter: VttAdapter<OgChartVttFile> = new VttAdapter(OgChartVttFile);
@@ -89,9 +89,11 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
     super(timelineLaneComposeConfig(configDefault, config));
 
     this._vttAdapter.initFromConfig(this._config);
-    this._valueTransformFn = this._config.valueTransformFn ? this._config.valueTransformFn : (value: number) => {
-      return value;
-    };
+    this._valueTransformFn = this._config.valueTransformFn
+      ? this._config.valueTransformFn
+      : (value: number) => {
+          return value;
+        };
     this._itemProcessFn = this._config.itemProcessFn;
   }
 
@@ -101,17 +103,17 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
     let timecodedRect = this.getTimecodedRect();
 
     this._timecodedGroup = new Konva.Group({
-      ...timecodedRect
+      ...timecodedRect,
     });
 
     this._timecodedEventCatcher = KonvaFactory.createEventCatcherRect({
-      ...this._timecodedGroup.getSize()
+      ...this._timecodedGroup.getSize(),
     });
 
     this._itemsGroup = new Konva.Group({
       y: this._config.style.paddingTop,
       width: this._timecodedGroup.width(),
-      height: this._config.style.height - (this._config.style.paddingTop + this._config.style.paddingBottom)
+      height: this._config.style.height - (this._config.style.paddingTop + this._config.style.paddingBottom),
     });
 
     this._timecodedGroup.add(this._timecodedEventCatcher);
@@ -121,29 +123,32 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
 
     this._onSettleLayout$.pipe(takeUntil(this._destroyed$)).subscribe(() => {
       this.settlePosition();
-    })
+    });
 
-    this._onSettleLayout$.pipe(debounceTime(100), takeUntil(this._destroyed$)).subscribe(scroll => {
+    this._onSettleLayout$.pipe(debounceTime(100), takeUntil(this._destroyed$)).subscribe((scroll) => {
       this.settleAll();
-    })
+    });
 
-    this._timeline!.onScroll$.pipe(debounceTime(100), distinctUntilChanged(), takeUntil(this._destroyed$)).subscribe(scroll => {
+    this._timeline!.onScroll$.pipe(debounceTime(100), distinctUntilChanged(), takeUntil(this._destroyed$)).subscribe((scroll) => {
       this.settleAll();
-    })
+    });
 
-    zip([this._videoController!.onVideoLoaded$.pipe(filter(p => !!p && !(p.isAttaching || p.isDetaching))), this._vttAdapter.vttFileLoaded$])
+    zip([this._videoController!.onVideoLoaded$.pipe(filter((p) => !!p && !(p.isAttaching || p.isDetaching))), this._vttAdapter.vttFileLoaded$])
       .pipe(takeUntil(this._destroyed$))
       .subscribe({
         next: () => {
-          this.createEntities()
-        }
-      })
+          this.createEntities();
+        },
+      });
 
-    this._videoController!.onVideoLoading$.pipe(filter(p => !(p.isAttaching || p.isDetaching)), takeUntil(this._destroyed$)).subscribe({
+    this._videoController!.onVideoLoading$.pipe(
+      filter((p) => !(p.isAttaching || p.isDetaching)),
+      takeUntil(this._destroyed$)
+    ).subscribe({
       next: (event) => {
         this.clearContent();
-      }
-    })
+      },
+    });
 
     if (this.vttUrl) {
       this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig));
@@ -152,11 +157,11 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
 
   private createEntities() {
     if (!this.vttFile) {
-      throw new Error('VTT file not loaded')
+      throw new Error('VTT file not loaded');
     }
 
     if (!this._timeline) {
-      throw new Error('TimelineLane not initalized. Maybe you forgot to add TimelineLane to Timeline?')
+      throw new Error('TimelineLane not initalized. Maybe you forgot to add TimelineLane to Timeline?');
     }
 
     this.clearItems();
@@ -176,9 +181,7 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
 
     let timecodedContainerWidth = this._timeline.getTimecodedContainerDimension().width;
 
-    this._numOfInterpolations = new Decimal(timecodedContainerWidth)
-      .div(this.style.interpolationWidth)
-      .round().toNumber()
+    this._numOfInterpolations = new Decimal(timecodedContainerWidth).div(this.style.interpolationWidth).round().toNumber();
 
     let cuesInterpolations = this.resolveCuesInterpolations(this.vttFile, this._numOfInterpolations);
 
@@ -206,20 +209,20 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
             paddingY: this.style.itemPadding,
             scaleRatio: this.style.itemScaleRatio,
             visible: true,
-          }
+          },
         });
 
         this._itemsMap.set(i, laneItem);
         this._itemsGroup!.add(laneItem.konvaNode);
 
         if (this._itemProcessFn) {
-          this._itemProcessFn(laneItem, i)
+          this._itemProcessFn(laneItem, i);
         }
       }
     }
   }
 
-  private findMinMax(cues: OgChartVttCue[]): { min: OgChartVttCue, max: OgChartVttCue } {
+  private findMinMax(cues: OgChartVttCue[]): {min: OgChartVttCue; max: OgChartVttCue} {
     let min = cues[0];
     let max = cues[0];
 
@@ -242,7 +245,7 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
     let cuesInterpolations: Map<number, OgChartCue> = new Map<number, OgChartCue>();
 
     for (let i = 0; i < numOfInterpolations; i++) {
-      let isLast = i === (numOfInterpolations - 1);
+      let isLast = i === numOfInterpolations - 1;
 
       let interpolationTimes = this.resolveInterpolationTimes(i);
 
@@ -252,11 +255,12 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
       interpolationStartTime = new Decimal(interpolationStartTime).toDecimalPlaces(1).toNumber();
       interpolationEndTime = new Decimal(interpolationEndTime).toDecimalPlaces(1).toNumber();
 
-      let cuesForInterpolation = visibleCues.filter(cue => {
-        let inside = (cue.startTime >= interpolationStartTime) && (isLast ? cue.endTime <= interpolationEndTime : cue.endTime < interpolationEndTime)
-        let leftIntersection = (cue.startTime < interpolationStartTime) && (cue.endTime >= interpolationStartTime && (isLast ? cue.endTime <= interpolationEndTime : cue.endTime < interpolationEndTime))
-        let rightIntersection = ((cue.startTime >= interpolationStartTime) && (isLast ? cue.startTime <= interpolationEndTime : cue.startTime < interpolationEndTime)) && (cue.endTime > interpolationEndTime)
-        let completeIntersection = (cue.startTime < interpolationStartTime) && (cue.endTime > interpolationEndTime);
+      let cuesForInterpolation = visibleCues.filter((cue) => {
+        let inside = cue.startTime >= interpolationStartTime && (isLast ? cue.endTime <= interpolationEndTime : cue.endTime < interpolationEndTime);
+        let leftIntersection = cue.startTime < interpolationStartTime && cue.endTime >= interpolationStartTime && (isLast ? cue.endTime <= interpolationEndTime : cue.endTime < interpolationEndTime);
+        let rightIntersection =
+          cue.startTime >= interpolationStartTime && (isLast ? cue.startTime <= interpolationEndTime : cue.startTime < interpolationEndTime) && cue.endTime > interpolationEndTime;
+        let completeIntersection = cue.startTime < interpolationStartTime && cue.endTime > interpolationEndTime;
         return inside || leftIntersection || rightIntersection || completeIntersection;
       });
 
@@ -265,20 +269,20 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
       let cuePartial: WithOptionalPartial<OgChartCue, 'value'> = {
         id: `${i}`,
         startTime: interpolationStartTime,
-        endTime: interpolationEndTime
-      }
+        endTime: interpolationEndTime,
+      };
 
       if (cuesForInterpolation.length > 0) {
         cue = {
           ...cuePartial,
           value: this.resolveInterpolationValue(cuesForInterpolation),
-        }
+        };
 
         cuesInterpolations.set(i, cue);
       }
     }
 
-    return cuesInterpolations
+    return cuesInterpolations;
   }
 
   private resolveInterpolationValue(cues: OgChartCue[]): number {
@@ -286,9 +290,10 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
       return cues[0].value;
     } else {
       if (this._config.valueInterpolationStrategy === 'max') {
-        return Math.max(...cues.map(p => p.value))
-      } else { // average
-        let sum = cues.map(p => p.value).reduce((acc, num) => acc + num, 0)
+        return Math.max(...cues.map((p) => p.value));
+      } else {
+        // average
+        let sum = cues.map((p) => p.value).reduce((acc, num) => acc + num, 0);
         return new Decimal(sum).div(cues.length).toDecimalPlaces(3).toNumber();
       }
     }
@@ -303,8 +308,8 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
 
     return {
       start: interpolationStartTime,
-      end: interpolationEndTime
-    }
+      end: interpolationEndTime,
+    };
   }
 
   protected settleLayout() {
@@ -312,16 +317,16 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
 
     this._timecodedGroup!.setAttrs({
       x: timecodedRect.x,
-      y: timecodedRect.y
+      y: timecodedRect.y,
     });
 
     this._timecodedGroup!.clipFunc((ctx) => {
-      ctx.rect(0, 0, timecodedRect.width, timecodedRect.height)
+      ctx.rect(0, 0, timecodedRect.width, timecodedRect.height);
     });
 
-    [this._timecodedGroup, this._timecodedEventCatcher, this._itemsGroup].forEach(node => {
-      node!.width(timecodedRect.width)
-    })
+    [this._timecodedGroup, this._timecodedEventCatcher, this._itemsGroup].forEach((node) => {
+      node!.width(timecodedRect.width);
+    });
 
     this._onSettleLayout$.next();
   }
@@ -331,8 +336,8 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
   }
 
   private clearItems() {
-    this._itemsMap.forEach(p => p.destroy())
-    this._itemsMap.clear()
+    this._itemsMap.forEach((p) => p.destroy());
+    this._itemsMap.clear();
     this._itemsGroup?.destroyChildren();
   }
 
@@ -362,9 +367,7 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
   }
 
   override destroy() {
-    destroyer(
-      ...this._itemsMap.values()
-    )
+    destroyer(...this._itemsMap.values());
     super.destroy();
   }
 }

@@ -15,7 +15,6 @@
  */
 
 export class LocalStorageUtil {
-
   static setItem(key: string, value: string): void {
     localStorage.setItem(key, value);
   }
@@ -32,5 +31,4 @@ export class LocalStorageUtil {
   static clear(): void {
     localStorage.clear();
   }
-
 }

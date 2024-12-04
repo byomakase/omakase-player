@@ -14,19 +14,17 @@
  * limitations under the License.
  */
 
-export * from './api'
-export * from './common'
-export * from './layout'
-export * from './types'
-export * from './vtt'
+export * from './api';
+export * from './common';
+export * from './layout';
+export * from './types';
+export * from './vtt';
 
 // TODO consolidate in next major version
-export * from './timeline/marker'
-export * from './timeline'
+export * from './timeline/marker';
+export * from './timeline';
 // TODO consolidate in next major version
 
-export * from './video'
+export * from './video';
 
-export * from './omakase-player'
-
-
+export * from './omakase-player';

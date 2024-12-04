@@ -24,9 +24,7 @@ export class YogaProvider {
   Yoga: Yoga;
   Config: Config;
 
-  private constructor() {
-
-  }
+  private constructor() {}
 
   public static instance(): YogaProvider {
     if (!YogaProvider._instance) {
@@ -36,9 +34,11 @@ export class YogaProvider {
   }
 
   init(): Observable<void> {
-    return from(loadYoga()).pipe(map(Yoga => {
-      this.Yoga = Yoga;
-      this.Config = this.Yoga.Config;
-    }))
+    return from(loadYoga()).pipe(
+      map((Yoga) => {
+        this.Yoga = Yoga;
+        this.Config = this.Yoga.Config;
+      })
+    );
   }
 }

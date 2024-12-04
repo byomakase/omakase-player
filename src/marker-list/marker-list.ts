@@ -14,22 +14,34 @@
  * limitations under the License.
  */
 
-import { MarkerListApi } from '../api/marker-list-api';
-import { VideoControllerApi } from '../video/video-controller-api';
-import { MarkerListComponent } from './marker-list-component';
-import { MarkerListDomController } from './marker-list-dom-controller';
-import { MarkerVttFile, ThumbnailVttFile } from '../vtt';
-import { MarkerAwareApi } from '../api/marker-aware-api';
-import { map, merge, Subject, takeUntil } from 'rxjs';
-import { VttAdapter } from '../common/vtt-adapter';
-import { VttLoadOptions } from '../api/vtt-aware-api';
-import { ColorUtil } from '../util/color-util';
-import { Destroyable, MarkerCreateEvent, MarkerDeleteEvent, MarkerInitEvent, MarkerListActionEvent, MarkerListClickEvent, MarkerUpdateEvent, MarkerVttCue, MomentObservation, PeriodObservation } from '../types';
-import { nullifier } from '../util/destroy-util';
-import { MarkerListItem } from './marker-list-item';
-import { MarkerApi } from '../api/marker-api';
-import { MarkerListController } from './marker-list-controller';
-import { completeUnsubscribeSubjects, nextCompleteSubject } from '../util/rxjs-util';
+import {MarkerListApi} from '../api/marker-list-api';
+import {VideoControllerApi} from '../video/video-controller-api';
+import {MarkerListComponent} from './marker-list-component';
+import {MarkerListDomController} from './marker-list-dom-controller';
+import {MarkerVttFile, ThumbnailVttFile} from '../vtt';
+import {MarkerAwareApi} from '../api/marker-aware-api';
+import {map, merge, Subject, takeUntil} from 'rxjs';
+import {VttAdapter} from '../common/vtt-adapter';
+import {VttLoadOptions} from '../api/vtt-aware-api';
+import {ColorUtil} from '../util/color-util';
+import {
+  Destroyable,
+  MarkerCreateEvent,
+  MarkerDeleteEvent,
+  MarkerInitEvent,
+  MarkerListActionEvent,
+  MarkerListClickEvent,
+  MarkerSelectedEvent,
+  MarkerUpdateEvent,
+  MarkerVttCue,
+  MomentObservation,
+  PeriodObservation,
+} from '../types';
+import {nullifier} from '../util/destroy-util';
+import {MarkerListItem} from './marker-list-item';
+import {MarkerApi} from '../api/marker-api';
+import {MarkerListController} from './marker-list-controller';
+import {completeUnsubscribeSubjects, nextCompleteSubject} from '../util/rxjs-util';
 
 export interface MarkerListConfig {
   markerListHTMLElementId: string;
@@ -59,6 +71,7 @@ export class MarkerList implements Destroyable, MarkerListApi {
   onMarkerCreate$ = new Subject<MarkerCreateEvent>();
   onMarkerDelete$ = new Subject<MarkerDeleteEvent>();
   onMarkerUpdate$ = new Subject<MarkerUpdateEvent>();
+  onMarkerSelected$ = new Subject<MarkerSelectedEvent>();
 
   private _markerListDomController: MarkerListDomController;
   private _markerListComponent: MarkerListComponent;
@@ -77,16 +90,16 @@ export class MarkerList implements Destroyable, MarkerListApi {
     this._markerListDomController = new MarkerListDomController(this);
     this._markerListComponent = this._markerListDomController.markerListComponent;
     this._markerListComponent.videoController = videoController;
-    this._markerListComponent.onAction$.pipe(takeUntil(this._destroyed$)).subscribe(({ marker, action }) => {
-      this.onMarkerAction$.next({ marker, action });
+    this._markerListComponent.onAction$.pipe(takeUntil(this._destroyed$)).subscribe(({marker, action}) => {
+      this.onMarkerAction$.next({marker, action});
     });
     this._markerListComponent.onRemove$.pipe(takeUntil(this._destroyed$)).subscribe((marker) => {
       marker.source.removeMarker(marker.id);
-      this.onMarkerDelete$.next({ marker });
+      this.onMarkerDelete$.next({marker});
     });
     this._thumbnailVttFile = this._config.thumbnailVttFile;
     this._markerListComponent.onClick$.pipe(takeUntil(this._destroyed$)).subscribe((marker) => {
-      this.onMarkerClick$.next({ marker });
+      this.onMarkerClick$.next({marker});
     });
     if (this.config.source && this.config.vttUrl) {
       throw new Error(`Marker list misconfiguration: source and vttUrl can not be defined at the same time`);
@@ -98,21 +111,21 @@ export class MarkerList implements Destroyable, MarkerListApi {
           this.addMarkerToComponent(marker, source);
         }
       }
-      this.onMarkerInit$.next({ markers: this.getMarkers() });
+      this.onMarkerInit$.next({markers: this.getMarkers()});
     } else {
       this._sources = [new MarkerListController()];
     }
     if (this.config.vttUrl) {
       this._markerListComponent.isLoading = true;
       this._vttAdapter
-        .loadVtt(this.config.vttUrl, { ...this.config.vttLoadOptions })
+        .loadVtt(this.config.vttUrl, {...this.config.vttLoadOptions})
         .pipe(takeUntil(this._destroyed$))
         .subscribe((vttFile) => {
           this._markerListComponent.isLoading = false;
           const markers = vttFile?.cues.map((cue, index) => (this._config.vttMarkerCreateFn ? this._config.vttMarkerCreateFn(cue, index) : this.createDefaultMarker(cue)));
           if (markers) {
             (this._sources[0] as MarkerListController).markers = markers;
-            this.onMarkerInit$.next({ markers });
+            this.onMarkerInit$.next({markers});
           }
           this.onVttLoaded$.next(vttFile);
         });
@@ -157,13 +170,13 @@ export class MarkerList implements Destroyable, MarkerListApi {
   updateMarker(id: string, updateValue: Partial<MarkerListItem>) {
     const marker = this.getMarkerItem(id);
     marker.source.updateMarker(id, updateValue);
-    this.onMarkerUpdate$.next({ marker });
+    this.onMarkerUpdate$.next({marker});
   }
 
   removeMarker(id: string) {
     const marker = this.getMarkerItem(id);
     marker.source.removeMarker(id);
-    this.onMarkerDelete$.next({ marker });
+    this.onMarkerDelete$.next({marker});
   }
 
   toggleMarker(id: string) {
@@ -176,6 +189,7 @@ export class MarkerList implements Destroyable, MarkerListApi {
     }
     this._markerListComponent.toggleActiveClass(markerItem.id);
     this._lastActiveMarker = this._lastActiveMarker !== markerItem ? markerItem : undefined;
+    this.onMarkerSelected$.next({marker: this._lastActiveMarker});
   }
 
   getSelectedMarker(): MarkerApi | undefined {
@@ -201,26 +215,30 @@ export class MarkerList implements Destroyable, MarkerListApi {
   }
 
   private addSourceListeners() {
-    merge(...this._sources.map((source) => source.onMarkerInit$.pipe(map((event) => ({ markers: event.markers, source })))))
+    merge(...this._sources.map((source) => source.onMarkerInit$.pipe(map((event) => ({markers: event.markers, source})))))
       .pipe(takeUntil(this._destroyed$))
-      .subscribe(({ markers, source }) => {
+      .subscribe(({markers, source}) => {
         for (const marker of markers) {
           this.addMarkerToComponent(marker, source);
         }
       });
-    merge(...this._sources.map((source) => source.onMarkerCreate$.pipe(map((event) => ({ marker: event.marker, source })))))
+    merge(...this._sources.map((source) => source.onMarkerCreate$.pipe(map((event) => ({marker: event.marker, source})))))
       .pipe(takeUntil(this._destroyed$))
-      .subscribe(({ marker, source }) => {
+      .subscribe(({marker, source}) => {
         this.addMarkerToComponent(marker, source);
       });
     merge(...this._sources.map((source) => source.onMarkerDelete$))
       .pipe(takeUntil(this._destroyed$))
-      .subscribe(({ marker }) => {
+      .subscribe(({marker}) => {
         this._markerListComponent.removeMarker(marker.id);
+        if (marker.id === this._lastActiveMarker?.id) {
+          delete this._lastActiveMarker;
+          this.onMarkerSelected$.next({marker: undefined});
+        }
       });
     merge(...this._sources.map((source) => source.onMarkerUpdate$))
       .pipe(takeUntil(this._destroyed$))
-      .subscribe(({ marker }) => {
+      .subscribe(({marker}) => {
         this._markerListComponent.updateMarker(marker.id, {
           ...marker,
           name: marker.name,

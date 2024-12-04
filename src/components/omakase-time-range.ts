@@ -1,5 +1,5 @@
-import { MediaTimeRange } from 'media-chrome';
-import { Subject } from 'rxjs';
+import {MediaTimeRange} from 'media-chrome';
+import {Subject} from 'rxjs';
 
 const calcTimeFromRangeValue = (el: any, value: number = el.range.valueAsNumber): number => {
   const startTime = Number.isFinite(el.mediaSeekableStart) ? el.mediaSeekableStart : 0;
@@ -9,17 +9,11 @@ const calcTimeFromRangeValue = (el: any, value: number = el.range.valueAsNumber)
   return value * (endTime - startTime) + startTime;
 };
 
-const closestComposedNode = <T extends Element = Element>(
-  childNode: Element,
-  selector: string
-): T | null => {
+const closestComposedNode = <T extends Element = Element>(childNode: Element, selector: string): T | null => {
   if (!childNode) return null;
   const closest = childNode.closest(selector);
   if (closest) return closest as T;
-  return closestComposedNode(
-    (childNode.getRootNode() as ShadowRoot).host,
-    selector
-  );
+  return closestComposedNode((childNode.getRootNode() as ShadowRoot).host, selector);
 };
 
 export class OmakaseTimeRange extends MediaTimeRange {
@@ -62,10 +56,7 @@ export class OmakaseTimeRange extends MediaTimeRange {
 
   private getElementRects(box: HTMLElement) {
     // Get the element that enforces the bounds for the time range boxes.
-    const bounds =
-      (this.getAttribute('bounds')
-        ? closestComposedNode(this, `#${this.getAttribute('bounds')}`)
-        : this.parentElement) ?? this;
+    const bounds = (this.getAttribute('bounds') ? closestComposedNode(this, `#${this.getAttribute('bounds')}`) : this.parentElement) ?? this;
 
     const boundsRect = bounds.getBoundingClientRect();
     const rangeRect = this.range.getBoundingClientRect();
@@ -76,7 +67,7 @@ export class OmakaseTimeRange extends MediaTimeRange {
     const max = boundsRect.right - rangeRect.left - width / 2;
 
     return {
-      box: { width, min, max },
+      box: {width, min, max},
       bounds: boundsRect,
       range: rangeRect,
     };

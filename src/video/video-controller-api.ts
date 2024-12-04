@@ -16,7 +16,21 @@
 
 import {BehaviorSubject, Observable} from 'rxjs';
 import {VideoApi} from '../api';
-import {AudioContextChangeEvent, AudioLoadedEvent, AudioRoutingEvent, AudioSwitchedEvent, AudioWorkletNodeCreatedEvent, AudioPeakProcessorWorkletNodeMessageEvent, Destroyable, SubtitlesCreateEvent, SubtitlesEvent, SubtitlesLoadedEvent, SubtitlesVttTrack, VideoHelpMenuChangeEvent, ThumnbailVttUrlChangedEvent} from '../types';
+import {
+  AudioContextChangeEvent,
+  AudioLoadedEvent,
+  AudioRoutingEvent,
+  AudioSwitchedEvent,
+  AudioWorkletNodeCreatedEvent,
+  AudioPeakProcessorWorkletNodeMessageEvent,
+  Destroyable,
+  SubtitlesCreateEvent,
+  SubtitlesEvent,
+  SubtitlesLoadedEvent,
+  SubtitlesVttTrack,
+  VideoHelpMenuChangeEvent,
+  ThumnbailVttUrlChangedEvent,
+} from '../types';
 import {BufferedTimespan} from './video-controller';
 import {AudioInputOutputNode, AudioMeterStandard, PlaybackState, Video, VideoLoadOptions, VideoLoadOptionsInternal} from './model';
 
@@ -45,6 +59,8 @@ export interface VideoControllerApi extends VideoApi, Destroyable {
 
   loadVideoInternal(sourceUrl: string, frameRate: number | string, options: VideoLoadOptions | undefined, optionsInternal: VideoLoadOptionsInternal): Observable<Video>;
 
+  dispatchVideoTimeChange(): void;
+
   getPlaybackState(): PlaybackState | undefined;
 
   getBufferedTimespans(): BufferedTimespan[];
@@ -65,13 +81,17 @@ export interface VideoControllerApi extends VideoApi, Destroyable {
   hideSubtitlesTrack(id: string): Observable<void>;
 
   // audio
+  getHTMLAudioUtilElement(): HTMLAudioElement;
+
+  createAudioContext(contextOptions?: AudioContextOptions): Observable<void>;
+
   getAudioContext(): AudioContext | undefined;
 
   getMediaElementAudioSourceNode(): MediaElementAudioSourceNode | undefined;
 
-  createAudioContext(inputsNumber: number, outputsNumber?: number): Observable<void>;
+  createAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<void>;
 
-  createAudioContextWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void>;
+  createAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void>;
 
   getAudioInputOutputNodes(): AudioInputOutputNode[][];
 
@@ -86,6 +106,4 @@ export interface VideoControllerApi extends VideoApi, Destroyable {
   getThumbnailVttUrl(): string | undefined;
 
   loadThumbnailVttUrl(thumbnailVttUrl: string): Observable<void>;
-
-
 }

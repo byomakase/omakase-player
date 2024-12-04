@@ -2,10 +2,7 @@
   "compilerOptions": {
     "target": "ES6",
     "module": "ES6",
-    "lib": [
-      "ES2020",
-      "DOM"
-    ],
+    "lib": ["ES2020", "DOM"],
     "declaration": true,
     "outDir": "./dist/lib/es6",
     "moduleResolution": "node",
@@ -23,7 +20,5 @@
     "skipLibCheck": true,
     "importHelpers": true
   },
-  "include": [
-    "src/**/*"
-  ]
+  "include": ["src/**/*"]
 }

@@ -21,10 +21,7 @@ import {KonvaFactory} from '../../factory/konva-factory';
 import {ColorUtil} from '../../util/color-util';
 
 export class MarkerUtil {
-  static createPeriodSymbol(style: {
-    handleType: 'start' | 'end', symbolType: MarkerSymbolType, symbolSize: number, color: string
-  }): Konva.Shape {
-
+  static createPeriodSymbol(style: {handleType: 'start' | 'end'; symbolType: MarkerSymbolType; symbolSize: number; color: string}): Konva.Shape {
     const halfSymbolSize = new Decimal(style.symbolSize / 2).toDecimalPlaces(2).toNumber();
 
     switch (style.symbolType) {
@@ -39,8 +36,8 @@ export class MarkerUtil {
           fill: borderColor,
           opacity: 1,
           offsetY: halfSymbolSize,
-          offsetX: style.handleType === 'start' ? 0 : borderWidth
-        })
+          offsetX: style.handleType === 'start' ? 0 : borderWidth,
+        });
       case 'triangle':
         const diagonal = Decimal.sqrt(2).mul(style.symbolSize).toDecimalPlaces(2).toNumber();
         const halfDiagonal = diagonal / 2;
@@ -49,67 +46,54 @@ export class MarkerUtil {
           fill: style.color,
           closed: true,
           offsetY: halfDiagonal / 2,
-        })
+        });
       case 'circle':
         return new Konva.Arc({
           fill: style.color,
           innerRadius: 0,
           outerRadius: halfSymbolSize,
           angle: 180,
-          rotation: style.handleType === 'start' ? 90 : -90
-        })
+          rotation: style.handleType === 'start' ? 90 : -90,
+        });
       case 'square':
         return new Konva.Line({
-          points: [
-            0, 0,
-            style.symbolSize, 0,
-            style.symbolSize, style.symbolSize
-          ],
+          points: [0, 0, style.symbolSize, 0, style.symbolSize, style.symbolSize],
           fill: style.color,
           closed: true,
           rotation: style.handleType === 'start' ? 225 : 45,
           offsetX: halfSymbolSize,
           offsetY: halfSymbolSize,
-        })
+        });
       default:
         throw Error('Unknown type');
     }
   }
 
-  static createMomentSymbol(style: {
-    symbolType: MarkerSymbolType, symbolSize: number, color: string
-  }): Konva.Shape {
+  static createMomentSymbol(style: {symbolType: MarkerSymbolType; symbolSize: number; color: string}): Konva.Shape {
     const halfSymbolSize = new Decimal(style.symbolSize / 2).toDecimalPlaces(2).toNumber();
     switch (style.symbolType) {
       case 'none':
         return new Konva.Line({
-          points: [
-            0, 0,
-            0, style.symbolSize,
-          ],
+          points: [0, 0, 0, style.symbolSize],
           stroke: style.color,
           strokeWidth: 1,
           closed: false,
           offsetY: halfSymbolSize,
-        })
+        });
       case 'triangle':
         const diagonal = Decimal.sqrt(2).mul(style.symbolSize).toDecimalPlaces(2).toNumber();
         const halfDiagonal = diagonal / 2;
         return new Konva.Line({
-          points: [
-            -halfDiagonal, 0,
-            halfDiagonal, 0,
-            0, halfDiagonal
-          ],
+          points: [-halfDiagonal, 0, halfDiagonal, 0, 0, halfDiagonal],
           fill: style.color,
           closed: true,
           offsetY: halfDiagonal / 2,
-        })
+        });
       case 'circle':
         return new Konva.Circle({
           fill: style.color,
-          radius: halfSymbolSize
-        })
+          radius: halfSymbolSize,
+        });
       case 'square':
         return KonvaFactory.createRect({
           fill: style.color,
@@ -118,7 +102,7 @@ export class MarkerUtil {
           rotation: 45,
           offsetX: halfSymbolSize,
           offsetY: halfSymbolSize,
-        })
+        });
       default:
         throw Error('Unknown type');
     }

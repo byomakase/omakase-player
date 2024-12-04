@@ -52,9 +52,9 @@ const configDefault: SubtitlesLaneConfig = {
     paddingTop: 0,
     paddingBottom: 0,
     subtitlesLaneItemOpacity: 0.9,
-    subtitlesLaneItemFill: 'rgba(255,73,145)'
-  }
-}
+    subtitlesLaneItemFill: 'rgba(255,73,145)',
+  },
+};
 
 export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, SubtitlesLaneStyle, SubtitlesVttCue, SubtitlesVttFile> implements SubtitlesLaneApi {
   protected readonly _vttAdapter: VttAdapter<SubtitlesVttFile> = new VttAdapter(SubtitlesVttFile);
@@ -84,17 +84,17 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
     let timecodedRect = this.getTimecodedRect();
 
     this._timecodedGroup = KonvaFactory.createGroup({
-      ...timecodedRect
+      ...timecodedRect,
     });
 
     this._timecodedEventCatcher = KonvaFactory.createEventCatcherRect({
-      ...this._timecodedGroup.getSize()
+      ...this._timecodedGroup.getSize(),
     });
 
     this._itemsGroup = new Konva.Group({
       y: this._config.style.paddingTop,
       width: this._timecodedGroup.width(),
-      height: this._config.style.height - (this._config.style.paddingTop + this._config.style.paddingBottom)
+      height: this._config.style.height - (this._config.style.paddingTop + this._config.style.paddingBottom),
     });
 
     this._timecodedGroup.add(this._timecodedEventCatcher);
@@ -105,27 +105,32 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
     this._onSettleLayout$.pipe(takeUntil(this._destroyed$)).subscribe({
       next: () => {
         this.settlePosition();
-      }
-    })
+      },
+    });
 
-    combineLatest([this._onSettleLayout$, this._timeline!.onScroll$]).pipe(debounceTime(100)).pipe(takeUntil(this._destroyed$))
+    combineLatest([this._onSettleLayout$, this._timeline!.onScroll$])
+      .pipe(debounceTime(100))
+      .pipe(takeUntil(this._destroyed$))
       .subscribe(() => {
         this.settleAll();
       });
 
-    zip([this._videoController!.onVideoLoaded$.pipe(filter(p => !!p && !(p.isAttaching || p.isDetaching))), this._vttAdapter.vttFileLoaded$])
+    zip([this._videoController!.onVideoLoaded$.pipe(filter((p) => !!p && !(p.isAttaching || p.isDetaching))), this._vttAdapter.vttFileLoaded$])
       .pipe(takeUntil(this._destroyed$))
       .subscribe({
         next: () => {
-          this.createEntities()
-        }
-      })
+          this.createEntities();
+        },
+      });
 
-    this._videoController!.onVideoLoading$.pipe(filter(p => !(p.isAttaching || p.isDetaching)), takeUntil(this._destroyed$)).subscribe({
+    this._videoController!.onVideoLoading$.pipe(
+      filter((p) => !(p.isAttaching || p.isDetaching)),
+      takeUntil(this._destroyed$)
+    ).subscribe({
       next: (event) => {
         this.clearContent();
-      }
-    })
+      },
+    });
 
     if (this.vttUrl) {
       this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig));
@@ -137,16 +142,16 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
 
     this._timecodedGroup!.setAttrs({
       x: timecodedRect.x,
-      y: timecodedRect.y
+      y: timecodedRect.y,
     });
 
     this._timecodedGroup!.clipFunc((ctx) => {
-      ctx.rect(0, 0, timecodedRect.width, timecodedRect.height)
+      ctx.rect(0, 0, timecodedRect.width, timecodedRect.height);
     });
 
-    [this._timecodedGroup, this._timecodedEventCatcher, this._itemsGroup].forEach(node => {
-      node!.width(timecodedRect.width)
-    })
+    [this._timecodedGroup, this._timecodedEventCatcher, this._itemsGroup].forEach((node) => {
+      node!.width(timecodedRect.width);
+    });
 
     this._onSettleLayout$.next();
   }
@@ -156,8 +161,8 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
   }
 
   private clearItems() {
-    this._itemsMap.forEach(p => p.destroy())
-    this._itemsMap.clear()
+    this._itemsMap.forEach((p) => p.destroy());
+    this._itemsMap.clear();
     this._itemsGroup?.destroyChildren();
   }
 
@@ -180,16 +185,16 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
         let firstCue = subtitlesLaneItem.getCues()[0];
         let lastCue = subtitlesLaneItem.getCues()[subtitlesLaneItem.getCues().length - 1];
 
-        if ((lastCue.endTime >= visibleTimeRange.start && firstCue.startTime <= visibleTimeRange.end)) {
+        if (lastCue.endTime >= visibleTimeRange.start && firstCue.startTime <= visibleTimeRange.end) {
           let horizontals = this.resolveItemHorizontals({
             startTime: firstCue.startTime,
-            endTime: lastCue.endTime
+            endTime: lastCue.endTime,
           });
-          subtitlesLaneItem.setHorizontals(horizontals)
+          subtitlesLaneItem.setHorizontals(horizontals);
         } else {
-          subtitlesLaneItem.destroy()
+          subtitlesLaneItem.destroy();
         }
-      })
+      });
     }
   }
 
@@ -209,7 +214,7 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
         }
         squashed.push(cue);
         lastCue = cue;
-      })
+      });
 
       if (lastCue.endTime - squashed[0].startTime >= singlePixelDuration * this._cueThresholdCoefficient) {
         squashedCues.push(squashed);
@@ -219,22 +224,22 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
     return squashedCues;
   }
 
-  resolveItemHorizontals(textTrackCue: { startTime: number, endTime: number }): Horizontals {
+  resolveItemHorizontals(textTrackCue: {startTime: number; endTime: number}): Horizontals {
     let startTimeX = this._timeline!.constrainTimelinePosition(this._timeline!.timeToTimelinePosition(textTrackCue.startTime));
     let endTimeX = this._timeline!.constrainTimelinePosition(this._timeline!.timeToTimelinePosition(textTrackCue.endTime));
     return {
       x: startTimeX,
-      width: endTimeX - startTimeX
-    }
+      width: endTimeX - startTimeX,
+    };
   }
 
   private createEntities() {
     if (!this.vttFile) {
-      throw new Error('VTT file not loaded')
+      throw new Error('VTT file not loaded');
     }
 
     if (!this._timeline) {
-      throw new Error('TimelineLane not initalized. Maybe you forgot to add TimelineLane to Timeline?')
+      throw new Error('TimelineLane not initalized. Maybe you forgot to add TimelineLane to Timeline?');
     }
 
     this.clearItems();
@@ -251,8 +256,8 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
       let squashedCue: OmakaseTextTrackCue = {
         id: CryptoUtil.uuid(),
         startTime: firstCue.startTime,
-        endTime: lastCue.endTime
-      }
+        endTime: lastCue.endTime,
+      };
       let horizontals = this.resolveItemHorizontals(squashedCue);
 
       let subtitlesLaneItem = new SubtitlesLaneItem({
@@ -262,17 +267,17 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
         style: {
           height: this._itemsGroup!.height(),
           fill: this.style.subtitlesLaneItemFill,
-          opacity: this.style.subtitlesLaneItemOpacity
+          opacity: this.style.subtitlesLaneItemOpacity,
         },
-        listening: true
+        listening: true,
       });
       this._itemsMap.set(firstCue.startTime, subtitlesLaneItem);
       this._itemsGroup!.add(subtitlesLaneItem.konvaNode);
 
       if (this._itemProcessFn) {
-        this._itemProcessFn(subtitlesLaneItem, index)
+        this._itemProcessFn(subtitlesLaneItem, index);
       }
-    })
+    });
   }
 
   public getTimeline() {
@@ -284,9 +289,7 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
   }
 
   override destroy() {
-    destroyer(
-      ...this._itemsMap.values()
-    )
+    destroyer(...this._itemsMap.values());
     super.destroy();
   }
 }

@@ -18,9 +18,14 @@ import {StringUtil} from '../util/string-util';
 
 export class OmpError extends Error {
   constructor(message: string, name?: string) {
-    super();
-    this.name = StringUtil.isNullUndefinedOrWhitespace(name) ? 'OmpError' : name!
-    this.message = message
+    super(message);
+    this.name = StringUtil.isNullUndefinedOrWhitespace(name) ? 'OmpError' : name!;
+  }
+}
+
+export class OmpBroadcastChannelError extends OmpError {
+  constructor(message: string) {
+    super(message, 'OmpBroadcastChannelError');
   }
 }
 

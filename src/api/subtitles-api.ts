@@ -19,7 +19,6 @@ import {BehaviorSubject, Observable} from 'rxjs';
 import {SubtitlesCreateEvent, SubtitlesEvent, SubtitlesLoadedEvent, SubtitlesVttTrack} from '../types';
 
 export interface SubtitlesApi extends Api {
-
   /**
    * Fires on subtitles load. Initial value is undefined.
    * @readonly
@@ -103,5 +102,4 @@ export interface SubtitlesApi extends Api {
    * Toggles show / hide of active VTT track
    */
   toggleShowHideActiveTrack(): Observable<void>;
-
 }

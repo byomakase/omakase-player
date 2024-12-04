@@ -22,52 +22,64 @@ import {AuthUtil} from './auth-util';
 import {BlobUtil} from './blob-util';
 
 export class ImageUtil {
-
   static getProtectedImageUrl(url: string, authentication: AuthenticationData): Observable<string> {
-    return new Observable<string>(o$ => {
+    return new Observable<string>((o$) => {
       const axiosConfig = AuthUtil.getAuthorizedAxiosConfig(url, authentication);
-      axios.get(url, {...axiosConfig, responseType: 'blob'}).then(res => {
-        const blob = BlobUtil.createObjectURL(res.data)
-        o$.next(blob);
-        o$.complete()
-      }).catch(err => {
-        o$.error(err);
-      })
-    })
+      axios
+        .get(url, {...axiosConfig, responseType: 'blob'})
+        .then((res) => {
+          const blob = BlobUtil.createObjectURL(res.data);
+          o$.next(blob);
+          o$.complete();
+        })
+        .catch((err) => {
+          o$.error(err);
+        });
+    });
   }
 
   static createKonvaImage(url: string, authentication?: AuthenticationData): Observable<Konva.Image> {
     const imageUrl$ = authentication ? this.getProtectedImageUrl(url, authentication) : of(url);
-    return imageUrl$.pipe(switchMap(url => {
-      return new Observable<Konva.Image>(o$ => {
-        Konva.Image.fromURL(url, (image: Konva.Image) => {
-          o$.next(image);
-          o$.complete();
-        }, (error: any) => {
-          o$.error(error);
+    return imageUrl$.pipe(
+      switchMap((url) => {
+        return new Observable<Konva.Image>((o$) => {
+          Konva.Image.fromURL(
+            url,
+            (image: Konva.Image) => {
+              o$.next(image);
+              o$.complete();
+            },
+            (error: any) => {
+              o$.error(error);
+            }
+          );
         });
       })
-    }))
+    );
   }
 
   static createKonvaImageSizedByWidth(url: string, width: number, authentication?: AuthenticationData): Observable<Konva.Image> {
-    return ImageUtil.createKonvaImage(url, authentication).pipe(map(image => {
-      image.setAttrs({
-        width: width,
-        height: ImageUtil.calculateProportionalHeight(width, image)
+    return ImageUtil.createKonvaImage(url, authentication).pipe(
+      map((image) => {
+        image.setAttrs({
+          width: width,
+          height: ImageUtil.calculateProportionalHeight(width, image),
+        });
+        return image;
       })
-      return image;
-    }))
+    );
   }
 
   static createKonvaImageSizedByHeight(url: string, height: number, authentication?: AuthenticationData): Observable<Konva.Image> {
-    return ImageUtil.createKonvaImage(url, authentication).pipe(map(image => {
-      image.setAttrs({
-        width: ImageUtil.calculateProportionalWidth(height, image),
-        height: height
+    return ImageUtil.createKonvaImage(url, authentication).pipe(
+      map((image) => {
+        image.setAttrs({
+          width: ImageUtil.calculateProportionalWidth(height, image),
+          height: height,
+        });
+        return image;
       })
-      return image;
-    }))
+    );
   }
 
   public static calculateProportionalHeight(width: number, image: Konva.Image): number {
@@ -77,5 +89,4 @@ export class ImageUtil {
   public static calculateProportionalWidth(height: number, image: Konva.Image): number {
     return (height * image.getAttrs().image.naturalWidth) / image.getAttrs().image.naturalHeight;
   }
-
 }

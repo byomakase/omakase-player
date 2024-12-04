@@ -23,28 +23,27 @@ import {FrameRateModel} from '../video/model';
 
 const frameRatePrecision = 15; // frame rate precision
 
-const initFrameRates: { fraction: string, dropFramesOnMinute?: number }[] = [
+const initFrameRates: {fraction: string; dropFramesOnMinute?: number}[] = [
   {
-    fraction: '24000/1001'
+    fraction: '24000/1001',
   },
   {
     fraction: '30000/1001',
-    dropFramesOnMinute: 2
+    dropFramesOnMinute: 2,
   },
   {
     fraction: '60000/1001',
-    dropFramesOnMinute: 4
+    dropFramesOnMinute: 4,
   },
   {
-    fraction: '120000/1001'
+    fraction: '120000/1001',
   },
   {
-    fraction: '240000/1001'
-  }
+    fraction: '240000/1001',
+  },
 ];
 
 export class FrameRateUtil {
-
   private static frameRateModels: FrameRateModel[];
   private static frameRateModelByValue: Map<number, FrameRateModel> = new Map<number, FrameRateModel>();
 
@@ -54,13 +53,13 @@ export class FrameRateUtil {
         value: this.resolveFrameRateValueFromFraction(fractionFrameRate.fraction),
         fraction: fractionFrameRate.fraction,
         dropFrameEnabled: !isNullOrUndefined(fractionFrameRate.dropFramesOnMinute),
-        dropFramesOnMinute: fractionFrameRate.dropFramesOnMinute
-      }
-    })
+        dropFramesOnMinute: fractionFrameRate.dropFramesOnMinute,
+      };
+    });
 
     this.frameRateModels.forEach((frameRateModel) => {
       this.frameRateModelByValue.set(frameRateModel.value, frameRateModel);
-    })
+    });
   }
 
   private static resolveFrameRateValueFromFraction(fraction: string): number {
@@ -74,7 +73,7 @@ export class FrameRateUtil {
     let denominator = parseInt(parts[1]);
 
     if (isNaN(numerator) || isNaN(denominator) || numerator < 1 || denominator < 0) {
-      throw new Error(`Numerator and denominator must be integers larger than 0`)
+      throw new Error(`Numerator and denominator must be integers larger than 0`);
     }
 
     return parseFloat((numerator / denominator).toFixed(frameRatePrecision));
@@ -142,13 +141,13 @@ export class FrameRateUtil {
 
     let resolveFrameRateFromNumber: (requestedFrameRateNumber: number) => number = (requestedFrameRateNumber: number) => {
       let requestedRoundedTwoDigits = requestedFrameRateNumber.toFixed(2);
-      let frameRateModel = this.frameRateModels.find(frameRateModel => {
+      let frameRateModel = this.frameRateModels.find((frameRateModel) => {
         let frameRateModelValueRoundedTwoDigits = frameRateModel.value.toFixed(2);
         return frameRateModelValueRoundedTwoDigits === requestedRoundedTwoDigits ? frameRateModel : void 0;
-      })
+      });
 
       return frameRateModel ? frameRateModel.value : requestedFrameRateNumber;
-    }
+    };
 
     if (isNullOrUndefined(requestedFrameRate)) {
       throw new Error(errorMessage);
@@ -167,8 +166,6 @@ export class FrameRateUtil {
   }
 
   static isFrameRateFractional(frameRate: number): boolean {
-    return Number.isInteger(frameRate)
+    return Number.isInteger(frameRate);
   }
-
-
 }

@@ -15,7 +15,7 @@
  */
 
 export interface VttFileParsed {
-  valid: any
+  valid: any;
   note?: string;
   cues: VttCueParsed[];
 }

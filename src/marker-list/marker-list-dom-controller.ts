@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import { Destroyable } from '../types';
-import { DomUtil } from '../util/dom-util';
-import { MarkerList } from './marker-list';
-import { MarkerListComponent } from './marker-list-component';
+import {Destroyable} from '../types';
+import {DomUtil} from '../util/dom-util';
+import {MarkerList} from './marker-list';
+import {MarkerListComponent} from './marker-list-component';
 
 export class MarkerListDomController implements Destroyable {
   private _markerList: MarkerList;

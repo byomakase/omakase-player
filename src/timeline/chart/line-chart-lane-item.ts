@@ -38,9 +38,9 @@ const configDefault: Omit<LineChartLaneItemConfig, 'cue' | 'pointPosition'> = {
   style: {
     height: 20,
     pointWidth: 1,
-    pointFill: 'yellow'
-  }
-}
+    pointFill: 'yellow',
+  },
+};
 
 export class LineChartLaneItem extends BaseKonvaComponent<LineChartLaneItemConfig, LineChartLaneItemStyle, Konva.Group> {
   private _group: Konva.Group;
@@ -65,7 +65,7 @@ export class LineChartLaneItem extends BaseKonvaComponent<LineChartLaneItemConfi
       y: 0,
       width: 0,
       height: this.style.height,
-      listening: this.config.listening
+      listening: this.config.listening,
     });
 
     this._shape = new Konva.Circle({
@@ -73,7 +73,7 @@ export class LineChartLaneItem extends BaseKonvaComponent<LineChartLaneItemConfi
       y: this.config.pointPosition.y,
       width: this.style.pointWidth,
       fill: this.style.pointFill,
-    })
+    });
 
     this._group.add(this._shape);
   }
@@ -83,16 +83,16 @@ export class LineChartLaneItem extends BaseKonvaComponent<LineChartLaneItemConfi
   }
 
   set pointPosition(position: WithOptionalPartial<Position, 'y'>) {
-    this._group.x(position.x)
+    this._group.x(position.x);
     if (position.y) {
-      this._shape.y(position.y)
+      this._shape.y(position.y);
     }
   }
 
   get pointPosition(): Position {
     return {
       x: this._group.x(),
-      y: this._shape.y()
+      y: this._shape.y(),
     };
   }
 
@@ -102,8 +102,6 @@ export class LineChartLaneItem extends BaseKonvaComponent<LineChartLaneItemConfi
 
   override destroy() {
     super.destroy();
-    nullifier(
-      this._cue
-    );
+    nullifier(this._cue);
   }
 }

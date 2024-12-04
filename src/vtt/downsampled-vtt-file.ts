@@ -19,7 +19,6 @@ import {OmakaseVttCue} from '../types';
 import {DownsampleConfig, DownsampleStrategy, VttLoadOptions} from '../api/vtt-aware-api';
 
 export abstract class DownsampledVttFile<T extends OmakaseVttCue> extends BaseOmakaseRemoteVttFile<T> {
-
   protected _downsampleConfig?: DownsampleConfig;
   protected _supportedDownsampleStrategies: DownsampleStrategy[] = ['none'];
 
@@ -29,7 +28,6 @@ export abstract class DownsampledVttFile<T extends OmakaseVttCue> extends BaseOm
   }
 
   protected override downsampleCues(cues: T[]): T[] {
-
     if (this._downsampleConfig?.downsampleStrategy) {
       if (!this._supportedDownsampleStrategies.includes(this._downsampleConfig.downsampleStrategy)) {
         throw new Error('Downsampling strategy not supported: ' + this._downsampleConfig.downsampleStrategy);
@@ -47,10 +45,10 @@ export abstract class DownsampledVttFile<T extends OmakaseVttCue> extends BaseOm
     let firstCue = cues[0];
 
     if (!firstCue) {
-      return []
+      return [];
     } else {
       let firstCueDuration = firstCue.endTime - firstCue.startTime;
-      if (firstCueDuration >= (samplePeriodDuration - periodBoundary)) {
+      if (firstCueDuration >= samplePeriodDuration - periodBoundary) {
         return cues;
       }
     }
@@ -77,13 +75,12 @@ export abstract class DownsampledVttFile<T extends OmakaseVttCue> extends BaseOm
       }
 
       if (index === cues.length - 1 && currentSampleCues.length > 0) {
-        cuesSampled.push(this.resolveDownsampledCue(sampleIndex++, currentSampleStart, (currentSampleStart + samplePeriodDuration) - periodBoundary, currentSampleCues));
+        cuesSampled.push(this.resolveDownsampledCue(sampleIndex++, currentSampleStart, currentSampleStart + samplePeriodDuration - periodBoundary, currentSampleCues));
       }
-    })
+    });
 
     return cuesSampled;
   }
 
   protected abstract resolveDownsampledCue(index: number, startTime: number, endTime: number, cues: T[]): T;
-
 }

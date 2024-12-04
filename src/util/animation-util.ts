@@ -18,12 +18,12 @@ import Konva from 'konva';
 import {IFrame} from 'konva/lib/types';
 
 export interface AnimateConfig {
-  layer?: Konva.Layer,
-  duration: number,
-  startValue: number,
-  endValue: number,
-  onUpdateHandler: (frame: IFrame, value: number) => void,
-  onCompleteHandler?: (frame: IFrame, value: number) => void
+  layer?: Konva.Layer;
+  duration: number;
+  startValue: number;
+  endValue: number;
+  onUpdateHandler: (frame: IFrame, value: number) => void;
+  onCompleteHandler?: (frame: IFrame, value: number) => void;
 }
 
 export function animate(config: AnimateConfig) {
@@ -34,7 +34,7 @@ export function animate(config: AnimateConfig) {
   let isRising = config.startValue < config.endValue;
 
   // we will always animate from 0 to maxValue
-  let maxValue = isRising ? (config.endValue - config.startValue) : (config.startValue - config.endValue);
+  let maxValue = isRising ? config.endValue - config.startValue : config.startValue - config.endValue;
 
   let animation = new Konva.Animation((frame) => {
     if (frame) {

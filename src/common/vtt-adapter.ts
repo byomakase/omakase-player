@@ -18,7 +18,7 @@ export class VttAdapter<T extends OmakaseVttFile<OmakaseVttCue>> implements Dest
 
   private _vttUrl?: string;
   private _vttFile?: T;
-  private _vttFactory: VttFileFactory<T>
+  private _vttFactory: VttFileFactory<T>;
 
   constructor(vttFactory: VttFileFactory<T>) {
     this._vttFactory = vttFactory;
@@ -64,8 +64,6 @@ export class VttAdapter<T extends OmakaseVttFile<OmakaseVttCue>> implements Dest
   }
 
   destroy() {
-    nullifier(
-      this._vttFile
-    )
+    nullifier(this._vttFile);
   }
 }

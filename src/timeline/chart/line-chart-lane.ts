@@ -59,9 +59,9 @@ const configDefault: LineChartLaneConfig = {
     fill: ['red', 'green', 'blue', 'magenta', 'cyan', 'yellow'],
     pointFill: ['red', 'green', 'blue', 'magenta', 'cyan', 'yellow'],
     pointWidth: 0,
-    lineStrokeWidth: 1
-  }
-}
+    lineStrokeWidth: 1,
+  },
+};
 
 export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChartLaneStyle, LineChartVttCue, LineChartVttFile> implements LineChartLaneApi {
   protected readonly _vttAdapter: VttAdapter<LineChartVttFile> = new VttAdapter(LineChartVttFile);
@@ -94,27 +94,27 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
     let timecodedRect = this.getTimecodedRect();
 
     this._timecodedGroup = new Konva.Group({
-      ...timecodedRect
+      ...timecodedRect,
     });
 
     this._timecodedEventCatcher = KonvaFactory.createEventCatcherRect({
-      ...this._timecodedGroup.getSize()
+      ...this._timecodedGroup.getSize(),
     });
 
     this._group = new Konva.Group({
       y: this._config.style.paddingTop,
       width: this._timecodedGroup.width(),
-      height: this._config.style.height - (this._config.style.paddingTop + this._config.style.paddingBottom)
+      height: this._config.style.height - (this._config.style.paddingTop + this._config.style.paddingBottom),
     });
 
     this._itemsGroup = new Konva.Group({
       width: this._group.width(),
-      height: this._group.height()
+      height: this._group.height(),
     });
 
     this._lineGroup = new Konva.Group({
       width: this._group.width(),
-      height: this._group.height()
+      height: this._group.height(),
     });
 
     this._lines = [];
@@ -129,29 +129,32 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
 
     this._onSettleLayout$.pipe(takeUntil(this._destroyed$)).subscribe(() => {
       this.settlePosition();
-    })
+    });
 
-    this._onSettleLayout$.pipe(debounceTime(100), takeUntil(this._destroyed$)).subscribe(scroll => {
+    this._onSettleLayout$.pipe(debounceTime(100), takeUntil(this._destroyed$)).subscribe((scroll) => {
       this.settleAll();
-    })
+    });
 
-    this._timeline!.onScroll$.pipe(debounceTime(100), distinctUntilChanged(), takeUntil(this._destroyed$)).subscribe(scroll => {
+    this._timeline!.onScroll$.pipe(debounceTime(100), distinctUntilChanged(), takeUntil(this._destroyed$)).subscribe((scroll) => {
       this.settleAll();
-    })
+    });
 
-    zip([this._videoController!.onVideoLoaded$.pipe(filter(p => !!p && !(p.isAttaching || p.isDetaching))), this._vttAdapter.vttFileLoaded$])
+    zip([this._videoController!.onVideoLoaded$.pipe(filter((p) => !!p && !(p.isAttaching || p.isDetaching))), this._vttAdapter.vttFileLoaded$])
       .pipe(takeUntil(this._destroyed$))
       .subscribe({
         next: () => {
-          this.createEntities()
-        }
-      })
+          this.createEntities();
+        },
+      });
 
-    this._videoController!.onVideoLoading$.pipe(filter(p => !(p.isAttaching || p.isDetaching)), takeUntil(this._destroyed$)).subscribe({
+    this._videoController!.onVideoLoading$.pipe(
+      filter((p) => !(p.isAttaching || p.isDetaching)),
+      takeUntil(this._destroyed$)
+    ).subscribe({
       next: (event) => {
         this.clearContent();
-      }
-    })
+      },
+    });
 
     if (this.vttUrl) {
       this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig));
@@ -163,16 +166,16 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
 
     this._timecodedGroup!.setAttrs({
       x: timecodedRect.x,
-      y: timecodedRect.y
+      y: timecodedRect.y,
     });
 
     this._timecodedGroup!.clipFunc((ctx) => {
-      ctx.rect(0, 0, timecodedRect.width, timecodedRect.height)
+      ctx.rect(0, 0, timecodedRect.width, timecodedRect.height);
     });
 
-    [this._timecodedGroup, this._timecodedEventCatcher, this._group, this._itemsGroup, this._lineGroup].forEach(node => {
-      node!.width(timecodedRect.width)
-    })
+    [this._timecodedGroup, this._timecodedEventCatcher, this._group, this._itemsGroup, this._lineGroup].forEach((node) => {
+      node!.width(timecodedRect.width);
+    });
 
     this._onSettleLayout$.next();
   }
@@ -184,8 +187,8 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
   private addLine(index: number, count: number) {
     const style = {
       ...this.style,
-      ...this._lineStyleFn(index, count)
-    }
+      ...this._lineStyleFn(index, count),
+    };
     const line = new Konva.Line({
       stroke: this.getStyleAtIndex(style.fill, index),
       strokeWidth: this.getStyleAtIndex(style.lineStrokeWidth, index),
@@ -197,10 +200,10 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
   }
 
   private clearItems() {
-    this._itemsMap.forEach(p => p.destroy())
-    this._itemsMap.clear()
+    this._itemsMap.forEach((p) => p.destroy());
+    this._itemsMap.clear();
     this._itemsGroup?.destroyChildren();
-    this._lines?.forEach(line => line.destroy());
+    this._lines?.forEach((line) => line.destroy());
     this._lines = [];
     this._linePoints = void 0;
   }
@@ -223,7 +226,7 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
         let x = this._timeline!.timeToTimelinePosition(item.cue.startTime);
         item.pointPosition = {x};
         if (this._linePoints) {
-          this._linePoints[index * 2] = x
+          this._linePoints[index * 2] = x;
         }
       }
     }
@@ -231,11 +234,11 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
 
   private createEntities() {
     if (!this.vttFile) {
-      throw new Error('VTT file not loaded')
+      throw new Error('VTT file not loaded');
     }
 
     if (!this._timeline) {
-      throw new Error('TimelineLane not initalized. Maybe you forgot to add TimelineLane to Timeline?')
+      throw new Error('TimelineLane not initalized. Maybe you forgot to add TimelineLane to Timeline?');
     }
 
     this.clearItems();
@@ -264,12 +267,11 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
     this._lines!.forEach((line, lineIndex, lines) => {
       const style = {
         ...this.style,
-        ...this._lineStyleFn(lineIndex, lines.length)
+        ...this._lineStyleFn(lineIndex, lines.length),
       };
 
       this._linePoints = [];
       this.vttFile!.cues.forEach((cue, index) => {
-
         let pointX = this._timeline!.timeToTimelinePosition(cue.startTime);
         let pointY = itemHeight - new Decimal(this.getCueValue(cue, lineIndex) - pointYMin).mul(itemHeight).div(pointYScale).toNumber();
 
@@ -280,35 +282,33 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
           style: {
             height: itemHeight,
             pointFill: this.getStyleAtIndex(style.pointFill, lineIndex),
-            pointWidth: this.getStyleAtIndex(style.pointWidth, lineIndex)
+            pointWidth: this.getStyleAtIndex(style.pointWidth, lineIndex),
           },
           pointPosition: {
             x: pointX,
-            y: pointY
-          }
-        })
+            y: pointY,
+          },
+        });
 
         this._itemsMap.set(index, item);
         this._itemsGroup!.add(item.konvaNode);
       });
 
       line.points(this._linePoints);
-
-    })
-
+    });
   }
 
-  private findMinMax(cues: LineChartVttCue[]): { min: number, max: number } {
+  private findMinMax(cues: LineChartVttCue[]): {min: number; max: number} {
     if (this._lines!.length > 1) {
       return {
-        min: Math.min(...cues.map(cue => Math.min(...cue.extension!.rows!.map(row => row.value ? parseFloat(row.value) : cue.value)))),
-        max: Math.max(...cues.map(cue => Math.max(...cue.extension!.rows!.map(row => row.value ? parseFloat(row.value) : cue.value)))),
-      }
+        min: Math.min(...cues.map((cue) => Math.min(...cue.extension!.rows!.map((row) => (row.value ? parseFloat(row.value) : cue.value))))),
+        max: Math.max(...cues.map((cue) => Math.max(...cue.extension!.rows!.map((row) => (row.value ? parseFloat(row.value) : cue.value))))),
+      };
     } else {
       return {
-        min: Math.min(...cues.map(cue => cue.value)),
-        max: Math.max(...cues.map(cue => cue.value)),
-      }
+        min: Math.min(...cues.map((cue) => cue.value)),
+        max: Math.max(...cues.map((cue) => cue.value)),
+      };
     }
   }
 
@@ -326,9 +326,7 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
   }
 
   override destroy() {
-    destroyer(
-      ...this._itemsMap.values()
-    )
+    destroyer(...this._itemsMap.values());
 
     super.destroy();
   }

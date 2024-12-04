@@ -22,16 +22,17 @@ import {VttCueParsed} from './model';
 import {VttLoadOptions} from '../api/vtt-aware-api';
 
 export class MarkerVttFile extends BaseOmakaseRemoteVttFile<MarkerVttCue> {
-
   protected constructor(url: string, options: VttLoadOptions) {
     super(url, options);
   }
 
   static create(url: string, options: VttLoadOptions): Observable<MarkerVttFile> {
     let instance = new MarkerVttFile(url, options);
-    return instance.fetch().pipe(map(result => {
-      return instance;
-    }))
+    return instance.fetch().pipe(
+      map((result) => {
+        return instance;
+      })
+    );
   }
 
   protected mapCue(vttCueParsed: VttCueParsed, cueExtension: OmakaseVttCueExtension | undefined, index: number): MarkerVttCue {
@@ -41,8 +42,7 @@ export class MarkerVttFile extends BaseOmakaseRemoteVttFile<MarkerVttCue> {
       startTime: new Decimal(vttCueParsed.start).toDecimalPlaces(3).toNumber(),
       endTime: new Decimal(vttCueParsed.end).toDecimalPlaces(3).toNumber(),
       text: vttCueParsed.text,
-      extension: cueExtension
-    }
+      extension: cueExtension,
+    };
   }
-
 }

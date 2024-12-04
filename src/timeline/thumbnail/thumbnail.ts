@@ -45,9 +45,9 @@ const configDefault: ThumbnailConfig = {
     ...Constants.DIMENSION_ZERO,
     stroke: 'rgba(255,73,145)',
     strokeWidth: 5,
-    visible: false
-  }
-}
+    visible: false,
+  },
+};
 
 export class Thumbnail extends BaseKonvaComponent<ThumbnailConfig, ThumbnailStyle, Konva.Group> implements OnMeasurementsChange, HasRectMeasurement, Comparable<Thumbnail> {
   public readonly onClick$: Subject<ThumbnailEvent> = new Subject<ThumbnailEvent>();
@@ -78,7 +78,7 @@ export class Thumbnail extends BaseKonvaComponent<ThumbnailConfig, ThumbnailStyl
       width: this.style.width,
       height: this.style.height,
       visible: this.style.visible,
-      listening: this.config.listening
+      listening: this.config.listening,
     });
 
     this._bgRect = KonvaFactory.createRect({
@@ -87,56 +87,55 @@ export class Thumbnail extends BaseKonvaComponent<ThumbnailConfig, ThumbnailStyl
       width: this._group.width(),
       height: this._group.height(),
       strokeWidth: this.style.strokeWidth,
-      stroke: this.style.stroke
-    })
+      stroke: this.style.stroke,
+    });
 
     this._group.add(this._bgRect);
 
-
     this._group.on('click', (event) => {
       this.onClick$.next({
-        thumbnail: this
-      })
-    })
+        thumbnail: this,
+      });
+    });
 
     this._group.on('mouseover', (event) => {
       this.onMouseOver$.next({
-        thumbnail: this
-      })
-    })
+        thumbnail: this,
+      });
+    });
 
     this._group.on('mousemove', (event) => {
       this.onMouseMove$.next({
-        thumbnail: this
-      })
-    })
+        thumbnail: this,
+      });
+    });
 
     this._group.on('mouseout', (event) => {
       this.onMouseOut$.next({
-        thumbnail: this
-      })
-    })
+        thumbnail: this,
+      });
+    });
 
     this._group.on('mouseleave', (event) => {
       this.onMouseLeave$.next({
-        thumbnail: this
-      })
-    })
+        thumbnail: this,
+      });
+    });
 
     this._group.on('touchstart', (event) => {
       this.onMouseOver$.next({
-        thumbnail: this
-      })
-    })
+        thumbnail: this,
+      });
+    });
 
     this._group.on('touchend', (event) => {
       this.onClick$.next({
-        thumbnail: this
-      })
+        thumbnail: this,
+      });
       this.onMouseOut$.next({
-        thumbnail: this
-      })
-    })
+        thumbnail: this,
+      });
+    });
   }
 
   protected provideKonvaNode(): Konva.Group {
@@ -144,21 +143,13 @@ export class Thumbnail extends BaseKonvaComponent<ThumbnailConfig, ThumbnailStyl
   }
 
   override destroy() {
-    nullifier(
-      this._cue
-    )
+    nullifier(this._cue);
 
     for (let eventListenersKey in this._group.eventListeners) {
       this._group.removeEventListener(eventListenersKey);
     }
 
-    completeUnsubscribeSubjects(
-      this.onClick$,
-      this.onMouseOver$,
-      this.onMouseMove$,
-      this.onMouseOut$,
-      this.onMouseLeave$
-    )
+    completeUnsubscribeSubjects(this.onClick$, this.onMouseOver$, this.onMouseMove$, this.onMouseOut$, this.onMouseLeave$);
 
     super.destroy();
   }
@@ -176,15 +167,15 @@ export class Thumbnail extends BaseKonvaComponent<ThumbnailConfig, ThumbnailStyl
 
     this.style = {
       width: image.width(),
-      height: image.height()
-    }
+      height: image.height(),
+    };
 
     this._group.setAttrs({
-      ...this._image.getSize()
+      ...this._image.getSize(),
     });
 
     this._bgRect.setAttrs({
-      ...this._image.getSize()
+      ...this._image.getSize(),
     });
 
     this._group.add(this._image);
@@ -192,27 +183,27 @@ export class Thumbnail extends BaseKonvaComponent<ThumbnailConfig, ThumbnailStyl
 
   setVisible(visible: boolean) {
     this.style = {
-      visible: visible
-    }
+      visible: visible,
+    };
     this._group.visible(visible);
   }
 
   setPosition(position: Position) {
     this.style = {
-      ...position
-    }
-    this._group.position(position)
+      ...position,
+    };
+    this._group.position(position);
   }
 
   setVisibleAndX(visible: boolean, x: number) {
     this.style = {
       visible: visible,
-      x: x
-    }
+      x: x,
+    };
     this._group.setAttrs({
       visible: visible,
-      x: x
-    })
+      x: x,
+    });
   }
 
   getPosition(): Position {
@@ -225,8 +216,8 @@ export class Thumbnail extends BaseKonvaComponent<ThumbnailConfig, ThumbnailStyl
 
   setDimension(dimension: Dimension) {
     this.style = {
-      ...dimension
-    }
+      ...dimension,
+    };
     this._group.size(dimension);
     this.onMeasurementsChange();
   }
@@ -234,12 +225,12 @@ export class Thumbnail extends BaseKonvaComponent<ThumbnailConfig, ThumbnailStyl
   getRect(): RectMeasurement {
     return {
       ...this.getPosition(),
-      ...this.getDimension()
+      ...this.getDimension(),
     };
   }
 
   compareTo(o: Thumbnail): number {
-    return (this._cue && o && o.cue) ? this._cue.url === o.cue.url ? 0 : -1 : -1;
+    return this._cue && o && o.cue ? (this._cue.url === o.cue.url ? 0 : -1) : -1;
   }
 
   set cue(value: ThumbnailVttCue | undefined) {

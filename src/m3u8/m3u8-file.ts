@@ -33,17 +33,19 @@ export abstract class BaseM3u8File {
   }
 
   fetch(): Observable<boolean> {
-    return from(httpGet<string, AxiosRequestConfig>(this._url, this._axiosConfig)).pipe(map(result => {
-      let m3u8FileText = result.data;
+    return from(httpGet<string, AxiosRequestConfig>(this._url, this._axiosConfig)).pipe(
+      map((result) => {
+        let m3u8FileText = result.data;
 
-      try {
-        this._m3u8Parsed = M3u8Parser.parse(m3u8FileText)
-        return true;
-      } catch (e) {
-        console.error(e);
-        return false;
-      }
-    }))
+        try {
+          this._m3u8Parsed = M3u8Parser.parse(m3u8FileText);
+          return true;
+        } catch (e) {
+          console.error(e);
+          return false;
+        }
+      })
+    );
   }
 
   get m3u8Parsed(): HLS | undefined {
@@ -56,15 +58,15 @@ export abstract class BaseM3u8File {
 }
 
 export class M3u8File extends BaseM3u8File {
-
   static create(url: string, axiosConfig?: AxiosRequestConfig, authentication?: AuthenticationData): Observable<M3u8File> {
     if (!axiosConfig && authentication) {
       axiosConfig = AuthUtil.getAuthorizedAxiosConfig(url, authentication);
     }
     let instance = new M3u8File(url, axiosConfig);
-    return instance.fetch().pipe(map(result => {
-      return instance;
-    }))
+    return instance.fetch().pipe(
+      map((result) => {
+        return instance;
+      })
+    );
   }
-
 }

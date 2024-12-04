@@ -29,9 +29,7 @@ import {VideoControllerApi} from '../../video';
 import {ScrubberLaneApi} from '../../api';
 import {konvaUnlistener} from '../../util/konva-util';
 
-export interface ScrubberLaneConfig extends TimelineLaneConfig<ScrubberLaneStyle> {
-
-}
+export interface ScrubberLaneConfig extends TimelineLaneConfig<ScrubberLaneStyle> {}
 
 export interface ScrubberLaneStyle extends TimelineLaneStyle {
   tickDivisor: number;
@@ -57,8 +55,8 @@ const configDefault: ScrubberLaneConfig = {
     timecodeShowFirst: true,
     timecodeFontSize: 11,
     timecodeFill: '#0d0f05',
-  }
-}
+  },
+};
 
 export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberLaneStyle> implements ScrubberLaneApi {
   public readonly onClick$: Subject<ClickEvent> = new Subject<ClickEvent>();
@@ -85,16 +83,16 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
     let timecodedRect = this.getTimecodedRect();
 
     this._timecodedGroup = KonvaFactory.createGroup({
-      ...timecodedRect
+      ...timecodedRect,
     });
 
     this._timecodedEventCatcher = KonvaFactory.createEventCatcherRect({
-      ...this._timecodedGroup.getSize()
+      ...this._timecodedGroup.getSize(),
     });
 
     this._ticksGroup = KonvaFactory.createGroup({
       width: this._timecodedGroup.width(),
-      height: this._config.style.height
+      height: this._config.style.height,
     });
 
     this._timecodedGroup.add(this._timecodedEventCatcher);
@@ -105,51 +103,54 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
     this._timecodedGroup.on('mousemove', (event) => {
       this.onMouseMove$.next({
         mouseEvent: event.evt,
-        cancelableEvent: event
-      })
-    })
+        cancelableEvent: event,
+      });
+    });
 
     this._timecodedGroup.on('mouseenter', (event) => {
       this.onMouseEnter$.next({
         mouseEvent: event.evt,
-        cancelableEvent: event
-      })
-    })
+        cancelableEvent: event,
+      });
+    });
 
     this._timecodedGroup.on('mouseout', (event) => {
       this.onMouseOut$.next({
         mouseEvent: event.evt,
-        cancelableEvent: event
-      })
-    })
+        cancelableEvent: event,
+      });
+    });
 
     this._timecodedGroup.on('mouseleave', (event) => {
       this.onMouseLeave$.next({
         mouseEvent: event.evt,
-        cancelableEvent: event
-      })
-    })
+        cancelableEvent: event,
+      });
+    });
 
     this._timecodedGroup.on('click', (event) => {
       this.onClick$.next({
         mouseEvent: event.evt,
-        cancelableEvent: event
-      })
-    })
+        cancelableEvent: event,
+      });
+    });
 
-    this._videoController!.onVideoLoaded$.pipe(filter(p => !!p && !(p.isAttaching || p.isDetaching)))
+    this._videoController!.onVideoLoaded$.pipe(filter((p) => !!p && !(p.isAttaching || p.isDetaching)))
       .pipe(takeUntil(this._destroyed$))
       .subscribe({
         next: () => {
-          this.settleLayout()
-        }
-      })
+          this.settleLayout();
+        },
+      });
 
-    this._videoController!.onVideoLoading$.pipe(filter(p => !(p.isAttaching || p.isDetaching)), takeUntil(this._destroyed$)).subscribe({
+    this._videoController!.onVideoLoading$.pipe(
+      filter((p) => !(p.isAttaching || p.isDetaching)),
+      takeUntil(this._destroyed$)
+    ).subscribe({
       next: (event) => {
         this.clearContent();
-      }
-    })
+      },
+    });
   }
 
   protected settleLayout() {
@@ -157,39 +158,29 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
 
     this._timecodedGroup!.setAttrs({
       x: timecodedRect.x,
-      y: timecodedRect.y
+      y: timecodedRect.y,
     });
 
-    [this._timecodedGroup, this._timecodedEventCatcher, this._ticksGroup].forEach(node => {
-      node!.width(timecodedRect.width)
-    })
+    [this._timecodedGroup, this._timecodedEventCatcher, this._ticksGroup].forEach((node) => {
+      node!.width(timecodedRect.width);
+    });
 
     this.refreshTimeDivisions();
   }
 
   override onStyleChange() {
     super.onStyleChange();
-    this.refreshTimeDivisions(true)
+    this.refreshTimeDivisions(true);
   }
 
   override destroy() {
-    konvaUnlistener(this._timecodedGroup)
+    konvaUnlistener(this._timecodedGroup);
 
-    destroyer(
-      this._timecodedGroup
-    )
+    destroyer(this._timecodedGroup);
 
-    nullifier(
-      this._videoController
-    )
+    nullifier(this._videoController);
 
-    completeUnsubscribeSubjects(
-      this.onClick$,
-      this.onMouseOver$,
-      this.onMouseMove$,
-      this.onMouseOut$,
-      this.onMouseLeave$
-    )
+    completeUnsubscribeSubjects(this.onClick$, this.onMouseOver$, this.onMouseMove$, this.onMouseOut$, this.onMouseLeave$);
 
     super.destroy();
   }
@@ -210,7 +201,7 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
     let newDivisionWidth = this.resolveTimeDivisionWidth(timelineWidth, tickMinDivisionWidth, tickDivisor, tickDivisor);
     let newTotalDivisions = new Decimal(timelineWidth).div(newDivisionWidth).round().toNumber();
 
-    let strategy: 'create' | 'move' = forceCreate || (this._ticksGroup!.getChildren().length < 1) || !this._tickTotalDivisions || (this._tickTotalDivisions !== newTotalDivisions) ? 'create' : 'move';
+    let strategy: 'create' | 'move' = forceCreate || this._ticksGroup!.getChildren().length < 1 || !this._tickTotalDivisions || this._tickTotalDivisions !== newTotalDivisions ? 'create' : 'move';
 
     if (strategy === 'create') {
       this.clearContent();
@@ -224,13 +215,13 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
     let lastTextRightPadding = 2;
     let textBottomPadding = 5;
 
-    for (let i = 0; i < (this._tickTotalDivisions + 1); i++) {
+    for (let i = 0; i < this._tickTotalDivisions + 1; i++) {
       let isFirstTick = i === 0;
       let isLastTick = i === this._tickTotalDivisions;
       let isDivisionTick = i % tickDivisor === 0;
       let tickGroupX = i * this._tickDivisionWidth;
       let lineHeight = isDivisionTick ? this.style.divisionTickHeight : this.style.tickHeight;
-      let lineY = this._ticksGroup!.height() - lineHeight
+      let lineY = this._ticksGroup!.height() - lineHeight;
       let textBottomY = this._ticksGroup!.height() - this.style.divisionTickHeight - textBottomPadding;
 
       if (strategy === 'move') {
@@ -239,18 +230,15 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
       } else {
         let tickGroup = new Konva.Group({
           x: tickGroupX,
-          y: tickGroupY
+          y: tickGroupY,
         });
 
         let lineX = 0;
         let line = new Konva.Line({
-          points: [
-            lineX, lineY,
-            lineX, lineY + lineHeight
-          ],
+          points: [lineX, lineY, lineX, lineY + lineHeight],
           stroke: this.style.tickFill,
           strokeWidth: 1,
-          listening: false
+          listening: false,
         });
 
         tickGroup.add(line);
@@ -260,16 +248,16 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
           fontFamily: this._timeline.style.textFontFamily,
           fill: this.style.timecodeFill,
           text: `${this._timeline.timelinePositionToTimecode(tickGroupX)}`,
-          listening: false
-        })
+          listening: false,
+        });
 
         let textRect: RectMeasurement = text.getSelfRect();
         let x = isFirstTick ? lineX + firstTextLeftPadding : isLastTick ? lineX - textRect.width - lastTextRightPadding : lineX - textRect.width / 2;
         let y = textBottomY - textRect.height;
         text.setAttrs({
           x: x,
-          y: y
-        })
+          y: y,
+        });
 
         let showTimecode = isDivisionTick;
         showTimecode = isFirstTick ? this.style.timecodeShowFirst : showTimecode;
@@ -278,7 +266,7 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
           tickGroup.add(text);
         }
 
-        this._ticksGroup!.add(tickGroup)
+        this._ticksGroup!.add(tickGroup);
       }
     }
   }

@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import { Observable } from 'rxjs';
-import { MarkerVttFile } from '../vtt';
-import { MarkerListActionEvent, MarkerListClickEvent } from '../types';
-import { MarkerAwareApi } from './marker-aware-api';
-import { MarkerApi } from './marker-api';
+import {Observable} from 'rxjs';
+import {MarkerVttFile} from '../vtt';
+import {MarkerListActionEvent, MarkerListClickEvent, MarkerListSelectedEvent} from '../types';
+import {MarkerAwareApi} from './marker-aware-api';
+import {MarkerApi} from './marker-api';
 
 export interface MarkerListApi extends MarkerAwareApi {
   /**
@@ -35,6 +35,11 @@ export interface MarkerListApi extends MarkerAwareApi {
    * Fires after a marker list item row is clicked
    */
   onMarkerClick$: Observable<MarkerListClickEvent>;
+
+  /**
+   * Fires after a marker list item is toggled on or off
+   */
+  onMarkerSelected$: Observable<MarkerListSelectedEvent>;
 
   /**
    * Get currently active marker on the list

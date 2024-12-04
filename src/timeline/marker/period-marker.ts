@@ -34,12 +34,9 @@ export interface PeriodMarkerHandleStyle extends MarkerHandleStyle {
   periodMarkerHandleType: 'start' | 'end';
 }
 
-export interface PeriodMarkerHandleConfig extends MarkerHandleConfig<PeriodMarkerHandleStyle> {
-
-}
+export interface PeriodMarkerHandleConfig extends MarkerHandleConfig<PeriodMarkerHandleStyle> {}
 
 export class PeriodMarkerHandle extends BaseMarkerHandle<PeriodMarkerHandleConfig, PeriodMarkerHandleStyle> {
-
   constructor(config: PeriodMarkerHandleConfig) {
     super(config);
   }
@@ -49,8 +46,8 @@ export class PeriodMarkerHandle extends BaseMarkerHandle<PeriodMarkerHandleConfi
       handleType: this.style.periodMarkerHandleType,
       color: this.style.color,
       symbolSize: this.style.symbolSize,
-      symbolType: this.style.symbolType
-    })
+      symbolType: this.style.symbolType,
+    });
   }
 }
 
@@ -61,18 +58,16 @@ export interface PeriodMarkerStyle extends MarkerStyle {
   markerHandleAreaOpacity: number;
 }
 
-export interface PeriodMarkerConfig extends MarkerConfig<PeriodObservation, PeriodMarkerStyle> {
-
-}
+export interface PeriodMarkerConfig extends MarkerConfig<PeriodObservation, PeriodMarkerStyle> {}
 
 const markerConfigDefault: Omit<PeriodMarkerConfig, 'timeObservation'> = {
   editable: false,
   style: {
     ...MARKER_STYLE_DEFAULT,
     selectedAreaOpacity: 0.2,
-    markerHandleAreaOpacity: 0.7
-  }
-}
+    markerHandleAreaOpacity: 0.7,
+  },
+};
 
 export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConfig, PeriodMarkerStyle, PeriodMarkerChangeEvent> {
   private _startMarkerHandle?: PeriodMarkerHandle;
@@ -91,22 +86,12 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
       },
     });
 
-    this._timeObservation.start = z.coerce.number()
-      .min(0)
-      .nullable()
-      .optional()
-      .parse(this._timeObservation.start);
+    this._timeObservation.start = z.coerce.number().min(0).nullable().optional().parse(this._timeObservation.start);
 
-    this._timeObservation.end = z.coerce.number()
-      .min(0)
-      .nullable()
-      .optional()
-      .parse(this._timeObservation.end);
+    this._timeObservation.end = z.coerce.number().min(0).nullable().optional().parse(this._timeObservation.end);
 
     if (!isNullOrUndefined(this._timeObservation.start) && !isNullOrUndefined(this._timeObservation.end)) {
-      this._timeObservation.start = z.coerce.number()
-        .lte(this._timeObservation.end!)
-        .parse(this._timeObservation.start);
+      this._timeObservation.start = z.coerce.number().lte(this._timeObservation.end!).parse(this._timeObservation.start);
     }
   }
 
@@ -115,7 +100,7 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
 
     this._styleAdapter.onChange$.pipe(takeUntil(this._destroyed$)).subscribe((style) => {
       this.initAll();
-    })
+    });
 
     this.initAll();
   }
@@ -126,25 +111,25 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
     }
 
     if (this.hasTimeObservationEnd()) {
-      this.initEndMarkerHandle()
+      this.initEndMarkerHandle();
     }
 
     if (this.hasTimeObservationStart() && this.hasTimeObservationEnd()) {
       this.initSelectedAreaRect();
     }
 
-    this._startMarkerHandle?.konvaNode.moveToTop()
-    this._endMarkerHandle?.konvaNode.moveToTop()
+    this._startMarkerHandle?.konvaNode.moveToTop();
+    this._endMarkerHandle?.konvaNode.moveToTop();
 
     this.refreshTimelinePosition();
   }
 
   protected onObservationChange() {
-    this.refreshTimelinePosition()
+    this.refreshTimelinePosition();
     let event: PeriodMarkerChangeEvent = {
-      timeObservation: this.timeObservation
-    }
-    this.onChange$.next(event)
+      timeObservation: this.timeObservation,
+    };
+    this.onChange$.next(event);
   }
 
   private initStartMarkerHandle() {
@@ -162,10 +147,10 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
       x: startX,
       editable: this.editable,
       verticalsProviderFn: () => {
-        return this.getMarkerHandleVerticals()
+        return this.getMarkerHandleVerticals();
       },
       dragPositionConstrainerFn: (newPosition: Position) => {
-        return this.onDragMove(newPosition)
+        return this.onDragMove(newPosition);
       },
       style: {
         periodMarkerHandleType: 'start',
@@ -173,8 +158,8 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
         symbolType: this.style.symbolType,
         symbolSize: this.style.symbolSize,
         lineStrokeWidth: this.style.lineStrokeWidth,
-        lineOpacity: this.style.lineOpacity
-      }
+        lineOpacity: this.style.lineOpacity,
+      },
     });
 
     this._startMarkerHandle.onDrag = (markerHandleGroup) => {
@@ -184,25 +169,25 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
             markerHandleGroup.x(this._endMarkerHandle.getPosition().x);
           }
         }
-        this.settleAreaHorizontals()
+        this.settleAreaHorizontals();
         if (this._markerHandleRect) {
           this._markerHandleRect.opacity(1);
         }
       }
-    }
+    };
 
     this._startMarkerHandle.onDragEnd = (markerHandleGroup) => {
       if (this.editable) {
         let newTime = this._timeline!.timelinePositionToTime(markerHandleGroup.x());
         this.timeObservation = {
           ...this.timeObservation,
-          start: newTime
-        }
+          start: newTime,
+        };
         if (this._markerHandleRect) {
           this._markerHandleRect.opacity(this.style.markerHandleAreaOpacity);
         }
       }
-    }
+    };
 
     this._group.add(this._startMarkerHandle.konvaNode);
   }
@@ -222,10 +207,10 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
       x: endX,
       editable: this.editable,
       verticalsProviderFn: () => {
-        return this.getMarkerHandleVerticals()
+        return this.getMarkerHandleVerticals();
       },
       dragPositionConstrainerFn: (newPosition: Position) => {
-        return this.onDragMove(newPosition)
+        return this.onDragMove(newPosition);
       },
       style: {
         periodMarkerHandleType: 'end',
@@ -233,8 +218,8 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
         symbolType: this.style.symbolType,
         symbolSize: this.style.symbolSize,
         lineStrokeWidth: this.style.lineStrokeWidth,
-        lineOpacity: this.style.lineOpacity
-      }
+        lineOpacity: this.style.lineOpacity,
+      },
     });
 
     this._endMarkerHandle.onDrag = (markerHandleGroup) => {
@@ -244,25 +229,25 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
             markerHandleGroup.x(this._startMarkerHandle.getPosition().x);
           }
         }
-        this.settleAreaHorizontals()
+        this.settleAreaHorizontals();
         if (this._markerHandleRect) {
           this._markerHandleRect.opacity(1);
         }
       }
-    }
+    };
 
     this._endMarkerHandle.onDragEnd = (markerHandleGroup) => {
       if (this.editable) {
         let newTime = this._timeline!.timelinePositionToTime(markerHandleGroup.x());
         this.timeObservation = {
           ...this.timeObservation,
-          end: newTime
-        }
+          end: newTime,
+        };
         if (this._markerHandleRect) {
           this._markerHandleRect.opacity(this.style.markerHandleAreaOpacity);
         }
       }
-    }
+    };
 
     this._group.add(this._endMarkerHandle.konvaNode);
   }
@@ -285,14 +270,14 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
     this._selectedAreaRect = KonvaFactory.createRect({
       listening: false,
       fill: this.style.color,
-      opacity: this.style.selectedAreaOpacity
-    })
+      opacity: this.style.selectedAreaOpacity,
+    });
 
     this._markerHandleRect = KonvaFactory.createRect({
       listening: false,
       fill: this.style.color,
-      opacity: this.style.markerHandleAreaOpacity
-    })
+      opacity: this.style.markerHandleAreaOpacity,
+    });
 
     this._group.add(this._selectedAreaRect);
     this._group.add(this._markerHandleRect);
@@ -301,13 +286,13 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
   refreshTimelinePosition() {
     this._startMarkerHandle?.setPosition({
       ...this._startMarkerHandle.getPosition(),
-      x: this._timeline!.timeToTimelinePosition(this.timeObservation.start!)
-    })
+      x: this._timeline!.timeToTimelinePosition(this.timeObservation.start!),
+    });
 
     this._endMarkerHandle?.setPosition({
       ...this._endMarkerHandle.getPosition(),
-      x: this._timeline!.timeToTimelinePosition(this.timeObservation.end!)
-    })
+      x: this._timeline!.timeToTimelinePosition(this.timeObservation.end!),
+    });
 
     this.settleAreaVerticals();
     this.settleAreaHorizontals();
@@ -315,11 +300,11 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
 
   private settleAreaVerticals() {
     this._selectedAreaRect?.setAttrs({
-      ...this.getMarkerHandleVerticals().area
+      ...this.getMarkerHandleVerticals().area,
     });
 
     this._markerHandleRect?.setAttrs({
-      ...this.getMarkerHandleRectVerticals()
+      ...this.getMarkerHandleRectVerticals(),
     });
   }
 
@@ -327,13 +312,13 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
     if (this._startMarkerHandle && this._endMarkerHandle) {
       this._selectedAreaRect?.setAttrs({
         x: this._startMarkerHandle.getPosition().x,
-        width: this._endMarkerHandle.getPosition().x - this._startMarkerHandle.getPosition().x
-      })
+        width: this._endMarkerHandle.getPosition().x - this._startMarkerHandle.getPosition().x,
+      });
 
       this._markerHandleRect?.setAttrs({
         x: this._startMarkerHandle.getPosition().x,
-        width: this._endMarkerHandle.getPosition().x - this._startMarkerHandle.getPosition().x
-      })
+        width: this._endMarkerHandle.getPosition().x - this._startMarkerHandle.getPosition().x,
+      });
     }
   }
 
@@ -342,14 +327,14 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
       let markerHandleVerticals = this.getMarkerHandleVerticals();
       let handleGroupClientRect = this._startMarkerHandle.getHandleGroup().getClientRect();
       return {
-        y: markerHandleVerticals.area.y + this.getMarkerHandleVerticals().handle.y - (handleGroupClientRect.height / 2),
+        y: markerHandleVerticals.area.y + this.getMarkerHandleVerticals().handle.y - handleGroupClientRect.height / 2,
         height: handleGroupClientRect.height,
-      }
+      };
     } else {
       return {
         y: 0,
-        height: 0
-      }
+        height: 0,
+      };
     }
   }
 

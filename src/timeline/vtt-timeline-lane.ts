@@ -10,11 +10,12 @@ import {errorCompleteObserver, nextCompleteObserver, passiveObservable} from '..
 
 const sampleTimeSyncVideoMetadata = 100;
 
-export interface VttTimelineLaneConfig<S extends TimelineLaneStyle> extends TimelineLaneConfig<S>, Partial<DownsampleConfig> {
+export interface VttTimelineLaneConfig<S extends TimelineLaneStyle> extends TimelineLaneConfig<S>, Partial<DownsampleConfig> {}
 
-}
-
-export abstract class VttTimelineLane<C extends VttTimelineLaneConfig<S>, S extends TimelineLaneStyle, Q extends OmakaseVttCue, T extends OmakaseVttFile<Q>> extends BaseTimelineLane<C, S> implements VttAwareApi<Q, T> {
+export abstract class VttTimelineLane<C extends VttTimelineLaneConfig<S>, S extends TimelineLaneStyle, Q extends OmakaseVttCue, T extends OmakaseVttFile<Q>>
+  extends BaseTimelineLane<C, S>
+  implements VttAwareApi<Q, T>
+{
   protected abstract readonly _vttAdapter: VttAdapter<T>;
 
   protected _onVideoCueEvent$?: Observable<OmakaseVttCueEvent<Q>>;
@@ -70,19 +71,19 @@ export abstract class VttTimelineLane<C extends VttTimelineLaneConfig<S>, S exte
   }
 
   loadVtt(vttUrl: string, options: VttLoadOptions = {}): Observable<T | undefined> {
-    return passiveObservable<T | undefined>(observer => {
+    return passiveObservable<T | undefined>((observer) => {
       if (!options.axiosConfig && AuthUtil.authentication) {
         options.axiosConfig = AuthUtil.getAuthorizedAxiosConfig(vttUrl, AuthUtil.authentication);
       }
       this._vttAdapter.loadVtt(vttUrl, options).subscribe({
         next: (value) => {
-          nextCompleteObserver(observer, value)
+          nextCompleteObserver(observer, value);
         },
         error: (error) => {
           errorCompleteObserver(observer, error);
-        }
-      })
-    })
+        },
+      });
+    });
   }
 
   getVttLoadOptions(axiosConfig?: AxiosRequestConfig): VttLoadOptions {
@@ -90,9 +91,9 @@ export abstract class VttTimelineLane<C extends VttTimelineLaneConfig<S>, S exte
       axiosConfig,
       downsampleConfig: {
         downsamplePeriod: this._config.downsamplePeriod ?? VTT_DOWNSAMPLE_CONFIG_DEFAULT.downsamplePeriod,
-        downsampleStrategy: this._config.downsampleStrategy ?? VTT_DOWNSAMPLE_CONFIG_DEFAULT.downsampleStrategy
-      }
-    }
+        downsampleStrategy: this._config.downsampleStrategy ?? VTT_DOWNSAMPLE_CONFIG_DEFAULT.downsampleStrategy,
+      },
+    };
   }
 
   private getCueEvents(source$: Observable<VideoTimeChangeEvent | PlayheadMoveEvent | ScrubberMoveEvent>): Observable<OmakaseVttCueEvent<Q>> {
@@ -103,23 +104,25 @@ export abstract class VttTimelineLane<C extends VttTimelineLaneConfig<S>, S exte
       throw Error('Timeline setup is not done');
     }
     let visibleCues: Q[] = [];
-    return source$.pipe(takeUntil(this._destroyed$)).pipe(sampleTime(sampleTimeSyncVideoMetadata)).pipe(
-      map((time) => {
-        const currentTime = (time as VideoTimeChangeEvent).currentTime ?? this._videoController!.parseTimecodeToTime((time as PlayheadMoveEvent | ScrubberMoveEvent).timecode);
-        const startTime = currentTime - sampleTimeSyncVideoMetadata / 1000;
-        const cues = this.vttFile!.findCues(startTime, currentTime);
-        if (!cues) {
-          return [];
-        }
-        const newVisibleCues = cues.filter((c: Q) => c.endTime >= startTime && c.startTime <= currentTime);
-        const newCues = newVisibleCues.filter((c) => !visibleCues.find((q) => c.index === q.index));
-        const oldCues = visibleCues.filter((q) => !newVisibleCues.find((c) => c.index === q.index));
-        visibleCues = newVisibleCues;
-        return newCues.map((cue) => ({cue, action: 'entry'} as OmakaseVttCueEvent<Q>))
-          .concat(...oldCues.map((cue) => ({cue, action: 'exit'} as OmakaseVttCueEvent<Q>)));
-      }),
-      mergeAll()
-    );
+    return source$
+      .pipe(takeUntil(this._destroyed$))
+      .pipe(sampleTime(sampleTimeSyncVideoMetadata))
+      .pipe(
+        map((time) => {
+          const currentTime = (time as VideoTimeChangeEvent).currentTime ?? this._videoController!.parseTimecodeToTime((time as PlayheadMoveEvent | ScrubberMoveEvent).timecode);
+          const startTime = currentTime - sampleTimeSyncVideoMetadata / 1000;
+          const cues = this.vttFile!.findCues(startTime, currentTime);
+          if (!cues) {
+            return [];
+          }
+          const newVisibleCues = cues.filter((c: Q) => c.endTime >= startTime && c.startTime <= currentTime);
+          const newCues = newVisibleCues.filter((c) => !visibleCues.find((q) => c.index === q.index));
+          const oldCues = visibleCues.filter((q) => !newVisibleCues.find((c) => c.index === q.index));
+          visibleCues = newVisibleCues;
+          return newCues.map((cue) => ({cue, action: 'entry'}) as OmakaseVttCueEvent<Q>).concat(...oldCues.map((cue) => ({cue, action: 'exit'}) as OmakaseVttCueEvent<Q>));
+        }),
+        mergeAll()
+      );
   }
 
   override destroy() {

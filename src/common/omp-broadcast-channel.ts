@@ -15,24 +15,30 @@
  */
 
 import {catchError, combineLatest, defer, filter, map, Observable, Subject, take, takeUntil, tap, timeout} from 'rxjs';
-import {Destroyable, OmpBroadcastChannelTimeoutError, UnwrapObservable} from '../types';
+import {Destroyable, OmpBroadcastChannelError, OmpBroadcastChannelTimeoutError, UnwrapObservable} from '../types';
 import {isNullOrUndefined} from '../util/object-util';
 import {CryptoUtil} from '../util/crypto-util';
 import {nextCompleteSubject} from '../util/rxjs-util';
 
 export enum OmpBroadcastMessageType {
-  MESSAGE, MESSAGE_RESPONSE
+  MESSAGE,
+  MESSAGE_RESPONSE,
 }
 
-export interface OmpBroadcastMessageResponse<DataType, ErrorType> {
-  messageType: OmpBroadcastMessageType.MESSAGE_RESPONSE
+export interface OmpBroadcastErrorMessage {
+  name: string;
+  message: string;
+}
+
+export interface OmpBroadcastMessageResponse<DataType> {
+  messageType: OmpBroadcastMessageType.MESSAGE_RESPONSE;
   requestMessageId: string;
   data?: DataType;
-  error?: ErrorType;
+  error?: OmpBroadcastErrorMessage;
 }
 
 export interface OmpBroadcastMessage<DataType> {
-  messageType: OmpBroadcastMessageType.MESSAGE
+  messageType: OmpBroadcastMessageType.MESSAGE;
   messageId: string;
   actionName: string;
   data?: DataType;
@@ -43,7 +49,7 @@ export class OmpBroadcastChannel implements Destroyable {
 
   private readonly _channelId: string;
   private readonly _onMessage$: Subject<OmpBroadcastMessage<any>> = new Subject<OmpBroadcastMessage<any>>();
-  private readonly _onResponse$: Subject<OmpBroadcastMessageResponse<any, any>> = new Subject<OmpBroadcastMessageResponse<any, any>>();
+  private readonly _onResponse$: Subject<OmpBroadcastMessageResponse<any>> = new Subject<OmpBroadcastMessageResponse<any>>();
 
   private _broadcastChannel: BroadcastChannel;
 
@@ -62,52 +68,69 @@ export class OmpBroadcastChannel implements Destroyable {
 
   private init() {
     this._messageListener = (messageEvent: MessageEvent) => {
-      let message: OmpBroadcastMessage<any> | OmpBroadcastMessageResponse<any, any> = messageEvent.data;
+      let message: OmpBroadcastMessage<any> | OmpBroadcastMessageResponse<any> = messageEvent.data;
       if (message.messageType === OmpBroadcastMessageType.MESSAGE) {
         this._onMessage$.next(message);
       } else {
         this._onResponse$.next(message);
       }
-    }
+    };
 
     this._messageerrorListener = (error: any) => {
-      console.error(error)
-    }
+      console.error(error);
+    };
 
-    this._broadcastChannel.addEventListener('message', this._messageListener)
-    this._broadcastChannel.addEventListener('messageerror', this._messageerrorListener)
+    this._broadcastChannel.addEventListener('message', this._messageListener);
+    this._broadcastChannel.addEventListener('messageerror', this._messageerrorListener);
   }
 
-  protected _sendAndObserveResponse<DataType, ErrorType>(message: OmpBroadcastMessage<any>): Observable<OmpBroadcastMessageResponse<DataType, ErrorType>> {
-    let send$ = defer(() => new Observable<void>(o$ => {
-      this.sendMessage(message);
-      o$.next()
-      o$.complete();
-    }))
+  protected _sendAndObserveResponse<DataType>(message: OmpBroadcastMessage<any>): Observable<OmpBroadcastMessageResponse<DataType>> {
+    let send$ = defer(
+      () =>
+        new Observable<void>((o$) => {
+          this.sendMessage(message);
+          o$.next();
+          o$.complete();
+        })
+    );
 
-    return combineLatest(
-      [this._onResponse$
-        .pipe(filter(p => p.requestMessageId === message.messageId))
+    return combineLatest([
+      this._onResponse$
+        .pipe(filter((p) => p.requestMessageId === message.messageId))
         .pipe(take(1))
         .pipe(timeout(OmpBroadcastChannel.channelTimeout)) // safeguard timeout
-        .pipe(tap(p => {
-          if (!isNullOrUndefined(p.error)) {
-            throw p.error;
-          }
-        }))
-        .pipe(catchError(error => {
-          if (error.name === 'TimeoutError') {
-            let errorMessage = `Didnt receive response for: ${JSON.stringify(message)}`;
-            console.debug(errorMessage)
-            throw new OmpBroadcastChannelTimeoutError(errorMessage);
-          } else {
-            throw error
-          }
-        })),
-        send$
-      ]).pipe(take(1), map(([onResponse, sendResponse]) => {
-      return onResponse;
-    }))
+        .pipe(
+          tap((p) => {
+            if (!isNullOrUndefined(p.error)) {
+              if (p.error!.name && p.error!.message) {
+                let reconstructedError = new Error(p.error!.message);
+                reconstructedError.name = p.error!.name;
+                throw reconstructedError;
+              } else {
+                throw p.error;
+              }
+            }
+          })
+        )
+        .pipe(
+          catchError((error) => {
+            if (error.name === 'TimeoutError') {
+              let errorMessage = `Didnt receive response for: ${JSON.stringify(message)}`;
+              console.debug(errorMessage);
+              throw new OmpBroadcastChannelTimeoutError(errorMessage);
+            } else {
+              console.debug(error);
+              throw error;
+            }
+          })
+        ),
+      send$,
+    ]).pipe(
+      take(1),
+      map(([onResponse, sendResponse]) => {
+        return onResponse;
+      })
+    );
   }
 
   protected sendResponse<T>(responseToMessageId: string, responseValue: Observable<T> | any): void {
@@ -119,23 +142,29 @@ export class OmpBroadcastChannel implements Destroyable {
         error: (err: any) => {
           console.error(err);
           this._sendErrorResponse(responseToMessageId, err);
-        }
-      })
+        },
+      });
     } else {
       this._sendResponse(responseToMessageId, responseValue);
     }
   }
 
   protected createMessageStream(actionName: string): Observable<OmpBroadcastMessage<any>> {
-    return this._onMessage$.pipe(filter(p => p.actionName === actionName))
+    return this._onMessage$.pipe(filter((p) => p.actionName === actionName));
   }
 
   protected createDataStream<T>(actionName: string): Observable<T> {
-    return this.createMessageStream(actionName).pipe(map(p => p.data as T));
+    return this.createMessageStream(actionName).pipe(map((p) => p.data as T));
   }
 
   protected sendMessage<DataType>(message: OmpBroadcastMessage<DataType>): void {
-    this._broadcastChannel.postMessage(message);
+    try {
+      this._broadcastChannel.postMessage(message);
+    } catch (e) {
+      let errorMsg = `Failed sending message actionName=${message.actionName}, messageId=${message.messageId}`
+      console.debug(errorMsg)
+      throw new OmpBroadcastChannelError(errorMsg);
+    }
   }
 
   protected createMessage<DataType>(actionName: string, data?: DataType): OmpBroadcastMessage<DataType> {
@@ -143,24 +172,27 @@ export class OmpBroadcastChannel implements Destroyable {
       messageType: OmpBroadcastMessageType.MESSAGE,
       messageId: CryptoUtil.uuid(),
       actionName: actionName,
-      data: data
-    }
+      data: data,
+    };
   }
 
   private _sendResponse(requestMessageId: string, data: any): void {
-    let message: OmpBroadcastMessageResponse<any, any> = {
+    let message: OmpBroadcastMessageResponse<any> = {
       messageType: OmpBroadcastMessageType.MESSAGE_RESPONSE,
       requestMessageId: requestMessageId,
-      data: data
+      data: data,
     };
     this._broadcastChannel.postMessage(message);
   }
 
   private _sendErrorResponse(requestMessageId: string, error: any): void {
-    let message: OmpBroadcastMessageResponse<any, any> = {
+    let message: OmpBroadcastMessageResponse<any> = {
       messageType: OmpBroadcastMessageType.MESSAGE_RESPONSE,
       requestMessageId: requestMessageId,
-      error: error
+      error: {
+        name: error.name,
+        message: error.message,
+      },
     };
     this._broadcastChannel.postMessage(message);
   }
@@ -171,18 +203,23 @@ export class OmpBroadcastChannel implements Destroyable {
 
   destroy() {
     if (this._broadcastChannel) {
-      this._broadcastChannel.removeEventListener('message', this._messageListener)
-      this._broadcastChannel.removeEventListener('messageerror', this._messageerrorListener)
-      this._broadcastChannel.close()
+      this._broadcastChannel.removeEventListener('message', this._messageListener);
+      this._broadcastChannel.removeEventListener('messageerror', this._messageerrorListener);
+      this._broadcastChannel.close();
     }
     nextCompleteSubject(this._destroyed$);
   }
 }
 
-export type OmpBroadcastChannelActionsMap<T extends Record<string, {
-  requestType?: any,
-  responseType?: any
-}>> = {
+export type OmpBroadcastChannelActionsMap<
+  T extends Record<
+    string,
+    {
+      requestType?: any;
+      responseType?: any;
+    }
+  >,
+> = {
   /**
    * actionName: {
    *   requestType: Type,
@@ -190,8 +227,8 @@ export type OmpBroadcastChannelActionsMap<T extends Record<string, {
    * }
    */
   [K in Extract<keyof T, string>]: {
-    requestType: T[K]['requestType'] extends undefined ? [void] : T[K]['requestType'];      // default to void if undefined
-    responseType: T[K]['responseType'] extends undefined ? void : T[K]['responseType'];     // default to void if undefined
+    requestType: T[K]['requestType'] extends undefined ? [void] : T[K]['requestType']; // default to void if undefined
+    responseType: T[K]['responseType'] extends undefined ? void : T[K]['responseType']; // default to void if undefined
   };
 };
 
@@ -201,77 +238,40 @@ export type OmpBroadcastChannelActionName<T extends OmpBroadcastChannelActionsMa
  * If remote method response is awaited value is always Observable. For methods that already return Observable we need to unwrap it as return type is already Observable
  */
 export class TypedOmpBroadcastChannel<T extends OmpBroadcastChannelActionsMap<any>> extends OmpBroadcastChannel {
-
   constructor(channelId: string) {
     super(channelId);
   }
 
   createRequestStream<ActionName extends OmpBroadcastChannelActionName<T>, ResponseType extends T[ActionName]['responseType']>(action: ActionName): Observable<UnwrapObservable<ResponseType>> {
-    return this.createDataStream<UnwrapObservable<ResponseType>>(action)
+    return this.createDataStream<UnwrapObservable<ResponseType>>(action);
   }
 
-  createRequestResponseStream<ActionName extends OmpBroadcastChannelActionName<T>, RequestType extends T[ActionName]['requestType'], ResponseType extends T[ActionName]['responseType']>(action: ActionName): Observable<[UnwrapObservable<RequestType>, (response: ResponseType) => void]> {
+  createRequestResponseStream<ActionName extends OmpBroadcastChannelActionName<T>, RequestType extends T[ActionName]['requestType'], ResponseType extends T[ActionName]['responseType']>(
+    action: ActionName
+  ): Observable<[UnwrapObservable<RequestType>, (response: ResponseType) => void]> {
     let createResponseHook = (request: OmpBroadcastMessage<any>) => {
       return (responseValue: ResponseType) => {
-        return this.sendResponse(request.messageId, responseValue)
-      }
-    }
+        return this.sendResponse(request.messageId, responseValue);
+      };
+    };
 
-    return this.createMessageStream(action).pipe(map(request => {
-      return [
-        request.data,
-        createResponseHook(request)
-      ]
-    }))
+    return this.createMessageStream(action).pipe(
+      map((request) => {
+        return [request.data, createResponseHook(request)];
+      })
+    );
   }
 
-  sendAndObserveResponse<ActionName extends OmpBroadcastChannelActionName<T>, RequestType extends T[ActionName]['requestType'], ResponseType extends T[ActionName]['responseType']>(action: ActionName, arg?: RequestType): Observable<UnwrapObservable<ResponseType>> {
+  sendAndObserveResponse<ActionName extends OmpBroadcastChannelActionName<T>, RequestType extends T[ActionName]['requestType'], ResponseType extends T[ActionName]['responseType']>(
+    action: ActionName,
+    arg?: RequestType
+  ): Observable<UnwrapObservable<ResponseType>> {
     let message = this.createMessage(action, arg);
-    return this._sendAndObserveResponse<UnwrapObservable<ResponseType>, any>(message)
-      .pipe(map(p => p.data as UnwrapObservable<ResponseType>));
+    return this._sendAndObserveResponse<UnwrapObservable<ResponseType>>(message).pipe(map((p) => p.data as UnwrapObservable<ResponseType>));
   }
 
   send<ActionName extends OmpBroadcastChannelActionName<T>, RequestType extends T[ActionName]['requestType']>(action: ActionName, arg?: RequestType): void {
     let message = this.createMessage(action, arg);
     this.sendMessage(message);
   }
-
-
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

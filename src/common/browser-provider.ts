@@ -27,14 +27,14 @@ export class BrowserProvider {
   private _isSafari;
 
   private constructor() {
-    this._userAgent = window.navigator && window.navigator.userAgent || '';
+    this._userAgent = (window.navigator && window.navigator.userAgent) || '';
 
-    this._isAndroid = (/Android/i).test(this._userAgent);
-    this._isFirefox = (/Firefox/i).test(this._userAgent);
-    this._isEdge = (/Edg/i).test(this._userAgent);
-    this._isChromium = ((/Chrome/i).test(this._userAgent) || (/CriOS/i).test(this._userAgent));
+    this._isAndroid = /Android/i.test(this._userAgent);
+    this._isFirefox = /Firefox/i.test(this._userAgent);
+    this._isEdge = /Edg/i.test(this._userAgent);
+    this._isChromium = /Chrome/i.test(this._userAgent) || /CriOS/i.test(this._userAgent);
     this._isChrome = !this.isEdge && this.isChromium;
-    this._isSafari = (/Safari/i).test(this._userAgent) && !this.isChrome && !this.isAndroid && !this.isEdge;
+    this._isSafari = /Safari/i.test(this._userAgent) && !this.isChrome && !this.isAndroid && !this.isEdge;
   }
 
   public static instance(): BrowserProvider {

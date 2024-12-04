@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-import { Subject } from 'rxjs';
-import { MarkerApi } from '../api/marker-api';
-import { MarkerAwareApi } from '../api/marker-aware-api';
-import { MarkerInitEvent, MarkerCreateEvent, MarkerDeleteEvent, MarkerUpdateEvent } from '../types';
-import { MarkerListItem } from './marker-list-item';
+import {Subject} from 'rxjs';
+import {MarkerApi} from '../api/marker-api';
+import {MarkerAwareApi} from '../api/marker-aware-api';
+import {MarkerInitEvent, MarkerCreateEvent, MarkerDeleteEvent, MarkerUpdateEvent} from '../types';
+import {MarkerListItem} from './marker-list-item';
 
 export class MarkerListController implements MarkerAwareApi {
-
   onMarkerInit$: Subject<MarkerInitEvent> = new Subject();
   onMarkerCreate$: Subject<MarkerCreateEvent> = new Subject();
   onMarkerDelete$: Subject<MarkerDeleteEvent> = new Subject();
@@ -34,8 +33,8 @@ export class MarkerListController implements MarkerAwareApi {
   }
 
   set markers(markers: MarkerApi[]) {
-    this._markers = markers.map(marker => this.createMarker(marker));
-    this.onMarkerInit$.next({ markers: this._markers });
+    this._markers = markers.map((marker) => this.createMarker(marker));
+    this.onMarkerInit$.next({markers: this._markers});
   }
 
   getMarkers(): MarkerApi[] {
@@ -45,26 +44,26 @@ export class MarkerListController implements MarkerAwareApi {
   addMarker(markerData: Partial<MarkerApi>): MarkerApi {
     const marker = this.createMarker(markerData);
     this._markers.push(marker);
-    this.onMarkerCreate$.next({ marker });
+    this.onMarkerCreate$.next({marker});
     return marker;
   }
 
   removeMarker(id: string): void {
-    const marker = this._markers.find(m => m.id === id);
+    const marker = this._markers.find((m) => m.id === id);
     if (!marker) {
       return;
     }
     this._markers.splice(this._markers.indexOf(marker), 1);
-    this.onMarkerDelete$.next({ marker })
+    this.onMarkerDelete$.next({marker});
   }
 
   updateMarker(id: string, data: Partial<MarkerApi>): void {
-    const marker = this._markers.find(m => m.id === id);
+    const marker = this._markers.find((m) => m.id === id);
     if (!marker) {
       return;
     }
     Object.assign(marker, data);
-    this.onMarkerUpdate$.next({ marker });
+    this.onMarkerUpdate$.next({marker});
   }
 
   toggleMarker(id: string): void {
@@ -74,6 +73,4 @@ export class MarkerListController implements MarkerAwareApi {
   private createMarker(marker: Partial<MarkerApi>): MarkerListItem {
     return marker instanceof MarkerListItem ? marker : new MarkerListItem(marker, this);
   }
-
-
 }

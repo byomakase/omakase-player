@@ -44,9 +44,7 @@ export interface ScrubberStyle {
   visible: boolean;
 }
 
-export interface ScrubberConfig extends ComponentConfig<ScrubberStyle> {
-
-}
+export interface ScrubberConfig extends ComponentConfig<ScrubberStyle> {}
 
 const configDefault: ScrubberConfig = {
   style: {
@@ -68,9 +66,9 @@ const configDefault: ScrubberConfig = {
     textSnappedFill: '#f43530',
     textYOffset: 0,
 
-    visible: false
-  }
-}
+    visible: false,
+  },
+};
 
 export class Scrubber extends BaseKonvaComponent<ScrubberConfig, ScrubberStyle, Konva.Group> implements OnMeasurementsChange {
   public readonly onMove$: Subject<ScrubberMoveEvent> = new Subject<ScrubberMoveEvent>();
@@ -103,7 +101,7 @@ export class Scrubber extends BaseKonvaComponent<ScrubberConfig, ScrubberStyle, 
     this._group = new Konva.Group({
       ...Constants.POSITION_TOP_LEFT,
       visible: this.style.visible,
-      listening: listening
+      listening: listening,
     });
 
     this._northLine = new Konva.Line({
@@ -111,22 +109,22 @@ export class Scrubber extends BaseKonvaComponent<ScrubberConfig, ScrubberStyle, 
       stroke: this.style.fill,
       strokeWidth: this.style.northLineWidth,
       listening: listening,
-      opacity: this.style.northLineOpacity
-    })
+      opacity: this.style.northLineOpacity,
+    });
 
     this._southLine = new Konva.Line({
       points: [0, 0, 0, 0],
       stroke: this.style.fill,
       strokeWidth: this.style.southLineWidth,
       listening: listening,
-      opacity: this.style.southLineOpacity
-    })
+      opacity: this.style.southLineOpacity,
+    });
 
     this._symbol = new Konva.Circle({
       fill: this.style.fill,
       radius: this.style.symbolHeight / 2,
       offsetY: this.style.symbolYOffset,
-      opacity: this.style.symbolOpacity
+      opacity: this.style.symbolOpacity,
     });
 
     this._group.add(this._symbol);
@@ -135,7 +133,7 @@ export class Scrubber extends BaseKonvaComponent<ScrubberConfig, ScrubberStyle, 
 
     this._label = new Konva.Label({
       y: this.style.textYOffset,
-      listening: listening
+      listening: listening,
     });
 
     this._text = new Konva.Text({
@@ -144,23 +142,22 @@ export class Scrubber extends BaseKonvaComponent<ScrubberConfig, ScrubberStyle, 
       fill: this.style.textFill,
       ...Constants.POSITION_TOP_LEFT,
       text: ``,
-      listening: listening
+      listening: listening,
     });
 
     this._label.add(this._text);
     this._group.add(this._label);
 
-
     this._styleAdapter.onChange$.pipe(takeUntil(this._destroyed$)).subscribe((style) => {
       this.onStyleChange();
-    })
+    });
 
     this._timeline.onStyleChange$.pipe(takeUntil(this._destroyed$)).subscribe((timelineStyle) => {
       this._text.setAttrs({
         fontFamily: this._timeline.style.textFontFamily,
         fontStyle: this._timeline.style.textFontStyle,
       });
-    })
+    });
   }
 
   protected provideKonvaNode(): Konva.Group {
@@ -174,11 +171,11 @@ export class Scrubber extends BaseKonvaComponent<ScrubberConfig, ScrubberStyle, 
     let scrubberLaneHeight = this._timeline.getScrubberLane().getTimecodedRect().height;
 
     this._northLine.points([this._northLine.x(), 0, this._northLine.x(), scrubberLaneHeight]);
-    this._southLine.points([this._southLine.x(), scrubberLaneHeight, this._southLine.x(), totalHeight])
+    this._southLine.points([this._southLine.x(), scrubberLaneHeight, this._southLine.x(), totalHeight]);
   }
 
   onMeasurementsChange() {
-    this.onStyleChange()
+    this.onStyleChange();
   }
 
   move(x: number, isSnapped = false) {
@@ -186,11 +183,11 @@ export class Scrubber extends BaseKonvaComponent<ScrubberConfig, ScrubberStyle, 
     let text = timecode;
 
     let textRect = this._text.getSelfRect();
-    let textHalfWidth = textRect.width / 2
+    let textHalfWidth = textRect.width / 2;
     let labelX = -textHalfWidth;
     let horizontals = this._timeline.getTimecodedFloatingHorizontals();
 
-    if ((horizontals.width - x) < (textHalfWidth)) {
+    if (horizontals.width - x < textHalfWidth) {
       labelX = -textRect.width + (horizontals.width - x);
     } else if (x < textHalfWidth) {
       labelX = -textHalfWidth + (textHalfWidth - x);
@@ -198,23 +195,22 @@ export class Scrubber extends BaseKonvaComponent<ScrubberConfig, ScrubberStyle, 
 
     this._group.x(x);
     this._text.text(text);
-    this._label.x(labelX)
+    this._label.x(labelX);
 
     if (isSnapped) {
-      this._northLine.stroke(this.style.snappedFill)
-      this._southLine.stroke(this.style.snappedFill)
+      this._northLine.stroke(this.style.snappedFill);
+      this._southLine.stroke(this.style.snappedFill);
 
-      this._text.fill(this.style.snappedFill)
+      this._text.fill(this.style.snappedFill);
       this._symbol.visible(false);
     } else {
-      this._northLine.stroke(this.style.fill)
-      this._southLine.stroke(this.style.fill)
+      this._northLine.stroke(this.style.fill);
+      this._southLine.stroke(this.style.fill);
 
-      this._text.fill(this.style.textFill)
+      this._text.fill(this.style.textFill);
       this._symbol.visible(true);
     }
 
     this.onMove$.next({timecode: timecode, snapped: isSnapped});
   }
-
 }

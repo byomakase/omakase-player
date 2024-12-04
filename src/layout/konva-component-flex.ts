@@ -38,9 +38,7 @@ export class KonvaComponentFlexContentNode<T extends KonvaComponent<any, any, an
 
   override destroy() {
     super.destroy();
-    destroyer(
-      this._component
-    )
+    destroyer(this._component);
   }
 
   get component(): T {

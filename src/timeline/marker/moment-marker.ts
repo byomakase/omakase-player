@@ -27,16 +27,11 @@ import {Position} from '../../common/measurement';
 import {ConfigWithOptionalStyle} from '../../layout';
 
 // region marker handle
-export interface MomentMarkerHandleStyle extends MarkerHandleStyle {
+export interface MomentMarkerHandleStyle extends MarkerHandleStyle {}
 
-}
-
-export interface MomentMarkerHandleConfig extends MarkerHandleConfig<MomentMarkerHandleStyle> {
-
-}
+export interface MomentMarkerHandleConfig extends MarkerHandleConfig<MomentMarkerHandleStyle> {}
 
 export class MomentMarkerHandle extends BaseMarkerHandle<MomentMarkerHandleConfig, MomentMarkerHandleStyle> {
-
   constructor(config: MomentMarkerHandleConfig) {
     super(config);
   }
@@ -45,27 +40,23 @@ export class MomentMarkerHandle extends BaseMarkerHandle<MomentMarkerHandleConfi
     return MarkerUtil.createMomentSymbol({
       symbolSize: this.style.symbolSize,
       symbolType: this.style.symbolType,
-      color: this.style.color
-    })
+      color: this.style.color,
+    });
   }
 }
 
 // endregion
 
-export interface MomentMarkerStyle extends MarkerStyle {
+export interface MomentMarkerStyle extends MarkerStyle {}
 
-}
-
-export interface MomentMarkerConfig extends MarkerConfig<MomentObservation, MomentMarkerStyle> {
-
-}
+export interface MomentMarkerConfig extends MarkerConfig<MomentObservation, MomentMarkerStyle> {}
 
 const configDefault: Omit<MomentMarkerConfig, 'timeObservation'> = {
   editable: false,
   style: {
-    ...MARKER_STYLE_DEFAULT
-  }
-}
+    ...MARKER_STYLE_DEFAULT,
+  },
+};
 
 export class MomentMarker extends BaseMarker<MomentObservation, MomentMarkerConfig, MomentMarkerStyle, MomentMarkerChangeEvent> {
   private _markerHandle?: MomentMarkerHandle;
@@ -80,9 +71,7 @@ export class MomentMarker extends BaseMarker<MomentObservation, MomentMarkerConf
       },
     });
 
-    this._timeObservation.time = z.coerce.number()
-      .min(0)
-      .parse(this._timeObservation.time);
+    this._timeObservation.time = z.coerce.number().min(0).parse(this._timeObservation.time);
   }
 
   override attachToTimeline(timeline: Timeline, markerLane: MarkerLane) {
@@ -90,7 +79,7 @@ export class MomentMarker extends BaseMarker<MomentObservation, MomentMarkerConf
 
     this._styleAdapter.onChange$.subscribe((style) => {
       this.initMarkerHandle();
-    })
+    });
 
     this.initMarkerHandle();
   }
@@ -118,15 +107,15 @@ export class MomentMarker extends BaseMarker<MomentObservation, MomentMarkerConf
         return this.getMarkerHandleVerticals();
       },
       dragPositionConstrainerFn: (newPosition: Position) => {
-        return this.onDragMove(newPosition)
+        return this.onDragMove(newPosition);
       },
       style: {
         color: this.style.color,
         symbolType: this.style.symbolType,
         symbolSize: this.style.symbolSize,
         lineStrokeWidth: this.style.lineStrokeWidth,
-        lineOpacity: this.style.lineOpacity
-      }
+        lineOpacity: this.style.lineOpacity,
+      },
     });
 
     markerHandle.onDragEnd = (markerHandleGroup) => {
@@ -134,10 +123,10 @@ export class MomentMarker extends BaseMarker<MomentObservation, MomentMarkerConf
         let newTime = this._timeline!.timelinePositionToTime(markerHandleGroup.x());
         this.timeObservation = {
           ...this.timeObservation,
-          time: newTime
-        }
+          time: newTime,
+        };
       }
-    }
+    };
 
     return markerHandle;
   }
@@ -146,17 +135,17 @@ export class MomentMarker extends BaseMarker<MomentObservation, MomentMarkerConf
     this.refreshTimelinePosition();
 
     let event: MomentMarkerChangeEvent = {
-      timeObservation: this.timeObservation
-    }
+      timeObservation: this.timeObservation,
+    };
 
-    this.onChange$.next(event)
+    this.onChange$.next(event);
   }
 
   refreshTimelinePosition() {
     this._markerHandle?.setPosition({
       ...this._markerHandle.getPosition(),
-      x: this._timeline!.timeToTimelinePosition(this.timeObservation.time)
-    })
+      x: this._timeline!.timeToTimelinePosition(this.timeObservation.time),
+    });
   }
 
   override set editable(value: boolean) {

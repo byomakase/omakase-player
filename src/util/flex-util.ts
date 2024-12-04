@@ -26,40 +26,42 @@ export class FlexUtil {
     let group = new Konva.Group({
       width: width,
       height: height,
-    })
-
-    group.add(KonvaFactory.createRect({
-      width: width,
-      height: height,
-      fill: fill ? fill : ColorUtil.randomHexColor(),
-      opacity: opacity,
-    }))
-
-    let konvaText = new Konva.Text({
-      text: text
     });
 
-    group.add(konvaText)
+    group.add(
+      KonvaFactory.createRect({
+        width: width,
+        height: height,
+        fill: fill ? fill : ColorUtil.randomHexColor(),
+        opacity: opacity,
+      })
+    );
+
+    let konvaText = new Konva.Text({
+      text: text,
+    });
+
+    group.add(konvaText);
 
     let flexGroup = KonvaFlexGroup.of({
       konvaNode: group,
       name: text,
       width: width,
       height: height,
-    })
+    });
     return flexGroup;
   }
 
   static echoFlexNodeLayout(flexNode: FlexNode<any>, level: number = 1) {
     if (flexNode) {
-      console.log(`${Array(level).join('\t')} ${flexNode.name}`, flexNode.getLayout())
+      console.log(`${Array(level).join('\t')} ${flexNode.name}`, flexNode.getLayout());
       if (flexNode instanceof BaseFlexGroup) {
-        flexNode.getChildren().forEach(child => {
+        flexNode.getChildren().forEach((child) => {
           FlexUtil.echoFlexNodeLayout(child, level + 1);
-        })
+        });
       }
     } else {
-      console.debug('Nothing to echo')
+      console.debug('Nothing to echo');
     }
   }
 
@@ -73,18 +75,20 @@ export class FlexUtil {
       justifyContent: 'JUSTIFY_SPACE_BETWEEN',
     });
 
-    let debugBgGroupFlexItem = KonvaFlexItem.of({
-      name: `bg-group-flex-item`,
-      width: '100%',
-      height: '100%',
-      positionType: 'POSITION_TYPE_ABSOLUTE',
-    }, KonvaFactory.createRect({
-      fill: fill,
-      opacity: opacity,
-      listening: false
-    }))
+    let debugBgGroupFlexItem = KonvaFlexItem.of(
+      {
+        name: `bg-group-flex-item`,
+        width: '100%',
+        height: '100%',
+        positionType: 'POSITION_TYPE_ABSOLUTE',
+      },
+      KonvaFactory.createRect({
+        fill: fill,
+        opacity: opacity,
+        listening: false,
+      })
+    );
 
-    return debugBgGroup
-      .addChild(debugBgGroupFlexItem);
+    return debugBgGroup.addChild(debugBgGroupFlexItem);
   }
 }

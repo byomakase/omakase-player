@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { MomentObservation, PeriodObservation } from '../types';
+import {MomentObservation, PeriodObservation} from '../types';
 
 export type MarkerTimeObservation = PeriodObservation | MomentObservation;
 

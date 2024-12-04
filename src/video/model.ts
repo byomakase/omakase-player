@@ -27,7 +27,7 @@ export interface Video {
    * Frame duration in seconds
    * @private
    */
-  frameDuration: number
+  frameDuration: number;
 
   /**
    * Time offset incurred by init segment
@@ -54,10 +54,10 @@ export interface Video {
 }
 
 export interface TimecodeObject {
-  hours: number,
-  minutes: number,
-  seconds: number,
-  frames: number
+  hours: number;
+  minutes: number;
+  seconds: number;
+  frames: number;
   dropFrame: boolean;
   audioOnly: boolean;
 }
@@ -82,18 +82,18 @@ export class PlaybackStateMachine {
     waiting: false,
     seeking: false,
     buffering: false,
-    ended: false
+    ended: false,
   };
 
   constructor() {
-    this.onChange$ = new BehaviorSubject(this._state)
+    this.onChange$ = new BehaviorSubject(this._state);
   }
 
   private updateState(partialState: Partial<PlaybackState>) {
     let newState = {
       ...this._state,
-      ...partialState
-    }
+      ...partialState,
+    };
     let isEqual = this.compare(this._state, newState) === 0;
     this._state = newState;
     if (!isEqual) {
@@ -102,14 +102,15 @@ export class PlaybackStateMachine {
   }
 
   private compare(o1: PlaybackState, o2: PlaybackState): number {
-    return (o1.playing === o2.playing
-      && o1.paused === o2.paused
-      && o1.pausing === o2.pausing
-      && o1.waiting === o2.waiting
-      && o1.seeking === o2.seeking
-      && o1.buffering === o2.buffering
-      && o1.ended === o2.ended
-    ) ? 0 : -1;
+    return o1.playing === o2.playing &&
+      o1.paused === o2.paused &&
+      o1.pausing === o2.pausing &&
+      o1.waiting === o2.waiting &&
+      o1.seeking === o2.seeking &&
+      o1.buffering === o2.buffering &&
+      o1.ended === o2.ended
+      ? 0
+      : -1;
   }
 
   get state(): PlaybackState {
@@ -124,8 +125,8 @@ export class PlaybackStateMachine {
       waiting: false,
       seeking: false,
       buffering: false,
-      ended: false
-    })
+      ended: false,
+    });
   }
 
   setPaused() {
@@ -136,8 +137,8 @@ export class PlaybackStateMachine {
       waiting: false,
       seeking: false,
       buffering: false,
-      ended: false
-    })
+      ended: false,
+    });
   }
 
   get pausing(): boolean {
@@ -146,8 +147,8 @@ export class PlaybackStateMachine {
 
   setPausing() {
     this.updateState({
-      pausing: true
-    })
+      pausing: true,
+    });
   }
 
   setEnded() {
@@ -158,8 +159,8 @@ export class PlaybackStateMachine {
       waiting: false,
       seeking: false,
       buffering: false,
-      ended: true
-    })
+      ended: true,
+    });
   }
 
   get waiting(): boolean {
@@ -168,8 +169,8 @@ export class PlaybackStateMachine {
 
   set waiting(value: boolean) {
     this.updateState({
-      waiting: value
-    })
+      waiting: value,
+    });
   }
 
   get seeking(): boolean {
@@ -180,8 +181,8 @@ export class PlaybackStateMachine {
     this.updateState({
       seeking: value,
       pausing: false,
-      ended: false
-    })
+      ended: false,
+    });
   }
 
   get buffering(): boolean {
@@ -190,8 +191,8 @@ export class PlaybackStateMachine {
 
   set buffering(value: boolean) {
     this.updateState({
-      buffering: value
-    })
+      buffering: value,
+    });
   }
 }
 
@@ -199,17 +200,17 @@ export interface VideoLoadOptions {
   /**
    * Set video duration explicitly
    */
-  duration?: number,
+  duration?: number;
 
   /**
    * Time offset timecode
    */
-  ffom?: string,
+  ffom?: string;
 
   /**
    * Is frame rate with drop frame or not
    */
-  dropFrame?: boolean
+  dropFrame?: boolean;
 }
 
 /**
@@ -236,29 +237,28 @@ export interface VideoSafeZone {
   /**
    * If provided {@link aspectRatio} will be ignored
    */
-  topRightBottomLeftPercent?: number[],
+  topRightBottomLeftPercent?: number[];
 
   /**
    * Aspect ratio for safe zone
    */
-  aspectRatio?: string,
+  aspectRatio?: string;
 
   /**
    * If used {@link aspectRatio} must be provided
    */
-  scalePercent?: number
+  scalePercent?: number;
 
-  htmlId?: string,
-  htmlClass?: string,
+  htmlId?: string;
+  htmlClass?: string;
 }
 
-export type VideoWindowPlaybackState = 'detaching' | 'detached' | 'attaching' | 'attached'
+export type VideoWindowPlaybackState = 'detaching' | 'detached' | 'attaching' | 'attached';
 
 /**
  * Represents connected or disconnected {@link AudioNode} or input-output point
  */
 export interface AudioInputOutputNode {
-
   /**
    * Input
    */

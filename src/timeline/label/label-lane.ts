@@ -41,9 +41,9 @@ const configDefault: Omit<LabelLaneConfig, 'text'> = {
     height: 40,
     textFill: 'red',
     textFontSize: 14,
-    textAreaStretch: true
-  }
-}
+    textAreaStretch: true,
+  },
+};
 
 export class LabelLane extends BaseTimelineLane<LabelLaneConfig, LabelLaneStyle> {
   protected _contentFlexGroup?: KonvaFlexGroup;
@@ -64,8 +64,8 @@ export class LabelLane extends BaseTimelineLane<LabelLaneConfig, LabelLaneStyle>
       height: this._config.minimized ? 0 : this._config.style.height,
       flexDirection: 'FLEX_DIRECTION_ROW',
       alignItems: 'ALIGN_CENTER',
-      margins: FlexSpacingBuilder.instance().topRightBottomLeft([0, 0, 0, 10]).build()
-    })
+      margins: FlexSpacingBuilder.instance().topRightBottomLeft([0, 0, 0, 10]).build(),
+    });
 
     this._timeline!.addToTimecodedStaticContent(this._contentFlexGroup.contentNode.konvaNode);
 
@@ -79,23 +79,25 @@ export class LabelLane extends BaseTimelineLane<LabelLaneConfig, LabelLaneStyle>
         fill: this.style.textFill,
         align: 'left',
         verticalAlign: 'middle',
-        textAreaStretch: this.style.textAreaStretch
-      }
-    })
+        textAreaStretch: this.style.textAreaStretch,
+      },
+    });
 
-    let textLabelFlexItem = new KonvaFlexItem({
-      flexGrow: 1,
-      height: '100%'
-    }, new KonvaComponentFlexContentNode(this._textLabel))
+    let textLabelFlexItem = new KonvaFlexItem(
+      {
+        flexGrow: 1,
+        height: '100%',
+      },
+      new KonvaComponentFlexContentNode(this._textLabel)
+    );
 
     // clipping when minimized
     this._contentFlexGroup.contentNode.konvaNode.clipFunc((ctx) => {
       let layout = this._contentFlexGroup!.getLayout();
-      ctx.rect(0, 0, layout.width, layout.height)
-    })
+      ctx.rect(0, 0, layout.width, layout.height);
+    });
 
-    this._contentFlexGroup
-      .addChild(textLabelFlexItem);
+    this._contentFlexGroup.addChild(textLabelFlexItem);
   }
 
   override onStyleChange() {
@@ -107,7 +109,7 @@ export class LabelLane extends BaseTimelineLane<LabelLaneConfig, LabelLaneStyle>
         fontSize: this._styleAdapter.style.textFontSize,
         fontStyle: this._styleAdapter.style.textFontStyle,
         fill: this._styleAdapter.style.textFill,
-      }
+      };
     }
   }
 
@@ -115,16 +117,10 @@ export class LabelLane extends BaseTimelineLane<LabelLaneConfig, LabelLaneStyle>
     let timecodedContainerDimension = this._timeline!.getTimecodedContainerDimension();
     let timecodedRect = this.getTimecodedRect();
 
-    this._contentFlexGroup!.setDimensionAndPositions(
-      timecodedContainerDimension.width,
-      timecodedRect.height,
-      FlexSpacingBuilder.instance().topRightBottomLeft([timecodedRect.y, 0, 0, 0]).build()
-    )
+    this._contentFlexGroup!.setDimensionAndPositions(timecodedContainerDimension.width, timecodedRect.height, FlexSpacingBuilder.instance().topRightBottomLeft([timecodedRect.y, 0, 0, 0]).build());
   }
 
-  override clearContent() {
-
-  }
+  override clearContent() {}
 
   override destroy() {
     super.destroy();

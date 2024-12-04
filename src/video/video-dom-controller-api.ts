@@ -28,6 +28,8 @@ export interface VideoDomControllerApi extends Destroyable {
 
   getVideoElement(): HTMLVideoElement;
 
+  getAudioUtilElement(): HTMLAudioElement;
+
   isFullscreen(): boolean;
 
   toggleFullscreen(): Observable<void>;
