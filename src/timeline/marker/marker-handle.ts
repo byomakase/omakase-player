@@ -16,7 +16,7 @@
 
 import {BaseKonvaComponent, ComponentConfig, KonvaComponent} from '../../layout/konva-component';
 import Konva from 'konva';
-import {Position} from '../../common/measurement';
+import {Position} from '../../common';
 import {WindowUtil} from '../../util/window-util';
 import {MarkerHandleStyle, MarkerHandleVerticals} from './marker-types';
 

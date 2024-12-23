@@ -55,6 +55,9 @@ export interface MarkerListConfig {
   vttLoadOptions?: VttLoadOptions;
   vttMarkerCreateFn?: (marker: MarkerVttCue, index: number) => MarkerListItem;
   thumbnailFn?: (time: number) => string | undefined;
+  nameEditable?: boolean;
+  nameOptions?: string[];
+  nameValidationFn?: (name: string) => boolean;
   source?: MarkerAwareApi | MarkerAwareApi[];
 }
 
@@ -145,12 +148,18 @@ export class MarkerList implements Destroyable, MarkerListApi {
     return this._config;
   }
 
-  set thumbnailVttFile(thumbnailVttFile: ThumbnailVttFile) {
+  get thumbnailVttFile(): ThumbnailVttFile | undefined {
+    return this._thumbnailVttFile;
+  }
+
+  set thumbnailVttFile(thumbnailVttFile: ThumbnailVttFile | undefined) {
     this._thumbnailVttFile = thumbnailVttFile;
-    for (const marker of this._markerListComponent.markers) {
-      this._markerListComponent.updateMarker(marker.id, {
-        thumbnail: marker.start ? thumbnailVttFile?.findNearestCue(marker.start)?.url : undefined,
-      });
+    if (this._thumbnailVttFile) {
+      for (const marker of this._markerListComponent.markers) {
+        this._markerListComponent.updateMarker(marker.id, {
+          thumbnail: marker.start !== undefined ? thumbnailVttFile?.findNearestCue(marker.start)?.url : undefined,
+        });
+      }
     }
   }
 

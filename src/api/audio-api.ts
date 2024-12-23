@@ -15,16 +15,18 @@
  */
 
 import {Api} from './api';
-import {BehaviorSubject, Observable} from 'rxjs';
-import {AudioContextChangeEvent, AudioLoadedEvent, AudioRoutingEvent, AudioSwitchedEvent, AudioPeakProcessorWorkletNodeMessageEvent, OmakaseAudioTrack} from '../types';
+import {Observable} from 'rxjs';
+import {AudioContextChangeEvent, AudioLoadedEvent, AudioPeakProcessorWorkletNodeMessageEvent, AudioRoutingEvent, AudioSwitchedEvent, OmakaseAudioTrack} from '../types';
 import {AudioInputOutputNode, AudioMeterStandard} from '../video/model';
 
 export interface AudioApi extends Api {
   /**
    * Fires on subtitles load. Initial value is undefined.
+   * Always emits the current value on subscription.
+   *
    * @readonly
    */
-  onAudioLoaded$: BehaviorSubject<AudioLoadedEvent | undefined>;
+  onAudioLoaded$: Observable<AudioLoadedEvent | undefined>;
 
   /**
    *  Fires on audio track switched

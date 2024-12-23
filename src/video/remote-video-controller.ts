@@ -25,6 +25,8 @@ import {
   AudioWorkletNodeCreatedEvent,
   HelpMenuGroup,
   OmakaseAudioTrack,
+  OmpNamedEvent,
+  OmpNamedEvents,
   OmpVideoWindowPlaybackError,
   SubtitlesCreateEvent,
   SubtitlesEvent,
@@ -47,18 +49,17 @@ import {
   VideoVolumeEvent,
   VideoWindowPlaybackStateChangeEvent,
 } from '../types';
-import {PlaybackState, Video, VideoLoadOptions} from './index';
-import {BufferedTimespan} from './video-controller';
+import {AudioMeterStandard, PlaybackState, Video, VideoControllerApi, VideoLoadOptions} from './index';
+import {VideoControllerConfig} from './video-controller';
 import {nextCompleteSubject} from '../util/rxjs-util';
 import {Validators} from '../validators';
 import {TimecodeUtil} from '../util/timecode-util';
 import {FrameRateUtil} from '../util/frame-rate-util';
 import Decimal from 'decimal.js';
-import {VideoControllerApi} from './video-controller-api';
 import {TypedOmpBroadcastChannel} from '../common/omp-broadcast-channel';
-import {MessageChannelActionsMap} from './types';
+import {MessageChannelActionsMap} from './channel-types';
 import {fromPromise} from 'rxjs/internal/observable/innerFrom';
-import {AudioInputOutputNode, AudioMeterStandard, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
+import {AudioInputOutputNode, BufferedTimespan, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
 
 export class RemoteVideoController implements VideoControllerApi {
   private readonly _messageChannel: TypedOmpBroadcastChannel<MessageChannelActionsMap>;
@@ -88,6 +89,7 @@ export class RemoteVideoController implements VideoControllerApi {
   private _activeAudioTrack: OmakaseAudioTrack | undefined = void 0;
   private _audioInputOutputNodes: AudioInputOutputNode[][] = [];
   private _thumbnailVttUrl: string | undefined = void 0;
+  private _activeNamedEventStreams: OmpNamedEvents[] = [];
   // endregion
 
   private _destroyed$ = new Subject<void>();
@@ -218,7 +220,13 @@ export class RemoteVideoController implements VideoControllerApi {
 
     this.onThumbnailVttUrlChanged$.pipe(takeUntil(this._destroyed$)).subscribe({
       next: (value) => {
-        this._thumbnailVttUrl = value?.thumbnailVttUrl;
+        this._thumbnailVttUrl = value.thumbnailVttUrl;
+      },
+    });
+
+    this.onActiveNamedEventStreamsChange$.pipe(takeUntil(this._destroyed$)).subscribe({
+      next: (value) => {
+        this._activeNamedEventStreams = value;
       },
     });
   }
@@ -335,8 +343,16 @@ export class RemoteVideoController implements VideoControllerApi {
     return this._get_onAudioWorkletNodeCreated$;
   }
 
-  get onThumbnailVttUrlChanged$(): Observable<ThumnbailVttUrlChangedEvent | undefined> {
+  get onThumbnailVttUrlChanged$(): Observable<ThumnbailVttUrlChangedEvent> {
     return this._messageChannel.createRequestStream('VideoControllerApi.onThumbnailVttUrlChanged$');
+  }
+
+  get onActiveNamedEventStreamsChange$(): Observable<OmpNamedEvents[]> {
+    return this._messageChannel.createRequestStream('VideoControllerApi.onActiveNamedEventStreamsChange$');
+  }
+
+  get onNamedEvent$(): Observable<OmpNamedEvent> {
+    return this._messageChannel.createRequestStream('VideoControllerApi.onNamedEvent$');
   }
 
   loadVideoInternal(sourceUrl: string, frameRate: number | string, options: VideoLoadOptions | undefined, optionsInternal: VideoLoadOptionsInternal): Observable<Video> {
@@ -506,12 +522,12 @@ export class RemoteVideoController implements VideoControllerApi {
 
   calculateTimeToFrame(time: number): number {
     this.validateVideoLoaded();
-    return FrameRateUtil.timeToFrameNumber(time, this.getVideo()!);
+    return FrameRateUtil.videoTimeToVideoFrameNumber(time, this.getVideo()!);
   }
 
   calculateFrameToTime(frameNumber: number): number {
     this.validateVideoLoaded();
-    return FrameRateUtil.frameNumberToTime(frameNumber, this.getVideo()!);
+    return FrameRateUtil.videoFrameNumberToVideoTime(frameNumber, this.getVideo()!);
   }
 
   mute(): Observable<void> {
@@ -536,10 +552,6 @@ export class RemoteVideoController implements VideoControllerApi {
 
   toggleFullscreen(): Observable<void> {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.toggleFullscreen')));
-  }
-
-  getHls(): Hls | undefined {
-    throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
   }
 
   appendHelpMenuGroup(helpMenuGroup: HelpMenuGroup): Observable<void> {
@@ -582,11 +594,15 @@ export class RemoteVideoController implements VideoControllerApi {
     return 'detached';
   }
 
-  isDetachVideoWindowEnabled(): boolean {
+  isDetachable(): boolean {
     return false;
   }
 
-  isAttachVideoWindowEnabled(): boolean {
+  canDetach(): boolean {
+    return false;
+  }
+
+  canAttach(): boolean {
     return true;
   }
 
@@ -694,5 +710,26 @@ export class RemoteVideoController implements VideoControllerApi {
 
   disablePiP(): Observable<void> {
     throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
+  }
+
+  getConfig(): VideoControllerConfig {
+    throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
+    // TODO verify this
+  }
+
+  getHls(): Hls | undefined {
+    throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
+  }
+
+  updateActiveNamedEventStreams(eventNames: OmpNamedEvents[]): Observable<void> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.updateActiveNamedEventStreams', [eventNames])));
+  }
+
+  getActiveNamedEventStreams(): OmpNamedEvents[] {
+    return this._activeNamedEventStreams;
+  }
+
+  loadBlackVideo(): Observable<Video> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.loadBlackVideo')));
   }
 }

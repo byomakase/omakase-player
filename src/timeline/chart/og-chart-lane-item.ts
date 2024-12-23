@@ -16,7 +16,7 @@
 
 import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle} from '../../layout/konva-component';
 import Konva from 'konva';
-import {Position} from '../../common/measurement';
+import {Position} from '../../common';
 import {BarChartCue, ChartCueEvent, OgChartCue, WithOptionalPartial} from '../../types';
 import Decimal from 'decimal.js';
 import {Constants} from '../../constants';

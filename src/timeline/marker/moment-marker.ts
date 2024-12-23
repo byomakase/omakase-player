@@ -60,6 +60,7 @@ const configDefault: Omit<MomentMarkerConfig, 'timeObservation'> = {
 
 export class MomentMarker extends BaseMarker<MomentObservation, MomentMarkerConfig, MomentMarkerStyle, MomentMarkerChangeEvent> {
   private _markerHandle?: MomentMarkerHandle;
+  private _maxOpacity?: number;
 
   constructor(config: ConfigWithOptionalStyle<MomentMarkerConfig>) {
     super({
@@ -72,6 +73,7 @@ export class MomentMarker extends BaseMarker<MomentObservation, MomentMarkerConf
     });
 
     this._timeObservation.time = z.coerce.number().min(0).parse(this._timeObservation.time);
+    this._maxOpacity = this.style.lineOpacity;
   }
 
   override attachToTimeline(timeline: Timeline, markerLane: MarkerLane) {
@@ -157,5 +159,9 @@ export class MomentMarker extends BaseMarker<MomentObservation, MomentMarkerConf
 
   override get editable(): boolean {
     return super.editable;
+  }
+
+  get maxOpacity() {
+    return this._maxOpacity;
   }
 }

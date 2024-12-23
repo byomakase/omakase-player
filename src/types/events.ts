@@ -17,91 +17,15 @@
 import {HelpMenuGroup, MomentObservation, PeriodObservation} from './model';
 import {Thumbnail} from '../timeline/thumbnail/thumbnail';
 import {OmakaseChartCue} from './chart';
-import {MarkerApi} from '../api/marker-api';
-import {CamelToSnakeCase} from './ts-types';
+import {MarkerApi} from '../api';
 import {OmakaseAudioTrack, OmakaseTextTrackCue, SubtitlesVttTrack} from './track';
 import {Video, VideoLoadOptions} from '../video';
-import {BufferedTimespan} from '../video/video-controller';
-import {AudioInputOutputNode, AudioMeterStandard, VideoSafeZone, VideoWindowPlaybackState} from '../video/model';
+import {AudioInputOutputNode, AudioMeterStandard, BufferedTimespan, VideoSafeZone, VideoWindowPlaybackState} from '../video/model';
+import {Events as HlsEvents} from 'hls.js';
 
-export const OmakasePlayerEvents: OmakasePlayerEventsType = {
-  OMAKASE_SUBTITLES_HIDE: 'omakaseSubtitlesHide',
-  OMAKASE_TIMELINE_ZOOM: 'omakaseTimelineZoom',
-  OMAKASE_VIDEO_LOADING: 'omakaseVideoLoading',
-  OMAKASE_VIDEO_LOADED: 'omakaseVideoLoaded',
-  OMAKASE_VIDEO_PAUSE: 'omakaseVideoPause',
-  OMAKASE_VIDEO_PLAY: 'omakaseVideoPlay',
-  OMAKASE_VIDEO_SEEKED: 'omakaseVideoSeeked',
-  OMAKASE_VIDEO_SEEKING: 'omakaseVideoSeeking',
-  OMAKASE_VIDEO_BUFFERING: 'omakaseVideoBuffering',
-  OMAKASE_VIDEO_ENDED: 'omakaseVideoEnded',
-  OMAKASE_VIDEO_TIME_CHANGE: 'omakaseVideoTimeChange',
-  OMAKASE_VIDEO_AUDIO_SWITCHED: 'omakaseVideoAudioSwitched',
-  OMAKASE_AUDIO_SWITCHED: 'omakaseAudioSwitched',
-  OMAKASE_SUBTITLES_LOADED: 'omakaseSubtitlesLoaded',
-  OMAKASE_SUBTITLES_CREATE: 'omakaseSubtitlesCreate',
-  OMAKASE_SUBTITLES_REMOVE: 'omakaseSubtitlesRemove',
-  OMAKASE_SUBTITLES_SHOW: 'omakaseSubtitlesShow',
-  OMAKASE_TIMELINE_SCROLL: 'omakaseTimelineScroll',
-  OMAKASE_MARKER_LIST_ACTION: 'omakaseMarkerListAction',
-  OMAKASE_MARKER_LIST_CLICK: 'omakaseMarkerListClick',
-  OMAKASE_MARKER_LIST_DELETE: 'omakaseMarkerListDelete',
-  OMAKASE_MARKER_LIST_UPDATE: 'omakaseMarkerListUpdate',
-  OMAKASE_MARKER_LIST_CREATE: 'omakaseMarkerListCreate',
-  OMAKASE_MARKER_LIST_INIT: 'omakaseMarkerListInit',
-};
+export interface OmpEvent {}
 
-export type OmakasePlayerEventsType = OmakasePlayerEventsMappingType<OmakasePlayerEventMap>;
-
-export type OmakasePlayerEventsMappingType<T> = {
-  [K in keyof T as Uppercase<CamelToSnakeCase<string & K>>]: K;
-};
-
-export type OmakasePlayerEventMap = VideoEventMap & AudioEventMap & SubtitlesEventMap & TimelineEventMap & MarkerListEventMap;
-
-export type VideoEventMap = {
-  omakaseVideoLoading: VideoLoadingEvent;
-  omakaseVideoLoaded: VideoLoadedEvent | undefined;
-  omakaseVideoPlay: VideoPlayEvent;
-  omakaseVideoPause: VideoPlayEvent;
-  omakaseVideoTimeChange: VideoTimeChangeEvent;
-  omakaseVideoSeeking: VideoSeekingEvent;
-  omakaseVideoSeeked: VideoSeekedEvent;
-  omakaseVideoEnded: VideoEndedEvent;
-  omakaseVideoAudioSwitched: AudioEvent;
-  omakaseVideoBuffering: VideoBufferingEvent;
-};
-
-export type AudioEventMap = {
-  omakaseAudioSwitched: AudioEvent;
-  // TODO omakaseAudioLoaded event
-};
-
-export type SubtitlesEventMap = {
-  omakaseSubtitlesLoaded: SubtitlesLoadedEvent | undefined;
-  omakaseSubtitlesCreate: SubtitlesCreateEvent;
-  omakaseSubtitlesRemove: SubtitlesEvent;
-  omakaseSubtitlesShow: SubtitlesEvent;
-  omakaseSubtitlesHide: SubtitlesEvent;
-};
-
-export type TimelineEventMap = {
-  omakaseTimelineScroll: TimelineScrollEvent;
-  omakaseTimelineZoom: TimelineZoomEvent;
-};
-
-export type MarkerListEventMap = {
-  omakaseMarkerListAction: MarkerListActionEvent;
-  omakaseMarkerListClick: MarkerListClickEvent;
-  omakaseMarkerListDelete: MarkerListDeleteEvent;
-  omakaseMarkerListUpdate: MarkerListUpdateEvent;
-  omakaseMarkerListInit: MarkerListInitEvent;
-  omakaseMarkerListCreate: MarkerListCreateEvent;
-};
-
-export interface OmakaseEvent {}
-
-export interface OmakaseCancelableEvent {
+export interface OmpCancelableEvent {
   cancelableEvent: {
     cancelBubble: boolean;
   };
@@ -109,27 +33,27 @@ export interface OmakaseCancelableEvent {
 
 // region general
 
-export interface OmakaseMouseEvent extends OmakaseEvent, OmakaseCancelableEvent {
+export interface OmpMouseEvent extends OmpEvent, OmpCancelableEvent {
   mouseEvent: MouseEvent;
 }
 
-export interface ClickEvent extends OmakaseMouseEvent {}
+export interface ClickEvent extends OmpMouseEvent {}
 
-export interface MouseEnterEvent extends OmakaseMouseEvent {}
+export interface MouseEnterEvent extends OmpMouseEvent {}
 
-export interface MouseMoveEvent extends OmakaseMouseEvent {}
+export interface MouseMoveEvent extends OmpMouseEvent {}
 
-export interface MouseLeaveEvent extends OmakaseMouseEvent {}
+export interface MouseLeaveEvent extends OmpMouseEvent {}
 
-export interface MouseOutEvent extends OmakaseMouseEvent {}
+export interface MouseOutEvent extends OmpMouseEvent {}
 
-export interface MouseOverEvent extends OmakaseMouseEvent {}
+export interface MouseOverEvent extends OmpMouseEvent {}
 
 // endregion
 
 // region video
 
-export interface VideoEvent extends OmakaseEvent {}
+export interface VideoEvent extends OmpEvent {}
 
 export interface VideoLoadingEvent extends VideoEvent {
   sourceUrl: string;
@@ -262,7 +186,7 @@ export interface VideoErrorEvent extends VideoEvent {
   message?: string;
 }
 
-export interface AudioEvent extends OmakaseEvent {}
+export interface AudioEvent extends OmpEvent {}
 
 export interface AudioLoadedEvent extends AudioEvent {
   /**
@@ -305,7 +229,7 @@ export interface AudioPeakProcessorWorkletNodeMessageEvent extends AudioEvent {
 
 // region subtitles
 
-export interface SubtitlesEvent extends OmakaseEvent {
+export interface SubtitlesEvent extends OmpEvent {
   tracks: SubtitlesVttTrack[];
   currentTrack: SubtitlesVttTrack | undefined;
 }
@@ -314,7 +238,7 @@ export interface SubtitlesLoadedEvent extends SubtitlesEvent {}
 
 export interface SubtitlesCreateEvent extends SubtitlesEvent {}
 
-export interface SubtitlesChartEvent extends OmakaseEvent {
+export interface SubtitlesChartEvent extends OmpEvent {
   cue?: OmakaseTextTrackCue;
 }
 
@@ -322,7 +246,7 @@ export interface SubtitlesChartEvent extends OmakaseEvent {
 
 // region timeline
 
-export interface TimelineEvent extends OmakaseEvent {}
+export interface TimelineEvent extends OmpEvent {}
 
 export interface TimelineReadyEvent extends TimelineEvent {}
 
@@ -355,7 +279,7 @@ export interface PlayheadMoveEvent extends TimelineEvent {
 
 // region scrollbar
 
-export interface ScrollbarEvent extends OmakaseEvent {}
+export interface ScrollbarEvent extends OmpEvent {}
 
 export interface ScrollbarScrollEvent extends ScrollbarEvent {
   scrollPercent: number;
@@ -370,7 +294,7 @@ export interface ScrollbarZoomEvent extends ScrollbarEvent {
 
 // region thumbnail
 
-export interface ThumbnailEvent extends OmakaseEvent {
+export interface ThumbnailEvent extends OmpEvent {
   thumbnail: Thumbnail;
 }
 
@@ -378,7 +302,7 @@ export interface ThumbnailEvent extends OmakaseEvent {
 
 // region marker
 
-export interface MarkerEvent extends OmakaseEvent {}
+export interface MarkerEvent extends OmpEvent {}
 
 export interface MarkerChangeEvent extends MarkerEvent {}
 
@@ -418,7 +342,7 @@ export interface PeriodMarkerChangeEvent extends MarkerChangeEvent {
 
 // region charts
 
-export interface ChartEvent extends OmakaseEvent {}
+export interface ChartEvent extends OmpEvent {}
 
 export interface ChartCueEvent extends ChartEvent {
   cue: OmakaseChartCue;
@@ -428,7 +352,7 @@ export interface ChartCueEvent extends ChartEvent {
 
 // region marker list
 
-export interface MarkerListEvent extends OmakaseEvent {}
+export interface MarkerListEvent extends OmpEvent {}
 
 export interface MarkerListClickEvent extends MarkerListEvent {
   marker: MarkerApi;
@@ -461,4 +385,25 @@ export interface MarkerListSelectedEvent extends MarkerListEvent {
 
 export interface ThumnbailVttUrlChangedEvent extends VideoEvent {
   thumbnailVttUrl?: string;
+}
+
+export interface OmpNamedEvent extends OmpEvent {
+  eventName: OmpNamedEvents;
+}
+
+export interface OmpNamedEvent extends OmpEvent {
+  eventName: OmpNamedEvents;
+}
+
+export enum OmpNamedEvents {
+  hlsManifestParsed = 'hlsManifestParsed',
+  hlsMediaAttached = 'hlsMediaAttached',
+  hlsFragLoading = 'hlsFragLoading',
+  hlsFragLoaded = 'hlsFragLoaded',
+  hlsError = 'hlsError',
+}
+
+export interface OmpHlsNamedEvent extends OmpNamedEvent {
+  hlsEventName: HlsEvents;
+  data: any;
 }

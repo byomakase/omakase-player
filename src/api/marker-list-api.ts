@@ -15,7 +15,7 @@
  */
 
 import {Observable} from 'rxjs';
-import {MarkerVttFile} from '../vtt';
+import {MarkerVttFile, ThumbnailVttFile} from '../vtt';
 import {MarkerListActionEvent, MarkerListClickEvent, MarkerListSelectedEvent} from '../types';
 import {MarkerAwareApi} from './marker-aware-api';
 import {MarkerApi} from './marker-api';
@@ -40,6 +40,13 @@ export interface MarkerListApi extends MarkerAwareApi {
    * Fires after a marker list item is toggled on or off
    */
   onMarkerSelected$: Observable<MarkerListSelectedEvent>;
+
+  /**
+   * VTT file for generating thumbnail images
+   */
+  get thumbnailVttFile(): ThumbnailVttFile | undefined;
+
+  set thumbnailVttFile(thumbnailVttFile: ThumbnailVttFile | undefined);
 
   /**
    * Get currently active marker on the list

@@ -161,8 +161,9 @@ export class OmpBroadcastChannel implements Destroyable {
     try {
       this._broadcastChannel.postMessage(message);
     } catch (e) {
-      let errorMsg = `Failed sending message actionName=${message.actionName}, messageId=${message.messageId}`
-      console.debug(errorMsg)
+      console.debug(e);
+      let errorMsg = `Failed sending message actionName=${message.actionName}, messageId=${message.messageId}`;
+      console.debug(errorMsg);
       throw new OmpBroadcastChannelError(errorMsg);
     }
   }

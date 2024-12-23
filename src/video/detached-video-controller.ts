@@ -16,7 +16,7 @@
 
 import {VideoControllerApi} from './video-controller-api';
 import {TypedOmpBroadcastChannel} from '../common/omp-broadcast-channel';
-import {HandshakeChannelActionsMap, MessageChannelActionsMap} from './types';
+import {HandshakeChannelActionsMap, MessageChannelActionsMap} from './channel-types';
 import {BehaviorSubject, catchError, filter, interval, Observable, Subject, take, takeUntil, timeout, timer} from 'rxjs';
 import {Constants} from '../constants';
 import {CryptoUtil} from '../util/crypto-util';
@@ -32,6 +32,8 @@ import {
   AudioSwitchedEvent,
   AudioWorkletNodeCreatedEvent,
   HelpMenuGroup,
+  OmpNamedEvent,
+  OmpNamedEvents,
   OmpVideoWindowPlaybackError,
   SubtitlesCreateEvent,
   SubtitlesEvent,
@@ -54,8 +56,8 @@ import {
   VideoVolumeEvent,
   VideoWindowPlaybackStateChangeEvent,
 } from '../types';
-import {AudioInputOutputNode, AudioMeterStandard, PlaybackState, Video, VideoLoadOptions, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
-import {BufferedTimespan} from './video-controller';
+import {AudioInputOutputNode, AudioMeterStandard, BufferedTimespan, PlaybackState, Video, VideoLoadOptions, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
+import {VideoControllerConfig} from './video-controller';
 import Hls from 'hls.js';
 import {BlobUtil} from '../util/blob-util';
 // @ts-ignore
@@ -214,6 +216,8 @@ export class DetachedVideoController implements VideoControllerApi {
     if (this._videoController.isPlaying()) {
       this._videoController.pause();
     }
+
+    destroyer(this._handshakeChannel, this._messageChannel);
 
     OmakasePlayer.instance.alerts.error(`Connection to host window lost`);
 
@@ -458,11 +462,11 @@ export class DetachedVideoController implements VideoControllerApi {
       },
     });
 
-    this._videoController.onVideoWindowPlaybackStateChange$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
-      next: (value) => {
-        this._messageChannel!.send('VideoControllerApi.onVideoWindowPlaybackStateChange$', value);
-      },
-    });
+    // this._videoController.onVideoWindowPlaybackStateChange$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
+    //   next: (value) => {
+    //     this._messageChannel!.send('VideoControllerApi.onVideoWindowPlaybackStateChange$', value);
+    //   },
+    // });
 
     this._videoController.onSubtitlesLoaded$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
@@ -497,6 +501,18 @@ export class DetachedVideoController implements VideoControllerApi {
     this._videoController.onThumbnailVttUrlChanged$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onThumbnailVttUrlChanged$', value);
+      },
+    });
+
+    this._videoController.onActiveNamedEventStreamsChange$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
+      next: (value) => {
+        this._messageChannel!.send('VideoControllerApi.onActiveNamedEventStreamsChange$', value);
+      },
+    });
+
+    this._videoController.onNamedEvent$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
+      next: (value) => {
+        this._messageChannel!.send('VideoControllerApi.onNamedEvent$', value);
       },
     });
 
@@ -844,6 +860,30 @@ export class DetachedVideoController implements VideoControllerApi {
           sendResponseHook(this._videoController.loadThumbnailVttUrl(request[0]));
         },
       });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.updateActiveNamedEventStreams')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.updateActiveNamedEventStreams(request[0]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.getActiveNamedEventStreams')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.getActiveNamedEventStreams());
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.loadBlackVideo')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.loadBlackVideo());
+        },
+      });
   }
 
   private isPermissionsCheck(error: any): boolean {
@@ -857,7 +897,7 @@ export class DetachedVideoController implements VideoControllerApi {
 
   // region provider mappings
 
-  get onVideoLoaded$(): BehaviorSubject<VideoLoadedEvent | undefined> {
+  get onVideoLoaded$(): Observable<VideoLoadedEvent | undefined> {
     return this._videoController.onVideoLoaded$;
   }
 
@@ -969,8 +1009,16 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.onAudioWorkletNodeCreated$;
   }
 
-  get onThumbnailVttUrlChanged$(): Observable<ThumnbailVttUrlChangedEvent | undefined> {
+  get onThumbnailVttUrlChanged$(): Observable<ThumnbailVttUrlChangedEvent> {
     return this._videoController.onThumbnailVttUrlChanged$;
+  }
+
+  get onActiveNamedEventStreamsChange$(): Observable<OmpNamedEvents[]> {
+    return this._videoController.onActiveNamedEventStreamsChange$;
+  }
+
+  get onNamedEvent$(): Observable<OmpNamedEvent> {
+    return this._videoController.onNamedEvent$;
   }
 
   addSafeZone(videoSafeZone: VideoSafeZone): Observable<VideoSafeZone> {
@@ -1047,10 +1095,6 @@ export class DetachedVideoController implements VideoControllerApi {
 
   getHelpMenuGroups(): HelpMenuGroup[] {
     return this._videoController.getHelpMenuGroups();
-  }
-
-  getHls(): Hls | undefined {
-    return this._videoController.getHls();
   }
 
   getPlaybackRate(): number {
@@ -1213,16 +1257,21 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.getVideoWindowPlaybackState();
   }
 
-  isDetachVideoWindowEnabled(): boolean {
-    return this._videoController.isDetachVideoWindowEnabled();
+  isDetachable(): boolean {
+    return this._videoController.isDetachable();
+  }
+
+  canDetach(): boolean {
+    return this._videoController.canDetach();
   }
 
   detachVideoWindow(): Observable<void> {
     return this._videoController.detachVideoWindow();
   }
 
-  isAttachVideoWindowEnabled(): boolean {
-    return true;
+  canAttach(): boolean {
+    // controller VideoWindowPlaybackState is 'attached' as we're "in local" Detached controller, so we have to take that out of condition
+    return this.isVideoLoaded();
   }
 
   // sent to host
@@ -1316,5 +1365,25 @@ export class DetachedVideoController implements VideoControllerApi {
 
   disablePiP(): Observable<void> {
     return this._videoController.disablePiP();
+  }
+
+  getConfig(): VideoControllerConfig {
+    return this._videoController.getConfig();
+  }
+
+  getHls(): Hls | undefined {
+    return this._videoController.getHls();
+  }
+
+  updateActiveNamedEventStreams(eventNames: OmpNamedEvents[]): Observable<void> {
+    return this._videoController.updateActiveNamedEventStreams(eventNames);
+  }
+
+  getActiveNamedEventStreams(): OmpNamedEvents[] {
+    return this._videoController.getActiveNamedEventStreams();
+  }
+
+  loadBlackVideo(): Observable<Video> {
+    return this._videoController.loadBlackVideo();
   }
 }

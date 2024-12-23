@@ -16,16 +16,16 @@
 
 import {VideoControllerApi} from './video-controller-api';
 import {concat, filter, forkJoin, Observable, Subject, take, takeUntil, timeout, timer} from 'rxjs';
-import {nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
+import {errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {destroyer} from '../util/destroy-util';
 import {TypedOmpBroadcastChannel} from '../common/omp-broadcast-channel';
 import {RemoteVideoController} from './remote-video-controller';
 import {Constants} from '../constants';
 import {SwitchableVideoController} from './switchable-video-controller';
 import {WindowUtil} from '../util/window-util';
-import {HandshakeChannelActionsMap, MessageChannelActionsMap} from './types';
+import {HandshakeChannelActionsMap, MessageChannelActionsMap} from './channel-types';
 import {AudioInputOutputNode, Video, VideoLoadOptions, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
-import {AudioWorkletNodeCreatedEvent, HelpMenuGroup, OmakaseAudioTrack, SubtitlesVttTrack} from '../types';
+import {AudioWorkletNodeCreatedEvent, HelpMenuGroup, OmakaseAudioTrack, OmpError, OmpNamedEvents, SubtitlesVttTrack} from '../types';
 import {CryptoUtil} from '../util/crypto-util';
 import {StringUtil} from '../util/string-util';
 
@@ -45,6 +45,7 @@ interface VideoControllerState {
   audioInputOutputNodes: AudioInputOutputNode[][];
   audioWorkletNodeCreatedEvent: AudioWorkletNodeCreatedEvent | undefined;
   thumbnailVttUrl: string | undefined;
+  activeNamedEventStreams: OmpNamedEvents[];
 }
 
 export interface DetachableVideoControllerConfig {
@@ -74,6 +75,8 @@ export class DetachableVideoController extends SwitchableVideoController {
   protected _remoteVideoController?: VideoControllerApi;
 
   protected _videoWindowPlaybackState: VideoWindowPlaybackState = 'attached';
+  protected _isDetachInProgress = false;
+  protected _isAttachInProgress = false;
 
   protected _lastHeartbeatTime?: number;
   protected _heartbeatFailuresNumber = 0;
@@ -111,12 +114,16 @@ export class DetachableVideoController extends SwitchableVideoController {
     });
   }
 
-  override isDetachVideoWindowEnabled(): boolean {
+  override isDetachable(): boolean {
     return !StringUtil.isNullUndefinedOrWhitespace(this._config.detachedPlayerUrl);
   }
 
-  override isAttachVideoWindowEnabled(): boolean {
-    return this.isDetachVideoWindowEnabled();
+  override canDetach(): boolean {
+    return this.isVideoLoaded() && this.getVideoWindowPlaybackState() === 'attached' && !this._isDetachInProgress && this.isDetachable();
+  }
+
+  override canAttach(): boolean {
+    return this.isVideoLoaded() && this.getVideoWindowPlaybackState() === 'detached' && !this._isAttachInProgress && this.isDetachable();
   }
 
   override getVideoWindowPlaybackState(): VideoWindowPlaybackState {
@@ -125,116 +132,145 @@ export class DetachableVideoController extends SwitchableVideoController {
 
   override detachVideoWindow(): Observable<void> {
     return passiveObservable((observer) => {
-      if (!this.isDetachVideoWindowEnabled()) {
-        throw new Error('Detaching is not enabled. Try setting detachPlayerUrl config');
-      }
+      if (this._isDetachInProgress) {
+        console.debug(`Detach in progress, exiting gracefully..`);
+        nextCompleteObserver(observer);
+      } else if (this.canDetach()) {
+        this._isDetachInProgress = true;
 
-      if (!this.isVideoLoaded()) {
-        throw new Error('Video not loaded');
-      }
+        let handleDetachError = (err: any) => {
+          errorCompleteObserver(observer, err);
+          this._isDetachInProgress = false;
+        };
 
-      if (this.getVideoWindowPlaybackState() !== 'attached') {
-        throw new Error('Video has to be attached to be able to detach');
-      }
-
-      if (this.isFullscreen()) {
-        this.toggleFullscreen();
-      }
-
-      let isDetachVideoWindowPossible = () => {
-        return this.getPlaybackState() && !this.getPlaybackState()!.seeking && !this.getPlaybackState()!.waiting && !this.getPlaybackState()!.buffering;
-      };
-
-      let proceedDetachVideoWindow = () => {
-        this.setVideoWindowPlaybackState('detaching');
-
-        this._detachedWindow = WindowUtil.open(this._config.detachedPlayerUrl!, this._config.detachedPlayerWindowTarget, this._config.detachedPlayerWindowFeatures);
-        if (!this._detachedWindow) {
-          throw new Error(`Error occurred while opening detached window`);
+        if (this.isFullscreen()) {
+          try {
+            this.toggleFullscreen();
+          } catch (e) {
+            console.debug(e);
+          }
         }
 
-        this.resetHandshakeChannel();
+        let prerequisitesSatisfied = () => {
+          return !!this.getPlaybackState() && !this.getPlaybackState()!.seeking && !this.getPlaybackState()!.waiting && !this.getPlaybackState()!.buffering;
+        };
 
-        // receiving connect message from detached window
-        this._handshakeChannel
-          .createRequestResponseStream('DetachedControllerProxy.connect')
-          .pipe(take(1), takeUntil(this._handshakeChannelBreaker$), takeUntil(this._destroyed$))
-          .subscribe({
-            next: ([request, sendResponseHook]) => {
-              let proxyId = request.proxyId;
+        let proceedDetachVideoWindow = () => {
+          this.setVideoWindowPlaybackState('detaching');
 
-              console.debug(`Connect received from proxy id: ${proxyId}`);
+          this._detachedWindow = WindowUtil.open(this._config.detachedPlayerUrl!, this._config.detachedPlayerWindowTarget, this._config.detachedPlayerWindowFeatures);
+          if (!this._detachedWindow) {
+            throw new Error(`Error occurred while opening detached window`);
+          }
 
-              let messageChannel = new TypedOmpBroadcastChannel<MessageChannelActionsMap>(CryptoUtil.uuid());
+          this.resetHandshakeChannel();
 
-              console.debug(`Message channel created, channelId: ${messageChannel.channelId}`);
+          // receiving connect message from detached window
+          this._handshakeChannel
+            .createRequestResponseStream('DetachedControllerProxy.connect')
+            .pipe(take(1), takeUntil(this._handshakeChannelBreaker$), takeUntil(this._destroyed$))
+            .subscribe({
+              next: ([request, sendResponseHook]) => {
+                let proxyId = request.proxyId;
 
-              sendResponseHook({
-                proxyId: proxyId,
-                messageChannelId: messageChannel.channelId,
-              });
+                console.debug(`Connect received from proxy id: ${proxyId}`);
 
-              this._handshakeChannel
-                .createRequestResponseStream(`DetachedControllerProxy.connected`)
-                .pipe(filter(([request, sendResponseHook]) => request.proxyId === proxyId))
-                .pipe(takeUntil(this._handshakeChannelBreaker$), take(1))
-                .subscribe({
-                  next: ([request, sendResponseHook]) => {
-                    console.debug(`Connection established with proxyId: ${proxyId}`);
+                let messageChannel = new TypedOmpBroadcastChannel<MessageChannelActionsMap>(CryptoUtil.uuid());
 
-                    this._remoteVideoController = new RemoteVideoController(messageChannel, () => {
-                      return this.attachVideoWindowRemoteControllerHook();
-                    });
+                console.debug(`Message channel created, channelId: ${messageChannel.channelId}`);
 
-                    this.switchToControllerRestoreState(this._remoteVideoController, this.captureCurrentState()).subscribe({
-                      next: () => {
-                        nextCompleteObserver(observer);
-
-                        sendResponseHook({
-                          proxyId: proxyId,
-                        });
-
-                        this._lastHeartbeatTime = new Date().getTime();
-                        this._handshakeChannel
-                          .createRequestResponseStream(`DetachedControllerProxy.heartbeat`)
-                          .pipe(filter(([request, sendResponseHook]) => request.proxyId === proxyId))
-                          .pipe(takeUntil(this._handshakeChannelBreaker$))
-                          .subscribe({
-                            next: ([request, sendResponseHook]) => {
-                              let heartbeatTime = new Date().getTime();
-                              sendResponseHook({
-                                proxyId: proxyId,
-                                heartbeat: request.heartbeat,
-                              });
-                              this._lastHeartbeatTime = heartbeatTime;
-                              this._heartbeatFailuresNumber = 0;
-                              // console.debug('Heartbeat', heartbeatTime)
-                            },
-                          });
-                        this.startHeartbeatCheckLoop();
-                      },
-                    });
-                  },
+                sendResponseHook({
+                  proxyId: proxyId,
+                  messageChannelId: messageChannel.channelId,
                 });
+
+                this._handshakeChannel
+                  .createRequestResponseStream(`DetachedControllerProxy.connected`)
+                  .pipe(filter(([request, sendResponseHook]) => request.proxyId === proxyId))
+                  .pipe(takeUntil(this._handshakeChannelBreaker$), take(1))
+                  .subscribe({
+                    next: ([request, sendResponseHook]) => {
+                      console.debug(`Connection established with proxyId: ${proxyId}`);
+
+                      this._remoteVideoController = new RemoteVideoController(messageChannel, () => {
+                        return this.attachVideoWindowRemoteControllerHook();
+                      });
+
+                      this.switchToControllerRestoreState(this._remoteVideoController, this.captureCurrentState()).subscribe({
+                        next: () => {
+                          nextCompleteObserver(observer);
+                          this._isDetachInProgress = false;
+
+                          sendResponseHook({
+                            proxyId: proxyId,
+                          });
+
+                          this._lastHeartbeatTime = new Date().getTime();
+                          this._handshakeChannel
+                            .createRequestResponseStream(`DetachedControllerProxy.heartbeat`)
+                            .pipe(filter(([request, sendResponseHook]) => request.proxyId === proxyId))
+                            .pipe(takeUntil(this._handshakeChannelBreaker$))
+                            .subscribe({
+                              next: ([request, sendResponseHook]) => {
+                                let heartbeatTime = new Date().getTime();
+                                sendResponseHook({
+                                  proxyId: proxyId,
+                                  heartbeat: request.heartbeat,
+                                });
+                                this._lastHeartbeatTime = heartbeatTime;
+                                this._heartbeatFailuresNumber = 0;
+                                // console.debug('Heartbeat', heartbeatTime)
+                              },
+                            });
+                          this.startHeartbeatCheckLoop();
+                        },
+
+                        error: (err) => handleDetachError(err),
+                      });
+                    },
+                    error: (err) => handleDetachError(err),
+                  });
+              },
+              error: (err) => handleDetachError(err),
+            });
+        };
+
+        let breaker$ = new Subject<void>();
+        timer(0, 10)
+          .pipe(takeUntil(breaker$))
+          .subscribe({
+            next: (value) => {
+              if (prerequisitesSatisfied()) {
+                if (!breaker$.closed) {
+                  nextCompleteSubject(breaker$);
+                  proceedDetachVideoWindow();
+                }
+              } else {
+                console.debug(`Waiting until video detach preconditions are met.. ${value}`);
+              }
             },
           });
-      };
+      } else {
+        let message = `Cannot detach. `;
 
-      let breaker$ = new Subject<void>();
-      timer(0, 10)
-        .pipe(takeUntil(breaker$))
-        .subscribe({
-          next: (value) => {
-            if (isDetachVideoWindowPossible()) {
-              if (!breaker$.closed) {
-                nextCompleteSubject(breaker$);
-                proceedDetachVideoWindow();
-              }
-            } else {
-              console.debug(`Waiting until video detach preconditions are met.. ${value}`);
-            }
-          },
-        });
+        if (!this.isVideoLoaded()) {
+          message = `${message} Video not loaded.`;
+        }
+
+        if (this._isDetachInProgress) {
+          message = `${message} Detach in progress.`;
+        }
+
+        if (!this.isDetachable()) {
+          message = `${message} Player is not detachable. Check config.`;
+        }
+
+        if (this.getVideoWindowPlaybackState() !== 'attached') {
+          message = `${message} Video has to be attached.`;
+        }
+
+        errorCompleteObserver(observer, new OmpError(message));
+      }
     });
   }
 
@@ -243,67 +279,75 @@ export class DetachableVideoController extends SwitchableVideoController {
   }
 
   override attachVideoWindow(): Observable<void> {
-    return passiveObservable(observer => {
-      // it's important to capture state before controller switch or RemoteVideoController destruction
-      let state = this.captureCurrentState();
-
-      this.pause() // called on RemoteVideoController
-        .pipe(timeout(500)) // pause() will timeout if RemoteVideoController cannot get response from DetachedVideoController (window is closed before attachVideoWindow() resolved)
-        .subscribe({
-          next: () => {
-            this.closeDetachedWindow().subscribe({
-              error: (err) => {
-                console.debug(err)
-              }
-            })
-
-            this.attachVideoWindowRestoreState(state).subscribe({
-              next: () => {
-                nextCompleteObserver(observer)
-              }
-            })
-
-          },
-          error: (error) => {
-            if (error.name === 'TimeoutError') {
-              console.debug(error);
-              this.handleAttachDetachError();
-            } else {
-              console.error(error);
-            }
-          },
-        });
-
-    })
-  }
-
-  protected attachVideoWindowRestoreState(state: VideoControllerState): Observable<void> {
     return passiveObservable((observer) => {
-      if (!this.isAttachVideoWindowEnabled()) {
-        throw new Error('Attaching is not enabled. Try setting detachPlayerUrl config');
-      }
+      if (this._isAttachInProgress) {
+        console.debug(`Attach in progress, exiting gracefully..`);
+        nextCompleteObserver(observer);
+      } else if (this.canAttach()) {
+        this._isAttachInProgress = true;
 
-      if (this.isVideoLoaded()) {
-        if (this.getVideoWindowPlaybackState() === 'attached') {
-          throw new Error('I think video is already attached');
+        let handleAttachError = (error: any) => {
+          console.debug(error);
+          this.handleAttachDetachError();
+          nextCompleteObserver(observer);
+          this._isAttachInProgress = false;
+        };
+
+        // it's important to capture state before controller switch or RemoteVideoController destruction
+        let state = this.captureCurrentState();
+
+        this.pause() // called on RemoteVideoController
+          .pipe(timeout(500)) // pause() will timeout if RemoteVideoController cannot get response from DetachedVideoController (window is closed before attachVideoWindow() resolved)
+          .subscribe({
+            next: () => {
+              this.closeDetachedWindow().subscribe({
+                error: (err) => {
+                  console.debug(err);
+                },
+              });
+
+              this.setVideoWindowPlaybackState('attaching');
+
+              this.switchToControllerRestoreState(this._localVideoController, state).subscribe({
+                next: () => {
+                  nextCompleteObserver(observer);
+                  this._isAttachInProgress = false;
+                },
+                error: (error) => {
+                  handleAttachError(error);
+                },
+              });
+            },
+            error: (error) => {
+              handleAttachError(error);
+            },
+          });
+      } else {
+        let message = `Cannot attach. `;
+
+        if (!this.isVideoLoaded()) {
+          message = `${message} Video not loaded.`;
         }
 
-        this.setVideoWindowPlaybackState('attaching');
+        if (this._isAttachInProgress) {
+          message = `${message} Attach in progress.`;
+        }
 
-        this.switchToControllerRestoreState(this._localVideoController, state).subscribe({
-          next: () => {
-            nextCompleteObserver(observer);
-          },
-        });
-      } else {
-        nextCompleteObserver(observer);
+        if (!this.isDetachable()) {
+          message = `${message} Player is not detachable. Check config.`;
+        }
+
+        if (this.getVideoWindowPlaybackState() !== 'detached') {
+          message = `${message} Video has to be detached.`;
+        }
+
+        errorCompleteObserver(observer, new OmpError(message));
       }
     });
   }
 
   protected closeDetachedWindow(): Observable<void> {
-    return passiveObservable(observer => {
-
+    return passiveObservable((observer) => {
       this.resetHandshakeChannel();
       if (this._detachedWindow) {
         try {
@@ -325,21 +369,15 @@ export class DetachableVideoController extends SwitchableVideoController {
 
       // return immediately, this will enable closing window ASAP
       nextCompleteObserver(observer);
-    })
+    });
   }
 
   private switchToControllerRestoreState(videoController: VideoControllerApi, state: VideoControllerState): Observable<void> {
     return new Observable((observer) => {
-      // let previousState = this.captureCurrentState();
       this.pause()
         .pipe(timeout(500)) // pause() will timeout if RemoteVideoController cannot get response from DetachedVideoController (window is closed before attachVideoWindow() resolved)
         .subscribe({
           next: () => {
-            // let state = {
-            //   ...this.captureCurrentState(),
-            //   isPlaying: previousState.isPlaying,
-            // };
-
             this.switchToController(videoController);
 
             this.restoreState(state).subscribe({
@@ -421,10 +459,32 @@ export class DetachableVideoController extends SwitchableVideoController {
       audioInputOutputNodes: this.getAudioInputOutputNodes(),
       audioWorkletNodeCreatedEvent: this.onAudioWorkletNodeCreated$.value,
       thumbnailVttUrl: this.getThumbnailVttUrl(),
+      activeNamedEventStreams: this.getActiveNamedEventStreams(),
     };
   }
 
   private restoreState(state: VideoControllerState) {
+    let beforeVideoLoads$: Observable<void>[] = [];
+    let afterVideoLoads$: Observable<void>[] = [];
+
+    let addBeforeVideoLoad = (o$: Observable<any>) => {
+      beforeVideoLoads$.push(o$);
+    };
+
+    let addAfterVideoLoad = (o$: Observable<any>) => {
+      afterVideoLoads$.push(o$);
+    };
+
+    addBeforeVideoLoad(
+      new Observable((observer) => {
+        this.updateActiveNamedEventStreams(state.activeNamedEventStreams).subscribe({
+          next: () => {
+            nextCompleteObserver(observer);
+          },
+        });
+      })
+    );
+
     let loadVideo$ = new Observable((observer) => {
       if (JSON.stringify(this.getVideo()) !== JSON.stringify(state.video) || JSON.stringify(this.getVideoLoadOptions()) !== JSON.stringify(state.videoLoadOptions)) {
         let optionsInternal: VideoLoadOptionsInternal = {
@@ -441,13 +501,7 @@ export class DetachableVideoController extends SwitchableVideoController {
       }
     });
 
-    let os$: Observable<void>[] = [];
-
-    let addObservable = (o$: Observable<any>) => {
-      os$.push(o$);
-    };
-
-    addObservable(
+    addAfterVideoLoad(
       new Observable((observer) => {
         this.seekToTime(state.currentTime).subscribe({
           next: () => {
@@ -473,7 +527,7 @@ export class DetachableVideoController extends SwitchableVideoController {
       })
     );
 
-    addObservable(
+    addAfterVideoLoad(
       new Observable((observer) => {
         this.onSubtitlesLoaded$
           .pipe(
@@ -539,7 +593,7 @@ export class DetachableVideoController extends SwitchableVideoController {
       })
     );
 
-    addObservable(
+    addAfterVideoLoad(
       new Observable((observer) => {
         this.onAudioLoaded$.pipe(take(1), timeout(60000)).subscribe({
           next: (event) => {
@@ -556,7 +610,7 @@ export class DetachableVideoController extends SwitchableVideoController {
       })
     );
 
-    addObservable(
+    addAfterVideoLoad(
       new Observable((observer) => {
         forkJoin([this.clearSafeZones(), ...state.videoSafeZones.map((p) => this.addSafeZone(p))]).subscribe({
           next: () => {
@@ -566,7 +620,7 @@ export class DetachableVideoController extends SwitchableVideoController {
       })
     );
 
-    addObservable(
+    addAfterVideoLoad(
       new Observable((observer) => {
         forkJoin([this.clearHelpMenuGroups(), ...state.helpMenuGroups.map((p) => this.appendHelpMenuGroup(p))]).subscribe({
           next: () => {
@@ -576,7 +630,7 @@ export class DetachableVideoController extends SwitchableVideoController {
       })
     );
 
-    addObservable(
+    addAfterVideoLoad(
       new Observable((observer) => {
         this.setVolume(state.volume).subscribe({
           next: () => {
@@ -598,7 +652,7 @@ export class DetachableVideoController extends SwitchableVideoController {
       })
     );
 
-    addObservable(
+    addAfterVideoLoad(
       new Observable((observer) => {
         if (state.audioInputOutputNodes.length > 0 && state.audioInputOutputNodes[0] && state.audioInputOutputNodes[0].length > 0) {
           let inputsNumber = state.audioInputOutputNodes.length;
@@ -628,7 +682,7 @@ export class DetachableVideoController extends SwitchableVideoController {
       })
     );
 
-    addObservable(
+    addAfterVideoLoad(
       new Observable((observer) => {
         if (state.thumbnailVttUrl) {
           this.loadThumbnailVttUrl(state.thumbnailVttUrl).subscribe({
@@ -642,7 +696,13 @@ export class DetachableVideoController extends SwitchableVideoController {
       })
     );
 
-    return concat(loadVideo$, forkJoin(os$));
+    return new Observable((observer) => {
+      concat(forkJoin(beforeVideoLoads$), loadVideo$, forkJoin(afterVideoLoads$)).subscribe({
+        complete: () => {
+          nextCompleteObserver(observer);
+        },
+      });
+    });
   }
 
   override destroy() {

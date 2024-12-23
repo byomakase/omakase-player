@@ -15,6 +15,9 @@
  */
 
 import {BehaviorSubject, Subject} from 'rxjs';
+import {VideoLoader} from './video-loader';
+
+export type VideoProtocol = 'hls' | 'native';
 
 export interface Video {
   sourceUrl: string;
@@ -211,6 +214,11 @@ export interface VideoLoadOptions {
    * Is frame rate with drop frame or not
    */
   dropFrame?: boolean;
+
+  /**
+   * Set to force video protocol loader, it will be set automatically otherwise
+   */
+  protocol?: VideoProtocol;
 }
 
 /**
@@ -276,3 +284,8 @@ export interface AudioInputOutputNode {
 }
 
 export type AudioMeterStandard = 'peak-sample' | 'true-peak';
+
+export interface BufferedTimespan {
+  start: number;
+  end: number;
+}

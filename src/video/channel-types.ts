@@ -94,6 +94,8 @@ export type MessageChannelActionsMap = OmpBroadcastChannelActionsMap<{
   'VideoControllerApi.onAudioPeakProcessorWorkletNodeMessage$': ExtractPropertyTypes<VideoControllerApi, 'onAudioPeakProcessorWorkletNodeMessage$'>;
   'VideoControllerApi.onAudioWorkletNodeCreated$': ExtractPropertyTypes<VideoControllerApi, 'onAudioWorkletNodeCreated$'>;
   'VideoControllerApi.onThumbnailVttUrlChanged$': ExtractPropertyTypes<VideoControllerApi, 'onThumbnailVttUrlChanged$'>;
+  'VideoControllerApi.onActiveNamedEventStreamsChange$': ExtractPropertyTypes<VideoControllerApi, 'onActiveNamedEventStreamsChange$'>;
+  'VideoControllerApi.onNamedEvent$': ExtractPropertyTypes<VideoControllerApi, 'onNamedEvent$'>;
 
   // method types
   'VideoControllerApi.loadVideoInternal': ExtractMethodTypes<VideoControllerApi, 'loadVideoInternal'>;
@@ -134,6 +136,9 @@ export type MessageChannelActionsMap = OmpBroadcastChannelActionsMap<{
   'VideoControllerApi.routeAudioInputOutputNodes': ExtractMethodTypes<VideoControllerApi, 'routeAudioInputOutputNodes'>;
   'VideoControllerApi.createAudioPeakProcessorWorkletNode': ExtractMethodTypes<VideoControllerApi, 'createAudioPeakProcessorWorkletNode'>;
   'VideoControllerApi.loadThumbnailVttUrl': ExtractMethodTypes<VideoControllerApi, 'loadThumbnailVttUrl'>;
+  'VideoControllerApi.updateActiveNamedEventStreams': ExtractMethodTypes<VideoControllerApi, 'updateActiveNamedEventStreams'>;
+  'VideoControllerApi.getActiveNamedEventStreams': ExtractMethodTypes<VideoControllerApi, 'getActiveNamedEventStreams'>;
+  'VideoControllerApi.loadBlackVideo': ExtractMethodTypes<VideoControllerApi, 'loadBlackVideo'>;
 
   // sent from DetachedVideoController to RemoteVideoController
   'VideoControllerApi.attachVideoWindow': ExtractMethodTypes<VideoControllerApi, 'attachVideoWindow'>;

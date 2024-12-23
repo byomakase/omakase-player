@@ -78,6 +78,7 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
         top: 0;
         bottom: 0;
         overflow: hidden;
+        margin: auto;
 
         .omakase-video-safe-zone {
           position: absolute;
@@ -124,7 +125,9 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
           z-index: 100;
           position: absolute;
           right: 0;
-          width: 400px;
+          width: 450px;
+          overflow-y: auto;
+          max-height: 215px;
 
           .omakase-help-group-title {
             background: rgba(2, 171, 141, 1);
@@ -133,22 +136,27 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
             color: #ffffff;
             font-weight: bold;
             text-align: left;
+
+            span {
+              height: 20px;
+              line-height: 20px;
+            }
           }
 
           .omakase-help-group {
-            overflow-y: scroll;
             display: block;
-            height: 200px;
             background: rgba(2, 171, 141, 0.2);
 
             .omakase-help-item {
-              display: list-item;
+              display: flex;
+              justify-content: space-between;
               padding: 5px 10px 5px 10px;
               color: #ffffff;
               //text-align: left;
 
               span {
-                //text-align: left;
+                height: 20px;
+                line-height: 20px;
               }
 
               &:hover {
@@ -312,17 +320,14 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
       display: grid !important;
     }
   }
+  .omakase-video-safe-zone-wrapper {
+    pointer-events: none;
+  }
 }
 
 :not(.omakase-player-detached) > .media-chrome-enabled {
-  .omakase-help {
-    display: none !important;
-  }
   .omakase-section-bottom-right {
     display: none !important;
-  }
-  .omakase-video-safe-zone-wrapper {
-    pointer-events: none;
   }
 }
 
@@ -334,6 +339,7 @@ media-controller {
   --media-control-background: transparent;
   --media-control-hover-background: transparent;
   --media-tooltip-display: none;
+  --media-background-color: transparent;
 
   --padding-size-default: 5px;
   --icon-size-default: 28px;

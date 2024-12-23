@@ -37,6 +37,7 @@ import 'media-chrome';
 import '../components';
 // @ts-ignore
 import silentWavBase64 from '../../assets/silent.wav.base64.txt?raw';
+import {HTMLVideoElementEventKeys} from './video-controller';
 
 const domClasses = {
   player: 'omakase-player',
@@ -180,10 +181,12 @@ export class VideoDomController implements VideoDomControllerApi {
   protected _showTemporaryOnMouseMoveTimeoutId?: ReturnType<typeof setTimeout>;
 
   protected _fullscreenChangeHandler: () => void;
+  protected _enterPictureInPictureHandler: () => void;
+  protected _leavePictureInPictureHandler: () => void;
 
   protected _videoSafeZones: VideoSafeZone[] = [];
 
-  protected _silentWavUrl?: string;
+  protected _silentWavUrl: string;
 
   constructor(config: Partial<VideoDomControllerConfig>) {
     this._config = {
@@ -197,7 +200,7 @@ export class VideoDomController implements VideoDomControllerApi {
       throw new Error(`DOM <div> for player not found. ID provided: ${this._config.playerHTMLElementId}`);
     }
 
-    this._silentWavUrl = `data:${'audio/wav'};base64,${silentWavBase64}`;
+    this._silentWavUrl = `data:${'audio/wav'};base64,${silentWavBase64}`
 
     this.createDom();
 
@@ -212,6 +215,14 @@ export class VideoDomController implements VideoDomControllerApi {
       });
     };
 
+    this._enterPictureInPictureHandler = () => {
+      this._buttonDetach!.className = domClasses.mediaChromeAttach;
+    };
+
+    this._leavePictureInPictureHandler = () => {
+      this._buttonDetach!.className = domClasses.mediaChromeDetach;
+    };
+
     Fullscreen.on('change', this._fullscreenChangeHandler);
   }
 
@@ -222,6 +233,14 @@ export class VideoDomController implements VideoDomControllerApi {
           <media-controller>
               <video slot="media" class="${domClasses.video}" playsinline=""></video>
               <div slot="centered-chrome" class="${domClasses.videoControls}" noautohide>
+                  <div class="${domClasses.safeZoneWrapper}"></div>
+                  <div class="${domClasses.help} d-none">
+                      <div class="omakase-help-dropdown">
+                        <button class="omakase-help-button d-none"></button>
+                        <div class="${domClasses.helpMenu} d-none">
+                        </div>
+                      </div>
+                  </div>
                   <div class="omakase-overlay-buttons">
                       <div class="${domClasses.buttonOverlayAttach} omakase-video-overlay-button"></div>
                       <div class="${domClasses.buttonOverlayPlay} omakase-video-overlay-button d-none"></div>
@@ -236,19 +255,6 @@ export class VideoDomController implements VideoDomControllerApi {
           <div class="${domClasses.detachedBackground} d-none">
           </div>
           <div class="${domClasses.backgroundImage} d-none"></div>
-
-          <div class="${domClasses.videoControls}">
-              <div class="${domClasses.safeZoneWrapper}">
-              </div>
-          </div>
-
-          <div class="${domClasses.help} d-none">
-              <div class="omakase-help-dropdown">
-                <button class="omakase-help-button d-none"></button>
-                <div class="${domClasses.helpMenu} d-none">
-                </div>
-              </div>
-          </div>
 
           <div class="${domClasses.sectionBottomRight} d-none">
               <button class="${domClasses.buttonAttach}"></button>
@@ -419,14 +425,13 @@ export class VideoDomController implements VideoDomControllerApi {
       this.showElements(this._divHelp);
       this._divHelpMenu.innerHTML = helpMenuGroups
         .map((helpMenuGroup) => {
-          let items = `${helpMenuGroup.items.map((helpMenuItem) => `<div class="omakase-help-item"><span class="float-start">${helpMenuItem.name}</span><span class="float-end">${helpMenuItem.description}</span></div>`).join('')}`;
+          let items = `${helpMenuGroup.items.map((helpMenuItem) => `<div class="omakase-help-item"><span>${helpMenuItem.name}</span><span>${helpMenuItem.description}</span></div>`).join('')}`;
           return `<div class="omakase-help-group">
-                            <div class="omakase-help-group-title">
-                              <span>${helpMenuGroup.name}</span>
-                            </div>
-                            ${items}
-                        </div>
-                        `;
+                      <div class="omakase-help-group-title">
+                        <span>${helpMenuGroup.name}</span>
+                      </div>
+                      ${items}
+                  </div>`;
         })
         .join('');
     } else {
@@ -579,6 +584,13 @@ export class VideoDomController implements VideoDomControllerApi {
     return this._videoSafeZones;
   }
 
+  setSafeZoneAspectRatio(aspectRatio: string): Observable<void> {
+    return passiveObservable((observer) => {
+      this._divSafeZoneWrapper.style.aspectRatio = aspectRatio;
+      nextCompleteObserver(observer);
+    });
+  }
+
   loadThumbnailVtt(vttUrl: string) {
     return passiveObservable((observer) => {
       const options: VttLoadOptions = {};
@@ -632,18 +644,10 @@ export class VideoDomController implements VideoDomControllerApi {
         });
     }
 
-    if (!videoController.isDetachVideoWindowEnabled() && this._buttonDetach) {
-      this._videoController.getHTMLVideoElement().addEventListener('enterpictureinpicture', (event) => {
-        if (event instanceof PictureInPictureEvent) {
-          this._buttonDetach!.className = domClasses.mediaChromeAttach;
-        }
-      });
+    if (!videoController.isDetachable() && this._buttonDetach) {
+      this._videoController.getHTMLVideoElement().addEventListener(HTMLVideoElementEventKeys.ENTERPIP, this._enterPictureInPictureHandler);
 
-      this._videoController.getHTMLVideoElement().addEventListener('leavepictureinpicture', (event) => {
-        if (event instanceof PictureInPictureEvent) {
-          this._buttonDetach!.className = domClasses.mediaChromeDetach;
-        }
-      });
+      this._videoController.getHTMLVideoElement().addEventListener(HTMLVideoElementEventKeys.LEAVEPIP, this._leavePictureInPictureHandler);
     }
 
     if (this._currentTimecode) {
@@ -709,7 +713,7 @@ export class VideoDomController implements VideoDomControllerApi {
             ) {
               if (this._videoController.getVideoWindowPlaybackState() !== 'detached') {
                 if (!this._videoController.isFullscreen() && this._config.mediaChrome !== 'enabled') {
-                  this._videoController.togglePlayPause().subscribe();
+                  this._videoController.togglePlayPause();
                 }
               } else {
                 this._videoController.attachVideoWindow();
@@ -724,7 +728,7 @@ export class VideoDomController implements VideoDomControllerApi {
         .pipe(takeUntil(this._videoEventBreaker$))
         .subscribe({
           next: (event) => {
-            this._videoController.seekNextFrame().subscribe();
+            this._videoController.seekNextFrame();
           },
         });
     }
@@ -733,7 +737,7 @@ export class VideoDomController implements VideoDomControllerApi {
         .pipe(takeUntil(this._videoEventBreaker$))
         .subscribe({
           next: (event) => {
-            this._videoController.seekPreviousFrame().subscribe();
+            this._videoController.seekPreviousFrame();
           },
         });
     }
@@ -742,7 +746,7 @@ export class VideoDomController implements VideoDomControllerApi {
         .pipe(takeUntil(this._videoEventBreaker$))
         .subscribe({
           next: (event) => {
-            this._videoController.seekFromCurrentFrame(10).subscribe();
+            this._videoController.seekFromCurrentFrame(10);
           },
         });
     }
@@ -751,7 +755,7 @@ export class VideoDomController implements VideoDomControllerApi {
         .pipe(takeUntil(this._videoEventBreaker$))
         .subscribe({
           next: (event) => {
-            this._videoController.seekFromCurrentFrame(-10).subscribe();
+            this._videoController.seekFromCurrentFrame(-10);
           },
         });
     }
@@ -760,8 +764,10 @@ export class VideoDomController implements VideoDomControllerApi {
         .pipe(takeUntil(this._videoEventBreaker$))
         .subscribe({
           next: (event) => {
-            if (this._videoController.isDetachVideoWindowEnabled()) {
-              this._videoController.detachVideoWindow();
+            if (this._videoController.isDetachable()) {
+              if (this._videoController.canDetach()) {
+                this._videoController.detachVideoWindow();
+              }
             } else {
               this.togglePIP();
             }
@@ -773,7 +779,9 @@ export class VideoDomController implements VideoDomControllerApi {
         .pipe(takeUntil(this._videoEventBreaker$))
         .subscribe({
           next: (event) => {
-            this._videoController.attachVideoWindow();
+            if (this._videoController.canAttach()) {
+              this._videoController.attachVideoWindow();
+            }
           },
         });
     }
@@ -977,6 +985,14 @@ export class VideoDomController implements VideoDomControllerApi {
 
     if (this._fullscreenChangeHandler) {
       Fullscreen.off('change', this._fullscreenChangeHandler);
+    }
+
+    if (this._enterPictureInPictureHandler) {
+      this._videoController.getHTMLVideoElement().removeEventListener(HTMLVideoElementEventKeys.ENTERPIP, this._enterPictureInPictureHandler);
+    }
+
+    if (this._leavePictureInPictureHandler) {
+      this._videoController.getHTMLVideoElement().removeEventListener(HTMLVideoElementEventKeys.LEAVEPIP, this._leavePictureInPictureHandler);
     }
 
     nullifier(this._videoController, this._videoElement);

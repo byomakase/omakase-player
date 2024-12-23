@@ -19,7 +19,6 @@ import Konva from 'konva';
 import {Constants} from '../constants';
 import {OnMeasurementsChange, Position} from '../common/measurement';
 import {Timeline} from './timeline';
-import {BufferedTimespan} from '../video/video-controller';
 import {BehaviorSubject, combineLatest, filter, merge, Subject, takeUntil} from 'rxjs';
 import {PlaybackState, VideoControllerApi} from '../video';
 import {KonvaFactory} from '../factory/konva-factory';
@@ -28,6 +27,7 @@ import {KonvaUtil} from '../util/konva-util';
 import {nextCompleteSubject} from '../util/rxjs-util';
 import {isNullOrUndefined} from '../util/object-util';
 import {PlayheadMoveEvent} from '../types';
+import {BufferedTimespan} from '../video/model';
 
 export interface PlayheadState {
   dragging: boolean;

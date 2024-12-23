@@ -17,20 +17,16 @@
 import {Timeline, TimelineConfig} from './timeline';
 import {forkJoin, Observable, Subject, takeUntil} from 'rxjs';
 import {AlertsApi, AudioApi, MarkerListApi, OmakasePlayerApi, SubtitlesApi, TimelineApi, VideoApi} from './api';
-import {VIDEO_HLS_CONTROLLER_CONFIG_DEFAULT, VideoHlsController} from './video/video-hls-controller';
 import {SubtitlesController} from './subtitles/subtitles-controller';
-import EventEmitter from 'eventemitter3';
-import {OmakaseEventKey, OmakaseEventListener} from './events';
-import {Destroyable, OmakasePlayerEventMap, OmakasePlayerEvents, OmakasePlayerEventsType} from './types';
+import {Destroyable, WithOptionalPartial} from './types';
 import {AudioController} from './audio/audio-controller';
 // we need to include styles in compilation process, thus import them
 import './../style/omakase-player.scss';
 import {nextCompleteSubject} from './util/rxjs-util';
-import {Video, VideoControllerApi, VideoLoadOptions} from './video';
+import {Video, VideoController, VideoControllerApi, VideoLoadOptions} from './video';
 import {destroyer, nullifier} from './util/destroy-util';
 import {HlsConfig} from 'hls.js';
 import {YogaProvider} from './common/yoga-provider';
-import {VideoNativeController} from './video/video-native-controller';
 import {AlertsController} from './alerts/alerts-controller';
 import {BlobUtil} from './util/blob-util';
 import {DetachableVideoController} from './video/detachable-video-controller';
@@ -42,8 +38,12 @@ import {ConfigWithOptionalStyle} from './layout';
 import {MarkerList, MarkerListConfig} from './marker-list/marker-list';
 import {AuthUtil} from './util/auth-util';
 import {AuthenticationData} from './authentication/model';
+import {VIDEO_CONTROLLER_CONFIG_DEFAULT} from './video/video-controller';
+import {VideoProtocol} from './video/model';
 
 export interface OmakasePlayerConfig {
+  protocol: VideoProtocol;
+
   playerHTMLElementId?: string;
   mediaChromeHTMLElementId?: string;
   crossorigin?: 'anonymous' | 'use-credentials';
@@ -51,7 +51,7 @@ export interface OmakasePlayerConfig {
   /**
    * HLS.js configuration
    */
-  hls?: Partial<HlsConfig>;
+  hlsConfig?: Partial<HlsConfig>;
 
   vttDownsamplePeriod?: number;
 
@@ -87,11 +87,10 @@ export interface OmakasePlayerConfig {
 }
 
 const configDefault: OmakasePlayerConfig = {
+  protocol: 'hls',
   playerHTMLElementId: VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT.playerHTMLElementId,
   crossorigin: VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT.crossorigin,
-  hls: {
-    ...VIDEO_HLS_CONTROLLER_CONFIG_DEFAULT.hls,
-  },
+  hlsConfig: VIDEO_CONTROLLER_CONFIG_DEFAULT.hlsConfig,
   detachedPlayer: false,
   mediaChrome: 'fullscreen-only',
 };
@@ -110,18 +109,13 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
 
   private _timeline?: Timeline;
 
-  private _eventEmitter = new EventEmitter();
   private _destroyed$ = new Subject<void>();
 
-  constructor(config?: OmakasePlayerConfig) {
-    this._config = config
-      ? {
-          ...configDefault,
-          ...config,
-        }
-      : {
-          ...configDefault,
-        };
+  constructor(config?: WithOptionalPartial<OmakasePlayerConfig, 'protocol'>) {
+    this._config = {
+      ...configDefault,
+      ...(config ? config : {}),
+    };
 
     if (this._config.detachedPlayer && !config?.mediaChrome) {
       this._config.mediaChrome = 'enabled';
@@ -148,18 +142,12 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
     });
 
     let createLocalVideoController = () => {
-      let loader: 'hls' | 'native' = 'hls'; // for now lets just use HLS
-
-      if (loader === 'hls') {
-        return new VideoHlsController(
-          {
-            hls: this._config.hls,
-          },
-          this._videoDomController
-        );
-      } else {
-        return new VideoNativeController({}, this._videoDomController);
-      }
+      return new VideoController(
+        {
+          hlsConfig: this._config.hlsConfig,
+        },
+        this._videoDomController
+      );
     };
 
     if (this._config.detachedPlayer) {
@@ -178,8 +166,6 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
 
     this._audioController = new AudioController(this._videoController);
     this._subtitlesController = new SubtitlesController(this._videoController);
-
-    this.bindEventHandlers();
   }
 
   setAuthentication(authentication: AuthenticationData) {
@@ -198,15 +184,6 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
     return new Observable<Timeline>((o$) => {
       let createTimeline = () => {
         this._timeline = new Timeline(config, this._videoController);
-
-        // bind timeline event handlers
-        this._timeline.onScroll$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-          this.emit('omakaseTimelineScroll', event);
-        });
-
-        this._timeline.onZoom$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-          this.emit('omakaseTimelineZoom', event);
-        });
       };
 
       let yogaLayoutReady$ = new Subject<void>();
@@ -234,31 +211,6 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
     return new Observable<MarkerList>((o$) => {
       const markerList = new MarkerList(config, this._videoController);
 
-      // bind marker list event handlers
-      markerList.onMarkerAction$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-        this.emit('omakaseMarkerListAction', event);
-      });
-
-      markerList.onMarkerClick$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-        this.emit('omakaseMarkerListClick', event);
-      });
-
-      markerList.onMarkerDelete$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-        this.emit('omakaseMarkerListDelete', event);
-      });
-
-      markerList.onMarkerCreate$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-        this.emit('omakaseMarkerListCreate', event);
-      });
-
-      markerList.onMarkerUpdate$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-        this.emit('omakaseMarkerListUpdate', event);
-      });
-
-      markerList.onMarkerInit$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-        this.emit('omakaseMarkerListInit', event);
-      });
-
       if (config.vttUrl) {
         markerList.onVttLoaded$.pipe(takeUntil(this._destroyed$)).subscribe(() => {
           o$.next(markerList);
@@ -272,105 +224,6 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
         });
       }
     });
-  }
-
-  private bindEventHandlers() {
-    // video
-    this._videoController.onPlay$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.emit('omakaseVideoPlay', event);
-    });
-
-    this._videoController.onPause$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.emit('omakaseVideoPause', event);
-    });
-
-    this._videoController.onVideoLoading$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.emit('omakaseVideoLoading', event!);
-    });
-
-    this._videoController.onVideoLoaded$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.emit('omakaseVideoLoaded', event!);
-    });
-
-    this._videoController.onVideoTimeChange$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.emit('omakaseVideoTimeChange', event);
-    });
-
-    this._videoController.onSeeking$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.emit('omakaseVideoSeeking', event);
-    });
-
-    this._videoController.onSeeked$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.emit('omakaseVideoSeeked', event);
-    });
-
-    this._videoController.onBuffering$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.emit('omakaseVideoBuffering', event);
-    });
-
-    this._videoController.onEnded$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.emit('omakaseVideoEnded', event);
-    });
-
-    this._videoController.onAudioSwitched$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.emit('omakaseVideoAudioSwitched', event);
-    });
-
-    // audio
-    this._audioController.onAudioSwitched$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.emit('omakaseAudioSwitched', event);
-    });
-
-    // subtitles
-    this._subtitlesController.onSubtitlesLoaded$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.emit('omakaseSubtitlesLoaded', event!);
-    });
-
-    this._subtitlesController.onCreate$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.emit('omakaseSubtitlesCreate', event);
-    });
-
-    this._subtitlesController.onRemove$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.emit('omakaseSubtitlesRemove', event);
-    });
-
-    this._subtitlesController.onShow$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.emit('omakaseSubtitlesShow', event);
-    });
-
-    this._subtitlesController.onHide$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.emit('omakaseSubtitlesHide', event);
-    });
-  }
-
-  // region eventemmiter
-
-  emit<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey: K, event: OmakasePlayerEventMap[K]): void {
-    this._eventEmitter.emit(eventKey, event);
-  }
-
-  off<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey: K, handler: OmakaseEventListener<OmakasePlayerEventMap[K]>): void {
-    this._eventEmitter.off(eventKey, handler);
-  }
-
-  on<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey: K, handler: OmakaseEventListener<OmakasePlayerEventMap[K]>): void {
-    this._eventEmitter.on(eventKey, handler);
-  }
-
-  listenerCount<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey: K): void {
-    this._eventEmitter.listenerCount(eventKey);
-  }
-
-  listeners<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey: K): OmakaseEventListener<OmakasePlayerEventMap[K]>[] {
-    return this._eventEmitter.listeners(eventKey);
-  }
-
-  once<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey: K, handler: OmakaseEventListener<OmakasePlayerEventMap[K]>): void {
-    this._eventEmitter.once(eventKey, handler);
-  }
-
-  removeAllListeners<K extends OmakaseEventKey<OmakasePlayerEventMap>>(eventKey?: K): void {
-    this._eventEmitter.removeAllListeners(eventKey);
   }
 
   get timeline(): TimelineApi | undefined {
@@ -393,19 +246,13 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
     return this._alertsController;
   }
 
-  get EVENTS(): OmakasePlayerEventsType {
-    return OmakasePlayerEvents;
-  }
-
   destroy() {
     BlobUtil.revokeAll();
 
-    destroyer(this._timeline, this._subtitlesController, this._audioController, this._videoController);
-
-    this._eventEmitter.removeAllListeners();
+    destroyer(this._timeline, this._subtitlesController, this._audioController, this._videoController, this._videoDomController);
 
     nextCompleteSubject(this._destroyed$);
 
-    nullifier(this._timeline, this._videoController, this._audioController, this._subtitlesController, this._eventEmitter);
+    nullifier(this._timeline, this._videoController, this._audioController, this._subtitlesController);
   }
 }

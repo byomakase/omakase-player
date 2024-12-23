@@ -15,7 +15,7 @@
  */
 
 import {Api} from './api';
-import {BehaviorSubject, Observable} from 'rxjs';
+import {Observable} from 'rxjs';
 import {PlayheadMoveEvent, ScrubberMoveEvent, TimecodeClickEvent, TimecodeMouseMoveEvent, TimelineReadyEvent, TimelineScrollEvent, TimelineZoomEvent} from '../types';
 import {ScrubberLane, TimelineStyle} from '../timeline';
 import {TimelineLaneApi} from './timeline-lane-api';
@@ -24,9 +24,11 @@ import {ThumbnailVttFile} from '../vtt';
 export interface TimelineApi extends Api {
   /**
    * Fires when Timeline is ready and all timeline lanes are created. Initial value is undefined.
+   * Always emits the current value on subscription.
+   *
    * @readonly
    */
-  onReady$: BehaviorSubject<TimelineReadyEvent | undefined>;
+  onReady$: Observable<TimelineReadyEvent | undefined>;
 
   /**
    *  Fires on Timeline scroll

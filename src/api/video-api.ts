@@ -15,10 +15,11 @@
  */
 
 import {Api} from './api';
-import {BehaviorSubject, Observable} from 'rxjs';
+import {Observable} from 'rxjs';
 import {
   HelpMenuGroup,
   OmakaseAudioTrack,
+  OmpNamedEvent, OmpNamedEvents,
   VideoBufferingEvent,
   VideoEndedEvent,
   VideoErrorEvent,
@@ -47,9 +48,10 @@ export interface VideoApi extends Api {
 
   /**
    * Fires on video load. Initial value is undefined.
+   * Always emits the current value on subscription.
    * @readonly
    */
-  onVideoLoaded$: BehaviorSubject<VideoLoadedEvent | undefined>;
+  onVideoLoaded$: Observable<VideoLoadedEvent | undefined>;
 
   /**
    * Fires on video time change
@@ -128,6 +130,11 @@ export interface VideoApi extends Api {
    * @readonly
    */
   onVideoWindowPlaybackStateChange$: Observable<VideoWindowPlaybackStateChangeEvent>;
+
+  /**
+   * Fires on event which has active stream (see {@link updateActiveNamedEventStreams}
+   */
+  onNamedEvent$: Observable<OmpNamedEvent>;
 
   /**
    * Loads new video
@@ -378,11 +385,6 @@ export interface VideoApi extends Api {
   setActiveAudioTrack(id: string): Observable<void>;
 
   /**
-   * @returns Hls (hls.js) instance if video is loaded, otherwise undefined
-   */
-  getHls(): Hls | undefined;
-
-  /**
    * Appends new HelpMenuGroup to video context menu
    * @param helpMenuGroup
    */
@@ -429,19 +431,24 @@ export interface VideoApi extends Api {
   getSafeZones(): VideoSafeZone[];
 
   /**
-   * Is detach video window enabled
-   */
-  isDetachVideoWindowEnabled(): boolean;
-
-  /**
-   * Is attach video enabled
-   */
-  isAttachVideoWindowEnabled(): boolean;
-
-  /**
    * @returns {@link VideoWindowPlaybackState}
    */
   getVideoWindowPlaybackState(): VideoWindowPlaybackState;
+
+  /**
+   * @returns true if player is detachable
+   */
+  isDetachable(): boolean;
+
+  /**
+   * @returns true if video can be detached, false if not
+   */
+  canDetach(): boolean;
+
+  /**
+   * @returns true if video can  be attached, false if not
+   */
+  canAttach(): boolean;
 
   /**
    * Detaches video to new window
@@ -462,4 +469,25 @@ export interface VideoApi extends Api {
    * Disables picture in picture mode
    */
   disablePiP(): Observable<void>;
+
+  /**
+   * @returns Hls (hls.js) instance if video is loaded, otherwise undefined
+   */
+  getHls(): Hls | undefined;
+
+  /**
+   * Opens event stream for each provided event name in {@link eventNames} subscribable in {@link onNamedEvent$}. Deactivates all other event streams.
+   * @param eventNames Event name
+   */
+  updateActiveNamedEventStreams(eventNames: OmpNamedEvents[]): Observable<void>;
+
+  /**
+   * @returns Event names for events streamed through {@link onNamedEvent$}
+   */
+  getActiveNamedEventStreams(): OmpNamedEvents[];
+
+  /**
+   * Loads black MP4 video
+   */
+  loadBlackVideo(): Observable<Video>;
 }

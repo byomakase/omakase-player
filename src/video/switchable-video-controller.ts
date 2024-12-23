@@ -24,6 +24,8 @@ import {
   AudioSwitchedEvent,
   AudioWorkletNodeCreatedEvent,
   HelpMenuGroup,
+  OmpNamedEvent,
+  OmpNamedEvents,
   SubtitlesCreateEvent,
   SubtitlesEvent,
   SubtitlesLoadedEvent,
@@ -45,12 +47,12 @@ import {
   VideoVolumeEvent,
   VideoWindowPlaybackStateChangeEvent,
 } from '../types';
-import {PlaybackState, Video, VideoLoadOptions} from './index';
+import {AudioMeterStandard, PlaybackState, Video, VideoLoadOptions} from './index';
 import {nextCompleteSubject} from '../util/rxjs-util';
-import {BufferedTimespan} from './video-controller';
+import {VideoControllerConfig} from './video-controller';
 import Hls from 'hls.js';
 import {destroyer} from '../util/destroy-util';
-import {AudioInputOutputNode, AudioMeterStandard, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
+import {AudioInputOutputNode, BufferedTimespan, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
 
 /**
  * Used for switching between {@link VideoControllerApi} instances
@@ -87,7 +89,10 @@ export class SwitchableVideoController implements VideoControllerApi {
   public readonly onSubtitlesRemove$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
   public readonly onSubtitlesShow$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
 
-  public readonly onThumbnailVttUrlChanged$: Subject<ThumnbailVttUrlChangedEvent | undefined> = new Subject<ThumnbailVttUrlChangedEvent | undefined>();
+  public readonly onThumbnailVttUrlChanged$: Subject<ThumnbailVttUrlChangedEvent> = new Subject<ThumnbailVttUrlChangedEvent>();
+
+  public readonly onActiveNamedEventStreamsChange$: Subject<OmpNamedEvents[]> = new Subject<OmpNamedEvents[]>();
+  public readonly onNamedEvent$: Subject<OmpNamedEvent> = new Subject<OmpNamedEvent>();
 
   protected _videoController!: VideoControllerApi;
   protected _eventBreaker$ = new Subject<void>();
@@ -289,6 +294,18 @@ export class SwitchableVideoController implements VideoControllerApi {
         this.onThumbnailVttUrlChanged$.next(value);
       },
     });
+
+    videoController.onActiveNamedEventStreamsChange$.pipe(takeUntil(this._eventBreaker$)).subscribe({
+      next: (value) => {
+        this.onActiveNamedEventStreamsChange$.next(value);
+      },
+    });
+
+    videoController.onNamedEvent$.pipe(takeUntil(this._eventBreaker$)).subscribe({
+      next: (value) => {
+        this.onNamedEvent$.next(value);
+      },
+    });
   }
 
   addSafeZone(videoSafeZone: VideoSafeZone): Observable<VideoSafeZone> {
@@ -365,10 +382,6 @@ export class SwitchableVideoController implements VideoControllerApi {
 
   getHelpMenuGroups(): HelpMenuGroup[] {
     return this._videoController.getHelpMenuGroups();
-  }
-
-  getHls(): Hls | undefined {
-    return this._videoController.getHls();
   }
 
   getPlaybackRate(): number {
@@ -531,12 +544,16 @@ export class SwitchableVideoController implements VideoControllerApi {
     return this._videoController.getVideoWindowPlaybackState();
   }
 
-  isDetachVideoWindowEnabled(): boolean {
-    return this._videoController.isDetachVideoWindowEnabled();
+  isDetachable(): boolean {
+    return this._videoController.isDetachable();
   }
 
-  isAttachVideoWindowEnabled(): boolean {
-    return this._videoController.isAttachVideoWindowEnabled();
+  canDetach(): boolean {
+    return this._videoController.canDetach();
+  }
+
+  canAttach(): boolean {
+    return this._videoController.canAttach();
   }
 
   detachVideoWindow(): Observable<void> {
@@ -625,5 +642,25 @@ export class SwitchableVideoController implements VideoControllerApi {
 
   disablePiP(): Observable<void> {
     return this._videoController.disablePiP();
+  }
+
+  getConfig(): VideoControllerConfig {
+    return this._videoController.getConfig();
+  }
+
+  getHls(): Hls | undefined {
+    return this._videoController.getHls();
+  }
+
+  updateActiveNamedEventStreams(eventNames: OmpNamedEvents[]): Observable<void> {
+    return this._videoController.updateActiveNamedEventStreams(eventNames);
+  }
+
+  getActiveNamedEventStreams(): OmpNamedEvents[] {
+    return this._videoController.getActiveNamedEventStreams();
+  }
+
+  loadBlackVideo(): Observable<Video> {
+    return this._videoController.loadBlackVideo()
   }
 }

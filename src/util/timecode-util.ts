@@ -117,7 +117,7 @@ export class TimecodeUtil {
 
   static parseTimecodeToTime(timecode: string, video: Video, ffomTimecodeObject: TimecodeObject | undefined = void 0): number {
     let frameNumber = TimecodeUtil.parseTimecodeToFrame(timecode, new Decimal(video.frameRate), ffomTimecodeObject);
-    return FrameRateUtil.frameNumberToTime(frameNumber, video);
+    return FrameRateUtil.videoFrameNumberToVideoTime(frameNumber, video);
   }
 
   static parseTimecodeToFrame(timecode: string, frameRateDecimal: Decimal, ffomTimecodeObject: TimecodeObject | undefined = void 0): number {

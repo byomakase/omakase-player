@@ -19,20 +19,20 @@ import {VideoApi} from '../api';
 import {
   AudioContextChangeEvent,
   AudioLoadedEvent,
+  AudioPeakProcessorWorkletNodeMessageEvent,
   AudioRoutingEvent,
   AudioSwitchedEvent,
   AudioWorkletNodeCreatedEvent,
-  AudioPeakProcessorWorkletNodeMessageEvent,
-  Destroyable,
+  Destroyable, OmpNamedEvents,
   SubtitlesCreateEvent,
   SubtitlesEvent,
   SubtitlesLoadedEvent,
   SubtitlesVttTrack,
-  VideoHelpMenuChangeEvent,
   ThumnbailVttUrlChangedEvent,
+  VideoHelpMenuChangeEvent,
 } from '../types';
-import {BufferedTimespan} from './video-controller';
-import {AudioInputOutputNode, AudioMeterStandard, PlaybackState, Video, VideoLoadOptions, VideoLoadOptionsInternal} from './model';
+import {VideoControllerConfig} from './video-controller';
+import {AudioInputOutputNode, AudioMeterStandard, BufferedTimespan, PlaybackState, Video, VideoLoadOptions, VideoLoadOptionsInternal} from './model';
 
 /**
  * @internal
@@ -55,9 +55,13 @@ export interface VideoControllerApi extends VideoApi, Destroyable {
   onSubtitlesHide$: Observable<SubtitlesEvent>;
 
   onHelpMenuChange$: Observable<VideoHelpMenuChangeEvent>;
-  onThumbnailVttUrlChanged$: Observable<ThumnbailVttUrlChangedEvent | undefined>;
+  onThumbnailVttUrlChanged$: Observable<ThumnbailVttUrlChangedEvent>;
+
+  onActiveNamedEventStreamsChange$: Observable<OmpNamedEvents[]>;
 
   loadVideoInternal(sourceUrl: string, frameRate: number | string, options: VideoLoadOptions | undefined, optionsInternal: VideoLoadOptionsInternal): Observable<Video>;
+
+  getConfig(): VideoControllerConfig;
 
   dispatchVideoTimeChange(): void;
 
@@ -68,13 +72,13 @@ export interface VideoControllerApi extends VideoApi, Destroyable {
   // subtitles
   createSubtitlesVttTrack(subtitlesVttTrack: SubtitlesVttTrack): Observable<SubtitlesVttTrack | undefined>;
 
-  getSubtitlesTracks(): SubtitlesVttTrack[];
-
-  getActiveSubtitlesTrack(): SubtitlesVttTrack | undefined;
-
   removeSubtitlesTrack(id: string): Observable<void>;
 
   removeAllSubtitlesTracks(): Observable<void>;
+
+  getSubtitlesTracks(): SubtitlesVttTrack[];
+
+  getActiveSubtitlesTrack(): SubtitlesVttTrack | undefined;
 
   showSubtitlesTrack(id: string): Observable<void>;
 
@@ -102,6 +106,8 @@ export interface VideoControllerApi extends VideoApi, Destroyable {
   getAudioPeakProcessorWorkletNode(): AudioWorkletNode | undefined;
 
   createAudioPeakProcessorWorkletNode(audioMeterStandard: AudioMeterStandard): Observable<void>;
+
+  // thumbnails
 
   getThumbnailVttUrl(): string | undefined;
 

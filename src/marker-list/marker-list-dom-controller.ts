@@ -49,6 +49,15 @@ export class MarkerListDomController implements Destroyable {
     if (this._markerList.config.loadingHTMLElementId) {
       this.markerListComponent.loadingElement = this.getHTMLElement(this._markerList.config.loadingHTMLElementId);
     }
+    if (this._markerList.config.nameEditable) {
+      this.markerListComponent.nameEditable = this._markerList.config.nameEditable;
+    }
+    if (this._markerList.config.nameOptions) {
+      this.markerListComponent.nameOptions = this._markerList.config.nameOptions;
+    }
+    if (this._markerList.config.nameValidationFn) {
+      this.markerListComponent.nameValidationFn = this._markerList.config.nameValidationFn;
+    }
   }
 
   get markerListComponent(): MarkerListComponent {

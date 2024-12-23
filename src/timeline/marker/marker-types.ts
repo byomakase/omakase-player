@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Verticals} from '../../common/measurement';
+import {Verticals} from '../../common';
 
 export type MarkerRender = 'lane' | 'spanning';
 export type MarkerSymbolType = 'none' | 'square' | 'triangle' | 'circle';
@@ -24,7 +24,7 @@ export interface MarkerStyle {
   renderType: MarkerRender;
   symbolType: MarkerSymbolType;
   symbolSize: number;
-  lineStrokeWidth: 1;
+  lineStrokeWidth: number;
   lineOpacity: number;
 }
 

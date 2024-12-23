@@ -293,12 +293,14 @@ export class MarkerLane extends VttTimelineLane<MarkerLaneConfig, MarkerLaneStyl
       activeMarker.style = {
         ...activeMarker.style,
         renderType: 'lane',
+        lineOpacity: activeMarker instanceof MomentMarker ? 0 : activeMarker.style.lineOpacity,
       };
     }
     if (activeMarker?.id !== markerId) {
       marker.style = {
         ...marker.style,
         renderType: 'spanning',
+        lineOpacity: marker instanceof MomentMarker ? (marker.maxOpacity ?? 1) : marker.style.lineOpacity,
       };
     }
   }

@@ -19,8 +19,6 @@ import {TimelineConfig} from '../timeline';
 import {Observable} from 'rxjs';
 import {SubtitlesApi} from './subtitles-api';
 import {VideoApi} from './video-api';
-import {OmakaseEventEmitter} from '../events';
-import {OmakasePlayerEventMap, OmakasePlayerEventsType} from '../types';
 import {AudioApi} from './audio-api';
 import {TimelineApi} from './timeline-api';
 import {Video, VideoLoadOptions} from '../video';
@@ -30,7 +28,7 @@ import {MarkerListApi} from './marker-list-api';
 import {ConfigWithOptionalStyle} from '../layout';
 import {AuthenticationData} from '../authentication/model';
 
-export interface OmakasePlayerApi extends Api, OmakaseEventEmitter<OmakasePlayerEventMap> {
+export interface OmakasePlayerApi extends Api {
   /**
    * Loads new video
    * @param videoSourceUrl Video manifest URL
@@ -67,7 +65,7 @@ export interface OmakasePlayerApi extends Api, OmakaseEventEmitter<OmakasePlayer
 
   /**
    * Set thumbnail vtt url for media chrome thumbnail preview
-   * @param vttUrl Thumbnail Vtt Url
+   * @param thumbnailVttUrl Thumbnail Vtt Url
    */
   setThumbnailVttUrl(thumbnailVttUrl: string): void;
 
@@ -95,11 +93,6 @@ export interface OmakasePlayerApi extends Api, OmakaseEventEmitter<OmakasePlayer
    * @returns Alerts API
    */
   get alerts(): AlertsApi;
-
-  /**
-   * @returns Omakase Player events enumeration
-   */
-  get EVENTS(): OmakasePlayerEventsType;
 
   /**
    * Destroys OmakasePlayer instance and frees up memory

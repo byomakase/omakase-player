@@ -107,7 +107,7 @@ omakasePlayer.video.toggleMuteUnmute();
 
 ### Events
 
-Before or after loading video stream, we can subscribe to various events. All events are available in API objects as Observables or we can subscribe to events by using *EventEmmiter* like methods.
+Before or after loading video stream, we can subscribe to various events. All events are available in API objects as Observables.
 Example how to subscribe to video loaded event Observable:
 
 ```javascript
@@ -119,15 +119,6 @@ omakasePlayer.video.onVideoLoaded$.subscribe({
       console.log(`Video loaded. Duration: ${video.duration}, totalFrames: ${video.totalFrames}`)
     }
   }
-})
-```
-
-Example how to subscribe to video time change event using *EventEmmiter* like methods:
-
-```javascript
-// alternatively, subscribe to events by using 'EventEmmiter' methods
-omakasePlayer.on(omakasePlayer.EVENTS.OMAKASE_VIDEO_TIME_CHANGE, (event) => {
-  console.log(`Video time change. Timestamp: ${event.currentTime} => ${omakasePlayer.video.formatToTimecode(event.currentTime)}. Frame: ${event.frame}`)
 })
 ```
 
@@ -203,8 +194,7 @@ omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8', 25).subscribe({
 ```
 
 Due to security and usability policies, most modern browsers require a user interaction before allowing certain actions, such as video autoplay or fullscreen initiation. 
-It could be that one-time-only user interaction (such as clicking on play button in detached player) is needed before video playback or switching to fullscreen playback after video detaching.   
-
+It could be that one-time-only user interaction (such as clicking on play button in detached player) is needed before video playback or switching to fullscreen playback after video detaching.
 
 ### Hls.js
 
@@ -217,6 +207,22 @@ hlsInstance.on('hlsManifestParsed', (event, data) => {
   console.log(`HLS manifest parsed`, data);
 })
 ```
+
+### Streaming named events
+
+Other way to listen particular events is by using `onNamedEvent$` observable:
+```javascript
+// 
+omakasePlayer.video.onNamedEvent$.subscribe({
+  next: (event) => {
+    console.log('Got named event:' + event.eventName, event)
+  }
+})
+
+// activates named event streams that will be emitted in onNamedEvent$
+omakasePlayer.video.updateActiveNamedEventStreams(['hlsManifestParsed', 'hlsMediaAttached', 'hlsFragLoading', 'hlsFragLoaded', 'hlsError'])
+```
+If detached video mode is used we should always use `onNamedEvent$`$ observable for hooking onto ie. hls.js events as hls.js API is not available in *local* window while in detached mode.
 
 ### Utilities
 

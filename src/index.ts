@@ -27,4 +27,5 @@ export * from './timeline';
 
 export * from './video';
 
+// export type {VideoProtocol, OmakasePlayerConfig} from './omakase-player';
 export * from './omakase-player';

@@ -85,7 +85,7 @@ export class FrameRateUtil {
    * @param time in Seconds
    * @param video
    */
-  static timeToFrameNumber(time: number, video: Video): number {
+  static videoTimeToVideoFrameNumber(time: number, video: Video): number {
     if (video.initSegmentTimeOffset) {
       if (InitSegmentUtil.isInitSegment(video, time)) {
         return 0;
@@ -104,13 +104,25 @@ export class FrameRateUtil {
    * @param frameNumber
    * @param video
    */
-  static frameNumberToTime(frameNumber: number, video: Video): number {
-    let time = Decimal.div(frameNumber, video.frameRate).toNumber();
+  static videoFrameNumberToVideoTime(frameNumber: number, video: Video): number {
+    let time = FrameRateUtil.frameNumberToTime(frameNumber, video.frameRate);
     if (video.initSegmentTimeOffset && frameNumber !== 0) {
       return time + video.initSegmentTimeOffset;
     } else {
       return time;
     }
+  }
+
+  static frameNumberToTime(frameNumber: number, frameRate: number): number {
+    return Decimal.div(frameNumber, frameRate).toNumber();
+  }
+
+  static totalFramesNumber(duration: number, frameRate: number): number {
+    return Decimal.mul(duration, frameRate).ceil().toNumber();
+  }
+
+  static frameDuration(frameRate: number): number {
+    return FrameRateUtil.frameNumberToTime(1, frameRate);
   }
 
   static isSupportedDropFrameRate(frameRate: number): boolean {

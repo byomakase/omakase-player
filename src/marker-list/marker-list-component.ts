@@ -18,6 +18,7 @@ import {Subject} from 'rxjs';
 import {VideoControllerApi} from '../video/video-controller-api';
 import {MarkerListItem} from './marker-list-item';
 import {markerListDefaultTemplates} from './marker-list-templates';
+import {OmakaseInlineEdit} from '../components/omakase-inline-edit';
 
 const classes = {
   markerListBody: 'omakase-marker-list-body',
@@ -37,9 +38,17 @@ export class MarkerListComponent extends HTMLElement {
   private _listElement: HTMLElement;
   private _videoController: VideoControllerApi | undefined;
   private _isLoading = false;
+  private _nameEditable = false;
+  private _nameOptions?: string[];
+  private _nameValidationFn?: (text: string) => boolean;
 
   constructor() {
     super();
+
+    if (!customElements.get('omakase-inline-edit')) {
+      customElements.define('omakase-inline-edit', OmakaseInlineEdit);
+    }
+
     this.attachShadow({mode: 'open'});
 
     const style = document.createElement('style');
@@ -99,6 +108,18 @@ export class MarkerListComponent extends HTMLElement {
   set isLoading(isLoading: boolean) {
     this._isLoading = isLoading;
     this.renderList();
+  }
+
+  set nameEditable(isEditable: boolean) {
+    this._nameEditable = isEditable;
+  }
+
+  set nameOptions(options: string[]) {
+    this._nameOptions = options;
+  }
+
+  set nameValidationFn(validationFn: (text: string) => boolean) {
+    this._nameValidationFn = validationFn;
   }
 
   updateMarker(id: string, updateValue: Partial<MarkerListItem>) {
@@ -234,7 +255,10 @@ export class MarkerListComponent extends HTMLElement {
       };
     }
     container.appendChild(clone);
-    const rowElement = container.lastChild as HTMLElement;
+    let rowElement = container.lastChild as HTMLElement;
+    if (!(rowElement instanceof HTMLDivElement)) {
+      rowElement = rowElement.previousSibling as HTMLElement;
+    }
     rowElement!.setAttribute('id', 'marker_' + item.id);
     rowElement!.onclick = () => {
       this.onClick$.next(item);
@@ -252,7 +276,22 @@ export class MarkerListComponent extends HTMLElement {
     }
     const nameSlot = element.querySelector<HTMLElement>('[slot="name"]');
     if (nameSlot) {
-      nameSlot.innerHTML = item.name ?? '';
+      if (this._nameEditable) {
+        nameSlot.innerHTML = `<omakase-inline-edit></omakase-inline-edit>`;
+        const inlineEdit = element.querySelector<OmakaseInlineEdit>('omakase-inline-edit');
+        inlineEdit!.setText(item.name ?? '');
+        inlineEdit!.onEdit$.subscribe((name) => {
+          item.source.updateMarker(item.id, {name});
+        });
+        if (this._nameValidationFn) {
+          inlineEdit!.validationFn = this._nameValidationFn;
+        }
+        if (this._nameOptions) {
+          inlineEdit!.setOptions(this._nameOptions);
+        }
+      } else {
+        nameSlot.innerText = item.name ?? '';
+      }
     }
     const trackSlot = element.querySelector<HTMLElement>('[slot="track"]');
     if (trackSlot) {

@@ -20,7 +20,18 @@ import {ScrollableHorizontally, Scrollbar} from './scrollbar/scrollbar';
 import {Dimension, Horizontals, Position, RectMeasurement} from '../common';
 import {animate} from '../util/animation-util';
 import {BehaviorSubject, debounceTime, filter, fromEvent, map, merge, Observable, sampleTime, Subject, take, takeUntil} from 'rxjs';
-import {Destroyable, PlayheadMoveEvent, ScrubberMoveEvent, ThumbnailVttCue, TimecodeClickEvent, TimecodeMouseMoveEvent, TimelineReadyEvent, TimelineScrollEvent, TimelineZoomEvent, VideoLoadedEvent} from '../types';
+import {
+  Destroyable,
+  PlayheadMoveEvent,
+  ScrubberMoveEvent,
+  ThumbnailVttCue,
+  TimecodeClickEvent,
+  TimecodeMouseMoveEvent,
+  TimelineReadyEvent,
+  TimelineScrollEvent,
+  TimelineZoomEvent,
+  VideoLoadedEvent,
+} from '../types';
 import {Playhead} from './playhead';
 import {Thumbnail} from './thumbnail/thumbnail';
 import {ImageUtil} from '../util/image-util';
@@ -666,7 +677,7 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
       .pipe(takeUntil(this._destroyed$))
       .subscribe({
         next: (event) => {
-          this.onWindowResize(event);
+          this.onWindowResize();
         },
       });
 
@@ -989,7 +1000,7 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
     });
   }
 
-  private onWindowResize(event: Event) {
+  private onWindowResize() {
     this.settleLayout();
   }
 
@@ -1654,6 +1665,7 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
     return this._videoController.formatToTimecode(this.timelinePositionToTime(x));
   }
 
+  // TODO do something better than returning 0 if video not loaded
   timelinePositionToFrame(x: number): number {
     return this._videoController.isVideoLoaded() ? this._videoController.calculateTimeToFrame(this.timelinePositionToTime(x)) : 0;
   }
@@ -1662,10 +1674,12 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
     return this.convertTimeToTimelinePosition(time, this.getTimecodedFloatingDimension().width);
   }
 
+  // TODO do something better than returning 0 if video not loaded
   private convertTimeToTimelinePosition(time: number, timecodedWidth: number): number {
-    return new Decimal(time).mul(timecodedWidth).div(this._videoController.getDuration()).toNumber();
+    return this._videoController.isVideoLoaded() ? new Decimal(time).mul(timecodedWidth).div(this._videoController.getDuration()).toNumber() : 0;
   }
 
+  // TODO do something better than returning 0 if video not loaded
   private convertPositionOnTimelineToTime(xOnTimeline: number, timecodedWidth: number): number {
     let constrainedX = this.constrainTimelinePosition(xOnTimeline);
     return this._videoController.isVideoLoaded() ? new Decimal(constrainedX).mul(this._videoController.getDuration()).div(timecodedWidth).toNumber() : 0;
