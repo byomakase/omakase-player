@@ -76,6 +76,8 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
   private _selectedAreaRect?: Konva.Rect;
   private _markerHandleRect?: Konva.Rect;
 
+  private _previousTimeObservation: PeriodObservation;
+
   constructor(config: ConfigWithOptionalStyle<PeriodMarkerConfig>) {
     super({
       ...markerConfigDefault,
@@ -89,6 +91,8 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
     this._timeObservation.start = z.coerce.number().min(0).nullable().optional().parse(this._timeObservation.start);
 
     this._timeObservation.end = z.coerce.number().min(0).nullable().optional().parse(this._timeObservation.end);
+
+    this._previousTimeObservation = this._timeObservation;
 
     if (!isNullOrUndefined(this._timeObservation.start) && !isNullOrUndefined(this._timeObservation.end)) {
       this._timeObservation.start = z.coerce.number().lte(this._timeObservation.end!).parse(this._timeObservation.start);
@@ -128,6 +132,7 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
     this.refreshTimelinePosition();
     let event: PeriodMarkerChangeEvent = {
       timeObservation: this.timeObservation,
+      oldTimeObservation: this._previousTimeObservation,
     };
     this.onChange$.next(event);
   }
@@ -179,6 +184,7 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
     this._startMarkerHandle.onDragEnd = (markerHandleGroup) => {
       if (this.editable) {
         let newTime = this._timeline!.timelinePositionToTime(markerHandleGroup.x());
+        this._previousTimeObservation = this.timeObservation;
         this.timeObservation = {
           ...this.timeObservation,
           start: newTime,
@@ -239,6 +245,7 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
     this._endMarkerHandle.onDragEnd = (markerHandleGroup) => {
       if (this.editable) {
         let newTime = this._timeline!.timelinePositionToTime(markerHandleGroup.x());
+        this._previousTimeObservation = this.timeObservation;
         this.timeObservation = {
           ...this.timeObservation,
           end: newTime,

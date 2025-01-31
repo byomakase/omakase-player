@@ -16,8 +16,9 @@
 
 import {MarkerApi, MarkerStyle, MarkerTimeObservation} from '../api/marker-api';
 import {MarkerAwareApi} from '../api/marker-aware-api';
-import {MomentObservation, PeriodObservation, TimeObservation} from '../types';
+import {MomentObservation, PeriodObservation} from '../types';
 import {CryptoUtil} from '../util/crypto-util';
+import Decimal from 'decimal.js';
 
 export class MarkerListItem implements MarkerApi {
   readonly id: string;
@@ -91,7 +92,7 @@ export class MarkerListItem implements MarkerApi {
 
   get duration(): number | undefined {
     if (this.start !== undefined && this.end !== undefined) {
-      return Math.max(this.end - this.start, 0);
+      return Math.max(new Decimal(this.end).sub(this.start).toNumber(), 0);
     } else {
       return undefined;
     }

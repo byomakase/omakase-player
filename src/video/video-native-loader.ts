@@ -60,6 +60,7 @@ export class VideoNativeLoader extends BaseVideoLoader {
             totalFrames: FrameRateUtil.totalFramesNumber(duration, frameRate),
             frameDuration: FrameRateUtil.frameDuration(frameRate),
             audioOnly: false,
+            drm: false
           };
 
           nextCompleteObserver(observer, video);

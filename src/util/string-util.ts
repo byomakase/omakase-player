@@ -23,7 +23,11 @@ export class StringUtil {
   }
 
   public static isNonEmpty(value: string | undefined | null): boolean {
-    return !StringUtil.isNullUndefinedOrWhitespace(value);
+    return !this.isNullUndefinedOrWhitespace(value);
+  }
+
+  public static isEmpty(value: string | undefined | null): boolean {
+    return !this.isNonEmpty(value);
   }
 
   public static toArrayBuffer(str: string): ArrayBuffer {

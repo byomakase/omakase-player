@@ -19,8 +19,8 @@ import {FrameRateUtil} from './frame-rate-util';
 import {TimecodeObject, Video} from '../video/model';
 import {InitSegmentUtil} from './init-segment-util';
 
-const timecodeNonDropRegex = /^(?:[01]\d|2[0-3]):(?:[0-5]\d):(?:[0-5]\d):(?:[0-9]{2})$/;
-const timecodeDropRegex = /^(?:[01]\d|2[0-3]):(?:[0-5]\d):(?:[0-5]\d);(?:[0-9]{2})$/;
+export const timecodeNonDropRegex = /^(?:[01]\d|2[0-3]):(?:[0-5]\d):(?:[0-5]\d):(?:[0-9]{2})$/;
+export const timecodeDropRegex = /^(?:[01]\d|2[0-3]):(?:[0-5]\d):(?:[0-5]\d);(?:[0-9]{2})$/;
 const timecodeAudioOnlyRegex = /^(?:[01]\d|2[0-3]):(?:[0-5]\d):(?:[0-5]\d)\.(?:[0-9]{2})$/;
 
 const timecodeFormatNonDrop = 'HH:MM:SS:FF';
@@ -33,15 +33,19 @@ export class TimecodeUtil {
    * @param video
    */
   static formatToTimecode(time: number, video: Video): string {
+    return this.formatDecimalTimeToTimecode(new Decimal(time), video);
+  }
+
+  static formatDecimalTimeToTimecode(time: Decimal, video: Video): string {
     let frameRateDecimal = new Decimal(video.frameRate);
     let frameNumberDecimal: Decimal;
     let frameRateRoundedDecimal = frameRateDecimal.round();
 
     if (video.initSegmentTimeOffset) {
-      if (InitSegmentUtil.isInitSegment(video, time)) {
+      if (InitSegmentUtil.isInitSegment(video, time.toNumber())) {
         frameNumberDecimal = new Decimal(0);
       } else {
-        frameNumberDecimal = frameRateDecimal.mul(time - video.initSegmentTimeOffset).floor();
+        frameNumberDecimal = frameRateDecimal.mul(time.minus(video.initSegmentTimeOffset)).floor();
       }
     } else {
       frameNumberDecimal = frameRateDecimal.mul(time).floor();
@@ -116,8 +120,12 @@ export class TimecodeUtil {
   }
 
   static parseTimecodeToTime(timecode: string, video: Video, ffomTimecodeObject: TimecodeObject | undefined = void 0): number {
+    return this.parseTimecodeToTimeDecimal(timecode, video, ffomTimecodeObject).toNumber();
+  }
+
+  static parseTimecodeToTimeDecimal(timecode: string, video: Video, ffomTimecodeObject: TimecodeObject | undefined = void 0): Decimal {
     let frameNumber = TimecodeUtil.parseTimecodeToFrame(timecode, new Decimal(video.frameRate), ffomTimecodeObject);
-    return FrameRateUtil.videoFrameNumberToVideoTime(frameNumber, video);
+    return FrameRateUtil.videoFrameNumberToVideoTimeDecimal(frameNumber, video);
   }
 
   static parseTimecodeToFrame(timecode: string, frameRateDecimal: Decimal, ffomTimecodeObject: TimecodeObject | undefined = void 0): number {
@@ -175,10 +183,27 @@ export class TimecodeUtil {
 
     if (ffomTimecodeObject) {
       let ffomFrameNumber = TimecodeUtil.timecodeObjectToFrameNumber(ffomTimecodeObject, frameRateDecimal);
+
       frameNumberDecimal = frameNumberDecimal.minus(ffomFrameNumber);
+
+      // do we have a 24h rollover ?
+      if (frameNumberDecimal.lt(0)) {
+        frameNumberDecimal = frameNumberDecimal.add(TimecodeUtil.timecodeObjectToFrameNumber(this.create24hTimecodeObject(timecodeObject), frameRateDecimal));
+      }
     }
 
     return frameNumberDecimal.toNumber();
+  }
+
+  private static create24hTimecodeObject(timecodeObject: TimecodeObject): TimecodeObject {
+    return {
+      hours: 24,
+      minutes: 0,
+      seconds: 0,
+      frames: 0,
+      dropFrame: timecodeObject.dropFrame,
+      audioOnly: timecodeObject.audioOnly
+    }
   }
 
   static timecodeObjectToFrameNumber(timecodeObject: TimecodeObject, frameRateDecimal: Decimal): number {

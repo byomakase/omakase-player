@@ -19,7 +19,7 @@ import {TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneCon
 import {MarkerLaneApi} from '../../api';
 import {PeriodMarker, PeriodMarkerConfig} from './period-marker';
 import {MomentMarker, MomentMarkerConfig} from './moment-marker';
-import {MarkerCreateEvent, MarkerDeleteEvent, MarkerFocusEvent, MarkerInitEvent, MarkerUpdateEvent, MarkerVttCue} from '../../types';
+import {MarkerCreateEvent, MarkerDeleteEvent, MarkerFocusEvent, MarkerInitEvent, MarkerSelectedEvent, MarkerUpdateEvent, MarkerVttCue} from '../../types';
 import {filter, Subject, take, takeUntil, zip} from 'rxjs';
 import {Timeline} from '../timeline';
 import {Marker} from './marker';
@@ -58,6 +58,7 @@ export class MarkerLane extends VttTimelineLane<MarkerLaneConfig, MarkerLaneStyl
   public readonly onMarkerCreate$: Subject<MarkerCreateEvent> = new Subject<MarkerCreateEvent>();
   public readonly onMarkerDelete$: Subject<MarkerDeleteEvent> = new Subject<MarkerDeleteEvent>();
   public readonly onMarkerUpdate$: Subject<MarkerUpdateEvent> = new Subject<MarkerUpdateEvent>();
+  public readonly onMarkerSelected$: Subject<MarkerSelectedEvent> = new Subject<MarkerSelectedEvent>();
   public readonly onMarkerInit$: Subject<MarkerInitEvent> = new Subject<MarkerInitEvent>();
 
   protected readonly _vttAdapter: VttAdapter<MarkerVttFile> = new VttAdapter(MarkerVttFile);
@@ -203,7 +204,9 @@ export class MarkerLane extends VttTimelineLane<MarkerLaneConfig, MarkerLaneStyl
     });
 
     (marker as PeriodMarker).onChange$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
-      this.onMarkerUpdate$.next({marker});
+      const oldConfig = {...marker.config, timeObservation: event.oldTimeObservation};
+      const oldValue = 'start' in oldConfig.timeObservation ? new PeriodMarker(oldConfig) : new MomentMarker(oldConfig as MomentMarkerConfig);
+      this.onMarkerUpdate$.next({marker, oldValue});
     });
 
     this._markers.push(marker);
@@ -302,7 +305,14 @@ export class MarkerLane extends VttTimelineLane<MarkerLaneConfig, MarkerLaneStyl
         renderType: 'spanning',
         lineOpacity: marker instanceof MomentMarker ? (marker.maxOpacity ?? 1) : marker.style.lineOpacity,
       };
+      this.onMarkerSelected$.next({marker});
+    } else {
+      this.onMarkerSelected$.next({});
     }
+  }
+
+  getSelectedMarker(): Marker | undefined {
+    return this._markers.find((marker) => marker.style.renderType === 'spanning');
   }
 
   updateMarker(markerId: string, updateData: Partial<Marker>) {
@@ -310,13 +320,14 @@ export class MarkerLane extends VttTimelineLane<MarkerLaneConfig, MarkerLaneStyl
     if (!marker) {
       return;
     }
+    const oldValue = {...marker};
     const {timeObservation, ...otherData} = updateData;
     Object.assign(marker, otherData);
     if (timeObservation !== undefined) {
       marker.timeObservation = timeObservation;
       marker.refreshTimelinePosition();
     }
-    this.onMarkerUpdate$.next({marker});
+    this.onMarkerUpdate$.next({marker, oldValue});
   }
 
   private moveToTop(marker: Marker) {

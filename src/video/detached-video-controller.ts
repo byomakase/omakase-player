@@ -57,11 +57,8 @@ import {
   VideoWindowPlaybackStateChangeEvent,
 } from '../types';
 import {AudioInputOutputNode, AudioMeterStandard, BufferedTimespan, PlaybackState, Video, VideoLoadOptions, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
-import {VideoControllerConfig} from './video-controller';
+import {VideoController, VideoControllerConfig} from './video-controller';
 import Hls from 'hls.js';
-import {BlobUtil} from '../util/blob-util';
-// @ts-ignore
-import ompSyncWatchdogProcessor from '../worker/omp-sync-watchdog-processor.js?raw';
 import {WindowUtil} from '../util/window-util';
 
 interface OutboundLatest {
@@ -77,7 +74,7 @@ export class DetachedVideoController implements VideoControllerApi {
   private readonly _proxyId;
   private readonly _handshakeChannel: TypedOmpBroadcastChannel<HandshakeChannelActionsMap>;
 
-  private readonly _videoController: VideoControllerApi;
+  private readonly _videoController: VideoController;
 
   private _messageChannel: TypedOmpBroadcastChannel<MessageChannelActionsMap> | undefined;
 
@@ -98,14 +95,11 @@ export class DetachedVideoController implements VideoControllerApi {
     heartbeat: void 0,
   };
 
-  protected _syncWatchdogWorklet?: AudioWorkletNode;
-  protected _onSyncWatchdogMessage$ = new Subject<MessageEvent>();
-
   private _handshakeChannelBreaker$ = new Subject<void>();
   private _messageChannelBreaker$ = new Subject<void>();
   private _destroyed$ = new Subject<void>();
 
-  constructor(videoController: VideoControllerApi) {
+  constructor(videoController: VideoController) {
     this._handshakeChannel = new TypedOmpBroadcastChannel(Constants.OMP_HANDSHAKE_BROADCAST_CHANNEL_ID);
 
     this._videoController = videoController;
@@ -114,7 +108,7 @@ export class DetachedVideoController implements VideoControllerApi {
 
     this.startConnectLoop();
 
-    this.createSyncWatchdog();
+    this.initHeartbeatWatchdog();
   }
 
   private startConnectLoop() {
@@ -243,84 +237,35 @@ export class DetachedVideoController implements VideoControllerApi {
     });
   }
 
-  createSyncWatchdog(): Observable<void> {
-    return passiveObservable((observer) => {
-      if (this._syncWatchdogWorklet) {
-        console.debug('OmpDetachedPlayerProcessor already exists');
-        nextCompleteObserver(observer);
-      } else {
-        this.createAudioContext().subscribe({
-          next: () => {
-            let mediaElementAudioSource = this.getAudioContext()!.createMediaElementSource(this.getHTMLAudioUtilElement());
+  protected initHeartbeatWatchdog() {
+    let lastVideoTimeChangeEvent: VideoTimeChangeEvent | undefined;
+    this.onVideoTimeChange$
+      .pipe(filter((p) => !this._disconnecting))
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: (event) => {
+          lastVideoTimeChangeEvent = event;
+        },
+      });
+    this._videoController.onSyncTick$.pipe(filter((p) => !this._disconnecting)).subscribe({
+      next: (event) => {
+        let now = new Date().getTime();
+        let isPlaying = this.isPlaying();
+        let currentFrame = this.getCurrentFrame();
+        let whenPlaying = isPlaying && lastVideoTimeChangeEvent && this.getVideo() && currentFrame - lastVideoTimeChangeEvent.frame > 1;
+        let whenNotPlaying = !isPlaying && lastVideoTimeChangeEvent && this.getVideo() && currentFrame !== lastVideoTimeChangeEvent.frame;
 
-            let worklet$ = new Subject<AudioWorkletNode>();
+        if (whenPlaying || whenNotPlaying) {
+          // call dispatchVideoTimeChange if when playing getCurrentFrame() and lastVideoTimeChangeEvent differ in more than 1 frame, or are not equal if playback is stopped
+          // console.debug(`dispatchVideoTimeChange, frame diff ${currentFrame} - ${lastVideoTimeChangeEvent?.frame}`)
+          this._videoController.dispatchVideoTimeChange();
+        }
 
-            const workletName = 'omp-sync-watchdog-processor';
-            try {
-              let audioWorkletNode = new AudioWorkletNode(mediaElementAudioSource.context, workletName, {
-                parameterData: {},
-              });
-              nextCompleteSubject(worklet$, audioWorkletNode);
-            } catch (e) {
-              let objectURL = BlobUtil.createObjectURL(BlobUtil.createBlob([ompSyncWatchdogProcessor], {type: 'application/javascript'}));
-              mediaElementAudioSource.context.audioWorklet.addModule(objectURL).then(() => {
-                let audioWorkletNode = new AudioWorkletNode(mediaElementAudioSource.context, workletName, {
-                  parameterData: {},
-                });
-                nextCompleteSubject(worklet$, audioWorkletNode);
-              });
-            }
-
-            worklet$.subscribe((worklet) => {
-              this._syncWatchdogWorklet = worklet;
-
-              this._syncWatchdogWorklet.port.onmessage = (event: MessageEvent) => {
-                this._onSyncWatchdogMessage$.next(event);
-              };
-
-              mediaElementAudioSource.connect(this._syncWatchdogWorklet).connect(mediaElementAudioSource.context.destination);
-
-              let silentGainNode = this.getAudioContext()!.createGain();
-              silentGainNode.gain.value = 0; // Set gain to 0 (silent)
-              silentGainNode.connect(mediaElementAudioSource.context.destination);
-
-              mediaElementAudioSource.connect(silentGainNode);
-
-              let lastVideoTimeChangeEvent: VideoTimeChangeEvent | undefined;
-              this.onVideoTimeChange$
-                .pipe(filter((p) => !this._disconnecting))
-                .pipe(takeUntil(this._destroyed$))
-                .subscribe({
-                  next: (event) => {
-                    lastVideoTimeChangeEvent = event;
-                  },
-                });
-
-              this._onSyncWatchdogMessage$.pipe(filter((p) => !this._disconnecting)).subscribe({
-                next: (event) => {
-                  let now = new Date().getTime();
-                  let isPlaying = this.isPlaying();
-                  let currentFrame = this.getCurrentFrame();
-                  let whenPlaying = isPlaying && lastVideoTimeChangeEvent && this.getVideo() && currentFrame - lastVideoTimeChangeEvent.frame > 1;
-                  let whenNotPlaying = !isPlaying && lastVideoTimeChangeEvent && this.getVideo() && currentFrame !== lastVideoTimeChangeEvent.frame;
-
-                  if (whenPlaying || whenNotPlaying) {
-                    // call dispatchVideoTimeChange if when playing getCurrentFrame() and lastVideoTimeChangeEvent differ in more than 1 frame, or are not equal if playback is stopped
-                    // console.debug(`dispatchVideoTimeChange, frame diff ${currentFrame} - ${lastVideoTimeChangeEvent?.frame}`)
-                    this.dispatchVideoTimeChange();
-                  }
-
-                  // send heartbeat if difference between last send heartbeat and now is >= (this._heartbeatInterval + this._heartbeatInterval * 0.1)
-                  if (this._inboundLatest.heartbeat && this._outboundLatest.heartbeat && now - this._outboundLatest.heartbeat >= this._heartbeatInterval + this._heartbeatInterval * 0.1) {
-                    this.sendHeartBeat();
-                  }
-                },
-              });
-            });
-            nextCompleteObserver(observer);
-          },
-        });
-      }
+        // send heartbeat if difference between last send heartbeat and now is >= (this._heartbeatInterval + this._heartbeatInterval * 0.1)
+        if (this._inboundLatest.heartbeat && this._outboundLatest.heartbeat && now - this._outboundLatest.heartbeat >= this._heartbeatInterval + this._heartbeatInterval * 0.1) {
+          this.sendHeartBeat();
+        }
+      },
     });
   }
 
@@ -556,7 +501,7 @@ export class DetachedVideoController implements VideoControllerApi {
                     duration: 3000,
                   });
                 }
-                throw new OmpVideoWindowPlaybackError(`play`);
+                throw new OmpVideoWindowPlaybackError(`togglePlayPause`);
               })
             )
           );
@@ -624,6 +569,14 @@ export class DetachedVideoController implements VideoControllerApi {
       .subscribe({
         next: ([request, sendResponseHook]) => {
           sendResponseHook(this._videoController.seekToPercent(request[0]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.seekToEnd')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.seekToEnd());
         },
       });
 
@@ -1149,10 +1102,6 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.loadVideoInternal(sourceUrl, frameRate, options, optionsInternal);
   }
 
-  dispatchVideoTimeChange(): void {
-    return this._videoController.dispatchVideoTimeChange();
-  }
-
   loadVideo(sourceUrl: string, frameRate: number | string, options?: VideoLoadOptions): Observable<Video> {
     return this._videoController.loadVideo(sourceUrl, frameRate, options);
   }
@@ -1215,6 +1164,10 @@ export class DetachedVideoController implements VideoControllerApi {
 
   seekToPercent(percent: number): Observable<boolean> {
     return this._videoController.seekToPercent(percent);
+  }
+
+  seekToEnd(): Observable<boolean> {
+    return this._videoController.seekToEnd();
   }
 
   seekToTime(time: number): Observable<boolean> {
@@ -1357,10 +1310,6 @@ export class DetachedVideoController implements VideoControllerApi {
 
   enablePiP(): Observable<void> {
     return this._videoController.enablePiP();
-  }
-
-  getHTMLAudioUtilElement(): HTMLAudioElement {
-    return this._videoController.getHTMLAudioUtilElement();
   }
 
   disablePiP(): Observable<void> {

@@ -7,7 +7,7 @@ Omakase Player can be loaded as UMD module inside HTML page. If loaded as UMD mo
 ```html
 
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-<script src="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@0.9.2-SNAPSHOT.1724678052/dist/omakase-player.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@latest/dist/omakase-player.umd.min.js"></script>
 ```
 
 Omakase Player can be used as ES module and CJS module as well.
@@ -22,7 +22,7 @@ Optionally, you can include default Omakase Player CSS stylesheet or import and 
 
 ```html
 
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@0.9.2-SNAPSHOT.1724678052/dist/style.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@latest/dist/style.min.css">
 ```
 
 Stylesheet references default player overlay icons, help menu icons and default styles for video safe zones. All of which can be overridden.
@@ -161,7 +161,7 @@ Local player instance configuration on `https://my-server.com/omp-player`:
 // Local OmakasePlayer instance configuration on https://my-server.com/omp-player
 let omakasePlayer = new omakase.OmakasePlayer({
   playerHTMLElementId: 'omakase-player',
-  detachedPlayerUrl: 'https://my-server.com/player/omp-player-detached'
+  detachedPlayerUrlFn: (video, videoLoadOptions) => 'https://my-server.com/player/omp-player-detached'
 });
 ```
 

@@ -51,6 +51,12 @@ export interface MouseOverEvent extends OmpMouseEvent {}
 
 // endregion
 
+// synchronization
+
+export interface SyncTickEvent extends OmpEvent {}
+
+// endregion
+
 // region video
 
 export interface VideoEvent extends OmpEvent {}
@@ -159,6 +165,13 @@ export interface VideoPlaybackRateEvent extends VideoEvent {
    * Playback rate
    */
   playbackRate: number;
+}
+
+export interface VideoDurationEvent extends VideoEvent {
+  /**
+   * Duration
+   */
+  duration: number;
 }
 
 export interface VideoEndedEvent extends VideoEvent {}
@@ -320,6 +333,7 @@ export interface MarkerDeleteEvent extends MarkerEvent {
 
 export interface MarkerUpdateEvent extends MarkerEvent {
   marker: MarkerApi;
+  oldValue: MarkerApi;
 }
 
 export interface MarkerSelectedEvent extends MarkerEvent {
@@ -332,10 +346,12 @@ export interface MarkerInitEvent extends MarkerEvent {
 
 export interface MomentMarkerChangeEvent extends MarkerChangeEvent {
   timeObservation: MomentObservation;
+  oldTimeObservation: MomentObservation;
 }
 
 export interface PeriodMarkerChangeEvent extends MarkerChangeEvent {
   timeObservation: PeriodObservation;
+  oldTimeObservation: PeriodObservation;
 }
 
 // endregion

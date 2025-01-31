@@ -55,6 +55,7 @@ export interface MarkerListConfig {
   vttLoadOptions?: VttLoadOptions;
   vttMarkerCreateFn?: (marker: MarkerVttCue, index: number) => MarkerListItem;
   thumbnailFn?: (time: number) => string | undefined;
+  timeEditable?: boolean;
   nameEditable?: boolean;
   nameOptions?: string[];
   nameValidationFn?: (name: string) => boolean;
@@ -112,6 +113,11 @@ export class MarkerList implements Destroyable, MarkerListApi {
       for (const source of this._sources) {
         for (const marker of source.getMarkers()) {
           this.addMarkerToComponent(marker, source);
+        }
+        const selectedMarker = source.getSelectedMarker();
+        if (selectedMarker) {
+          this._lastActiveMarker = this.getMarkerItem(selectedMarker.id);
+          this._markerListComponent.toggleActiveClass(selectedMarker.id);
         }
       }
       this.onMarkerInit$.next({markers: this.getMarkers()});
@@ -178,8 +184,9 @@ export class MarkerList implements Destroyable, MarkerListApi {
 
   updateMarker(id: string, updateValue: Partial<MarkerListItem>) {
     const marker = this.getMarkerItem(id);
+    const oldValue: any = {...marker};
     marker.source.updateMarker(id, updateValue);
-    this.onMarkerUpdate$.next({marker});
+    this.onMarkerUpdate$.next({marker, oldValue});
   }
 
   removeMarker(id: string) {
@@ -190,15 +197,7 @@ export class MarkerList implements Destroyable, MarkerListApi {
 
   toggleMarker(id: string) {
     const markerItem = this.getMarkerItem(id);
-    if (this._lastActiveMarker?.source && this._lastActiveMarker.source !== markerItem.source) {
-      this._lastActiveMarker.source.toggleMarker(this._lastActiveMarker.id!);
-    }
-    if (markerItem.source) {
-      markerItem.source.toggleMarker(markerItem.id!);
-    }
-    this._markerListComponent.toggleActiveClass(markerItem.id);
-    this._lastActiveMarker = this._lastActiveMarker !== markerItem ? markerItem : undefined;
-    this.onMarkerSelected$.next({marker: this._lastActiveMarker});
+    markerItem.source.toggleMarker(markerItem.id);
   }
 
   getSelectedMarker(): MarkerApi | undefined {
@@ -254,6 +253,24 @@ export class MarkerList implements Destroyable, MarkerListApi {
           style: marker.style,
           thumbnail: this.findThumbnail(marker),
         });
+      });
+    merge(...this._sources.map((source) => source.onMarkerSelected$))
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe(({marker}) => {
+        if (marker) {
+          const markerItem = this.getMarkerItem(marker.id);
+          if (this._lastActiveMarker?.source && this._lastActiveMarker.source !== markerItem.source) {
+            this._lastActiveMarker.source.toggleMarker(this._lastActiveMarker.id!);
+          }
+          this._markerListComponent.toggleActiveClass(markerItem.id);
+          this._lastActiveMarker = markerItem;
+        } else {
+          if (this._lastActiveMarker) {
+            this._markerListComponent.toggleActiveClass(this._lastActiveMarker.id);
+          }
+          this._lastActiveMarker = undefined;
+        }
+        this.onMarkerSelected$.next({marker: this._lastActiveMarker});
       });
   }
 

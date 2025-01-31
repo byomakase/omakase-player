@@ -16,7 +16,7 @@
 
 import {Observable} from 'rxjs';
 import {Api} from './api';
-import {MarkerCreateEvent, MarkerDeleteEvent, MarkerInitEvent, MarkerUpdateEvent} from '../types';
+import {MarkerCreateEvent, MarkerDeleteEvent, MarkerInitEvent, MarkerSelectedEvent, MarkerUpdateEvent} from '../types';
 import {MarkerApi} from './marker-api';
 
 export interface MarkerAwareApi extends Api {
@@ -43,6 +43,12 @@ export interface MarkerAwareApi extends Api {
    *  @readonly
    */
   onMarkerUpdate$: Observable<MarkerUpdateEvent>;
+
+  /**
+   *  Fires on marker selected
+   *  @readonly
+   */
+  onMarkerSelected$: Observable<MarkerSelectedEvent>;
 
   /**
    * Track name
@@ -77,4 +83,9 @@ export interface MarkerAwareApi extends Api {
    * @param id Marker ID
    */
   toggleMarker(id: string): void;
+
+  /**
+   * Get currently active marker
+   */
+  getSelectedMarker(): MarkerApi | undefined;
 }

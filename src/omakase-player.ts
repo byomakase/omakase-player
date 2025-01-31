@@ -25,7 +25,6 @@ import './../style/omakase-player.scss';
 import {nextCompleteSubject} from './util/rxjs-util';
 import {Video, VideoController, VideoControllerApi, VideoLoadOptions} from './video';
 import {destroyer, nullifier} from './util/destroy-util';
-import {HlsConfig} from 'hls.js';
 import {YogaProvider} from './common/yoga-provider';
 import {AlertsController} from './alerts/alerts-controller';
 import {BlobUtil} from './util/blob-util';
@@ -40,6 +39,7 @@ import {AuthUtil} from './util/auth-util';
 import {AuthenticationData} from './authentication/model';
 import {VIDEO_CONTROLLER_CONFIG_DEFAULT} from './video/video-controller';
 import {VideoProtocol} from './video/model';
+import {OmpHlsConfig} from './video/video-hls-loader';
 
 export interface OmakasePlayerConfig {
   protocol: VideoProtocol;
@@ -49,9 +49,9 @@ export interface OmakasePlayerConfig {
   crossorigin?: 'anonymous' | 'use-credentials';
 
   /**
-   * HLS.js configuration
+   * HLS configuration
    */
-  hlsConfig?: Partial<HlsConfig>;
+  hlsConfig?: Partial<OmpHlsConfig>;
 
   vttDownsamplePeriod?: number;
 
@@ -61,9 +61,9 @@ export interface OmakasePlayerConfig {
   detachedPlayer?: boolean;
 
   /**
-   *  URL where detached player resides. Property is set on non-detached (local) player side.
+   *  Function that will return URL where detached player resides. Property is set on non-detached (local) player side.
    */
-  detachedPlayerUrl?: string;
+  detachedPlayerUrlFn?: (video: Video, videoLoadOptions?: VideoLoadOptions) => string;
 
   /**
    *  Authentication data for HLS.js, VTT and thumbnail image requests
@@ -144,7 +144,7 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
     let createLocalVideoController = () => {
       return new VideoController(
         {
-          hlsConfig: this._config.hlsConfig,
+          hlsConfig: this._config.hlsConfig
         },
         this._videoDomController
       );
@@ -155,7 +155,7 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
     } else {
       this._videoController = new DetachableVideoController(
         {
-          detachedPlayerUrl: this._config.detachedPlayerUrl,
+          detachedPlayerUrlFn: this._config.detachedPlayerUrlFn,
           thumbnailVttUrl: this._config.thumbnailVttUrl,
         },
         createLocalVideoController()

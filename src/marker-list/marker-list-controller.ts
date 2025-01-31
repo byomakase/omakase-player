@@ -17,7 +17,7 @@
 import {Subject} from 'rxjs';
 import {MarkerApi} from '../api/marker-api';
 import {MarkerAwareApi} from '../api/marker-aware-api';
-import {MarkerInitEvent, MarkerCreateEvent, MarkerDeleteEvent, MarkerUpdateEvent} from '../types';
+import {MarkerInitEvent, MarkerCreateEvent, MarkerDeleteEvent, MarkerUpdateEvent, MarkerSelectedEvent} from '../types';
 import {MarkerListItem} from './marker-list-item';
 
 export class MarkerListController implements MarkerAwareApi {
@@ -25,6 +25,7 @@ export class MarkerListController implements MarkerAwareApi {
   onMarkerCreate$: Subject<MarkerCreateEvent> = new Subject();
   onMarkerDelete$: Subject<MarkerDeleteEvent> = new Subject();
   onMarkerUpdate$: Subject<MarkerUpdateEvent> = new Subject();
+  onMarkerSelected$: Subject<MarkerSelectedEvent> = new Subject();
 
   private _markers: MarkerListItem[] = [];
 
@@ -62,12 +63,18 @@ export class MarkerListController implements MarkerAwareApi {
     if (!marker) {
       return;
     }
+    const oldValue = {...marker} as MarkerApi;
     Object.assign(marker, data);
-    this.onMarkerUpdate$.next({marker});
+    this.onMarkerUpdate$.next({marker, oldValue});
   }
 
   toggleMarker(id: string): void {
-    return;
+    const marker = this._markers.find((m) => m.id === id);
+    this.onMarkerSelected$.next({marker});
+  }
+
+  getSelectedMarker(): MarkerApi | undefined {
+    return undefined;
   }
 
   private createMarker(marker: Partial<MarkerApi>): MarkerListItem {

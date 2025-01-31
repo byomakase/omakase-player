@@ -21,7 +21,7 @@ import dtsPlugin from 'vite-plugin-dts';
 const outputNames = {
   omp_peak_sample_processor: 'omp-peak-sample-processor.js',
   omp_true_peak_processor: 'omp-true-peak-processor.js',
-  omp_sync_watchdog_processor: 'omp-sync-watchdog-processor.js',
+  omp_synchronization_processor: 'omp-synchronization-processor.js',
 };
 
 export default defineConfig({
@@ -35,7 +35,7 @@ export default defineConfig({
       entry: {
         omp_peak_sample_processor: resolve(__dirname, 'src/worker/omp-peak-sample-processor.ts'),
         omp_true_peak_processor: resolve(__dirname, 'src/worker/omp-true-peak-processor.ts'),
-        omp_sync_watchdog_processor: resolve(__dirname, 'src/worker/omp-sync-watchdog-processor.ts'),
+        omp_synchronization_processor: resolve(__dirname, 'src/worker/omp-synchronization-processor.ts'),
       },
       formats: ['es'], // Only output ES format
       name: 'OmpWorkers', // Global name if needed

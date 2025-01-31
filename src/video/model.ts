@@ -15,7 +15,6 @@
  */
 
 import {BehaviorSubject, Subject} from 'rxjs';
-import {VideoLoader} from './video-loader';
 
 export type VideoProtocol = 'hls' | 'native';
 
@@ -39,6 +38,11 @@ export interface Video {
   initSegmentTimeOffset?: number;
 
   audioOnly: boolean;
+
+  /**
+   * Is DRM applied
+   */
+  drm: boolean;
 
   /**
    * Corrected duration field may be updated once when:
@@ -219,6 +223,11 @@ export interface VideoLoadOptions {
    * Set to force video protocol loader, it will be set automatically otherwise
    */
   protocol?: VideoProtocol;
+
+  /**
+   * Arbitrary key-value data provided on video load. Can be used to storevalues such as DRM tokens.
+   */
+  data?: Record<string, any>;
 }
 
 /**

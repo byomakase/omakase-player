@@ -61,6 +61,7 @@ const configDefault: Omit<MomentMarkerConfig, 'timeObservation'> = {
 export class MomentMarker extends BaseMarker<MomentObservation, MomentMarkerConfig, MomentMarkerStyle, MomentMarkerChangeEvent> {
   private _markerHandle?: MomentMarkerHandle;
   private _maxOpacity?: number;
+  private _previousTimeObservation: MomentObservation;
 
   constructor(config: ConfigWithOptionalStyle<MomentMarkerConfig>) {
     super({
@@ -73,6 +74,7 @@ export class MomentMarker extends BaseMarker<MomentObservation, MomentMarkerConf
     });
 
     this._timeObservation.time = z.coerce.number().min(0).parse(this._timeObservation.time);
+    this._previousTimeObservation = this._timeObservation;
     this._maxOpacity = this.style.lineOpacity;
   }
 
@@ -123,6 +125,7 @@ export class MomentMarker extends BaseMarker<MomentObservation, MomentMarkerConf
     markerHandle.onDragEnd = (markerHandleGroup) => {
       if (this.editable) {
         let newTime = this._timeline!.timelinePositionToTime(markerHandleGroup.x());
+        this._previousTimeObservation = this.timeObservation;
         this.timeObservation = {
           ...this.timeObservation,
           time: newTime,
@@ -138,6 +141,7 @@ export class MomentMarker extends BaseMarker<MomentObservation, MomentMarkerConf
 
     let event: MomentMarkerChangeEvent = {
       timeObservation: this.timeObservation,
+      oldTimeObservation: this._previousTimeObservation,
     };
 
     this.onChange$.next(event);

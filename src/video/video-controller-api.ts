@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {BehaviorSubject, Observable} from 'rxjs';
+import {BehaviorSubject, Observable, Subject} from 'rxjs';
 import {VideoApi} from '../api';
 import {
   AudioContextChangeEvent,
@@ -23,11 +23,12 @@ import {
   AudioRoutingEvent,
   AudioSwitchedEvent,
   AudioWorkletNodeCreatedEvent,
-  Destroyable, OmpNamedEvents,
+  Destroyable,
+  OmpNamedEvents,
   SubtitlesCreateEvent,
   SubtitlesEvent,
   SubtitlesLoadedEvent,
-  SubtitlesVttTrack,
+  SubtitlesVttTrack, SyncTickEvent,
   ThumnbailVttUrlChangedEvent,
   VideoHelpMenuChangeEvent,
 } from '../types';
@@ -63,8 +64,6 @@ export interface VideoControllerApi extends VideoApi, Destroyable {
 
   getConfig(): VideoControllerConfig;
 
-  dispatchVideoTimeChange(): void;
-
   getPlaybackState(): PlaybackState | undefined;
 
   getBufferedTimespans(): BufferedTimespan[];
@@ -85,8 +84,6 @@ export interface VideoControllerApi extends VideoApi, Destroyable {
   hideSubtitlesTrack(id: string): Observable<void>;
 
   // audio
-  getHTMLAudioUtilElement(): HTMLAudioElement;
-
   createAudioContext(contextOptions?: AudioContextOptions): Observable<void>;
 
   getAudioContext(): AudioContext | undefined;

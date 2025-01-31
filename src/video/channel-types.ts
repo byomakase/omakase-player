@@ -114,6 +114,7 @@ export type MessageChannelActionsMap = OmpBroadcastChannelActionsMap<{
   'VideoControllerApi.seekToTime': ExtractMethodTypes<VideoControllerApi, 'seekToTime'>;
   'VideoControllerApi.seekToTimecode': ExtractMethodTypes<VideoControllerApi, 'seekToTimecode'>;
   'VideoControllerApi.seekToPercent': ExtractMethodTypes<VideoControllerApi, 'seekToPercent'>;
+  'VideoControllerApi.seekToEnd': ExtractMethodTypes<VideoControllerApi, 'seekToEnd'>;
   'VideoControllerApi.mute': ExtractMethodTypes<VideoControllerApi, 'mute'>;
   'VideoControllerApi.unmute': ExtractMethodTypes<VideoControllerApi, 'unmute'>;
   'VideoControllerApi.toggleMuteUnmute': ExtractMethodTypes<VideoControllerApi, 'toggleMuteUnmute'>;

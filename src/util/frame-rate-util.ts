@@ -105,16 +105,24 @@ export class FrameRateUtil {
    * @param video
    */
   static videoFrameNumberToVideoTime(frameNumber: number, video: Video): number {
-    let time = FrameRateUtil.frameNumberToTime(frameNumber, video.frameRate);
+    return this.videoFrameNumberToVideoTimeDecimal(frameNumber, video).toNumber();
+  }
+
+  static videoFrameNumberToVideoTimeDecimal(frameNumber: number, video: Video): Decimal {
+    let time = FrameRateUtil.frameNumberToTimeDecimal(frameNumber, video.frameRate);
     if (video.initSegmentTimeOffset && frameNumber !== 0) {
-      return time + video.initSegmentTimeOffset;
+      return time.add(video.initSegmentTimeOffset);
     } else {
       return time;
     }
   }
 
   static frameNumberToTime(frameNumber: number, frameRate: number): number {
-    return Decimal.div(frameNumber, frameRate).toNumber();
+    return this.frameNumberToTimeDecimal(frameNumber, frameRate).toNumber();
+  }
+
+  static frameNumberToTimeDecimal(frameNumber: number, frameRate: number): Decimal {
+    return Decimal.div(frameNumber, frameRate);
   }
 
   static totalFramesNumber(duration: number, frameRate: number): number {

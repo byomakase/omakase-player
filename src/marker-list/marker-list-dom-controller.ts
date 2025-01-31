@@ -49,6 +49,9 @@ export class MarkerListDomController implements Destroyable {
     if (this._markerList.config.loadingHTMLElementId) {
       this.markerListComponent.loadingElement = this.getHTMLElement(this._markerList.config.loadingHTMLElementId);
     }
+    if (this._markerList.config.timeEditable) {
+      this.markerListComponent.timeEditable = this._markerList.config.timeEditable;
+    }
     if (this._markerList.config.nameEditable) {
       this.markerListComponent.nameEditable = this._markerList.config.nameEditable;
     }
@@ -88,10 +91,16 @@ export class MarkerListDomController implements Destroyable {
   }
 
   private getHTMLElement(templateId: string): HTMLElement {
-    const template = DomUtil.getElementById<HTMLTemplateElement>(templateId);
-    const clone = document.importNode(template.content, true);
-    const element = DomUtil.createElement('div');
-    element.appendChild(clone);
-    return element;
+    const template = DomUtil.getElementById<HTMLElement>(templateId);
+    if (template instanceof HTMLTemplateElement) {
+      const clone = document.importNode(template.content, true);
+      const element = DomUtil.createElement('div');
+      element.appendChild(clone);
+      return element;
+    } else {
+      const element = DomUtil.createElement('div');
+      element.innerHTML = template.innerHTML;
+      return element;
+    }
   }
 }

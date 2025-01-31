@@ -29,3 +29,5 @@ export * from './video';
 
 // export type {VideoProtocol, OmakasePlayerConfig} from './omakase-player';
 export * from './omakase-player';
+
+export * from './marker-list';

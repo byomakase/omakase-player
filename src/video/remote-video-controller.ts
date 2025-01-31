@@ -359,10 +359,6 @@ export class RemoteVideoController implements VideoControllerApi {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.loadVideoInternal', [sourceUrl, frameRate, options, optionsInternal])));
   }
 
-  dispatchVideoTimeChange(): void {
-    throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
-  }
-
   loadVideo(sourceUrl: string, frameRate: string | number, options?: VideoLoadOptions | undefined): Observable<Video> {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.loadVideo', [sourceUrl, frameRate, options])));
   }
@@ -500,6 +496,10 @@ export class RemoteVideoController implements VideoControllerApi {
 
   seekToPercent(percent: number): Observable<boolean> {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.seekToPercent', [percent])));
+  }
+
+  seekToEnd(): Observable<boolean> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.seekToEnd')));
   }
 
   formatToTimecode(time: number): string {
@@ -698,10 +698,6 @@ export class RemoteVideoController implements VideoControllerApi {
 
   loadThumbnailVttUrl(thumbnailVttUrl: string): Observable<void> {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.loadThumbnailVttUrl', [thumbnailVttUrl])));
-  }
-
-  getHTMLAudioUtilElement(): HTMLAudioElement {
-    throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
   }
 
   enablePiP(): Observable<void> {

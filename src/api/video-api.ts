@@ -309,6 +309,11 @@ export interface VideoApi extends Api {
   seekToPercent(percent: number): Observable<boolean>;
 
   /**
+   * Seeks to end of video
+   */
+  seekToEnd(): Observable<boolean>;
+
+  /**
    * Formats video timestamp to HH:MM:SS:FF
    * @param time Video media time in seconds
    */

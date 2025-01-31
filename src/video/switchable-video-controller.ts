@@ -436,10 +436,6 @@ export class SwitchableVideoController implements VideoControllerApi {
     return this._videoController.loadVideoInternal(sourceUrl, frameRate, options, optionsInternal);
   }
 
-  dispatchVideoTimeChange(): void {
-    return this._videoController.dispatchVideoTimeChange();
-  }
-
   loadVideo(sourceUrl: string, frameRate: number | string, options?: VideoLoadOptions): Observable<Video> {
     return this._videoController.loadVideo(sourceUrl, frameRate, options);
   }
@@ -502,6 +498,10 @@ export class SwitchableVideoController implements VideoControllerApi {
 
   seekToPercent(percent: number): Observable<boolean> {
     return this._videoController.seekToPercent(percent);
+  }
+
+  seekToEnd(): Observable<boolean> {
+    return this._videoController.seekToEnd();
   }
 
   seekToTime(time: number): Observable<boolean> {
@@ -632,10 +632,6 @@ export class SwitchableVideoController implements VideoControllerApi {
     return this._videoController.loadThumbnailVttUrl(thumbnailVttUrl);
   }
 
-  getHTMLAudioUtilElement(): HTMLAudioElement {
-    return this._videoController.getHTMLAudioUtilElement();
-  }
-
   enablePiP(): Observable<void> {
     return this._videoController.enablePiP();
   }
@@ -661,6 +657,6 @@ export class SwitchableVideoController implements VideoControllerApi {
   }
 
   loadBlackVideo(): Observable<Video> {
-    return this._videoController.loadBlackVideo()
+    return this._videoController.loadBlackVideo();
   }
 }

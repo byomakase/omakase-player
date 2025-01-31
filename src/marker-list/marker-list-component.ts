@@ -19,6 +19,8 @@ import {VideoControllerApi} from '../video/video-controller-api';
 import {MarkerListItem} from './marker-list-item';
 import {markerListDefaultTemplates} from './marker-list-templates';
 import {OmakaseInlineEdit} from '../components/omakase-inline-edit';
+import {TimecodeUtil} from '../util/timecode-util';
+import Decimal from 'decimal.js';
 
 const classes = {
   markerListBody: 'omakase-marker-list-body',
@@ -39,6 +41,7 @@ export class MarkerListComponent extends HTMLElement {
   private _videoController: VideoControllerApi | undefined;
   private _isLoading = false;
   private _nameEditable = false;
+  private _timeEditable = false;
   private _nameOptions?: string[];
   private _nameValidationFn?: (text: string) => boolean;
 
@@ -112,6 +115,10 @@ export class MarkerListComponent extends HTMLElement {
 
   set nameEditable(isEditable: boolean) {
     this._nameEditable = isEditable;
+  }
+
+  set timeEditable(isEditable: boolean) {
+    this._timeEditable = isEditable;
   }
 
   set nameOptions(options: string[]) {
@@ -299,15 +306,60 @@ export class MarkerListComponent extends HTMLElement {
     }
     const startSlot = element.querySelector<HTMLElement>('[slot="start"]');
     if (startSlot) {
-      startSlot.innerHTML = item.start !== undefined ? this._videoController!.formatToTimecode(item.start) : '';
+      const timecode = item.start !== undefined ? this._videoController!.formatToTimecode(item.start) : '';
+      if (this._timeEditable) {
+        startSlot.innerHTML = `<omakase-inline-edit></omakase-inline-edit>`;
+        const inlineEdit = startSlot.querySelector<OmakaseInlineEdit>('omakase-inline-edit');
+        const maxTimecode = item.end ? this._videoController!.formatToTimecode(item.end) : undefined;
+        inlineEdit!.setTimecode!(timecode, this._videoController!.getFrameRate(), this._videoController!.getDuration(), undefined, maxTimecode);
+        inlineEdit!.onEdit$.subscribe((start) => {
+          let startTime = this._videoController!.parseTimecodeToTime(start)!;
+          const delta = 0.02 / this._videoController!.getFrameRate();
+          startTime += delta * 0.5;
+          if ('start' in item.timeObservation) {
+            const adjustedEnd = item.end ? item.end + delta : item.end;
+            item.source.updateMarker(item.id, {timeObservation: {start: startTime, end: adjustedEnd}});
+          } else {
+            item.source.updateMarker(item.id, {timeObservation: {time: startTime}});
+          }
+        });
+      } else {
+        startSlot.innerHTML = item.start !== undefined ? this._videoController!.formatToTimecode(item.start) : '';
+      }
     }
     const endSlot = element.querySelector<HTMLElement>('[slot="end"]');
     if (endSlot) {
-      endSlot.innerHTML = item.end !== undefined ? this._videoController!.formatToTimecode(item.end) : '';
+      const timecode = item.end !== undefined ? this._videoController!.formatToTimecode(item.end) : '';
+      if (this._timeEditable && 'start' in item.timeObservation) {
+        endSlot.innerHTML = `<omakase-inline-edit></omakase-inline-edit>`;
+        const inlineEdit = endSlot.querySelector<OmakaseInlineEdit>('omakase-inline-edit');
+        const minTimecode = item.start ? this._videoController!.formatToTimecode(item.start) : undefined;
+
+        inlineEdit!.setTimecode!(timecode, this._videoController!.getFrameRate(), this._videoController!.getDuration(), minTimecode, undefined);
+        const startTimeCode = this._videoController!.formatToTimecode(item.start!);
+        const startAdjusted = this._videoController!.parseTimecodeToTime(startTimeCode);
+        inlineEdit!.onEdit$.subscribe((end) => {
+          const delta = 0.02 / this._videoController!.getFrameRate();
+          item.source.updateMarker(item.id, {timeObservation: {start: item.start, end: this._videoController!.parseTimecodeToTime(end) + delta}});
+        });
+      } else {
+        endSlot.innerHTML = item.end !== undefined ? this._videoController!.formatToTimecode(item.end) : '';
+      }
     }
     const durationSlot = element.querySelector<HTMLElement>('[slot="duration"]');
     if (durationSlot) {
-      durationSlot.innerHTML = item.duration !== undefined ? this._videoController!.formatToTimecode(item.duration) : '';
+      if (item.start !== undefined && item.end !== undefined) {
+        const startTimecode = this._videoController!.formatToTimecode(item.start);
+        const endTimecode = this._videoController!.formatToTimecode(item.end);
+        const startFrame = TimecodeUtil.parseTimecodeToFrame(startTimecode, new Decimal(this._videoController!.getFrameRate()));
+        const endFrame = TimecodeUtil.parseTimecodeToFrame(endTimecode, new Decimal(this._videoController!.getFrameRate()));
+        const frameDiff = new Decimal(endFrame).minus(new Decimal(startFrame)).toNumber();
+        const timeDiff = this._videoController!.calculateFrameToTime(frameDiff);
+        const delta = 0.02 / this._videoController!.getFrameRate();
+        durationSlot.innerHTML = this._videoController!.formatToTimecode(timeDiff + delta);
+      } else {
+        durationSlot.innerHTML = '';
+      }
     }
     const customSlots = element.querySelectorAll<HTMLElement>('[slot^="data"]');
     customSlots.forEach((customSlot) => {

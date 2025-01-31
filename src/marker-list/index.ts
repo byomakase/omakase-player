@@ -13,17 +13,4 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-// @ts-ignore
-class OmpDetachedPlayerProcessor extends AudioWorkletProcessor {
-  override process(inputs: Float32Array[][], outputs: Float32Array[][], parameters: Record<string, Float32Array>): boolean {
-    this.port.postMessage(''); // simple message to trigger onmessage
-    return true;
-  }
-}
-
-try {
-  registerProcessor('omp-sync-watchdog-processor', OmpDetachedPlayerProcessor);
-} catch (err) {
-  console.info(`Failed to register ${'omp-sync-watchdog-processor'}. This probably means it was already registered.`);
-}
+export type {MarkerListConfig} from './marker-list';

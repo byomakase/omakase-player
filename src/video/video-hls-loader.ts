@@ -17,7 +17,7 @@
 import {first, forkJoin, fromEvent, map, Observable, Subject, takeUntil} from 'rxjs';
 import {Video, VideoLoadOptions} from './model';
 import {BaseVideoLoader} from './video-loader';
-import Hls, {AudioTrackSwitchingData, ErrorData, Events as HlsEvents, FragLoadedData, FragLoadingData, ManifestParsedData, MediaAttachedData, MediaPlaylist} from 'hls.js';
+import Hls, {AudioTrackSwitchingData, EMEControllerConfig, ErrorData, Events as HlsEvents, FragLoadedData, FragLoadingData, HlsConfig, ManifestParsedData, MediaAttachedData, MediaKeySessionContext, MediaPlaylist} from 'hls.js';
 import {errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {AuthUtil} from '../util/auth-util';
 import {BasicAuthenticationData, BearerAuthenticationData, CustomAuthenticationData} from '../authentication/model';
@@ -30,6 +30,30 @@ import {VttUtil} from '../vtt/vtt-util';
 import {StringUtil} from '../util/string-util';
 import {CryptoUtil} from '../util/crypto-util';
 import {VideoControllerApi} from './video-controller-api';
+
+export type HlsLicenseXhrSetupFn = (xhr: XMLHttpRequest, url: string, keyContext: MediaKeySessionContext, licenseChallenge: Uint8Array) => void | Uint8Array | Promise<Uint8Array | void>;
+
+export interface OmpHlsConfig extends HlsConfig {
+  /**
+   * Should fetch hls.js embedded subtitles
+   */
+  fetchManifestSubtitleTracks: boolean;
+
+  /**
+   * Should display hls.js subtitles
+   */
+  subtitleDisplay: boolean;
+
+  /**
+   * Function that creates hls.js pre-processor function {@link HlsConfig.licenseXhrSetup} for modifying license requests (https://github.com/video-dev/hls.js/blob/master/docs/API.md#licensexhrsetup)
+   * If set, created function takes precedence over {@link licenseXhrSetup}
+   *
+   * @param sourceUrl
+   * @param frameRate
+   * @param options
+   */
+  loadVideoLicenseXhrSetup?: (sourceUrl: string, frameRate: number, options?: VideoLoadOptions | undefined) => HlsLicenseXhrSetupFn;
+}
 
 type OmpHlsEventListener = (event: any, data: any) => void;
 
@@ -62,8 +86,13 @@ export class VideoHlsLoader extends BaseVideoLoader {
 
       this.destroyHls();
 
+      let hlsConfig = this._videoController.getConfig().hlsConfig;
+
       this._hls = new Hls({
-        ...this._videoController.getConfig().hlsConfig,
+        ...hlsConfig,
+        licenseXhrSetup: hlsConfig.loadVideoLicenseXhrSetup ? (xhr: XMLHttpRequest, url: string, keyContext: MediaKeySessionContext, licenseChallenge: Uint8Array) => {
+          return hlsConfig.loadVideoLicenseXhrSetup!(sourceUrl, frameRate, options)(xhr, url, keyContext, licenseChallenge);
+        } : hlsConfig.licenseXhrSetup
       });
 
       this.updateActiveNamedEventStreams(this._videoController.getActiveNamedEventStreams());
@@ -94,6 +123,12 @@ export class VideoHlsLoader extends BaseVideoLoader {
           });
         }
       };
+
+      let isDrm = false;
+      this._hls!.once(HlsEvents.KEY_LOADED, function (event, data) {
+        // console.debug(event, data);
+        isDrm = true;
+      });
 
       this._hls!.on(HlsEvents.AUDIO_TRACKS_UPDATED, function (event, data) {
         // console.debug(event, data);
@@ -134,21 +169,22 @@ export class VideoHlsLoader extends BaseVideoLoader {
          * are not to be playable by OmakasePlayer
          */
         if (!errorDetails.includes('audioTrackLoadError')) {
+
+
           errorCompleteObserver(observer, `Error loading video. Hls error details: ${errorDetails}`);
         }
       });
 
-      let hlsMediaAttached$ = new Observable<boolean>((o$) => {
+      let hlsMediaAttached$ = new Observable<boolean>((observer) => {
         // MEDIA_ATTACHED event is fired by hls object once MediaSource is ready
         this._hls!.once(HlsEvents.MEDIA_ATTACHED, function (event, data) {
           // console.debug('video element and hls.js are now bound together');
-          o$.next(true);
-          o$.complete();
+          nextCompleteObserver(observer, true)
         });
       });
 
       let audioOnly = false;
-      let hlsManifestParsed$ = new Observable<boolean>((o$) => {
+      let hlsManifestParsed$ = new Observable<boolean>((observer) => {
         this._hls!.once(HlsEvents.MANIFEST_PARSED, function (event, data) {
           // console.debug(event, data);
 
@@ -163,19 +199,17 @@ export class VideoHlsLoader extends BaseVideoLoader {
 
           audioOnly = !hasVideo; // if it doesn't contain video / audio, it'll still be audioOnly for now
 
-          o$.next(true);
-          o$.complete();
+          nextCompleteObserver(observer, true)
         });
       });
 
       let hasInitSegment = false;
-      let hlsFragParsingInitSegment$ = new Observable<boolean>((o$) => {
+      let hlsFragParsingInitSegment$ = new Observable<boolean>((observer) => {
         this._hls!.once(HlsEvents.FRAG_PARSING_INIT_SEGMENT, function (event, data) {
           if ((data as FragLoadedData).frag.sn === 'initSegment' && (data as FragLoadedData).frag.data) {
             hasInitSegment = true;
           }
-          o$.next(true);
-          o$.complete();
+          nextCompleteObserver(observer, true)
         });
       });
 
@@ -205,24 +239,8 @@ export class VideoHlsLoader extends BaseVideoLoader {
             frameDuration: FrameRateUtil.frameDuration(frameRate),
             audioOnly: audioOnly,
             initSegmentTimeOffset: initSegmentTimeOffset,
+            drm: isDrm
           };
-
-          this._hls!.on(HlsEvents.FRAG_LOADED, (event, data) => {
-            if (data.frag.endList && data.frag.type == 'main' && video.correctedDuration && video.correctedDuration > data.frag.start + data.frag.duration) {
-              /**
-               * if we land on exact time of the frame start at the end of video, there is the chance that we won't load the frame
-               */
-              video.correctedDuration = Number.isInteger(data.frag.start + data.frag.duration * video.frameRate)
-                ? data.frag.start + data.frag.duration - this._videoController.getConfig().frameDurationSpillOverCorrection
-                : data.frag.start + data.frag.duration;
-            }
-          });
-
-          let durationFractionThree = Number.parseFloat(video.duration.toFixed(3));
-          if (Number.isInteger(Number.parseFloat((video.duration * video.frameRate).toFixed(1)))) {
-            durationFractionThree = Number.parseFloat((durationFractionThree - this._videoController.getConfig().frameDurationSpillOverCorrection).toFixed(3));
-            video.correctedDuration = durationFractionThree;
-          }
 
           // audio
           if (!this._hls!.audioTracks || this._hls!.audioTracks.length < 1) {
@@ -231,11 +249,11 @@ export class VideoHlsLoader extends BaseVideoLoader {
           }
 
           // subtitles
-          this._hls!.subtitleDisplay = this._videoController.getConfig().hlsSubtitleDisplay;
-          if (!this._videoController.getConfig().hlsSubtitleDisplay) {
+          this._hls!.subtitleDisplay = !!hlsConfig.subtitleDisplay;
+          if (!hlsConfig.subtitleDisplay) {
             this._hls!.subtitleTrack = -1;
           }
-          if (this._videoController.getConfig().hlsFetchManifestSubtitleTracks && this._hls!.allSubtitleTracks && this._hls!.allSubtitleTracks.length > 0) {
+          if (!!hlsConfig.fetchManifestSubtitleTracks && this._hls!.allSubtitleTracks && this._hls!.allSubtitleTracks.length > 0) {
             let os$ = this._hls!.allSubtitleTracks.map((subtitleTrack) => {
               return VttUtil.fetchFromM3u8SegmentedConcat(subtitleTrack.url, void 0, AuthUtil.authentication).pipe(
                 map((webvttText) => {
@@ -429,7 +447,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
             details: data.details,
             reason: data.reason,
             fatal: data.fatal,
-            level: data.level
+            level: data.level,
           };
 
           this.onNamedEvent$.next({

@@ -45,7 +45,8 @@ export interface OmpBroadcastMessage<DataType> {
 }
 
 export class OmpBroadcastChannel implements Destroyable {
-  private static readonly channelTimeout = 20000;
+  // private static readonly channelTimeout = 20000;
+  private static readonly channelTimeout = 5000;
 
   private readonly _channelId: string;
   private readonly _onMessage$: Subject<OmpBroadcastMessage<any>> = new Subject<OmpBroadcastMessage<any>>();

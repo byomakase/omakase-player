@@ -38,6 +38,7 @@ import '../components';
 // @ts-ignore
 import silentWavBase64 from '../../assets/silent.wav.base64.txt?raw';
 import {HTMLVideoElementEventKeys} from './video-controller';
+import {UrlUtil} from '../util/url-util';
 
 const domClasses = {
   player: 'omakase-player',
@@ -134,7 +135,7 @@ export class VideoDomController implements VideoDomControllerApi {
   protected _videoElement!: HTMLVideoElement;
 
   /**
-   * Silent audio element, used for keepalive
+   * Silent audio element, can be used for time synchronization or keepalive
    * @protected
    */
   protected _audioUtilElement!: HTMLAudioElement;
@@ -200,7 +201,7 @@ export class VideoDomController implements VideoDomControllerApi {
       throw new Error(`DOM <div> for player not found. ID provided: ${this._config.playerHTMLElementId}`);
     }
 
-    this._silentWavUrl = `data:${'audio/wav'};base64,${silentWavBase64}`
+    this._silentWavUrl = UrlUtil.formatBase64Url('audio/wav', silentWavBase64);
 
     this.createDom();
 
@@ -646,7 +647,6 @@ export class VideoDomController implements VideoDomControllerApi {
 
     if (!videoController.isDetachable() && this._buttonDetach) {
       this._videoController.getHTMLVideoElement().addEventListener(HTMLVideoElementEventKeys.ENTERPIP, this._enterPictureInPictureHandler);
-
       this._videoController.getHTMLVideoElement().addEventListener(HTMLVideoElementEventKeys.LEAVEPIP, this._leavePictureInPictureHandler);
     }
 

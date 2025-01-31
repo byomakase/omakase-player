@@ -14,15 +14,7 @@
  * limitations under the License.
  */
 
-import {
-  AudioTrackLane,
-  MarkerLane,
-  MomentMarker,
-  OmakasePlayer,
-  PeriodMarker,
-  SubtitlesLane,
-  ThumbnailLane,
-} from '../src';
+import {AudioTrackLane, MarkerLane, MomentMarker, OmakasePlayer, PeriodMarker, SubtitlesLane, ThumbnailLane} from '../src';
 import {RandomUtil} from '../src/util/random-util';
 import {ColorUtil} from '../src/util/color-util';
 
@@ -101,9 +93,7 @@ window.addEventListener('load', () => {
         // console.log(`video.timeChangeEvent$`, event)
         document.getElementById('inputFrameSeek').value = event.frame;
         document.getElementById('inputTimestamp').value = event.currentTime;
-        document.getElementById('inputTimestampFormatted').value = omakasePlayer.video.formatToTimecode(
-          event.currentTime
-        );
+        document.getElementById('inputTimestampFormatted').value = omakasePlayer.video.formatToTimecode(event.currentTime);
 
         // let hls = omakasePlayer.video.getHls();
         // console.log(hls.levels[hls.currentLevel].details)
@@ -303,10 +293,7 @@ window.addEventListener('load', () => {
       let randomPeriodTimeObservation = () => {
         let start = RandomUtil.randomNumber(0, omakasePlayer.video.getDuration());
         let duration = omakasePlayer.video.getDuration() * 0.3;
-        let end = RandomUtil.randomNumber(
-          start,
-          start + duration > omakasePlayer.video.getDuration() ? omakasePlayer.video.getDuration() : start + duration
-        );
+        let end = RandomUtil.randomNumber(start, start + duration > omakasePlayer.video.getDuration() ? omakasePlayer.video.getDuration() : start + duration);
         return {
           start: start,
           end: end,

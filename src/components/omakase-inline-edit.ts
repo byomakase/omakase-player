@@ -1,4 +1,5 @@
-import {Subject} from 'rxjs';
+import {min, Subject} from 'rxjs';
+import {OmakaseTimecodeEdit} from './omakase-timecode-edit';
 
 export class OmakaseInlineEdit extends HTMLElement {
   onEdit$: Subject<string> = new Subject();
@@ -9,7 +10,7 @@ export class OmakaseInlineEdit extends HTMLElement {
   private _validationFn?: (text: string) => boolean;
 
   private _container: HTMLDivElement;
-  private _input: HTMLInputElement;
+  private _input: HTMLInputElement | OmakaseTimecodeEdit;
   private _span: HTMLSpanElement;
   private _select?: HTMLSelectElement;
 
@@ -80,6 +81,33 @@ export class OmakaseInlineEdit extends HTMLElement {
     this._input.value = text;
   }
 
+  setTimecode(timecode: string, frameRate: number, duration: number, minTimecode?: string, maxTimecode?: string) {
+    this._container.removeChild(this._input);
+    this._input = document.createElement('omakase-timecode-edit') as OmakaseTimecodeEdit;
+    this._container.appendChild(this._input);
+    this._input.frameRate = frameRate;
+    this._input.duration = duration;
+    this._input.value = timecode;
+
+    if (minTimecode) {
+      this._input.minTimecode = minTimecode;
+    }
+
+    if (maxTimecode) {
+      this._input.maxTimecode = maxTimecode;
+    }
+
+    this._validationFn = () => (this._input as OmakaseTimecodeEdit).isTimecodeValid();
+
+    this._input.addEventListener('keydown', this.handleKeyDown.bind(this));
+    this._input.addEventListener('keyup', this.handleKeyUp.bind(this));
+    this._input.addEventListener('blur', this.undoChanges.bind(this));
+    this._input.addEventListener('click', this.stopPropagation.bind(this));
+
+    this._span.textContent = timecode;
+    this._text = timecode;
+  }
+
   setOptions(options: string[]) {
     this._span.style.display = 'none';
     this._input.style.display = 'none';
@@ -107,6 +135,7 @@ export class OmakaseInlineEdit extends HTMLElement {
     this._isEditing = true;
     this._span.style.display = 'none';
     this._input.style.display = 'inline-block';
+    this._input.value = this._text;
     this._input.focus();
   }
 
