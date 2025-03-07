@@ -27,12 +27,18 @@ export class BlobUtil {
     return url;
   }
 
+  static createBlobURL(blobParts: BlobPart[], options?: BlobPropertyBag): string {
+    const blob = this.createBlob(blobParts, options);
+    return this.createObjectURL(blob);
+  }
+
   static revokeObjectURL(url: string): void {
     this._blobs.delete(url);
     return URL.revokeObjectURL(url);
   }
 
   static revokeAll(): void {
+    console.debug(`Revoking all blobs`)
     this._blobs.forEach((url) => this.revokeObjectURL(url));
   }
 }

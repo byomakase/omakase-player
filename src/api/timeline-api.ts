@@ -214,6 +214,11 @@ export interface TimelineApi extends Api {
   toggleDescriptionPaneVisibleEased(): Observable<void>;
 
   /**
+   * Toggles the CTI between its interactive and read-only state
+   */
+  toggleTimecodeEdit(): void;
+
+  /**
    * Load ThumbnailVttFile
    */
   loadThumbnailVttFileFromUrl(vttUrl: string): Observable<ThumbnailVttFile | undefined>;

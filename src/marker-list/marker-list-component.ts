@@ -310,12 +310,12 @@ export class MarkerListComponent extends HTMLElement {
       if (this._timeEditable) {
         startSlot.innerHTML = `<omakase-inline-edit></omakase-inline-edit>`;
         const inlineEdit = startSlot.querySelector<OmakaseInlineEdit>('omakase-inline-edit');
-        const maxTimecode = item.end ? this._videoController!.formatToTimecode(item.end) : undefined;
-        inlineEdit!.setTimecode!(timecode, this._videoController!.getFrameRate(), this._videoController!.getDuration(), undefined, maxTimecode);
+        inlineEdit!.setTimecode!(timecode, this._videoController!.getVideo()!, undefined, item.end);
         inlineEdit!.onEdit$.subscribe((start) => {
           let startTime = this._videoController!.parseTimecodeToTime(start)!;
           const delta = 0.02 / this._videoController!.getFrameRate();
           startTime += delta * 0.5;
+
           if ('start' in item.timeObservation) {
             const adjustedEnd = item.end ? item.end + delta : item.end;
             item.source.updateMarker(item.id, {timeObservation: {start: startTime, end: adjustedEnd}});
@@ -333,11 +333,8 @@ export class MarkerListComponent extends HTMLElement {
       if (this._timeEditable && 'start' in item.timeObservation) {
         endSlot.innerHTML = `<omakase-inline-edit></omakase-inline-edit>`;
         const inlineEdit = endSlot.querySelector<OmakaseInlineEdit>('omakase-inline-edit');
-        const minTimecode = item.start ? this._videoController!.formatToTimecode(item.start) : undefined;
 
-        inlineEdit!.setTimecode!(timecode, this._videoController!.getFrameRate(), this._videoController!.getDuration(), minTimecode, undefined);
-        const startTimeCode = this._videoController!.formatToTimecode(item.start!);
-        const startAdjusted = this._videoController!.parseTimecodeToTime(startTimeCode);
+        inlineEdit!.setTimecode!(timecode, this._videoController!.getVideo()!, item.start);
         inlineEdit!.onEdit$.subscribe((end) => {
           const delta = 0.02 / this._videoController!.getFrameRate();
           item.source.updateMarker(item.id, {timeObservation: {start: item.start, end: this._videoController!.parseTimecodeToTime(end) + delta}});

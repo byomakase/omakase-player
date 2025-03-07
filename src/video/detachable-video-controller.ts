@@ -24,8 +24,8 @@ import {Constants} from '../constants';
 import {SwitchableVideoController} from './switchable-video-controller';
 import {WindowUtil} from '../util/window-util';
 import {HandshakeChannelActionsMap, MessageChannelActionsMap} from './channel-types';
-import {AudioInputOutputNode, Video, VideoLoadOptions, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
-import {AudioWorkletNodeCreatedEvent, HelpMenuGroup, OmakaseAudioTrack, OmpError, OmpNamedEvents, SubtitlesVttTrack} from '../types';
+import {OmpSidecarAudioState, Video, VideoLoadOptions, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
+import {HelpMenuGroup, MainAudioChangeEvent, OmpAudioTrack, OmpError, OmpNamedEventEventName, SubtitlesVttTrack} from '../types';
 import {CryptoUtil} from '../util/crypto-util';
 import {StringUtil} from '../util/string-util';
 
@@ -36,16 +36,18 @@ interface VideoControllerState {
   currentTime: number;
   subtitlesTracks: SubtitlesVttTrack[];
   activeSubtitlesTrack: SubtitlesVttTrack | undefined;
-  activeAudioTrack: OmakaseAudioTrack | undefined;
+  activeAudioTrack: OmpAudioTrack | undefined;
   videoSafeZones: VideoSafeZone[];
   helpMenuGroups: HelpMenuGroup[];
   volume: number;
   muted: boolean;
   playbackRate: number;
-  audioInputOutputNodes: AudioInputOutputNode[][];
-  audioWorkletNodeCreatedEvent: AudioWorkletNodeCreatedEvent | undefined;
+
   thumbnailVttUrl: string | undefined;
-  activeNamedEventStreams: OmpNamedEvents[];
+  activeNamedEventStreams: OmpNamedEventEventName[];
+
+  mainAudioChangeEvent: MainAudioChangeEvent | undefined;
+  sidecarAudioStates: OmpSidecarAudioState[];
 }
 
 export interface DetachableVideoControllerConfig {
@@ -142,7 +144,6 @@ export class DetachableVideoController extends SwitchableVideoController {
         console.debug(`Detach in progress, exiting gracefully..`);
         nextCompleteObserver(observer);
       } else if (this.canDetach()) {
-
         let state = this.captureCurrentState();
         this._stateBeforeDetach = state;
 
@@ -233,17 +234,21 @@ export class DetachableVideoController extends SwitchableVideoController {
                           },
                           error: (err) => handleDetachError(err),
                         });
-                      }
+                      };
 
-                      (state.isPlaying ? this.pause().pipe(timeout(1000)).pipe(map(p => true)) : of(true)).subscribe({
+                      (state.isPlaying
+                        ? this.pause()
+                            .pipe(timeout(1000))
+                            .pipe(map((p) => true))
+                        : of(true)
+                      ).subscribe({
                         next: () => {
-                          finalize()
+                          finalize();
                         },
                         error: (err) => {
-                          handleDetachError(err)
+                          handleDetachError(err);
                         },
-                      })
-
+                      });
                     },
                     error: (err) => handleDetachError(err),
                   });
@@ -311,7 +316,6 @@ export class DetachableVideoController extends SwitchableVideoController {
         console.debug(`Attach in progress, exiting gracefully..`);
         nextCompleteObserver(observer);
       } else if (this.canAttach()) {
-
         this._isAttachInProgress = true;
 
         let handleAttachError = (error: any) => {
@@ -343,19 +347,23 @@ export class DetachableVideoController extends SwitchableVideoController {
               handleAttachError(error);
             },
           });
-        }
+        };
 
         // if detached window is closed, we will never get response, thus it's safe to timeout and continue as normal
-        (state.isPlaying ? this.pause().pipe(timeout(100)).pipe(map(p => true)) : of(true)).subscribe({
+        (state.isPlaying
+          ? this.pause()
+              .pipe(timeout(100))
+              .pipe(map((p) => true))
+          : of(true)
+        ).subscribe({
           next: () => {
-            finalize()
+            finalize();
           },
           error: (err) => {
             // handleAttachError(err);
-            finalize()
+            finalize();
           },
-        })
-
+        });
       } else {
         let message = `Cannot attach. `;
 
@@ -415,8 +423,8 @@ export class DetachableVideoController extends SwitchableVideoController {
           nextCompleteObserver(observer);
         },
         error: (err) => {
-          errorCompleteObserver(observer, err)
-        }
+          errorCompleteObserver(observer, err);
+        },
       });
     });
   }
@@ -453,19 +461,19 @@ export class DetachableVideoController extends SwitchableVideoController {
     let finalize = () => {
       // OmakasePlayer.alerts.info('Close detected, video attached', {autodismiss: true, duration: 3000})
       this.setVideoWindowPlaybackState(this._videoController.getVideoWindowPlaybackState());
-    }
+    };
 
     if (this._stateBeforeDetach) {
       this.restoreState(this._stateBeforeDetach).subscribe({
         next: () => {
-          finalize()
+          finalize();
         },
         error: (err) => {
-          finalize()
-        }
+          finalize();
+        },
       });
     } else {
-      finalize()
+      finalize();
     }
   }
 
@@ -529,10 +537,10 @@ export class DetachableVideoController extends SwitchableVideoController {
       volume: this.getVolume(),
       muted: this.isMuted(),
       playbackRate: this.getPlaybackRate(),
-      audioInputOutputNodes: this.getAudioInputOutputNodes(),
-      audioWorkletNodeCreatedEvent: this.onAudioWorkletNodeCreated$.value,
       thumbnailVttUrl: this.getThumbnailVttUrl(),
       activeNamedEventStreams: this.getActiveNamedEventStreams(),
+      mainAudioChangeEvent: this.onMainAudioChange$.value,
+      sidecarAudioStates: this.getSidecarAudioStates(),
     };
   }
 
@@ -568,9 +576,9 @@ export class DetachableVideoController extends SwitchableVideoController {
           next: () => {
             nextCompleteObserver(observer);
           },
-          error: err => {
-            errorCompleteObserver(observer, err)
-          }
+          error: (err) => {
+            errorCompleteObserver(observer, err);
+          },
         });
       } else {
         nextCompleteObserver(observer);
@@ -734,31 +742,72 @@ export class DetachableVideoController extends SwitchableVideoController {
 
     addAfterVideoLoad(
       new Observable((observer) => {
-        if (state.audioInputOutputNodes.length > 0 && state.audioInputOutputNodes[0] && state.audioInputOutputNodes[0].length > 0) {
-          let inputsNumber = state.audioInputOutputNodes.length;
-          let ouputsNumber = state.audioInputOutputNodes[0].length;
+        if (state.mainAudioChangeEvent) {
+          let mainAudioState = state.mainAudioChangeEvent.mainAudioState;
 
-          this.createAudioRouter(inputsNumber, ouputsNumber).subscribe({
-            next: (event) => {
-              let nodes = state.audioInputOutputNodes.flatMap((byInput, inputNumber) => byInput.map((audioInputOutputNode, outputNumber) => audioInputOutputNode));
-              this.routeAudioInputOutputNodes(nodes).subscribe({
-                next: (event) => {
-                  if (state.audioWorkletNodeCreatedEvent) {
-                    this.createAudioPeakProcessorWorkletNode(state.audioWorkletNodeCreatedEvent.audioMeterStandard).subscribe({
-                      next: () => {
-                        nextCompleteObserver(observer);
-                      },
-                    });
-                  } else {
-                    nextCompleteObserver(observer);
-                  }
-                },
-              });
+          let o1$ = mainAudioState.audioRouterState ? this.createMainAudioRouter(mainAudioState.audioRouterState.inputsNumber, mainAudioState.audioRouterState.outputsNumber) : of(true);
+          let o2$ = mainAudioState.audioPeakProcessorState ? this.createMainAudioPeakProcessor(mainAudioState.audioPeakProcessorState.audioMeterStandard) : of(true);
+
+          forkJoin([o1$, o2$]).subscribe({
+            next: () => {
+              // we will not wait for this to finish, just execute
+              if (mainAudioState.audioRouterState) {
+                let nodes = mainAudioState.audioRouterState.audioInputOutputNodes.flatMap((byInput, inputNumber) => byInput.map((audioInputOutputNode, outputNumber) => audioInputOutputNode));
+                this.routeMainAudioRouterNodes(nodes);
+              }
+              nextCompleteObserver(observer);
             },
           });
         } else {
           nextCompleteObserver(observer);
         }
+      })
+    );
+
+    addAfterVideoLoad(
+      new Observable((observer) => {
+        // could be optimized
+        this.removeAllSidecarAudioTracks().subscribe({
+          next: () => {
+            if (state.sidecarAudioStates && state.sidecarAudioStates.length > 0) {
+              let os$ = state.sidecarAudioStates.map((sidecarAudioState) => {
+                return new Observable((sidecarAudioObserver) => {
+                  this.createSidecarAudioTrack(sidecarAudioState.audioTrack).subscribe({
+                    next: () => {
+                      let o1$ = sidecarAudioState.audioRouterState
+                        ? this.createSidecarAudioRouter(sidecarAudioState.audioTrack.id, sidecarAudioState.audioRouterState.inputsNumber, sidecarAudioState.audioRouterState.outputsNumber)
+                        : of(true);
+                      let o2$ = sidecarAudioState.audioPeakProcessorState
+                        ? this.createSidecarAudioPeakProcessor(sidecarAudioState.audioTrack.id, sidecarAudioState.audioPeakProcessorState.audioMeterStandard)
+                        : of(true);
+                      forkJoin([o1$, o2$]).subscribe({
+                        next: () => {
+                          // we will not wait for this to finish, just execute
+                          if (sidecarAudioState.audioRouterState) {
+                            let nodes = sidecarAudioState.audioRouterState.audioInputOutputNodes.flatMap((byInput, inputNumber) =>
+                              byInput.map((audioInputOutputNode, outputNumber) => audioInputOutputNode)
+                            );
+                            this.routeSidecarAudioRouterNodes(sidecarAudioState.audioTrack.id, nodes);
+                          }
+
+                          nextCompleteObserver(sidecarAudioObserver);
+                        },
+                      });
+                    },
+                  });
+                });
+              });
+
+              forkJoin(os$).subscribe({
+                next: () => {
+                  nextCompleteObserver(observer);
+                },
+              });
+            } else {
+              nextCompleteObserver(observer);
+            }
+          },
+        });
       })
     );
 
@@ -782,7 +831,7 @@ export class DetachableVideoController extends SwitchableVideoController {
           nextCompleteObserver(observer);
         },
         error: (error) => {
-          errorCompleteObserver(observer, error)
+          errorCompleteObserver(observer, error);
         },
       });
     });

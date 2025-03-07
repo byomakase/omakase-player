@@ -17,6 +17,7 @@
 import {OmpBroadcastChannelActionsMap} from '../common/omp-broadcast-channel';
 import {VideoControllerApi} from './video-controller-api';
 import {UnwrapObservable} from '../types';
+import {Observable} from 'rxjs';
 
 type ExtractType<T, K extends keyof T> = T[K];
 type ExtractReturnType<T, K extends keyof T> = T[K] extends (...args: any[]) => infer R ? R : never;
@@ -63,6 +64,8 @@ export type HandshakeChannelActionsMap = OmpBroadcastChannelActionsMap<{
   };
 }>;
 
+export type FlattenObservableToVoid<T> = T extends Observable<infer U> ? Observable<void> : T;
+
 export type MessageChannelActionsMap = OmpBroadcastChannelActionsMap<{
   // property types
   'VideoControllerApi.onVideoLoading$': ExtractPropertyTypes<VideoControllerApi, 'onVideoLoading$'>;
@@ -89,10 +92,17 @@ export type MessageChannelActionsMap = OmpBroadcastChannelActionsMap<{
   'VideoControllerApi.onSubtitlesHide$': ExtractPropertyTypes<VideoControllerApi, 'onSubtitlesHide$'>;
   'VideoControllerApi.onSubtitlesRemove$': ExtractPropertyTypes<VideoControllerApi, 'onSubtitlesRemove$'>;
   'VideoControllerApi.onSubtitlesShow$': ExtractPropertyTypes<VideoControllerApi, 'onSubtitlesShow$'>;
-  'VideoControllerApi.onAudioContextChange$': ExtractPropertyTypes<VideoControllerApi, 'onAudioContextChange$'>;
-  'VideoControllerApi.onAudioRouting$': ExtractPropertyTypes<VideoControllerApi, 'onAudioRouting$'>;
-  'VideoControllerApi.onAudioPeakProcessorWorkletNodeMessage$': ExtractPropertyTypes<VideoControllerApi, 'onAudioPeakProcessorWorkletNodeMessage$'>;
-  'VideoControllerApi.onAudioWorkletNodeCreated$': ExtractPropertyTypes<VideoControllerApi, 'onAudioWorkletNodeCreated$'>;
+
+  // audio router
+  'VideoControllerApi.onMainAudioChange$': ExtractPropertyTypes<VideoControllerApi, 'onMainAudioChange$'>;
+  'VideoControllerApi.onMainAudioPeakProcessorMessage$': ExtractPropertyTypes<VideoControllerApi, 'onMainAudioPeakProcessorMessage$'>;
+
+  // sidecar audio
+  'VideoControllerApi.onSidecarAudioCreate$': ExtractPropertyTypes<VideoControllerApi, 'onSidecarAudioCreate$'>;
+  'VideoControllerApi.onSidecarAudioRemove$': ExtractPropertyTypes<VideoControllerApi, 'onSidecarAudioRemove$'>;
+  'VideoControllerApi.onSidecarAudioChange$': ExtractPropertyTypes<VideoControllerApi, 'onSidecarAudioChange$'>;
+  'VideoControllerApi.onSidecarAudioPeakProcessorMessage$': ExtractPropertyTypes<VideoControllerApi, 'onSidecarAudioPeakProcessorMessage$'>;
+
   'VideoControllerApi.onThumbnailVttUrlChanged$': ExtractPropertyTypes<VideoControllerApi, 'onThumbnailVttUrlChanged$'>;
   'VideoControllerApi.onActiveNamedEventStreamsChange$': ExtractPropertyTypes<VideoControllerApi, 'onActiveNamedEventStreamsChange$'>;
   'VideoControllerApi.onNamedEvent$': ExtractPropertyTypes<VideoControllerApi, 'onNamedEvent$'>;
@@ -131,11 +141,35 @@ export type MessageChannelActionsMap = OmpBroadcastChannelActionsMap<{
   'VideoControllerApi.removeSubtitlesTrack': ExtractMethodTypes<VideoControllerApi, 'removeSubtitlesTrack'>;
   'VideoControllerApi.showSubtitlesTrack': ExtractMethodTypes<VideoControllerApi, 'showSubtitlesTrack'>;
   'VideoControllerApi.setActiveAudioTrack': ExtractMethodTypes<VideoControllerApi, 'setActiveAudioTrack'>;
-  'VideoControllerApi.createAudioContext': ExtractMethodTypes<VideoControllerApi, 'createAudioContext'>;
-  'VideoControllerApi.createAudioRouter': ExtractMethodTypes<VideoControllerApi, 'createAudioRouter'>;
-  'VideoControllerApi.routeAudioInputOutputNode': ExtractMethodTypes<VideoControllerApi, 'routeAudioInputOutputNode'>;
-  'VideoControllerApi.routeAudioInputOutputNodes': ExtractMethodTypes<VideoControllerApi, 'routeAudioInputOutputNodes'>;
-  'VideoControllerApi.createAudioPeakProcessorWorkletNode': ExtractMethodTypes<VideoControllerApi, 'createAudioPeakProcessorWorkletNode'>;
+
+  'VideoControllerApi.createMainAudioRouter': ExtractMethodTypes<VideoControllerApi, 'createMainAudioRouter'>;
+
+  // 'VideoControllerApi.createMainAudioPeakProcessor': ExtractMethodTypes<VideoControllerApi, 'createMainAudioPeakProcessor'>;
+  'VideoControllerApi.createMainAudioPeakProcessor': {
+    requestType: ExtractParameterTypes<VideoControllerApi, 'createMainAudioPeakProcessor'>;
+    responseType: FlattenObservableToVoid<ExtractReturnType<VideoControllerApi, 'createMainAudioPeakProcessor'>>;
+  };
+
+  'VideoControllerApi.routeMainAudioRouterNodes': ExtractMethodTypes<VideoControllerApi, 'routeMainAudioRouterNodes'>;
+
+  'VideoControllerApi.createSidecarAudioTrack': ExtractMethodTypes<VideoControllerApi, 'createSidecarAudioTrack'>;
+  'VideoControllerApi.createSidecarAudioTracks': ExtractMethodTypes<VideoControllerApi, 'createSidecarAudioTracks'>;
+  'VideoControllerApi.removeSidecarAudioTracks': ExtractMethodTypes<VideoControllerApi, 'removeSidecarAudioTracks'>;
+  'VideoControllerApi.activateSidecarAudioTracks': ExtractMethodTypes<VideoControllerApi, 'activateSidecarAudioTracks'>;
+  'VideoControllerApi.deactivateSidecarAudioTracks': ExtractMethodTypes<VideoControllerApi, 'deactivateSidecarAudioTracks'>;
+  'VideoControllerApi.removeAllSidecarAudioTracks': ExtractMethodTypes<VideoControllerApi, 'removeAllSidecarAudioTracks'>;
+  'VideoControllerApi.createSidecarAudioRouter': ExtractMethodTypes<VideoControllerApi, 'createSidecarAudioRouter'>;
+  'VideoControllerApi.routeSidecarAudioRouterNodes': ExtractMethodTypes<VideoControllerApi, 'routeSidecarAudioRouterNodes'>;
+
+  // 'VideoControllerApi.createSidecarAudioPeakProcessor': ExtractMethodTypes<VideoControllerApi, 'createSidecarAudioPeakProcessor'>;
+  'VideoControllerApi.createSidecarAudioPeakProcessor': {
+    requestType: ExtractParameterTypes<VideoControllerApi, 'createSidecarAudioPeakProcessor'>;
+    responseType: FlattenObservableToVoid<ExtractReturnType<VideoControllerApi, 'createSidecarAudioPeakProcessor'>>;
+  };
+
+  'VideoControllerApi.exportMainAudioTrackToSidecar': ExtractMethodTypes<VideoControllerApi, 'exportMainAudioTrackToSidecar'>;
+  'VideoControllerApi.exportMainAudioTracksToSidecar': ExtractMethodTypes<VideoControllerApi, 'exportMainAudioTracksToSidecar'>;
+
   'VideoControllerApi.loadThumbnailVttUrl': ExtractMethodTypes<VideoControllerApi, 'loadThumbnailVttUrl'>;
   'VideoControllerApi.updateActiveNamedEventStreams': ExtractMethodTypes<VideoControllerApi, 'updateActiveNamedEventStreams'>;
   'VideoControllerApi.getActiveNamedEventStreams': ExtractMethodTypes<VideoControllerApi, 'getActiveNamedEventStreams'>;

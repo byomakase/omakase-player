@@ -15,7 +15,6 @@
  */
 
 import {Dimension, Position} from './common';
-import {AudioInputOutputNode} from './video/model';
 
 export class Constants {
   public static OMP_HANDSHAKE_BROADCAST_CHANNEL_ID = 'OMP_HANDSHAKE_BROADCAST_CHANNEL_ID';

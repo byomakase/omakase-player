@@ -15,17 +15,20 @@
  */
 
 import {VideoControllerApi} from './video-controller-api';
-import {BehaviorSubject, Observable, skip, Subject, takeUntil} from 'rxjs';
+import {BehaviorSubject, filter, map, Observable, skip, Subject, takeUntil} from 'rxjs';
 import {
-  AudioContextChangeEvent,
   AudioLoadedEvent,
-  AudioPeakProcessorWorkletNodeMessageEvent,
-  AudioRoutingEvent,
+  AudioPeakProcessorMessageEvent,
   AudioSwitchedEvent,
-  AudioWorkletNodeCreatedEvent,
   HelpMenuGroup,
+  MainAudioChangeEvent,
+  OmpAudioTrack,
   OmpNamedEvent,
-  OmpNamedEvents,
+  OmpNamedEventEventName,
+  SidecarAudioChangeEvent,
+  SidecarAudioCreateEvent,
+  SidecarAudioPeakProcessorMessageEvent,
+  SidecarAudioRemoveEvent,
   SubtitlesCreateEvent,
   SubtitlesEvent,
   SubtitlesLoadedEvent,
@@ -52,7 +55,9 @@ import {nextCompleteSubject} from '../util/rxjs-util';
 import {VideoControllerConfig} from './video-controller';
 import Hls from 'hls.js';
 import {destroyer} from '../util/destroy-util';
-import {AudioInputOutputNode, BufferedTimespan, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
+import {AudioInputOutputNode, BufferedTimespan, OmpAudioRouterState, OmpMainAudioState, OmpSidecarAudioState, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
+import {OmpAudioRouter} from './audio-router';
+import {SidecarAudioApi} from '../api/sidecar-audio-api';
 
 /**
  * Used for switching between {@link VideoControllerApi} instances
@@ -60,6 +65,16 @@ import {AudioInputOutputNode, BufferedTimespan, VideoLoadOptionsInternal, VideoS
 export class SwitchableVideoController implements VideoControllerApi {
   public readonly onVideoLoaded$: BehaviorSubject<VideoLoadedEvent | undefined> = new BehaviorSubject<VideoLoadedEvent | undefined>(void 0);
   public readonly onVideoLoading$: Subject<VideoLoadingEvent> = new Subject<VideoLoadingEvent>();
+
+  public readonly onAudioLoaded$: BehaviorSubject<AudioLoadedEvent | undefined> = new BehaviorSubject<AudioLoadedEvent | undefined>(void 0);
+  public readonly onAudioSwitched$: Subject<AudioSwitchedEvent> = new Subject<AudioSwitchedEvent>();
+
+  public readonly onSubtitlesLoaded$: BehaviorSubject<SubtitlesLoadedEvent | undefined> = new BehaviorSubject<SubtitlesLoadedEvent | undefined>(void 0);
+  public readonly onSubtitlesCreate$: Subject<SubtitlesCreateEvent> = new Subject<SubtitlesCreateEvent>();
+  public readonly onSubtitlesHide$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
+  public readonly onSubtitlesRemove$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
+  public readonly onSubtitlesShow$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
+
   public readonly onPlay$: Subject<VideoPlayEvent> = new Subject<VideoPlayEvent>();
   public readonly onPause$: Subject<VideoPlayEvent> = new Subject<VideoPlayEvent>();
   public readonly onVideoTimeChange$: Subject<VideoTimeChangeEvent> = new Subject<VideoTimeChangeEvent>();
@@ -74,24 +89,23 @@ export class SwitchableVideoController implements VideoControllerApi {
   public readonly onPlaybackRateChange$: Subject<VideoPlaybackRateEvent> = new Subject<VideoPlaybackRateEvent>();
   public readonly onVideoWindowPlaybackStateChange$: Subject<VideoWindowPlaybackStateChangeEvent> = new Subject<VideoWindowPlaybackStateChangeEvent>();
 
-  public readonly onAudioLoaded$: BehaviorSubject<AudioLoadedEvent | undefined> = new BehaviorSubject<AudioLoadedEvent | undefined>(void 0);
-  public readonly onAudioSwitched$: Subject<AudioSwitchedEvent> = new Subject<AudioSwitchedEvent>();
-  public readonly onAudioContextChange$: Subject<AudioContextChangeEvent> = new Subject<AudioContextChangeEvent>();
-  public readonly onAudioRouting$: Subject<AudioRoutingEvent> = new Subject<AudioRoutingEvent>();
-  public readonly onAudioPeakProcessorWorkletNodeMessage$: Subject<AudioPeakProcessorWorkletNodeMessageEvent> = new Subject<AudioPeakProcessorWorkletNodeMessageEvent>();
-  public readonly onAudioWorkletNodeCreated$: BehaviorSubject<AudioWorkletNodeCreatedEvent | undefined> = new BehaviorSubject<AudioWorkletNodeCreatedEvent | undefined>(void 0);
-
   public readonly onHelpMenuChange$: Subject<VideoHelpMenuChangeEvent> = new Subject<VideoHelpMenuChangeEvent>();
   public readonly onPlaybackState$: Subject<PlaybackState> = new Subject<PlaybackState>();
-  public readonly onSubtitlesLoaded$: BehaviorSubject<SubtitlesLoadedEvent | undefined> = new BehaviorSubject<SubtitlesLoadedEvent | undefined>(void 0);
-  public readonly onSubtitlesCreate$: Subject<SubtitlesCreateEvent> = new Subject<SubtitlesCreateEvent>();
-  public readonly onSubtitlesHide$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
-  public readonly onSubtitlesRemove$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
-  public readonly onSubtitlesShow$: Subject<SubtitlesEvent> = new Subject<SubtitlesEvent>();
 
   public readonly onThumbnailVttUrlChanged$: Subject<ThumnbailVttUrlChangedEvent> = new Subject<ThumnbailVttUrlChangedEvent>();
 
-  public readonly onActiveNamedEventStreamsChange$: Subject<OmpNamedEvents[]> = new Subject<OmpNamedEvents[]>();
+  // audio routing events
+  public readonly onMainAudioChange$: BehaviorSubject<MainAudioChangeEvent | undefined> = new BehaviorSubject<MainAudioChangeEvent | undefined>(void 0);
+  public readonly onMainAudioPeakProcessorMessage$: Subject<AudioPeakProcessorMessageEvent> = new Subject<AudioPeakProcessorMessageEvent>();
+
+  // sidecar audio
+  public readonly onSidecarAudioCreate$: Subject<SidecarAudioCreateEvent> = new Subject<SidecarAudioCreateEvent>();
+  public readonly onSidecarAudioRemove$: Subject<SidecarAudioRemoveEvent> = new Subject<SidecarAudioRemoveEvent>();
+  public readonly onSidecarAudioChange$: Subject<SidecarAudioChangeEvent> = new Subject<SidecarAudioChangeEvent>();
+  public readonly onSidecarAudioPeakProcessorMessage$: Subject<SidecarAudioPeakProcessorMessageEvent> = new Subject<SidecarAudioPeakProcessorMessageEvent>();
+
+  // VideoHlsLoader specific
+  public readonly onActiveNamedEventStreamsChange$: Subject<OmpNamedEventEventName[]> = new Subject<OmpNamedEventEventName[]>();
   public readonly onNamedEvent$: Subject<OmpNamedEvent> = new Subject<OmpNamedEvent>();
 
   protected _videoController!: VideoControllerApi;
@@ -186,27 +200,43 @@ export class SwitchableVideoController implements VideoControllerApi {
       },
     });
 
-    videoController.onAudioContextChange$.pipe(takeUntil(this._eventBreaker$)).subscribe({
+    // audio router
+
+    videoController.onMainAudioChange$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
-        this.onAudioContextChange$.next(value);
+        this.onMainAudioChange$.next(value);
       },
     });
 
-    videoController.onAudioRouting$.pipe(takeUntil(this._eventBreaker$)).subscribe({
+    videoController.onMainAudioPeakProcessorMessage$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
-        this.onAudioRouting$.next(value);
+        this.onMainAudioPeakProcessorMessage$.next(value);
       },
     });
 
-    videoController.onAudioPeakProcessorWorkletNodeMessage$.pipe(takeUntil(this._eventBreaker$)).subscribe({
+    // sidecar audio
+
+    videoController.onSidecarAudioCreate$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
-        this.onAudioPeakProcessorWorkletNodeMessage$.next(value);
+        this.onSidecarAudioCreate$.next(value);
       },
     });
 
-    videoController.onAudioWorkletNodeCreated$.pipe(skip(0), takeUntil(this._eventBreaker$)).subscribe({
+    videoController.onSidecarAudioRemove$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
-        this.onAudioWorkletNodeCreated$.next(value);
+        this.onSidecarAudioRemove$.next(value);
+      },
+    });
+
+    videoController.onSidecarAudioChange$.pipe(takeUntil(this._eventBreaker$)).subscribe({
+      next: (value) => {
+        this.onSidecarAudioChange$.next(value);
+      },
+    });
+
+    videoController.onSidecarAudioPeakProcessorMessage$.pipe(takeUntil(this._eventBreaker$)).subscribe({
+      next: (value) => {
+        this.onSidecarAudioPeakProcessorMessage$.next(value);
       },
     });
 
@@ -372,12 +402,12 @@ export class SwitchableVideoController implements VideoControllerApi {
     return this._videoController.getHTMLVideoElement();
   }
 
-  getAudioContext(): AudioContext | undefined {
+  getAudioContext(): AudioContext {
     return this._videoController.getAudioContext();
   }
 
-  getMediaElementAudioSourceNode(): MediaElementAudioSourceNode | undefined {
-    return this._videoController.getMediaElementAudioSourceNode();
+  getMainAudioRouter(): OmpAudioRouter | undefined {
+    return this._videoController.getMainAudioRouter();
   }
 
   getHelpMenuGroups(): HelpMenuGroup[] {
@@ -592,36 +622,96 @@ export class SwitchableVideoController implements VideoControllerApi {
     return this._videoController.showSubtitlesTrack(id);
   }
 
-  createAudioContext(contextOptions?: AudioContextOptions): Observable<void> {
-    return this._videoController.createAudioContext(contextOptions);
+  createMainAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<OmpAudioRouterState> {
+    return this._videoController.createMainAudioRouter(inputsNumber, outputsNumber);
   }
 
-  createAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<void> {
-    return this._videoController.createAudioRouter(inputsNumber, outputsNumber);
+  createMainAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<OmpAudioRouterState> {
+    return this._videoController.createMainAudioRouterWithOutputsResolver(inputsNumber, outputsNumberResolver);
   }
 
-  createAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void> {
-    return this._videoController.createAudioRouterWithOutputsResolver(inputsNumber, outputsNumberResolver);
+  createMainAudioPeakProcessor(audioMeterStandard?: AudioMeterStandard): Observable<Observable<AudioPeakProcessorMessageEvent>> {
+    // we have to re-map event stream to this controller
+    return this._videoController.createMainAudioPeakProcessor(audioMeterStandard).pipe(map((p) => this.onMainAudioPeakProcessorMessage$));
   }
 
-  getAudioInputOutputNodes(): AudioInputOutputNode[][] {
-    return this._videoController.getAudioInputOutputNodes();
+  getMainAudioSourceNode(): AudioNode {
+    return this._videoController.getMainAudioSourceNode();
   }
 
-  routeAudioInputOutputNode(newAudioInputOutputNode: AudioInputOutputNode): Observable<void> {
-    return this._videoController.routeAudioInputOutputNode(newAudioInputOutputNode);
+  getMainAudioState(): OmpMainAudioState | undefined {
+    return this._videoController.getMainAudioState();
   }
 
-  routeAudioInputOutputNodes(newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void> {
-    return this._videoController.routeAudioInputOutputNodes(newAudioInputOutputNodes);
+  routeMainAudioRouterNodes(newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void> {
+    return this._videoController.routeMainAudioRouterNodes(newAudioInputOutputNodes);
   }
 
-  getAudioPeakProcessorWorkletNode(): AudioWorkletNode | undefined {
-    return this._videoController.getAudioPeakProcessorWorkletNode();
+  getSidecarAudios(): SidecarAudioApi[] {
+    return this._videoController.getSidecarAudios();
   }
 
-  createAudioPeakProcessorWorkletNode(audioMeterStandard: AudioMeterStandard): Observable<void> {
-    return this._videoController.createAudioPeakProcessorWorkletNode(audioMeterStandard);
+  getSidecarAudio(id: string): SidecarAudioApi | undefined {
+    return this._videoController.getSidecarAudio(id);
+  }
+
+  getSidecarAudioStates(): OmpSidecarAudioState[] {
+    return this._videoController.getSidecarAudioStates();
+  }
+
+  createSidecarAudioTrack(track: Partial<OmpAudioTrack>): Observable<OmpAudioTrack> {
+    return this._videoController.createSidecarAudioTrack(track);
+  }
+
+  createSidecarAudioTracks(tracks: Partial<OmpAudioTrack>[]): Observable<OmpAudioTrack[]> {
+    return this._videoController.createSidecarAudioTracks(tracks);
+  }
+
+  activateSidecarAudioTracks(ids: string[], deactivateOthers: boolean | undefined): Observable<void> {
+    return this._videoController.activateSidecarAudioTracks(ids, deactivateOthers);
+  }
+
+  deactivateSidecarAudioTracks(ids: string[]): Observable<void> {
+    return this._videoController.deactivateSidecarAudioTracks(ids);
+  }
+
+  getActiveSidecarAudioTracks(): OmpAudioTrack[] {
+    return this._videoController.getActiveSidecarAudioTracks();
+  }
+
+  getSidecarAudioTracks(): OmpAudioTrack[] {
+    return this._videoController.getSidecarAudioTracks();
+  }
+
+  removeSidecarAudioTracks(ids: string[]): Observable<void> {
+    return this._videoController.removeSidecarAudioTracks(ids);
+  }
+
+  removeAllSidecarAudioTracks(): Observable<void> {
+    return this._videoController.removeAllSidecarAudioTracks();
+  }
+
+  createSidecarAudioRouter(sidecarAudioTrackId: string, inputsNumber: number, outputsNumber?: number): Observable<OmpAudioRouterState> {
+    return this._videoController.createSidecarAudioRouter(sidecarAudioTrackId, inputsNumber, outputsNumber);
+  }
+
+  routeSidecarAudioRouterNodes(sidecarAudioTrackId: string, newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void> {
+    return this._videoController.routeSidecarAudioRouterNodes(sidecarAudioTrackId, newAudioInputOutputNodes);
+  }
+
+  createSidecarAudioPeakProcessor(sidecarAudioTrackId: string, audioMeterStandard?: AudioMeterStandard): Observable<Observable<AudioPeakProcessorMessageEvent>> {
+    // we have to re-map event stream to this controller
+    return this._videoController
+      .createSidecarAudioPeakProcessor(sidecarAudioTrackId, audioMeterStandard)
+      .pipe(map((p) => this.onSidecarAudioPeakProcessorMessage$.pipe(filter((p) => p.sidecarAudioTrackId === sidecarAudioTrackId))));
+  }
+
+  exportMainAudioTrackToSidecar(mainAudioTrackId: string): Observable<OmpAudioTrack> {
+    return this._videoController.exportMainAudioTrackToSidecar(mainAudioTrackId);
+  }
+
+  exportMainAudioTracksToSidecar(mainAudioTrackIds: string[]): Observable<OmpAudioTrack[]> {
+    return this._videoController.exportMainAudioTracksToSidecar(mainAudioTrackIds);
   }
 
   getThumbnailVttUrl(): string | undefined {
@@ -630,6 +720,10 @@ export class SwitchableVideoController implements VideoControllerApi {
 
   loadThumbnailVttUrl(thumbnailVttUrl: string): Observable<void> {
     return this._videoController.loadThumbnailVttUrl(thumbnailVttUrl);
+  }
+
+  isPiPSupported(): boolean {
+    return this._videoController.isPiPSupported();
   }
 
   enablePiP(): Observable<void> {
@@ -648,11 +742,11 @@ export class SwitchableVideoController implements VideoControllerApi {
     return this._videoController.getHls();
   }
 
-  updateActiveNamedEventStreams(eventNames: OmpNamedEvents[]): Observable<void> {
+  updateActiveNamedEventStreams(eventNames: OmpNamedEventEventName[]): Observable<void> {
     return this._videoController.updateActiveNamedEventStreams(eventNames);
   }
 
-  getActiveNamedEventStreams(): OmpNamedEvents[] {
+  getActiveNamedEventStreams(): OmpNamedEventEventName[] {
     return this._videoController.getActiveNamedEventStreams();
   }
 

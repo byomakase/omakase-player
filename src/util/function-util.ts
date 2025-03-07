@@ -14,10 +14,6 @@
  * limitations under the License.
  */
 
-import {Video} from '../video';
-
-export class InitSegmentUtil {
-  static isInitSegment(video: Video, time: number): boolean {
-    return !!video.initSegmentTimeOffset && time >= 0 && time < video.initSegmentTimeOffset;
-  }
+export function isNonNullable<T>(value: T | null | undefined): value is NonNullable<T> {
+  return value != null; // Excludes both null and undefined
 }

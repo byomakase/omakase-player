@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Position} from '../../common/measurement';
+import {Position} from '../../common';
 import {BaseKonvaComponent, ComponentConfig, KonvaComponent} from '../../layout/konva-component';
 import Konva from 'konva';
 import {MarkerLane} from './marker-lane';
@@ -26,7 +26,7 @@ import {completeUnsubscribeSubjects} from '../../util/rxjs-util';
 import {StringUtil} from '../../util/string-util';
 import {konvaUnlistener} from '../../util/konva-util';
 import {MarkerHandleVerticals, MarkerStyle} from './marker-types';
-import {MarkerApi} from '../../api/marker-api';
+import {MarkerApi} from '../../api';
 import {CryptoUtil} from '../../util/crypto-util';
 
 export interface MarkerConfig<T extends TimeObservation, S extends MarkerStyle> extends ComponentConfig<S> {
@@ -93,7 +93,9 @@ export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConf
     this._editable = this.config.editable ? Validators.boolean()(this.config.editable!) : false;
     this._text = this.config.text;
 
-    this._group = new Konva.Group();
+    this._group = new Konva.Group({
+      name: 'BaseMarkerGroup',
+    });
 
     this._group.on('click', (event) => {
       this.onClick$.next({});

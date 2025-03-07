@@ -17,15 +17,15 @@
 import {AxiosRequestConfig} from 'axios';
 import {from, map, Observable} from 'rxjs';
 import {httpGet} from '../http';
-import {M3u8Parser} from './m3u8-parser';
+import {OmpM3u8Parser} from './omp-m3u8-parser';
 import {AuthenticationData} from '../authentication/model';
-import {AuthUtil} from '../util/auth-util';
-import HLS from 'parse-hls';
+import {AuthConfig} from '../auth/auth-config';
+import {Manifest} from './m3u8.model';
 
 export abstract class BaseM3u8File {
   private _url: string;
   private _axiosConfig?: AxiosRequestConfig;
-  private _m3u8Parsed?: HLS;
+  private _manifest?: Manifest;
 
   protected constructor(url: string, axiosConfig?: AxiosRequestConfig) {
     this._url = url;
@@ -33,12 +33,12 @@ export abstract class BaseM3u8File {
   }
 
   fetch(): Observable<boolean> {
-    return from(httpGet<string, AxiosRequestConfig>(this._url, this._axiosConfig)).pipe(
+    return from(httpGet<string>(this._url, this._axiosConfig)).pipe(
       map((result) => {
         let m3u8FileText = result.data;
 
         try {
-          this._m3u8Parsed = M3u8Parser.parse(m3u8FileText);
+          this._manifest = OmpM3u8Parser.parse(m3u8FileText);
           return true;
         } catch (e) {
           console.error(e);
@@ -48,8 +48,8 @@ export abstract class BaseM3u8File {
     );
   }
 
-  get m3u8Parsed(): HLS | undefined {
-    return this._m3u8Parsed;
+  get manifest(): Manifest | undefined {
+    return this._manifest;
   }
 
   get url(): string {
@@ -58,11 +58,8 @@ export abstract class BaseM3u8File {
 }
 
 export class M3u8File extends BaseM3u8File {
-  static create(url: string, axiosConfig?: AxiosRequestConfig, authentication?: AuthenticationData): Observable<M3u8File> {
-    if (!axiosConfig && authentication) {
-      axiosConfig = AuthUtil.getAuthorizedAxiosConfig(url, authentication);
-    }
-    let instance = new M3u8File(url, axiosConfig);
+  static create(url: string, authentication?: AuthenticationData): Observable<M3u8File> {
+    let instance = new M3u8File(url, AuthConfig.createAxiosRequestConfig(url, authentication));
     return instance.fetch().pipe(
       map((result) => {
         return instance;

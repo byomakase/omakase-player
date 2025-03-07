@@ -15,12 +15,10 @@
  */
 
 import {Video, VideoLoadOptions} from './model';
-import {BehaviorSubject, Observable, Subject, takeUntil} from 'rxjs';
+import {BehaviorSubject, Observable, Subject} from 'rxjs';
 import {VideoControllerApi} from './video-controller-api';
-import {AudioLoadedEvent, AudioSwitchedEvent, Destroyable, OmpNamedEvent, OmpNamedEvents, SubtitlesLoadedEvent} from '../types';
+import {AudioLoadedEvent, AudioSwitchedEvent, Destroyable, OmpAudioTrack, OmpNamedEvent, OmpNamedEventEventName, SubtitlesLoadedEvent} from '../types';
 import {completeUnsubscribeSubjects, nextCompleteSubject} from '../util/rxjs-util';
-import {types} from 'sass';
-import Error = types.Error;
 
 export interface VideoLoader extends Destroyable {
   onNamedEvent$: Observable<OmpNamedEvent>;
@@ -31,9 +29,11 @@ export interface VideoLoader extends Destroyable {
 
   loadVideo(sourceUrl: string, frameRate: number, options?: VideoLoadOptions): Observable<Video>;
 
-  setActiveAudioTrack(omakaseAudioTrackId: string): Observable<void>;
+  setActiveAudioTrack(ompAudioTrackId: string): Observable<void>;
 
-  updateActiveNamedEventStreams(eventNames: OmpNamedEvents[]): void;
+  exportAudioTrack(ompAudioTrackId: string): Observable<Partial<OmpAudioTrack>>;
+
+  updateActiveNamedEventStreams(eventNames: OmpNamedEventEventName[]): void;
 }
 
 export abstract class BaseVideoLoader implements VideoLoader {
@@ -53,9 +53,13 @@ export abstract class BaseVideoLoader implements VideoLoader {
 
   abstract loadVideo(sourceUrl: string, frameRate: number, options?: VideoLoadOptions): Observable<Video>;
 
-  abstract updateActiveNamedEventStreams(eventNames: OmpNamedEvents[]): void;
+  abstract updateActiveNamedEventStreams(eventNames: OmpNamedEventEventName[]): void;
 
-  setActiveAudioTrack(omakaseAudioTrackId: string): Observable<void> {
+  setActiveAudioTrack(ompAudioTrackId: string): Observable<void> {
+    throw new Error('Not supported');
+  }
+
+  exportAudioTrack(ompAudioTrackId: string): Observable<Partial<OmpAudioTrack>> {
     throw new Error('Not supported');
   }
 

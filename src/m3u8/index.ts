@@ -14,4 +14,4 @@
  * limitations under the License.
  */
 
-export * from './m3u8-parser';
+export * from './omp-m3u8-parser';

@@ -15,6 +15,7 @@
  */
 
 let activeMarker = null;
+let activeMarkerIndex = -1;
 let currentSpeed = 1;
 let currentAudio = '5.1';
 let currentCaption = 'EN';
@@ -23,25 +24,10 @@ let captions = ['EN', 'DK'];
 let audios = ['5.1', '2.0'];
 let audioContext = null;
 let markerCount = 2;
-let maxMarkerCount = 8;
+let maxMarkerCount = 7;
 let splitLaneId = 0;
 let urlSelector = 0;
-let markerColors = [
-  '#E4ABFF',
-  '#6AC7F6',
-  '#A007E8',
-  '#FCD004',
-  '#009CEB',
-  '#5E1879',
-  '#4D79A7',
-  '#A481B5',
-  '#5A6C80',
-  '#2B299E',
-  '#EE9247',
-  '#520160',
-  '#863800',
-  '#CD5600',
-];
+let markerColors = ['#E4ABFF', '#6AC7F6', '#A007E8', '#FCD004', '#009CEB', '#5E1879', '#4D79A7', '#A481B5', '#5A6C80', '#2B299E', '#EE9247', '#520160', '#863800', '#CD5600'];
 let omakasePlayer;
 let activeAlertType = null;
 let commentAlertId = null;
@@ -49,6 +35,9 @@ let commentSubscription = null;
 let measurementSubscription = null;
 let mouseOnLegendButton = false;
 let omakaseMarkerList = null;
+let routerVisualization = null;
+let browserIsSafari = false;
+let thumbnailVttFile;
 
 let urls = [
   {
@@ -80,11 +69,73 @@ let urls = [
 detectBrowser();
 
 window.addEventListener('load', () => {
+  if (browserIsSafari) {
+    domHelper.setStyle(domHelper.getById('tab-rvc'), {display: 'none'});
+    domHelper.setStyle(domHelper.getById('tab-separator'), {display: 'none'});
+  }
+
   createOmakasePlayer();
   loadOmakaseVideo(urls[urlSelector].video, urls[urlSelector].frameRate);
   omakasePlayer.video.onVideoLoaded$.subscribe((event) => {
     if (event) {
       createOmakaseTimeline();
+    }
+  });
+  omakasePlayer.audio.onAudioLoaded$.subscribe((event) => {
+    let userAgent = (window.navigator && window.navigator.userAgent) || '';
+
+    let isFirefox = /Firefox/i.test(userAgent);
+    let isEdge = /Edg/i.test(userAgent);
+    let isChromium = /Chrome/i.test(userAgent) || /CriOS/i.test(userAgent);
+    let isChrome = !isEdge && isChromium;
+
+    if (event && (isFirefox || isChrome)) {
+      const mainTrack = {
+        name: `5.1`,
+        inputNumber: 6,
+        maxInputNumber: 6,
+        inputLabels: ['L', 'R', 'C', 'LFE', 'Ls', 'Rs'],
+      };
+
+      router = omakasePlayer.initializeRouterVisualization({
+        size: 'medium',
+        routerVisualizationHTMLElementId: 'omakase-audio-router',
+        mainTrack: mainTrack,
+      });
+
+      const omakaseAudioRouter = domHelper.getById('omakase-audio-router');
+      const buttonGroup = domHelper.create('div');
+      domHelper.setProperty(buttonGroup, 'className', 'router-size');
+
+      let sizes = ['SMALL', 'MEDIUM', 'LARGE'];
+      for (let i = 0; i < 3; i++) {
+        const sizeButton = domHelper.create('button');
+        const lineBreak = domHelper.create('br');
+
+        if (i === 1) {
+          domHelper.setProperty(sizeButton, 'className', 'size activated');
+        } else {
+          domHelper.setProperty(sizeButton, 'className', 'size');
+        }
+        domHelper.setProperty(sizeButton, 'innerHTML', sizes[i]);
+
+        sizeButton.onclick = (event) => {
+          router.updateSize(event.target.innerHTML.toLowerCase());
+          let elems = domHelper.getByClassName('size');
+          for (let j = 0; j < elems.length; j++) {
+            if (elems[j].innerHTML === event.target.innerHTML) {
+              domHelper.setProperty(elems[j], 'className', 'size activated');
+            } else {
+              domHelper.setProperty(elems[j], 'className', 'size');
+            }
+          }
+        };
+        domHelper.appendChildren(buttonGroup, [sizeButton, lineBreak]);
+      }
+
+      domHelper.appendChildren(omakaseAudioRouter, [buttonGroup]);
+
+      createMLCAndRVCSwitcher();
     }
   });
 
@@ -185,6 +236,8 @@ function initializeOmakaseTimeline() {
       descriptionTextFontSize: 20,
       marginBottom: 0,
     };
+
+    omakasePlayer.timeline.getScrubberLane().updateLayoutDimensions();
 
     omakasePlayer.timeline.addTimelineLane(
       new omakase.LabelLane({
@@ -401,9 +454,19 @@ function initializeOmakaseTimeline() {
         omakasePlayer.video.seekToTime(event.thumbnail.cue.startTime).subscribe(() => {});
       });
 
+      // Add thumbnails to the marker list
+      defaultThumbnailLane.onVttFileLoaded$.subscribe((vttFile) => {
+        if (omakaseMarkerList) {
+          omakaseMarkerList.thumbnailVttFile = vttFile;
+        } else {
+          thumbnailVttFile = vttFile;
+        }
+      });
+
       omakasePlayer.timeline.addTimelineLane(defaultThumbnailLane);
 
       const marker = inAndOutMarkersLane.createPeriodMarker({
+        id: 'predefined_marker',
         text: 'Predefined marker',
         timeObservation: {
           start: 10.001,
@@ -414,7 +477,7 @@ function initializeOmakaseTimeline() {
           color: markerColors[1],
           renderType: 'lane',
         },
-        editable: true,
+        editable: false,
       });
 
       // Creating a Marker List
@@ -428,21 +491,32 @@ function initializeOmakaseTimeline() {
         })
         .subscribe((markerList) => {
           omakaseMarkerList = markerList;
+          if (thumbnailVttFile) {
+            markerList.thumbnailVttFile = thumbnailVttFile;
+          }
           markerList.toggleMarker(marker.id);
           activeMarker = marker;
           markerList.onMarkerClick$.subscribe(({marker}) => {
-            markerList.toggleMarker(marker.id);
-            activeMarker = markerList.getSelectedMarker();
+            if (marker.id !== markerList.getSelectedMarker()?.id) {
+              markerList.toggleMarker(marker.id);
+              activeMarker = markerList.getSelectedMarker();
+            }
+          });
+          markerList.onMarkerSelected$.subscribe(({marker}) => {
+            if (marker) {
+              activeMarkerIndex = markerList.getMarkers().findIndex((m) => m.id === marker.id);
+            }
           });
           markerList.onMarkerDelete$.subscribe(() => {
             updateAddMarkerButton();
+            if (!markerList.getSelectedMarker()) {
+              const nextMarker = markerList.getMarkers()[activeMarkerIndex] ?? markerList.getMarkers()[activeMarkerIndex - 1] ?? markerList.getMarkers()[0];
+              if (nextMarker) {
+                markerList.toggleMarker(nextMarker.id);
+              }
+            }
           });
         });
-
-      // Add thumbnails to the marker list
-      defaultThumbnailLane.onVttFileLoaded$.subscribe((thumbnailVttFile) => {
-        omakaseMarkerList.thumbnailVttFile = thumbnailVttFile;
-      });
     }
 
     if (inAndOutMarkersLane.getMarkers().length === 0) {
@@ -540,7 +614,7 @@ function initializeOmakaseTimeline() {
       },
     });
 
-    omakasePlayer.on(omakasePlayer.EVENTS.OMAKASE_SUBTITLES_SHOW, (event) => {
+    omakasePlayer.subtitles.onShow$.subscribe((event) => {
       if ('da-dk' !== omakasePlayer.subtitles.getActiveTrack().language) {
         subDkLabel.style = {
           backgroundFill: '#f45844',
@@ -710,7 +784,7 @@ function initializeOmakaseTimeline() {
       },
     });
 
-    omakasePlayer.on(omakasePlayer.EVENTS.OMAKASE_AUDIO_SWITCHED, (event) => {
+    omakasePlayer.audio.onAudioSwitched$.subscribe((event) => {
       if ('EN_20' !== omakasePlayer.audio.getActiveAudioTrack().label) {
         textLabel20.style = {
           backgroundFill: '#f45844',
@@ -884,7 +958,7 @@ function initializeOmakaseTimeline() {
       },
     });
 
-    omakasePlayer.on(omakasePlayer.EVENTS.OMAKASE_AUDIO_SWITCHED, (event) => {
+    omakasePlayer.audio.onAudioSwitched$.subscribe((event) => {
       if ('EN_51' !== omakasePlayer.audio.getActiveAudioTrack().label) {
         textLabel51.style = {
           backgroundFill: '#f45844',
@@ -1051,9 +1125,7 @@ function processSubtitles() {
         },
       });
 
-      let ind = omakasePlayer.timeline
-        .getTimelineLanes()
-        .findIndex((item) => item instanceof omakase.SubtitlesLane || item instanceof omakase.AudioTrackLane);
+      let ind = omakasePlayer.timeline.getTimelineLanes().findIndex((item) => item instanceof omakase.SubtitlesLane || item instanceof omakase.AudioTrackLane);
       if (ind !== -1) {
         omakasePlayer.timeline.addTimelineLaneAtIndex(enClosedCaptionLane, ind);
       } else {
@@ -1073,7 +1145,7 @@ function processSubtitles() {
         },
       });
 
-      omakasePlayer.on(omakasePlayer.EVENTS.OMAKASE_SUBTITLES_SHOW, (event) => {
+      omakasePlayer.subtitles.onShow$.subscribe((event) => {
         if ('eng' !== omakasePlayer.subtitles.getActiveTrack().language) {
           capEnLabel.style = {
             backgroundFill: '#f45844',
@@ -1197,8 +1269,29 @@ function createDropdownMenu() {
   domHelper.appendChildren(header, [dropdownMenu]);
 }
 
+function createMLCAndRVCSwitcher() {
+  const MLC = domHelper.getById('player-stats');
+  const RVC = domHelper.getById('omakase-audio-router');
+  const mlcTab = domHelper.getById('tab-mlc');
+  const rvcTab = domHelper.getById('tab-rvc');
+
+  mlcTab.onclick = () => {
+    domHelper.setStyle(RVC, {display: 'none'});
+    domHelper.setStyle(MLC, {display: 'inline-block'});
+    mlcTab.classList.add('active');
+    rvcTab.classList.remove('active');
+  };
+
+  rvcTab.onclick = () => {
+    domHelper.setStyle(MLC, {display: 'none'});
+    domHelper.setStyle(RVC, {display: 'inline-block'});
+    rvcTab.classList.add('active');
+    mlcTab.classList.remove('active');
+  };
+}
+
 function initializePlayerEventListeners() {
-  omakasePlayer.on(omakasePlayer.EVENTS.OMAKASE_VIDEO_TIME_CHANGE, (event) => {
+  omakasePlayer.video.onVideoTimeChange$.subscribe((event) => {
     let inputFrameSeek = domHelper.getById('inputFrameSeek');
     domHelper.setProperty(inputFrameSeek, 'innerHTML', event.frame);
 
@@ -1206,11 +1299,7 @@ function initializePlayerEventListeners() {
     domHelper.setProperty(inputTimestamp, event.currentTime.toFixed(3));
 
     let inputTimestampFormatted = domHelper.getById('inputTimestampFormatted');
-    domHelper.setProperty(
-      inputTimestampFormatted,
-      'innerHTML',
-      omakasePlayer.video.formatToTimecode(event.currentTime)
-    );
+    domHelper.setProperty(inputTimestampFormatted, 'innerHTML', omakasePlayer.video.formatToTimecode(event.currentTime));
   });
 
   omakasePlayer.video.onSeeked$.subscribe((event) => {
@@ -1243,7 +1332,7 @@ function initializePlayerEventListeners() {
     domHelper.setStyle(buttonPlay, {display: 'none'});
   });
 
-  omakasePlayer.on(omakasePlayer.EVENTS.OMAKASE_VIDEO_LOADED, (event) => {
+  omakasePlayer.video.onVideoLoaded$.subscribe((event) => {
     console.debug('Video Loaded', event);
 
     if (!event) {
@@ -1395,7 +1484,6 @@ function initializePlayerControlButtons() {
   let buttonAudio = domHelper.getById('audio');
   buttonAudio.onclick = function () {
     toggleAudio();
-    domHelper.setProperty(buttonAudio, 'innerHTML', currentAudio);
   };
 
   // Captions toggle and indicator
@@ -1476,19 +1564,28 @@ function initializePlayerControlButtons() {
     domHelper.setStyle(buttonPlay, {display: 'inline'});
   });
 
-  let detachPIP = domHelper.getById('detach-pip');
-  detachPIP.onclick = async function () {
-    if (!domHelper.getPIP() && !videoElement.disablePictureInPicture && document.pictureInPictureEnabled) {
-      domHelper.requestPIP(videoElement);
-    }
-  };
+  let userAgent = (window.navigator && window.navigator.userAgent) || '';
+  let isFirefox = /Firefox/i.test(userAgent);
+  if (!isFirefox) {
+    let detachPIP = domHelper.getById('detach-pip');
+    detachPIP.onclick = async function () {
+      if (!domHelper.getPIP() && !videoElement.disablePictureInPicture && document.pictureInPictureEnabled) {
+        domHelper.requestPIP(videoElement);
+      }
+    };
 
-  let attachPIP = domHelper.getById('attach-pip');
-  attachPIP.onclick = async function () {
-    if (domHelper.getPIP() && !videoElement.disablePictureInPicture && document.pictureInPictureEnabled) {
-      domHelper.exitPIP();
-    }
-  };
+    let attachPIP = domHelper.getById('attach-pip');
+    attachPIP.onclick = async function () {
+      if (domHelper.getPIP() && !videoElement.disablePictureInPicture && document.pictureInPictureEnabled) {
+        domHelper.exitPIP();
+      }
+    };
+  } else {
+    let detachPIP = domHelper.getById('detach-pip');
+    domHelper.setStyle(detachPIP, {display: 'none'});
+    let attachPIP = domHelper.getById('attach-pip');
+    domHelper.setStyle(attachPIP, {display: 'none'});
+  }
 
   let buttonFullscreen = domHelper.getById('full-screen');
   buttonFullscreen.onclick = function () {
@@ -1515,22 +1612,14 @@ function initializeVuMeter(event) {
   if (!audioContext) {
     domHelper.removeEventListener('keydown', initializeVuMeter);
     domHelper.removeEventListener('mousedown', initializeVuMeter);
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    audioContext = new AudioContext();
 
-    let splitterNode = new ChannelSplitterNode(audioContext, {numberOfOutputs: 6});
+    audioContext = omakasePlayer.video.getAudioContext();
 
-    let mergerNode = new ChannelMergerNode(audioContext, {numberOfInputs: 6});
-    let audioSource = audioContext.createMediaElementSource(domHelper.getByClassName('omakase-video')[0]);
-    audioSource.channelCountMode = 'max';
-    audioSource.channelCount = 6;
-    audioContext.destination.channelCount = audioContext.destination.maxChannelCount < 6 ? 2 : 6;
-    audioSource.connect(audioContext.destination);
     let omakaseVideo = domHelper.getByClassName('omakase-video')[0];
+
     domHelper.setProperty(omakaseVideo, 'volume', 1);
     var meterElement = domHelper.getById('peak-meter');
-    var meterNode = webAudioPeakMeter.createMeterNode(audioSource, audioContext);
-    var meterOptions = {
+    const peakMeterConfig = {
       backgroundColor: '#EEEFEE',
       tickColor: '#70849A',
       labelColor: '#70849A',
@@ -1538,9 +1627,10 @@ function initializeVuMeter(event) {
       dbRange: 60,
       dbTickSize: 6,
       font: 'Arial',
+      vertical: true,
     };
-    webAudioPeakMeter.createMeter(meterElement, meterNode, meterOptions);
-    audioContext.resume();
+
+    const vm = new vuMeter.VuMeter(6, meterElement, peakMeterConfig).attachSource(omakasePlayer.audio.createMainAudioPeakProcessor());
   }
 }
 
@@ -1818,36 +1908,36 @@ function toggleCaptions() {
 
 function toggleAudio() {
   let activeAudioIndex = audios.indexOf(currentAudio);
+  let activeAudio;
 
   if (activeAudioIndex === audios.length - 1) {
-    currentAudio = audios[0];
-    omakasePlayer.audio.setActiveAudioTrack('0');
-    let vuLabelSurround = domHelper.getById('vu-label-surround');
-    domHelper.setStyle(vuLabelSurround, {display: 'inline-block'});
+    activeAudio = audios[0];
   } else {
-    currentAudio = audios[activeAudioIndex + 1];
-    omakasePlayer.audio.setActiveAudioTrack((activeAudioIndex + 1).toString());
-    let vuLabelSurround = domHelper.getById('vu-label-surround');
-    domHelper.setStyle(vuLabelSurround, {display: 'none'});
+    activeAudio = audios[1];
   }
+
+  setActiveAudioTrack(activeAudio);
 }
 
 function setActiveAudioTrack(audio) {
-  let activeAudioIndex = audios.indexOf(currentAudio);
-
-  currentAudio = audio;
-  omakasePlayer.audio.setActiveAudioTrack('0');
-
   if ('5.1' === audio) {
-    currentAudio = audios[0];
     omakasePlayer.audio.setActiveAudioTrack('0');
+    router.updateMainTrack({
+      name: '5.1',
+      inputNumber: 6,
+    });
     let vuLabelSurround = domHelper.getById('vu-label-surround');
     domHelper.setStyle(vuLabelSurround, {display: 'inline-block'});
   } else {
     omakasePlayer.audio.setActiveAudioTrack('1');
+    router.updateMainTrack({
+      name: '2.0',
+      inputNumber: 2,
+    });
     let vuLabelSurround = domHelper.getById('vu-label-surround');
     domHelper.setStyle(vuLabelSurround, {display: 'none'});
   }
+  currentAudio = audio;
   let _audio = domHelper.getById('audio');
   domHelper.setProperty(_audio, 'innerHTML', currentAudio);
 }
@@ -1928,11 +2018,10 @@ function detectBrowser() {
   let isSafari = /Safari/i.test(userAgent) && !isChrome && !isAndroid && !isEdge;
 
   let useChrome = 'For the best experience, please use Chrome browser.';
-  if (isFirefox) {
-    alert('Firefox browser is not supported. ' + useChrome);
-  } else if (isSafari) {
-    alert('Audio meter is not supported in Safari browser. ' + useChrome);
-  } else if (!isChrome) {
+  if (isSafari) {
+    alert('Audio meter and audio router are not supported in Safari browser. ' + useChrome);
+    browserIsSafari = true;
+  } else if (!isChrome && !isFirefox) {
     alert(useChrome);
   }
 }
@@ -2008,22 +2097,7 @@ function resetVariables() {
   audios = ['5.1', '2.0'];
   markerCount = 2;
   splitLaneId = 0;
-  markerColors = [
-    '#E4ABFF',
-    '#6AC7F6',
-    '#A007E8',
-    '#FCD004',
-    '#009CEB',
-    '#5E1879',
-    '#4D79A7',
-    '#A481B5',
-    '#5A6C80',
-    '#2B299E',
-    '#EE9247',
-    '#520160',
-    '#863800',
-    '#CD5600',
-  ];
+  markerColors = ['#E4ABFF', '#6AC7F6', '#A007E8', '#FCD004', '#009CEB', '#5E1879', '#4D79A7', '#A481B5', '#5A6C80', '#2B299E', '#EE9247', '#520160', '#863800', '#CD5600'];
   omakasePlayer;
   activeAlertType = null;
   commentAlertId = null;

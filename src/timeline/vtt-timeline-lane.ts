@@ -3,7 +3,7 @@ import {DownsampleConfig, VttAwareApi, VttLoadOptions} from '../api/vtt-aware-ap
 import {OmakaseVttCue, OmakaseVttCueEvent, PlayheadMoveEvent, ScrubberMoveEvent, VideoTimeChangeEvent} from '../types';
 import {BaseTimelineLane, TimelineLaneConfig, TimelineLaneStyle, VTT_DOWNSAMPLE_CONFIG_DEFAULT} from './timeline-lane';
 import {VttAdapter} from '../common/vtt-adapter';
-import {AuthUtil} from '../util/auth-util';
+import {AuthConfig} from '../auth/auth-config';
 import {AxiosRequestConfig} from 'axios';
 import {OmakaseVttFile} from '../vtt';
 import {errorCompleteObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
@@ -72,8 +72,8 @@ export abstract class VttTimelineLane<C extends VttTimelineLaneConfig<S>, S exte
 
   loadVtt(vttUrl: string, options: VttLoadOptions = {}): Observable<T | undefined> {
     return passiveObservable<T | undefined>((observer) => {
-      if (!options.axiosConfig && AuthUtil.authentication) {
-        options.axiosConfig = AuthUtil.getAuthorizedAxiosConfig(vttUrl, AuthUtil.authentication);
+      if (!options.axiosConfig && AuthConfig.authentication) {
+        options.axiosConfig = AuthConfig.createAxiosRequestConfig(vttUrl, AuthConfig.authentication);
       }
       this._vttAdapter.loadVtt(vttUrl, options).subscribe({
         next: (value) => {

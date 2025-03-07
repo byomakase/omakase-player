@@ -83,9 +83,12 @@ export interface SubtitlesVttTrack extends OmakaseTextTrack {
   contentDigest?: string;
 }
 
-export interface OmakaseAudioTrack {
+export interface OmpAudioTrack {
   id: string;
   src: string;
-  label: string;
+  embedded: boolean;
+  label?: string;
   language?: string;
+  active: boolean;
+  channelCount?: number
 }

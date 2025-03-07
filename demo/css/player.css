@@ -66,10 +66,11 @@ body {
 
 .player-stats {
   width: 360px;
-  height: 465px;
+  height: 420px;
   display: inline-block;
   font-size: 14px;
-  padding-left: 100px;
+  padding-left: 50px;
+  vertical-align: top;
 }
 
 .marker-list-empty {
@@ -106,6 +107,10 @@ body {
   color: #235067;
 }
 
+#marker_predefined_marker .marker-remove {
+  display: none;
+}
+
 .marker-image {
   float: left;
   height: 45px;
@@ -126,6 +131,17 @@ body {
   padding-left: 10px;
   border-top-left-radius: 5px;
   border-top-right-radius: 5px;
+  display: flex;
+}
+
+.markers-title-text {
+  display: inline-block;
+  flex-grow: 1;
+}
+
+.markers-title-add {
+  cursor: pointer;
+  padding-right: 13px;
 }
 
 .player-time {
@@ -144,8 +160,8 @@ body {
 .inner-stats {
   /* border: 1px solid darkgrey;
    border-radius: 5px;
-   background-color: rgba(248, 250, 251, 0.766);*/
-  padding-left: 30px;
+   background-color: rgba(248, 250, 251, 0.766);
+  padding-left: 30px;*/
   right: 30px;
 }
 
@@ -326,12 +342,7 @@ body {
   width: 400px;
 }
 
-.omakase-player
-  .omakase-player-wrapper
-  .omakase-help
-  .omakase-help-dropdown
-  .omakase-help-menu
-  .omakase-help-group-title {
+.omakase-player .omakase-player-wrapper .omakase-help .omakase-help-dropdown .omakase-help-menu .omakase-help-group-title {
   background: rgb(2, 171, 141);
   display: block;
   padding: 5px 10px;
@@ -347,25 +358,13 @@ body {
   background: rgba(2, 171, 141, 0.2);
 }
 
-.omakase-player
-  .omakase-player-wrapper
-  .omakase-help
-  .omakase-help-dropdown
-  .omakase-help-menu
-  .omakase-help-group
-  .omakase-help-item {
+.omakase-player .omakase-player-wrapper .omakase-help .omakase-help-dropdown .omakase-help-menu .omakase-help-group .omakase-help-item {
   display: list-item;
   padding: 5px 10px;
   color: #fff;
 }
 
-.omakase-player
-  .omakase-player-wrapper
-  .omakase-help
-  .omakase-help-dropdown
-  .omakase-help-menu
-  .omakase-help-group
-  .omakase-help-item:hover {
+.omakase-player .omakase-player-wrapper .omakase-help .omakase-help-dropdown .omakase-help-menu .omakase-help-group .omakase-help-item:hover {
   background-color: #a93232;
 }
 
@@ -392,6 +391,33 @@ body {
 
 .content {
   margin: 10px;
+  display: flex;
+}
+
+.content-right {
+  flex-grow: 1;
+}
+
+.tabs {
+  display: flex;
+  list-style: none;
+  padding-left: 50px;
+  padding-top: 10px;
+  padding-bottom: 15px;
+}
+
+.tabs li {
+  margin-right: 20px;
+  color: dimgrey;
+}
+
+.tabs li:not(#tab-separator) {
+  cursor: pointer;
+}
+
+.tabs li.active {
+  color: black;
+  font-weight: bold;
 }
 
 .timeline {
@@ -529,4 +555,38 @@ body {
 
 .legend-box-text {
   padding-left: 10px;
+}
+
+.omakase-audio-router {
+  display: none;
+  height: 420px;
+  padding-left: 50px;
+}
+
+.router-size {
+  display: inline-block;
+  padding-left: 10px;
+  vertical-align: top;
+}
+
+.size {
+  margin-bottom: 5px;
+  width: 60px;
+  padding: 5px 0;
+  font-size: 12px;
+  background-color: #235067;
+  border-radius: 5px;
+  border: 0;
+  color: #fff;
+  cursor: pointer;
+}
+
+.activated {
+  background-color: #6ac7f6;
+  color: #000;
+}
+
+.omakase-audio-router .omakase-router-container .omakase-router-toggle .omakase-router-toggle-inner {
+  top: 4px;
+  left: 4px;
 }

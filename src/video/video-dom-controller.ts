@@ -32,7 +32,7 @@ import {OmakasePreviewThumbnail, OmakaseTimeDisplay, OmakaseTimeRange} from '../
 import {VttLoadOptions} from '../api/vtt-aware-api';
 import {VttAdapter} from '../common/vtt-adapter';
 import {ThumbnailVttFile} from '../vtt';
-import {AuthUtil} from '../util/auth-util';
+import {AuthConfig} from '../auth/auth-config';
 import 'media-chrome';
 import '../components';
 // @ts-ignore
@@ -107,6 +107,7 @@ export interface VideoDomControllerConfig {
   mediaChromeHTMLElementId?: string;
   thumbnailVttUrl?: string;
   thumbnailFn?: (time: number) => string | undefined;
+  playerClickHandler?: () => void;
 }
 
 export const VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT: VideoDomControllerConfig = {
@@ -231,7 +232,7 @@ export class VideoDomController implements VideoDomControllerApi {
     this._divPlayer.classList.add(`${domClasses.player}`);
 
     this._divPlayer.innerHTML = `<div class="${domClasses.playerWrapper} media-chrome-${this._config.mediaChrome}">
-          <media-controller>
+          <media-controller gesturesdisabled>
               <video slot="media" class="${domClasses.video}" playsinline=""></video>
               <div slot="centered-chrome" class="${domClasses.videoControls}" noautohide>
                   <div class="${domClasses.safeZoneWrapper}"></div>
@@ -271,6 +272,9 @@ export class VideoDomController implements VideoDomControllerApi {
           <audio controls loop class="${domClasses.audioUtil} d-none">
             <source src="${this._silentWavUrl}">
           </audio>
+<!--          <audio id="ble" controls style="width: 800px">-->
+<!--                <source src="http://127.0.0.1:8080/Sven%20Va%CC%88th%20-%20L'Esperanza%20(1993)%20HQ%20%5BrZKV4KIeIrU%5D.aac" type="audio/mpeg">-->
+<!--              </audio>-->
       </div>`;
 
     this._videoElement = this.getPlayerElement<HTMLVideoElement>(domClasses.video);
@@ -336,7 +340,7 @@ export class VideoDomController implements VideoDomControllerApi {
       </media-control-bar>
       <media-control-bar style="display:none" class="lower-control-bar">
           <div class="start-container">
-              <media-mute-button class="${domClasses.mediaChromeButton}">
+              <media-mute-button class="${domClasses.mediaChromeButton} omakase-player-mute">
                 <span slot="high" class="${domClasses.mediaChromeAudioHigh}"></span>
                 <span slot="medium" class="${domClasses.mediaChromeAudioMedium}"></span>
                 <span slot="low" class="${domClasses.mediaChromeAudioLow}"></span>
@@ -345,37 +349,37 @@ export class VideoDomController implements VideoDomControllerApi {
               <media-volume-range></media-volume-range>
           </div>
           <div class="center-container">
-              <media-chrome-button class="${domClasses.mediaChromeButton}">
+              <media-chrome-button class="${domClasses.mediaChromeButton} omakase-player-fast-rewind">
                 <span class="${domClasses.mediaFastRewindButton}"></span>
                 <media-tooltip>Rewind by 10 frames</media-tooltip>
               </media-chrome-button>
-              <media-chrome-button class="${domClasses.mediaChromeButton}">
+              <media-chrome-button class="${domClasses.mediaChromeButton} omakase-player-rewind">
                 <span class="${domClasses.mediaRewindButton}"></span>
                 <media-tooltip>Rewind to previous frame</media-tooltip>
               </media-chrome-button>
-              <media-play-button class="${domClasses.mediaChromeButton}">
+              <media-play-button class="${domClasses.mediaChromeButton} omakase-player-play">
                   <span slot="play" class="${domClasses.mediaChromePlay}"></span>
                   <span slot="pause" class="${domClasses.mediaChromePause}"></span>
               </media-play-button>
-              <media-chrome-button class="${domClasses.mediaChromeButton}">
+              <media-chrome-button class="${domClasses.mediaChromeButton} omakase-player-forward">
                 <span class="${domClasses.mediaForwardButton}"></span>
                 <media-tooltip>Fast forward to next frame</media-tooltip>
               </media-chrome-button>
-              <media-chrome-button class="${domClasses.mediaChromeButton}">
+              <media-chrome-button class="${domClasses.mediaChromeButton} omakase-player-fast-forward">
                 <span class="${domClasses.mediaFastForwardButton}"></span>
                 <media-tooltip>Fast forward by 10 frames</media-tooltip>
               </media-chrome-button>
           </div>
           <div class="end-container">
-              <media-chrome-button class="${domClasses.mediaChromeButton}">
+              <media-chrome-button class="${domClasses.mediaChromeButton} omakase-player-bitc">
                 <span class="${domClasses.mediaChromeBitcDisabled}"></span>
                 <media-tooltip class="${domClasses.mediaChromeBitcTooltip}">Show timecode</media-tooltip>
               </media-chrome-button>
-              <media-chrome-button class="${domClasses.mediaChromeButton}">
+              <media-chrome-button class="${domClasses.mediaChromeButton} omakase-player-attach-detach">
                 <span class="${this._config.detachedPlayer ? domClasses.mediaChromeAttach : domClasses.mediaChromeDetach}"></span>
                 <media-tooltip>${this._config.detachedPlayer ? 'Attach player' : 'Detach player'}</media-tooltip>
               </media-chrome-button>
-              <media-fullscreen-button class="${domClasses.mediaChromeButton}">
+              <media-fullscreen-button class="${domClasses.mediaChromeButton} omakase-player-fullscreen">
                   <span slot="enter" class="${domClasses.mediaChromeFullscreenEnter}"></span>
                    <span slot="exit" class="${domClasses.mediaChromeFullscreenExit}"></span>
               </media-fullscreen-button>
@@ -595,8 +599,8 @@ export class VideoDomController implements VideoDomControllerApi {
   loadThumbnailVtt(vttUrl: string) {
     return passiveObservable((observer) => {
       const options: VttLoadOptions = {};
-      if (AuthUtil.authentication) {
-        options.axiosConfig = AuthUtil.getAuthorizedAxiosConfig(vttUrl, AuthUtil.authentication);
+      if (AuthConfig.authentication) {
+        options.axiosConfig = AuthConfig.createAxiosRequestConfig(vttUrl, AuthConfig.authentication);
       }
       this._vttAdapter.loadVtt(vttUrl, options).subscribe((vttFile) => {
         if (vttFile && this._previewThumbnail) {
@@ -646,8 +650,12 @@ export class VideoDomController implements VideoDomControllerApi {
     }
 
     if (!videoController.isDetachable() && this._buttonDetach) {
-      this._videoController.getHTMLVideoElement().addEventListener(HTMLVideoElementEventKeys.ENTERPIP, this._enterPictureInPictureHandler);
-      this._videoController.getHTMLVideoElement().addEventListener(HTMLVideoElementEventKeys.LEAVEPIP, this._leavePictureInPictureHandler);
+      if (this._videoController.isPiPSupported()) {
+        this._videoController.getHTMLVideoElement().addEventListener(HTMLVideoElementEventKeys.ENTERPIP, this._enterPictureInPictureHandler);
+        this._videoController.getHTMLVideoElement().addEventListener(HTMLVideoElementEventKeys.LEAVEPIP, this._leavePictureInPictureHandler);
+      } else {
+        this.hideElements(this._buttonDetach);
+      }
     }
 
     if (this._currentTimecode) {
@@ -675,21 +683,25 @@ export class VideoDomController implements VideoDomControllerApi {
             this._videoController.isVideoLoaded() &&
             !(this._videoController.getPlaybackState()!.ended || this._videoController.getPlaybackState()!.waiting || this._videoController.getPlaybackState()!.seeking)
           ) {
-            let playControlToShow = this._videoController.isPlaying() ? this._divButtonOverlayPause : this._divButtonOverlayPlay;
             clearShowTemporaryOnMouseMoveTimeoutId();
-            this.hideElements(this._divButtonOverlayPause, this._divButtonOverlayPlay).showElements(playControlToShow, this._divButtonHelp);
+            if (this._config.playerClickHandler) {
+              this.hideElements(this._divButtonOverlayPause, this._divButtonOverlayPlay).showElements(this._divButtonHelp);
+            } else {
+              let playControlToShow = this._videoController.isPlaying() ? this._divButtonOverlayPause : this._divButtonOverlayPlay;
+              this.hideElements(this._divButtonOverlayPause, this._divButtonOverlayPlay).showElements(playControlToShow, this._divButtonHelp);
+
+              this._showTemporaryOnMouseMoveTimeoutId = setTimeout(() => {
+                this.hideElements(playControlToShow).hideElements(this._divSectionBottomRight);
+
+                if (!this.isShown(this._divHelpMenu)) {
+                  this.hideElements(this._divButtonHelp, this._divHelpMenu);
+                }
+              }, 1000);
+            }
 
             if (this._config.detachedPlayer) {
               this.showElements(this._divSectionBottomRight);
             }
-
-            this._showTemporaryOnMouseMoveTimeoutId = setTimeout(() => {
-              this.hideElements(playControlToShow).hideElements(this._divSectionBottomRight);
-
-              if (!this.isShown(this._divHelpMenu)) {
-                this.hideElements(this._divButtonHelp, this._divHelpMenu);
-              }
-            }, 1000);
           }
         },
       });
@@ -712,8 +724,12 @@ export class VideoDomController implements VideoDomControllerApi {
               !this._divAlerts.contains(event.target as HTMLElement)
             ) {
               if (this._videoController.getVideoWindowPlaybackState() !== 'detached') {
-                if (!this._videoController.isFullscreen() && this._config.mediaChrome !== 'enabled') {
-                  this._videoController.togglePlayPause();
+                if (['VIDEO', 'DIV'].includes((event.target as HTMLElement).tagName)) {
+                  if (this._config.playerClickHandler) {
+                    this._config.playerClickHandler();
+                  } else {
+                    this._videoController.togglePlayPause();
+                  }
                 }
               } else {
                 this._videoController.attachVideoWindow();
@@ -874,7 +890,7 @@ export class VideoDomController implements VideoDomControllerApi {
             this.hideElements(...allOverlayButtons).hideElements(this._divErrorMessage);
             if (state.seeking && state.waiting) {
               this.showElements(this._divButtonOverlayLoading);
-            } else if (state.ended) {
+            } else if (state.ended && !this._config.playerClickHandler) {
               this.showElements(this._divButtonOverlayReplay);
             }
           } else if (state.seeking && state.waiting) {

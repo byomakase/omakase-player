@@ -15,6 +15,7 @@
  */
 
 import {BehaviorSubject, Subject} from 'rxjs';
+import {OmpAudioTrack} from '../types';
 
 export type VideoProtocol = 'hls' | 'native';
 
@@ -292,9 +293,89 @@ export interface AudioInputOutputNode {
   connected: boolean;
 }
 
+/**
+ * Audio peak processing strategy
+ */
 export type AudioMeterStandard = 'peak-sample' | 'true-peak';
 
 export interface BufferedTimespan {
   start: number;
   end: number;
+}
+
+export interface OmpAudioState {
+  /**
+   * Audio router state
+   */
+  audioRouterState: OmpAudioRouterState | undefined;
+
+  /**
+   * Main audio peak processor state
+   */
+  audioPeakProcessorState: OmpAudioPeakProcessorState | undefined;
+
+  /**
+   * Source audio node channel count
+   */
+  numberOfChannels: number;
+}
+
+/**
+ * Main audio state
+ */
+export interface OmpMainAudioState extends OmpAudioState {}
+
+/**
+ * Sidecar audio state
+ */
+export interface OmpSidecarAudioState extends OmpAudioState {
+  /**
+   * Sidecar audio track
+   */
+  audioTrack: OmpAudioTrack;
+
+  /**
+   * Number of channels from {@link AudioBuffer}.numberOfChannels From {@link AudioBuffer} in which sidecar audio is loaded
+   */
+  numberOfChannels: number;
+}
+
+/**
+ * Audio router state
+ */
+export interface OmpAudioRouterState {
+  /**
+   * Number of audio inputs
+   */
+  inputsNumber: number;
+
+  /**
+   * Number of audio outputs
+   */
+  outputsNumber: number;
+
+  /**
+   * Audio routing matrix
+   */
+  audioInputOutputNodes: AudioInputOutputNode[][];
+}
+
+/**
+ * Peak processor state
+ */
+export interface OmpAudioPeakProcessorState {
+  /**
+   * Audio peak processing strategy
+   */
+  audioMeterStandard: AudioMeterStandard;
+}
+
+export interface OmpPeakProcessorDataMessage {
+  type: 'message';
+  message: number[][];
+}
+
+export interface OmpPeakProcessorDataPeaks {
+  type: 'peaks';
+  peaks: number[];
 }

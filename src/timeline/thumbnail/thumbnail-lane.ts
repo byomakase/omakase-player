@@ -32,7 +32,7 @@ import {ThumbnailLaneApi} from '../../api';
 import {ThumbnailVttFile} from '../../vtt';
 import {VttAdapter, VttAdapterConfig} from '../../common/vtt-adapter';
 import {VttTimelineLane, VttTimelineLaneConfig} from '../vtt-timeline-lane';
-import {AuthUtil} from '../../util/auth-util';
+import {AuthConfig} from '../../auth/auth-config';
 
 export interface ThumbnailLaneConfig extends VttTimelineLaneConfig<ThumbnailLaneStyle>, VttAdapterConfig<ThumbnailVttFile> {
   axiosConfig?: AxiosRequestConfig;
@@ -240,7 +240,7 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
         } else {
           if (visible) {
             this._itemsMap.set(cue.startTime, void 0); // this indicates that thumbnail started to load
-            ImageUtil.createKonvaImageSizedByHeight(cue.url, this.style.thumbnailHeight, AuthUtil.authentication).subscribe({
+            ImageUtil.createKonvaImageSizedByHeight(cue.url, this.style.thumbnailHeight, AuthConfig.authentication).subscribe({
               next: (image) => {
                 // use fresh visible status, maybe it has changed while waiting for response
                 let mostRecentVisible = this._itemsVisibleSet.has(cue.startTime);
@@ -347,7 +347,7 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
       }
     } else {
       if (thumbnail.cue && thumbnail.image) {
-        ImageUtil.createKonvaImageSizedByWidth(thumbnail.cue.url, thumbnail.image.width() * this.style.thumbnailHoverScale, AuthUtil.authentication).subscribe({
+        ImageUtil.createKonvaImageSizedByWidth(thumbnail.cue.url, thumbnail.image.width() * this.style.thumbnailHoverScale, AuthConfig.authentication).subscribe({
           next: (image) => {
             this._thumbnailHover!.setDimension(image.getSize());
             this._thumbnailHover!.setImage(image);
@@ -417,7 +417,7 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
         // try loading first thumbnail to define proportional dimensions
         let firstCue: ThumbnailVttCue = vttFile.cues[0];
         if (firstCue) {
-          ImageUtil.createKonvaImageSizedByHeight(firstCue.url, this.style.thumbnailHeight, AuthUtil.authentication).subscribe({
+          ImageUtil.createKonvaImageSizedByHeight(firstCue.url, this.style.thumbnailHeight, AuthConfig.authentication).subscribe({
             next: (image) => {
               o$.next({
                 width: image.getSize().width,

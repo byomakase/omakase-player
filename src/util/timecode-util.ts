@@ -17,7 +17,7 @@
 import Decimal from 'decimal.js';
 import {FrameRateUtil} from './frame-rate-util';
 import {TimecodeObject, Video} from '../video/model';
-import {InitSegmentUtil} from './init-segment-util';
+import {VideoUtil} from './video-util';
 
 export const timecodeNonDropRegex = /^(?:[01]\d|2[0-3]):(?:[0-5]\d):(?:[0-5]\d):(?:[0-9]{2})$/;
 export const timecodeDropRegex = /^(?:[01]\d|2[0-3]):(?:[0-5]\d):(?:[0-5]\d);(?:[0-9]{2})$/;
@@ -42,7 +42,7 @@ export class TimecodeUtil {
     let frameRateRoundedDecimal = frameRateDecimal.round();
 
     if (video.initSegmentTimeOffset) {
-      if (InitSegmentUtil.isInitSegment(video, time.toNumber())) {
+      if (VideoUtil.isInitSegment(video, time.toNumber())) {
         frameNumberDecimal = new Decimal(0);
       } else {
         frameNumberDecimal = frameRateDecimal.mul(time.minus(video.initSegmentTimeOffset)).floor();
@@ -202,8 +202,8 @@ export class TimecodeUtil {
       seconds: 0,
       frames: 0,
       dropFrame: timecodeObject.dropFrame,
-      audioOnly: timecodeObject.audioOnly
-    }
+      audioOnly: timecodeObject.audioOnly,
+    };
   }
 
   static timecodeObjectToFrameNumber(timecodeObject: TimecodeObject, frameRateDecimal: Decimal): number {

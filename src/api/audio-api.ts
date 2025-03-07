@@ -16,12 +16,14 @@
 
 import {Api} from './api';
 import {Observable} from 'rxjs';
-import {AudioContextChangeEvent, AudioLoadedEvent, AudioPeakProcessorWorkletNodeMessageEvent, AudioRoutingEvent, AudioSwitchedEvent, OmakaseAudioTrack} from '../types';
-import {AudioInputOutputNode, AudioMeterStandard} from '../video/model';
+import {AudioLoadedEvent, AudioPeakProcessorMessageEvent, AudioSwitchedEvent, MainAudioChangeEvent, OmpAudioTrack, SidecarAudioChangeEvent, SidecarAudioCreateEvent, SidecarAudioPeakProcessorMessageEvent, SidecarAudioRemoveEvent} from '../types';
+import {AudioInputOutputNode, AudioMeterStandard, OmpAudioRouterState, OmpMainAudioState} from '../video/model';
+import {OmpAudioRouter} from '../video/audio-router';
+import {SidecarAudioApi} from './sidecar-audio-api';
 
 export interface AudioApi extends Api {
   /**
-   * Fires on subtitles load. Initial value is undefined.
+   * Fires on audio load. Initial value is undefined.
    * Always emits the current value on subscription.
    *
    * @readonly
@@ -35,103 +37,205 @@ export interface AudioApi extends Api {
   onAudioSwitched$: Observable<AudioSwitchedEvent>;
 
   /**
-   * Fires on AudioContext creation
-   * @readonly
-   */
-  onAudioContextChange$: Observable<AudioContextChangeEvent>;
-
-  /**
-   * Fires on audio input / output channel connection change
-   * @readonly
-   */
-  onAudioRouting$: Observable<AudioRoutingEvent>;
-
-  /**
-   * Fires on event produced by {@link AudioWorkletNode} created with {@link createAudioPeakProcessorWorkletNode}
-   * @readonly
-   */
-  onAudioPeakProcessorWorkletNodeMessage$: Observable<AudioPeakProcessorWorkletNodeMessageEvent>;
-
-  /**
    * @returns available audio tracks
    */
-  getAudioTracks(): OmakaseAudioTrack[];
+  getAudioTracks(): OmpAudioTrack[];
 
   /**
    * @returns current active audio track
    */
-  getActiveAudioTrack(): OmakaseAudioTrack | undefined;
+  getActiveAudioTrack(): OmpAudioTrack | undefined;
 
   /**
    * Sets active audio track
-   * @param id {@link OmakaseAudioTrack} id
+   * @param id {@link OmpAudioTrack} id
    */
   setActiveAudioTrack(id: string): Observable<void>;
 
   /**
-   * @returns {@link AudioContext} if created
+   * @returns {@link AudioContext}
    */
-  getAudioContext(): AudioContext | undefined;
+  getAudioContext(): AudioContext;
+
+  // main audio
 
   /**
-   * @returns {@link MediaElementAudioSourceNode} implicitly created on <video> element when {@link AudioContext} is created
+   * Fires when Main audio topology changes. For example, audio router is created.
+   * @readonly
    */
-  getMediaElementAudioSourceNode(): MediaElementAudioSourceNode | undefined;
+  onMainAudioChange$: Observable<MainAudioChangeEvent | undefined>;
 
   /**
-   * Creates AudioContext. {@link AudioContext}.resume() is invoked on first video play
-   * @param contextOptions
+   * Fires on Main audio peak processor message
+   * @readonly
    */
-  createAudioContext(contextOptions?: AudioContextOptions): Observable<void>;
+  onMainAudioPeakProcessorMessage$: Observable<AudioPeakProcessorMessageEvent>;
 
   /**
-   * Creates AudioSplitterNode and AudioMergerMode configured for routing between {@link inputsNumber} and {@link outputsNumber}.
+   * @returns Main {@link AudioNode}
+   */
+  getMainAudioSourceNode(): AudioNode;
+
+  /**
+   * @returns Main audio state
+   */
+  getMainAudioState(): OmpMainAudioState | undefined;
+
+  /**
+   * @returns Main audio router
+   */
+  getMainAudioRouter(): OmpAudioRouter | undefined;
+
+  /**
+   * Creates Main audio router
    *
-   * @param inputsNumber Number of input channels. Implicitly created {@link ChannelSplitterNode} is configured with {@link inputsNumber}.
-   * @param outputsNumber Number of output channels. Implicitly created {@link ChannelMergerNode} is configured with {@link outputsNumber}. If not provided {@link outputsNumber} is resolved by calling defaultAudioOutputsResolver function:
-   * <pre>
-   * const defaultAudioOutputsResolver: (maxChannelCount: number) => number = (maxChannelCount: number) => {
-   *   if (maxChannelCount <= 1) {
-   *     return 1;
-   *   } else if (maxChannelCount >= 2 && maxChannelCount <= 5) {
-   *     return 2
-   *   } else if (maxChannelCount >= 6) {
-   *     return 6
-   *   } else {
-   *     return maxChannelCount;
-   *   }
-   * }
-   * </pre>
+   * @param inputsNumber Number of inputs
+   * @param outputsNumber Number of outputs
    */
-  createAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<void>;
+  createMainAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<OmpAudioRouterState>;
 
   /**
-   * Creates AudioContext. {@link AudioContext}.resume() is invoked on first video play
+   * Creates Main audio router
    *
-   * @param inputsNumber See {@link createAudioRouter}
-   * @param outputsNumberResolver Function to resolve outputsNumber. Provides {@link AudioContext}.destination.maxChannelCount as input argument
+   * @param inputsNumber Number of inputs
+   * @param outputsNumberResolver Function for resolving number of router outputs. Provides {@link outputsNumberResolver.maxChannelCount} as function input
    */
-  createAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void>;
+  createMainAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<OmpAudioRouterState>;
 
   /**
-   * @returns Matrix of {@link AudioInputOutputNode}s
+   * Creates Main audio peak processor
+   *
+   * @param audioMeterStandard default "peak-sample"
+   * @returns observable with stream of {@link AudioPeakProcessorMessageEvent} events
    */
-  getAudioInputOutputNodes(): AudioInputOutputNode[][];
+  createMainAudioPeakProcessor(audioMeterStandard?: AudioMeterStandard): Observable<Observable<AudioPeakProcessorMessageEvent>>;
 
   /**
-   * Routes (connects or disconnects) provided {@link AudioInputOutputNode} (connects it or disconnects it)
-   * @param newAudioInputOutputNode
-   */
-  routeAudioInputOutputNode(newAudioInputOutputNode: AudioInputOutputNode): Observable<void>;
-
-  /**
-   * Routes multiple {@link AudioInputOutputNode}
+   * Routes provided Main audio  {@link AudioInputOutputNode} nodes
+   *
    * @param newAudioInputOutputNodes
    */
-  routeAudioInputOutputNodes(newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void>;
+  routeMainAudioRouterNodes(newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void>;
+
+  // sidecar audio
 
   /**
-   * Creates {@link AudioWorkletNode} and attaches it to {@link AudioContext} input. It can be used for audio peak processing and gathering live volume levels data
+   * Fires when Sidecar audio is created
+   * @readonly
    */
-  createAudioPeakProcessorWorkletNode(audioMeterStandard: AudioMeterStandard): Observable<void>;
+  onSidecarAudioCreate$: Observable<SidecarAudioCreateEvent>;
+
+  /**
+   * Fires when Sidecar audio is removed
+   * @readonly
+   */
+  onSidecarAudioRemove$: Observable<SidecarAudioRemoveEvent>;
+
+  /**
+   * Fires when Sidecar audio topology changes. For example, audio router is created.
+   * @readonly
+   */
+  onSidecarAudioChange$: Observable<SidecarAudioChangeEvent>;
+
+  /**
+   * Fires on Sidecar audio peak processor message
+   * @readonly
+   */
+  onSidecarAudioPeakProcessorMessage$: Observable<SidecarAudioPeakProcessorMessageEvent>;
+
+  /**
+   * @returns Sidecar audios
+   */
+  getSidecarAudios(): SidecarAudioApi[];
+
+  /**
+   * @returns Sidecar audio
+   * @param id Sidecar audio {@link OmpAudioTrack.id}
+   */
+  getSidecarAudio(id: string): SidecarAudioApi | undefined;
+
+  /**
+   * Creates new Sidecar audio track
+   * @param track
+   */
+  createSidecarAudioTrack(track: Partial<OmpAudioTrack>): Observable<OmpAudioTrack>;
+
+  /**
+   * Creates multiple Sidecar audio tracks
+   * @param tracks
+   */
+  createSidecarAudioTracks(tracks: Partial<OmpAudioTrack>[]): Observable<OmpAudioTrack[]>;
+
+  /**
+   * Removes Sidecar audio tracks
+   * @param ids Sidecar audio {@link OmpAudioTrack}.id array
+   */
+  removeSidecarAudioTracks(ids: string[]): Observable<void>;
+
+  /**
+   * @returns Sidecar audio tracks
+   */
+  getSidecarAudioTracks(): OmpAudioTrack[];
+
+  /**
+   * @returns active Sidecar audio tracks
+   */
+  getActiveSidecarAudioTracks(): OmpAudioTrack[];
+
+  /**
+   * Activates Sidecar audio tracks
+   * @param ids Sidecar audio {@link OmpAudioTrack.id} array to activate
+   * @param deactivateOthers Set to true if other sidecar audios should be deactivated
+   */
+  activateSidecarAudioTracks(ids: string[], deactivateOthers: boolean | undefined): Observable<void>;
+
+  /**
+   * Deactivates Sidecar audio tracks
+   * @param ids Sidecar audio {@link OmpAudioTrack.id} array to activate
+   */
+  deactivateSidecarAudioTracks(ids: string[]): Observable<void>;
+
+  /**
+   * Removes all Sidecar audio tracks
+   */
+  removeAllSidecarAudioTracks(): Observable<void>;
+
+  /**
+   * Creates Sidecar audio router
+   *
+   * @param sidecarAudioTrackId id Sidecar audio {@link OmpAudioTrack.id}
+   * @param inputsNumber
+   * @param outputsNumber
+   */
+  createSidecarAudioRouter(sidecarAudioTrackId: string, inputsNumber?: number, outputsNumber?: number): Observable<OmpAudioRouterState>;
+
+  /**
+   * Routes provided Sidecar audio {@link AudioInputOutputNode} nodes
+   * @param sidecarAudioTrackId id Sidecar audio {@link OmpAudioTrack.id}
+   * @param newAudioInputOutputNodes
+   */
+  routeSidecarAudioRouterNodes(sidecarAudioTrackId: string, newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void>;
+
+  /**
+   * Creates Sidecar audio peak processor
+   *
+   * @param sidecarAudioTrackId id Sidecar audio {@link OmpAudioTrack.id}
+   * @param audioMeterStandard
+   * @returns observable with stream of {@link AudioPeakProcessorMessageEvent} events
+   */
+  createSidecarAudioPeakProcessor(sidecarAudioTrackId: string, audioMeterStandard?: AudioMeterStandard): Observable<Observable<AudioPeakProcessorMessageEvent>>;
+
+  /**
+   * Exports Main audio track as Sidecar audio track
+   *
+   * @param mainAudioTrackId Main audio track id
+   */
+  exportMainAudioTrackToSidecar(mainAudioTrackId: string): Observable<OmpAudioTrack>;
+
+  /**
+   * Exports Main audio tracks as Sidecar audio tracks
+   *
+   * @param mainAudioTrackIds
+   */
+  exportMainAudioTracksToSidecar(mainAudioTrackIds: string[]): Observable<OmpAudioTrack[]>;
 }

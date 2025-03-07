@@ -27,6 +27,8 @@ import {MarkerListConfig} from '../marker-list/marker-list';
 import {MarkerListApi} from './marker-list-api';
 import {ConfigWithOptionalStyle} from '../layout';
 import {AuthenticationData} from '../authentication/model';
+import {RouterVisualizationConfig} from '../router-visualization/router-visualization';
+import {RouterVisualizationApi} from './router-visualization-api';
 
 export interface OmakasePlayerApi extends Api {
   /**
@@ -56,6 +58,12 @@ export interface OmakasePlayerApi extends Api {
    * @param config Marker List configuration
    */
   createMarkerList(config: MarkerListConfig): Observable<MarkerListApi>;
+
+  /**
+   * Initializes Router Visualization component
+   * @param config Router Visualization configuration
+   */
+  initializeRouterVisualization(config: RouterVisualizationConfig): RouterVisualizationApi;
 
   /**
    * Set authentication for HLS.js, VTT and thumbnail image requests

@@ -14,10 +14,14 @@
  * limitations under the License.
  */
 
+import {catchError, from, map, mergeMap, Observable, of, toArray} from 'rxjs';
 import {AudioInputOutputNode} from '../video/model';
+import {httpGet} from '../http';
+import {AuthenticationData} from '../authentication/model';
+import {AuthConfig} from '../auth/auth-config';
 
 export class AudioUtil {
-  public static resolveDefaultAudioRouting(inputsNumber: number, outputsNumber: number): AudioInputOutputNode[] {
+  static resolveDefaultAudioRouting(inputsNumber: number, outputsNumber: number): AudioInputOutputNode[] {
     if (inputsNumber && outputsNumber) {
       if ((inputsNumber === 2 && outputsNumber === 2) || (inputsNumber === 2 && outputsNumber === 6) || (inputsNumber === 6 && outputsNumber === 6)) {
         return [...Array(inputsNumber).keys()].map((p) => ({
@@ -98,5 +102,45 @@ export class AudioUtil {
       }
     }
     return [];
+  }
+
+  static fetchAndMergeAudioFiles(urls: string[], authentication?: AuthenticationData): Observable<ArrayBuffer> {
+    const maxConcurrent = 20;
+    return from(urls).pipe(
+      mergeMap((url, index) => this.fetchAudioFile(url, authentication).pipe(map((data) => ({index, data}))), maxConcurrent),
+      toArray(),
+      map((results) => {
+        results.sort((a, b) => a.index - b.index);
+        return this.mergeBuffers(results.map((r) => r.data));
+      })
+    );
+  }
+
+  private static fetchAudioFile(url: string, authentication?: AuthenticationData): Observable<ArrayBuffer> {
+    return from(
+      httpGet<ArrayBuffer>(url, {
+        ...AuthConfig.createAxiosRequestConfig(url, authentication),
+        responseType: 'arraybuffer',
+      })
+    ).pipe(
+      map((response) => response.data as ArrayBuffer),
+      catchError((error) => {
+        console.error(`Failed to fetch ${url}:`, error);
+        return of(new ArrayBuffer(0)); // Return an empty buffer on error
+      })
+    );
+  }
+
+  private static mergeBuffers(buffers: ArrayBuffer[]): ArrayBuffer {
+    const totalLength = buffers.reduce((acc, buf) => acc + buf.byteLength, 0);
+    const mergedBuffer = new Uint8Array(totalLength);
+    let offset = 0;
+
+    for (const buffer of buffers) {
+      mergedBuffer.set(new Uint8Array(buffer), offset);
+      offset += buffer.byteLength;
+    }
+
+    return mergedBuffer.buffer;
   }
 }

@@ -15,7 +15,7 @@ if (!globalThis.customElements.get('omakase-preview-thumbnail')) {
   globalThis.customElements.define('omakase-preview-thumbnail', OmakasePreviewThumbnail);
 }
 
-if (!globalThis.customElements.get('omakse-timecode-edit')) {
+if (!globalThis.customElements.get('omakase-timecode-edit')) {
   globalThis.customElements.define('omakase-timecode-edit', OmakaseTimecodeEdit);
 }
 

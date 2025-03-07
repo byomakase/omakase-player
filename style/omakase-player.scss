@@ -299,6 +299,23 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
     padding-left: 10px;
     padding-top: 10px;
     overflow: hidden;
+
+    .omakase-timecode-edit {
+      input {
+        padding: 0 5px;
+        width: 100px;
+        border-radius: 5px;
+        border: 1px solid #5db7e8;
+
+        &:disabled {
+          background-color: #ccc;
+        }
+
+        &.omakase-timecode-edit-input-invalid {
+          border: 1px solid #fa6664;
+        }
+      }
+    }
   }
 }
 
@@ -603,12 +620,6 @@ media-controller {
     }
   }
 
-  @container (inline-size < 400px) {
-    *:not(video) {
-      display: none;
-    }
-  }
-
   @container (inline-size < 600px) {
     * {
       --padding-size: calc(var(--padding-size-default) * 0.5);
@@ -631,6 +642,55 @@ media-controller {
       --volume-container-width: 120px;
       --volume-range-width: 60px;
       --center-control-size: calc(var(--center-control-size-default) * 0.85);
+    }
+  }
+
+  @container (inline-size < 500px) {
+    .omakase-help {
+      display: none !important;
+    }
+  }
+
+  @container (inline-size < 450px) {
+    * {
+      --time-range-height: calc(var(--time-range-height-default) * 0.75);
+      --controls-height: calc(var(--controls-height-default) * 0.7);
+      --icon-size: calc(var(--icon-size-default) * 0.75);
+      --bitc-width: calc(var(--bitc-width-default) * 0.75);
+      --bitc-margin: calc(var(--bitc-margin-default) * 0.75);
+      --controls-bottom-padding: calc(var(--controls-bottom-padding-default) * 0.75);
+      --center-control-size: calc(var(--center-control-size-default) * 0.65);
+    }
+    .omakase-player-fast-rewind,
+    .omakase-player-fast-forward {
+      display: none;
+    }
+  }
+
+  @container (inline-size < 400px) {
+    .start-container {
+      width: 50px !important;
+      media-volume-range {
+        display: none;
+      }
+    }
+    .center-container media-chrome-button {
+      display: none;
+    }
+    .end-container media-chrome-button {
+      &:first-child {
+        display: none;
+      }
+    }
+  }
+
+  @container (inline-size < 200px) {
+    *:not(video) {
+      display: none;
+    }
+    .lower-control-bar {
+      height: 0;
+      padding: 0;
     }
   }
 
@@ -730,6 +790,208 @@ media-controller {
       --volume-range-width: calc(var(--volume-range-width-default) * 2);
       --volume-range-margin: calc(var(--volume-range-margin-default) * 2);
       --center-control-size: calc(var(--center-control-size-default) * 1.5);
+    }
+  }
+}
+
+omakase-audio-router {
+  font-size: 12px;
+  font-weight: 400;
+
+  .omakase-router-container {
+    border: 1px solid #c2e9ff;
+    border-radius: 3px;
+    display: inline-block;
+    background: #e9f7ff;
+
+    &.size-small {
+      font-size: 11px;
+      .omakase-router-table {
+        td {
+          padding: 0 5px;
+        }
+      }
+      .omakase-router-toggle {
+        width: 14px;
+        height: 14px;
+        .omakase-router-toggle-inner {
+          width: 6px;
+          height: 6px;
+        }
+      }
+    }
+    &.size-medium {
+      font-size: 12px;
+      .omakase-router-table {
+        td {
+          padding: 2px 7px;
+        }
+      }
+      .omakase-router-toggle {
+        width: 16px;
+        height: 16px;
+        .omakase-router-toggle-inner {
+          width: 8px;
+          height: 8px;
+        }
+      }
+    }
+    &.size-large {
+      font-size: 13px;
+      .omakase-router-table {
+        td {
+          padding: 5px 9px;
+        }
+        tbody tr {
+          &:first-child td {
+            padding-top: 20px;
+          }
+          &:last-child td {
+            padding-bottom: 20px;
+          }
+        }
+        thead th {
+          padding-top: 15px;
+          padding-bottom: 10px;
+        }
+      }
+      .omakase-router-toggle {
+        width: 20px;
+        height: 20px;
+        .omakase-router-toggle-inner {
+          width: 12px;
+          height: 12px;
+        }
+      }
+    }
+    .omakase-router-table {
+      border-collapse: collapse;
+      width: 100%;
+
+      tbody {
+        border-top: 1px solid #c2e9ff;
+
+        tr {
+          &:first-child {
+            td {
+              padding-top: 10px;
+            }
+          }
+          &:last-child {
+            td {
+              padding-bottom: 10px;
+            }
+          }
+        }
+      }
+
+      th,
+      td {
+        text-align: center;
+        padding: 5px;
+
+        &.align-left {
+          text-align: left;
+        }
+
+        &.align-right {
+          text-align: right;
+        }
+
+        &:first-child {
+          padding-left: 10px;
+          min-width: 80px;
+        }
+        &:last-child {
+          padding-right: 10px;
+        }
+      }
+
+      th {
+        font-weight: normal;
+
+        &:last-child {
+          width: 60px;
+        }
+      }
+
+      td {
+        .omakase-router-icon {
+          display: none;
+        }
+      }
+
+      &.omakase-router-multiple {
+        td {
+          .omakase-router-icon {
+            display: inline-block;
+          }
+        }
+      }
+    }
+    .omakase-router-toggle {
+      width: 16px;
+      height: 16px;
+      border: 1px solid #009ceb;
+      border-radius: 50%;
+      border: 1px solid #009ceb;
+      display: inline-block;
+      cursor: pointer;
+      position: relative;
+
+      &:not(.active) {
+        .omakase-router-toggle-inner {
+          display: none;
+        }
+      }
+
+      .omakase-router-toggle-inner {
+        position: absolute;
+        left: 3px;
+        top: 3px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: #009ceb;
+      }
+    }
+
+    .omakase-router-icon {
+      width: 20px;
+      height: 20px;
+      display: inline-block;
+      cursor: pointer;
+      background-repeat: no-repeat;
+      background-position: center;
+      vertical-align: middle;
+
+      &.icon-deselect-all {
+        background-image: url(/images/audio-deselect-all.svg);
+        background-size: 100%;
+        margin-right: 5px;
+      }
+
+      &.icon-reset-all {
+        background-image: url(/images/audio-reset-all.svg);
+        background-size: 100%;
+      }
+
+      &.icon-deselect {
+        background-image: url(/images/audio-deselect.svg);
+        margin-right: 5px;
+      }
+
+      &.icon-reset {
+        background-image: url(/images/audio-reset.svg);
+      }
+
+      &.icon-outputs-few {
+        background-image: url(/images/audio-outputs-few.svg);
+      }
+
+      &.icon-outputs-many {
+        background-image: url(/images/audio-outputs-many.svg);
+      }
     }
   }
 }

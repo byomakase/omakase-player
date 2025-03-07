@@ -432,7 +432,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
       height: 0,
       marginBottom: 0,
     } as Partial<S>;
-    this.updateLayoutDimensions(refreshLayout)
+    this.updateLayoutDimensions(refreshLayout);
   }
 
   maximizeInternal(refreshLayout: boolean = true) {
@@ -441,7 +441,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
       height: this._config.style.height,
       marginBottom: this._config.style.marginBottom ? this._config.style.marginBottom : 0,
     } as Partial<S>;
-    this.updateLayoutDimensions(refreshLayout)
+    this.updateLayoutDimensions(refreshLayout);
   }
 
   minimize() {
@@ -449,7 +449,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
   }
 
   maximize() {
-    this.maximizeInternal()
+    this.maximizeInternal();
   }
 
   minimizeEased(): Observable<void> {

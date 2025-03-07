@@ -15,11 +15,15 @@
  */
 
 export class UrlUtil {
-  public static isUrlAbsolute(url: string) {
+  static isUrlAbsolute(url: string) {
     return /^(https?|file):\/\//i.test(url);
   }
 
-  public static formatBase64Url(mime: string, base64: string): string {
-    return `data:${mime};base64,${base64}`
+  static absolutizeUrl(rootUrl: string, url: string) {
+    return this.isUrlAbsolute(url) ? url : `${rootUrl}/${url}`;
+  }
+
+  static formatBase64Url(mime: string, base64: string): string {
+    return `data:${mime};base64,${base64}`;
   }
 }

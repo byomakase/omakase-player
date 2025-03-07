@@ -22,6 +22,7 @@ import {VideoControllerApi} from '../video';
 import {filter, Subject, takeUntil} from 'rxjs';
 import {nextCompleteSubject} from '../util/rxjs-util';
 import {Dimension, Position} from '../common';
+import {OmakaseTimecodeEdit} from '../components';
 
 const domClasses = {
   timeline: 'omakase-timeline',
@@ -39,6 +40,7 @@ export class TimelineDomController implements Destroyable {
   private _divTimelineOverlay!: HTMLElement;
   private _divTimelineCanvas!: HTMLDivElement;
   private _divTimelineTimecode!: HTMLDivElement;
+  private _timecodeEdit?: OmakaseTimecodeEdit;
 
   private readonly _destroyed$ = new Subject<void>();
 
@@ -66,6 +68,10 @@ export class TimelineDomController implements Destroyable {
     this._videoController.onVideoLoaded$.pipe(filter((p) => !!p)).subscribe((event) => {
       this.settleDom();
     });
+
+    if (this._timeline.config.timecodeClickEdit) {
+      this._divTimelineTimecode.addEventListener('dblclick', this.timecodeDblClickHandler.bind(this));
+    }
   }
 
   private createDom() {
@@ -117,12 +123,38 @@ export class TimelineDomController implements Destroyable {
     });
   }
 
+  toggleTimecodeEdit() {
+    if (this._timecodeEdit) {
+      this.refreshTimecode();
+    } else {
+      this.openTimecodeEdit();
+    }
+  }
+
+  private openTimecodeEdit() {
+    this._videoController.pause().subscribe(() => {
+      this._timecodeEdit = document.createElement('omakase-timecode-edit') as OmakaseTimecodeEdit;
+
+      this._timecodeEdit.video = this._videoController.getVideo();
+      this._timecodeEdit.ffom = this._videoController.getVideo()?.ffomTimecodeObject;
+      this._timecodeEdit.timecode = this._divTimelineTimecode.innerHTML.replace(/<[^>]*>?/gm, '');
+      this._divTimelineTimecode.innerHTML = '';
+      this._divTimelineTimecode.appendChild(this._timecodeEdit);
+      setTimeout(() => {
+        this._timecodeEdit!.focus();
+        this._timecodeEdit!.addEventListener('blur', this.timecodeBlurHandler.bind(this));
+        this._timecodeEdit!.addEventListener('submit', this.timecodeSubmitHandler.bind(this));
+      });
+    });
+  }
+
   private refreshTimecode() {
     this.setDivTimelineTimecode(this._videoController.isVideoLoaded() ? this._videoController.getCurrentTimecode() : '');
   }
 
   private setDivTimelineTimecode(text: string) {
-    this._divTimelineTimecode.innerHTML = text;
+    delete this._timecodeEdit;
+    this._divTimelineTimecode.innerHTML = `<span style="pointer-events:none">${text}</span>`;
   }
 
   private getTimelineElement<T>(className: string): T {
@@ -131,6 +163,24 @@ export class TimelineDomController implements Destroyable {
 
   private getTimelineElements<T>(className: string): T[] {
     return Array.from(DomUtil.getElementById<HTMLElement>(this._divTimeline.id).querySelectorAll(`.${className}`)) as T[];
+  }
+
+  private timecodeDblClickHandler() {
+    this.openTimecodeEdit();
+  }
+
+  private timecodeBlurHandler() {
+    if (this._timecodeEdit) {
+      this.refreshTimecode();
+    }
+  }
+
+  private timecodeSubmitHandler() {
+    if (this._timecodeEdit) {
+      this._videoController.seekToTimecode(this._timecodeEdit!.value);
+      this._timecodeEdit.disabled = true;
+      delete this._timecodeEdit;
+    }
   }
 
   destroy(): void {

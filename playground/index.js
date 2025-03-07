@@ -306,7 +306,7 @@ window.addEventListener('load', () => {
           timeObservation: {
             time: 50,
           },
-          editable: false,
+          editable: true,
           style: {
             symbolType: 'square',
             color: ColorUtil.randomHexColor(),

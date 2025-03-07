@@ -15,8 +15,7 @@
  */
 
 import axios, {AxiosRequestConfig, AxiosResponse} from 'axios';
-import {isNullOrUndefined} from './util/object-util';
 
-export function httpGet<T, D>(url: string, config?: AxiosRequestConfig<D>): Promise<AxiosResponse<T, any>> {
-  return isNullOrUndefined(config) ? axios.get<T>(url) : axios.get<T>(url, config);
+export function httpGet<T>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+  return axios.get<T>(url, config);
 }

@@ -18,9 +18,9 @@ import {HelpMenuGroup, MomentObservation, PeriodObservation} from './model';
 import {Thumbnail} from '../timeline/thumbnail/thumbnail';
 import {OmakaseChartCue} from './chart';
 import {MarkerApi} from '../api';
-import {OmakaseAudioTrack, OmakaseTextTrackCue, SubtitlesVttTrack} from './track';
+import {OmakaseTextTrackCue, OmpAudioTrack, SubtitlesVttTrack} from './track';
 import {Video, VideoLoadOptions} from '../video';
-import {AudioInputOutputNode, AudioMeterStandard, BufferedTimespan, VideoSafeZone, VideoWindowPlaybackState} from '../video/model';
+import {BufferedTimespan, OmpAudioRouterState, OmpMainAudioState, OmpPeakProcessorDataMessage, OmpPeakProcessorDataPeaks, OmpSidecarAudioState, VideoSafeZone, VideoWindowPlaybackState} from '../video/model';
 import {Events as HlsEvents} from 'hls.js';
 
 export interface OmpEvent {}
@@ -205,37 +205,75 @@ export interface AudioLoadedEvent extends AudioEvent {
   /**
    * Audio tracks
    */
-  audioTracks: OmakaseAudioTrack[];
+  audioTracks: OmpAudioTrack[];
 
   /**
    * Audio track
    */
-  activeAudioTrack: OmakaseAudioTrack | undefined;
+  activeAudioTrack: OmpAudioTrack | undefined;
 }
 
 export interface AudioSwitchedEvent extends AudioEvent {
   /**
    * Audio track
    */
-  activeAudioTrack: OmakaseAudioTrack;
+  activeAudioTrack: OmpAudioTrack;
 }
 
-export interface AudioRoutingEvent extends AudioEvent {
-  audioInputOutputNodes: AudioInputOutputNode[][];
+export interface MainAudioEvent extends AudioEvent {}
+
+export interface MainAudioChangeEvent extends MainAudioEvent {
+  mainAudioState: OmpMainAudioState;
 }
 
-export interface AudioContextChangeEvent extends AudioEvent {
-  audioInputsNumber?: number;
-  audioOutputsNumber?: number;
-  audioInputOutputNodes: AudioInputOutputNode[][];
+export interface OmpAudioRouterChangeEvent extends AudioEvent {
+  audioRouterState: OmpAudioRouterState;
 }
 
-export interface AudioWorkletNodeCreatedEvent extends AudioEvent {
-  audioMeterStandard: AudioMeterStandard;
+export interface AudioPeakProcessorMessageEvent extends AudioEvent {
+  data: OmpPeakProcessorDataMessage | OmpPeakProcessorDataPeaks;
 }
 
-export interface AudioPeakProcessorWorkletNodeMessageEvent extends AudioEvent {
-  data: any;
+export interface SidecarAudioEvent extends AudioEvent {}
+
+export interface SidecarAudioCreateEvent extends SidecarAudioEvent {
+  /**
+   * Created Sidecar audio state
+   */
+  createdSidecarAudioState: OmpSidecarAudioState;
+
+  /**
+   * All available Sidecar audio states
+   */
+  sidecarAudioStates: OmpSidecarAudioState[];
+}
+
+export interface SidecarAudioRemoveEvent extends SidecarAudioEvent {
+  /**
+   * Removed Sidecar audio state
+   */
+  removedSidecarAudio: OmpSidecarAudioState;
+
+  /**
+   * All available Sidecar audio states
+   */
+  sidecarAudioStates: OmpSidecarAudioState[];
+}
+
+export interface SidecarAudioChangeEvent extends SidecarAudioEvent {
+  /**
+   * Changed Sidecar audio state
+   */
+  changedSidecarAudioState: OmpSidecarAudioState;
+
+  /**
+   * All available Sidecar audio states
+   */
+  sidecarAudioStates: OmpSidecarAudioState[];
+}
+
+export interface SidecarAudioPeakProcessorMessageEvent extends AudioPeakProcessorMessageEvent {
+  sidecarAudioTrackId: string; // keep object as light as possible
 }
 
 // endregion
@@ -404,20 +442,14 @@ export interface ThumnbailVttUrlChangedEvent extends VideoEvent {
 }
 
 export interface OmpNamedEvent extends OmpEvent {
-  eventName: OmpNamedEvents;
+  eventName: OmpNamedEventEventName;
 }
 
 export interface OmpNamedEvent extends OmpEvent {
-  eventName: OmpNamedEvents;
+  eventName: OmpNamedEventEventName;
 }
 
-export enum OmpNamedEvents {
-  hlsManifestParsed = 'hlsManifestParsed',
-  hlsMediaAttached = 'hlsMediaAttached',
-  hlsFragLoading = 'hlsFragLoading',
-  hlsFragLoaded = 'hlsFragLoaded',
-  hlsError = 'hlsError',
-}
+export type OmpNamedEventEventName = 'hlsManifestParsed' | 'hlsMediaAttached' | 'hlsFragLoading' | 'hlsFragLoaded' | 'hlsError';
 
 export interface OmpHlsNamedEvent extends OmpNamedEvent {
   hlsEventName: HlsEvents;

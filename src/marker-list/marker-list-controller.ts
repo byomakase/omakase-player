@@ -15,9 +15,9 @@
  */
 
 import {Subject} from 'rxjs';
-import {MarkerApi} from '../api/marker-api';
+import {MarkerApi} from '../api';
 import {MarkerAwareApi} from '../api/marker-aware-api';
-import {MarkerInitEvent, MarkerCreateEvent, MarkerDeleteEvent, MarkerUpdateEvent, MarkerSelectedEvent} from '../types';
+import {MarkerCreateEvent, MarkerDeleteEvent, MarkerInitEvent, MarkerSelectedEvent, MarkerUpdateEvent} from '../types';
 import {MarkerListItem} from './marker-list-item';
 
 export class MarkerListController implements MarkerAwareApi {

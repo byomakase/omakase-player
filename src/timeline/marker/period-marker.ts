@@ -332,7 +332,9 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
   private getMarkerHandleRectVerticals(): Verticals {
     if (this._startMarkerHandle) {
       let markerHandleVerticals = this.getMarkerHandleVerticals();
+
       let handleGroupClientRect = this._startMarkerHandle.getHandleGroup().getClientRect();
+
       return {
         y: markerHandleVerticals.area.y + this.getMarkerHandleVerticals().handle.y - handleGroupClientRect.height / 2,
         height: handleGroupClientRect.height,

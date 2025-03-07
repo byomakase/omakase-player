@@ -14,41 +14,53 @@
  * limitations under the License.
  */
 
-import {BehaviorSubject, Observable, Subject} from 'rxjs';
+import {BehaviorSubject, Observable} from 'rxjs';
 import {VideoApi} from '../api';
 import {
-  AudioContextChangeEvent,
   AudioLoadedEvent,
-  AudioPeakProcessorWorkletNodeMessageEvent,
-  AudioRoutingEvent,
+  AudioPeakProcessorMessageEvent,
   AudioSwitchedEvent,
-  AudioWorkletNodeCreatedEvent,
   Destroyable,
-  OmpNamedEvents,
+  MainAudioChangeEvent,
+  OmpAudioTrack,
+  OmpNamedEventEventName,
+  SidecarAudioChangeEvent,
+  SidecarAudioCreateEvent,
+  SidecarAudioPeakProcessorMessageEvent,
+  SidecarAudioRemoveEvent,
   SubtitlesCreateEvent,
   SubtitlesEvent,
   SubtitlesLoadedEvent,
-  SubtitlesVttTrack, SyncTickEvent,
+  SubtitlesVttTrack,
   ThumnbailVttUrlChangedEvent,
   VideoHelpMenuChangeEvent,
 } from '../types';
 import {VideoControllerConfig} from './video-controller';
-import {AudioInputOutputNode, AudioMeterStandard, BufferedTimespan, PlaybackState, Video, VideoLoadOptions, VideoLoadOptionsInternal} from './model';
+import {
+  AudioInputOutputNode,
+  AudioMeterStandard,
+  BufferedTimespan,
+  OmpAudioRouterState,
+  OmpMainAudioState,
+  OmpSidecarAudioState,
+  PlaybackState,
+  Video,
+  VideoLoadOptions,
+  VideoLoadOptionsInternal,
+} from './model';
+import {OmpAudioRouter} from './audio-router';
+import {SidecarAudioApi} from '../api/sidecar-audio-api';
 
 /**
  * @internal
  */
 export interface VideoControllerApi extends VideoApi, Destroyable {
   onAudioLoaded$: BehaviorSubject<AudioLoadedEvent | undefined>;
-  onAudioWorkletNodeCreated$: BehaviorSubject<AudioWorkletNodeCreatedEvent | undefined>;
+  onAudioSwitched$: Observable<AudioSwitchedEvent>;
+
   onSubtitlesLoaded$: BehaviorSubject<SubtitlesLoadedEvent | undefined>;
 
   onPlaybackState$: Observable<PlaybackState>;
-
-  onAudioSwitched$: Observable<AudioSwitchedEvent>;
-  onAudioContextChange$: Observable<AudioContextChangeEvent>;
-  onAudioRouting$: Observable<AudioRoutingEvent>;
-  onAudioPeakProcessorWorkletNodeMessage$: Observable<AudioPeakProcessorWorkletNodeMessageEvent>;
 
   onSubtitlesCreate$: Observable<SubtitlesCreateEvent>;
   onSubtitlesRemove$: Observable<SubtitlesEvent>;
@@ -58,7 +70,7 @@ export interface VideoControllerApi extends VideoApi, Destroyable {
   onHelpMenuChange$: Observable<VideoHelpMenuChangeEvent>;
   onThumbnailVttUrlChanged$: Observable<ThumnbailVttUrlChangedEvent>;
 
-  onActiveNamedEventStreamsChange$: Observable<OmpNamedEvents[]>;
+  onActiveNamedEventStreamsChange$: Observable<OmpNamedEventEventName[]>;
 
   loadVideoInternal(sourceUrl: string, frameRate: number | string, options: VideoLoadOptions | undefined, optionsInternal: VideoLoadOptionsInternal): Observable<Video>;
 
@@ -84,29 +96,82 @@ export interface VideoControllerApi extends VideoApi, Destroyable {
   hideSubtitlesTrack(id: string): Observable<void>;
 
   // audio
-  createAudioContext(contextOptions?: AudioContextOptions): Observable<void>;
 
-  getAudioContext(): AudioContext | undefined;
+  getAudioContext(): AudioContext;
 
-  getMediaElementAudioSourceNode(): MediaElementAudioSourceNode | undefined;
+  // audio router
 
-  createAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<void>;
+  onMainAudioChange$: Observable<MainAudioChangeEvent | undefined>;
 
-  createAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void>;
+  onMainAudioPeakProcessorMessage$: Observable<AudioPeakProcessorMessageEvent>;
 
-  getAudioInputOutputNodes(): AudioInputOutputNode[][];
+  getMainAudioSourceNode(): AudioNode;
 
-  routeAudioInputOutputNode(newAudioInputOutputNode: AudioInputOutputNode): Observable<void>;
+  getMainAudioState(): OmpMainAudioState | undefined;
 
-  routeAudioInputOutputNodes(newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void>;
+  getMainAudioRouter(): OmpAudioRouter | undefined;
 
-  getAudioPeakProcessorWorkletNode(): AudioWorkletNode | undefined;
+  createMainAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<OmpAudioRouterState>;
 
-  createAudioPeakProcessorWorkletNode(audioMeterStandard: AudioMeterStandard): Observable<void>;
+  createMainAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<OmpAudioRouterState>;
+
+  createMainAudioPeakProcessor(audioMeterStandard?: AudioMeterStandard): Observable<Observable<AudioPeakProcessorMessageEvent>>;
+
+  routeMainAudioRouterNodes(newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void>;
+
+  // sidecar audio
+
+  onSidecarAudioCreate$: Observable<SidecarAudioCreateEvent>;
+
+  onSidecarAudioRemove$: Observable<SidecarAudioRemoveEvent>;
+
+  onSidecarAudioChange$: Observable<SidecarAudioChangeEvent>;
+
+  onSidecarAudioPeakProcessorMessage$: Observable<SidecarAudioPeakProcessorMessageEvent>;
+
+  getSidecarAudios(): SidecarAudioApi[];
+
+  getSidecarAudio(id: string): SidecarAudioApi | undefined;
+
+  getSidecarAudioStates(): OmpSidecarAudioState[]; // non api method ?
+
+  createSidecarAudioTrack(track: Partial<OmpAudioTrack>): Observable<OmpAudioTrack>;
+
+  createSidecarAudioTracks(tracks: Partial<OmpAudioTrack>[]): Observable<OmpAudioTrack[]>;
+
+  removeSidecarAudioTracks(ids: string[]): Observable<void>;
+
+  removeAllSidecarAudioTracks(): Observable<void>;
+
+  getSidecarAudioTracks(): OmpAudioTrack[];
+
+  getActiveSidecarAudioTracks(): OmpAudioTrack[];
+
+  activateSidecarAudioTracks(ids: string[], deactivateOthers: boolean | undefined): Observable<void>;
+
+  deactivateSidecarAudioTracks(ids: string[]): Observable<void>;
+
+  createSidecarAudioRouter(sidecarAudioTrackId: string, inputsNumber?: number, outputsNumber?: number): Observable<OmpAudioRouterState>;
+
+  // createSidecarAudioRouterWithOutputsResolver(sidecarAudioTrackId: string, inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<OmpAudioRouterState>;
+
+  routeSidecarAudioRouterNodes(sidecarAudioTrackId: string, newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void>;
+
+  createSidecarAudioPeakProcessor(sidecarAudioTrackId: string, audioMeterStandard?: AudioMeterStandard): Observable<Observable<AudioPeakProcessorMessageEvent>>;
+
+  exportMainAudioTrackToSidecar(mainAudioTrackId: string): Observable<OmpAudioTrack>;
+
+  exportMainAudioTracksToSidecar(mainAudioTrackIds: string[]): Observable<OmpAudioTrack[]>;
+
+
 
   // thumbnails
 
   getThumbnailVttUrl(): string | undefined;
 
   loadThumbnailVttUrl(thumbnailVttUrl: string): Observable<void>;
+
+  //picture in picture
+
+  isPiPSupported(): boolean;
 }

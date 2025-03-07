@@ -18,8 +18,9 @@ import {Api} from './api';
 import {Observable} from 'rxjs';
 import {
   HelpMenuGroup,
-  OmakaseAudioTrack,
-  OmpNamedEvent, OmpNamedEvents,
+  OmpAudioTrack,
+  OmpNamedEvent,
+  OmpNamedEventEventName,
   VideoBufferingEvent,
   VideoEndedEvent,
   VideoErrorEvent,
@@ -376,16 +377,16 @@ export interface VideoApi extends Api {
   /**
    * @returns available audio tracks
    */
-  getAudioTracks(): OmakaseAudioTrack[];
+  getAudioTracks(): OmpAudioTrack[];
 
   /**
    * @returns current active audio track
    */
-  getActiveAudioTrack(): OmakaseAudioTrack | undefined;
+  getActiveAudioTrack(): OmpAudioTrack | undefined;
 
   /**
    * Sets active audio track
-   * @param id {@link OmakaseAudioTrack} id
+   * @param id {@link OmpAudioTrack} id
    */
   setActiveAudioTrack(id: string): Observable<void>;
 
@@ -484,12 +485,12 @@ export interface VideoApi extends Api {
    * Opens event stream for each provided event name in {@link eventNames} subscribable in {@link onNamedEvent$}. Deactivates all other event streams.
    * @param eventNames Event name
    */
-  updateActiveNamedEventStreams(eventNames: OmpNamedEvents[]): Observable<void>;
+  updateActiveNamedEventStreams(eventNames: OmpNamedEventEventName[]): Observable<void>;
 
   /**
    * @returns Event names for events streamed through {@link onNamedEvent$}
    */
-  getActiveNamedEventStreams(): OmpNamedEvents[];
+  getActiveNamedEventStreams(): OmpNamedEventEventName[];
 
   /**
    * Loads black MP4 video

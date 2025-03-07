@@ -20,34 +20,34 @@ import {isNullOrUndefined} from '../util/object-util';
 import {CryptoUtil} from '../util/crypto-util';
 import {nextCompleteSubject} from '../util/rxjs-util';
 
-export enum OmpBroadcastMessageType {
-  MESSAGE,
-  MESSAGE_RESPONSE,
-}
-
 export interface OmpBroadcastErrorMessage {
   name: string;
   message: string;
 }
 
 export interface OmpBroadcastMessageResponse<DataType> {
-  messageType: OmpBroadcastMessageType.MESSAGE_RESPONSE;
+  messageType: 'messageResponse';
   requestMessageId: string;
   data?: DataType;
   error?: OmpBroadcastErrorMessage;
 }
 
 export interface OmpBroadcastMessage<DataType> {
-  messageType: OmpBroadcastMessageType.MESSAGE;
+  messageType: 'message';
   messageId: string;
   actionName: string;
   data?: DataType;
 }
 
-export class OmpBroadcastChannel implements Destroyable {
-  // private static readonly channelTimeout = 20000;
-  private static readonly channelTimeout = 5000;
+export interface OmpBroadcastSendOptions {
+  timeout: number;
+}
 
+const BROADCAST_SEND_OPTIONS_DEFAULT: OmpBroadcastSendOptions = {
+  timeout: 20000,
+};
+
+export class OmpBroadcastChannel implements Destroyable {
   private readonly _channelId: string;
   private readonly _onMessage$: Subject<OmpBroadcastMessage<any>> = new Subject<OmpBroadcastMessage<any>>();
   private readonly _onResponse$: Subject<OmpBroadcastMessageResponse<any>> = new Subject<OmpBroadcastMessageResponse<any>>();
@@ -70,7 +70,7 @@ export class OmpBroadcastChannel implements Destroyable {
   private init() {
     this._messageListener = (messageEvent: MessageEvent) => {
       let message: OmpBroadcastMessage<any> | OmpBroadcastMessageResponse<any> = messageEvent.data;
-      if (message.messageType === OmpBroadcastMessageType.MESSAGE) {
+      if (message.messageType === 'message') {
         this._onMessage$.next(message);
       } else {
         this._onResponse$.next(message);
@@ -85,7 +85,7 @@ export class OmpBroadcastChannel implements Destroyable {
     this._broadcastChannel.addEventListener('messageerror', this._messageerrorListener);
   }
 
-  protected _sendAndObserveResponse<DataType>(message: OmpBroadcastMessage<any>): Observable<OmpBroadcastMessageResponse<DataType>> {
+  protected _sendAndObserveResponse<DataType>(message: OmpBroadcastMessage<any>, sendOptions?: Partial<OmpBroadcastSendOptions>): Observable<OmpBroadcastMessageResponse<DataType>> {
     let send$ = defer(
       () =>
         new Observable<void>((o$) => {
@@ -99,7 +99,7 @@ export class OmpBroadcastChannel implements Destroyable {
       this._onResponse$
         .pipe(filter((p) => p.requestMessageId === message.messageId))
         .pipe(take(1))
-        .pipe(timeout(OmpBroadcastChannel.channelTimeout)) // safeguard timeout
+        .pipe(timeout(sendOptions && sendOptions.timeout ? sendOptions.timeout : BROADCAST_SEND_OPTIONS_DEFAULT.timeout)) // safeguard timeout
         .pipe(
           tap((p) => {
             if (!isNullOrUndefined(p.error)) {
@@ -171,7 +171,7 @@ export class OmpBroadcastChannel implements Destroyable {
 
   protected createMessage<DataType>(actionName: string, data?: DataType): OmpBroadcastMessage<DataType> {
     return {
-      messageType: OmpBroadcastMessageType.MESSAGE,
+      messageType: 'message',
       messageId: CryptoUtil.uuid(),
       actionName: actionName,
       data: data,
@@ -180,7 +180,7 @@ export class OmpBroadcastChannel implements Destroyable {
 
   private _sendResponse(requestMessageId: string, data: any): void {
     let message: OmpBroadcastMessageResponse<any> = {
-      messageType: OmpBroadcastMessageType.MESSAGE_RESPONSE,
+      messageType: 'messageResponse',
       requestMessageId: requestMessageId,
       data: data,
     };
@@ -189,7 +189,7 @@ export class OmpBroadcastChannel implements Destroyable {
 
   private _sendErrorResponse(requestMessageId: string, error: any): void {
     let message: OmpBroadcastMessageResponse<any> = {
-      messageType: OmpBroadcastMessageType.MESSAGE_RESPONSE,
+      messageType: 'messageResponse',
       requestMessageId: requestMessageId,
       error: {
         name: error.name,
@@ -266,10 +266,11 @@ export class TypedOmpBroadcastChannel<T extends OmpBroadcastChannelActionsMap<an
 
   sendAndObserveResponse<ActionName extends OmpBroadcastChannelActionName<T>, RequestType extends T[ActionName]['requestType'], ResponseType extends T[ActionName]['responseType']>(
     action: ActionName,
-    arg?: RequestType
+    arg?: RequestType,
+    sendOptions?: Partial<OmpBroadcastSendOptions>
   ): Observable<UnwrapObservable<ResponseType>> {
     let message = this.createMessage(action, arg);
-    return this._sendAndObserveResponse<UnwrapObservable<ResponseType>>(message).pipe(map((p) => p.data as UnwrapObservable<ResponseType>));
+    return this._sendAndObserveResponse<UnwrapObservable<ResponseType>>(message, sendOptions).pipe(map((p) => p.data as UnwrapObservable<ResponseType>));
   }
 
   send<ActionName extends OmpBroadcastChannelActionName<T>, RequestType extends T[ActionName]['requestType']>(action: ActionName, arg?: RequestType): void {

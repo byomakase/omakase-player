@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {MarkerListApi} from '../api/marker-list-api';
-import {VideoControllerApi} from '../video/video-controller-api';
+import {MarkerApi, MarkerListApi} from '../api';
+import {VideoControllerApi} from '../video';
 import {MarkerListComponent} from './marker-list-component';
 import {MarkerListDomController} from './marker-list-dom-controller';
 import {MarkerVttFile, ThumbnailVttFile} from '../vtt';
@@ -24,22 +24,9 @@ import {map, merge, Subject, takeUntil} from 'rxjs';
 import {VttAdapter} from '../common/vtt-adapter';
 import {VttLoadOptions} from '../api/vtt-aware-api';
 import {ColorUtil} from '../util/color-util';
-import {
-  Destroyable,
-  MarkerCreateEvent,
-  MarkerDeleteEvent,
-  MarkerInitEvent,
-  MarkerListActionEvent,
-  MarkerListClickEvent,
-  MarkerSelectedEvent,
-  MarkerUpdateEvent,
-  MarkerVttCue,
-  MomentObservation,
-  PeriodObservation,
-} from '../types';
+import {Destroyable, MarkerCreateEvent, MarkerDeleteEvent, MarkerInitEvent, MarkerListActionEvent, MarkerListClickEvent, MarkerSelectedEvent, MarkerUpdateEvent, MarkerVttCue, MomentObservation, PeriodObservation} from '../types';
 import {nullifier} from '../util/destroy-util';
 import {MarkerListItem} from './marker-list-item';
-import {MarkerApi} from '../api/marker-api';
 import {MarkerListController} from './marker-list-controller';
 import {completeUnsubscribeSubjects, nextCompleteSubject} from '../util/rxjs-util';
 
@@ -117,7 +104,9 @@ export class MarkerList implements Destroyable, MarkerListApi {
         const selectedMarker = source.getSelectedMarker();
         if (selectedMarker) {
           this._lastActiveMarker = this.getMarkerItem(selectedMarker.id);
-          this._markerListComponent.toggleActiveClass(selectedMarker.id);
+          setTimeout(() => {
+            this._markerListComponent.toggleActiveClass(selectedMarker.id);
+          });
         }
       }
       this.onMarkerInit$.next({markers: this.getMarkers()});

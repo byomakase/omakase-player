@@ -22,7 +22,8 @@ import {HTMLVideoElementEventKeys} from './video-controller';
 import {z} from 'zod';
 import {VideoControllerApi} from './video-controller-api';
 import {FrameRateUtil} from '../util/frame-rate-util';
-import {OmpNamedEvents} from '../types';
+import {OmpNamedEventEventName} from '../types';
+import {FileUtil} from '../util/file-util';
 
 export class VideoNativeLoader extends BaseVideoLoader {
   constructor(videoController: VideoControllerApi) {
@@ -52,6 +53,8 @@ export class VideoNativeLoader extends BaseVideoLoader {
 
           let dropFrame = options && options.dropFrame !== void 0 ? options.dropFrame : false;
 
+          let isAudioOnly = FileUtil.isAudioFile(sourceUrl);
+
           let video: Video = {
             sourceUrl: sourceUrl,
             frameRate: frameRate,
@@ -59,8 +62,8 @@ export class VideoNativeLoader extends BaseVideoLoader {
             duration: duration,
             totalFrames: FrameRateUtil.totalFramesNumber(duration, frameRate),
             frameDuration: FrameRateUtil.frameDuration(frameRate),
-            audioOnly: false,
-            drm: false
+            audioOnly: isAudioOnly,
+            drm: false,
           };
 
           nextCompleteObserver(observer, video);
@@ -83,7 +86,7 @@ export class VideoNativeLoader extends BaseVideoLoader {
     });
   }
 
-  updateActiveNamedEventStreams(eventNames: OmpNamedEvents[]): void {}
+  updateActiveNamedEventStreams(eventNames: OmpNamedEventEventName[]): void {}
 
   override destroy() {
     super.destroy();

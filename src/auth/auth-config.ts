@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2025 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 import {AxiosRequestConfig} from 'axios';
 import {AuthenticationData, BasicAuthenticationData, BearerAuthenticationData, CustomAuthenticationData} from '../authentication/model';
 
-export class AuthUtil {
+export class AuthConfig {
   static _authentication?: AuthenticationData;
 
   static set authentication(authentication: AuthenticationData | undefined) {
@@ -27,22 +27,26 @@ export class AuthUtil {
     return this._authentication;
   }
 
-  static getAuthorizedAxiosConfig(url: string, authentication: AuthenticationData): AxiosRequestConfig {
-    if (authentication.type === 'basic') {
-      const token = btoa(`${(authentication as BasicAuthenticationData).username}:${(authentication as BasicAuthenticationData).password}`);
-      return {
-        headers: {
-          Authorization: `Basic ${token}`,
-        },
-      };
-    } else if (authentication.type === 'bearer') {
-      return {
-        headers: {
-          Authorization: `Bearer ${(authentication as BearerAuthenticationData).token}`,
-        },
-      };
+  static createAxiosRequestConfig(url: string, authentication?: AuthenticationData): AxiosRequestConfig {
+    if (authentication) {
+      if (authentication.type === 'basic') {
+        const token = btoa(`${(authentication as BasicAuthenticationData).username}:${(authentication as BasicAuthenticationData).password}`);
+        return {
+          headers: {
+            Authorization: `Basic ${token}`,
+          },
+        };
+      } else if (authentication.type === 'bearer') {
+        return {
+          headers: {
+            Authorization: `Bearer ${(authentication as BearerAuthenticationData).token}`,
+          },
+        };
+      } else {
+        return (authentication as CustomAuthenticationData).headers(url);
+      }
     } else {
-      return (authentication as CustomAuthenticationData).headers(url);
+      return {};
     }
   }
 }

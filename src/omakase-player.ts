@@ -18,7 +18,7 @@ import {Timeline, TimelineConfig} from './timeline';
 import {forkJoin, Observable, Subject, takeUntil} from 'rxjs';
 import {AlertsApi, AudioApi, MarkerListApi, OmakasePlayerApi, SubtitlesApi, TimelineApi, VideoApi} from './api';
 import {SubtitlesController} from './subtitles/subtitles-controller';
-import {Destroyable, WithOptionalPartial} from './types';
+import {Destroyable} from './types';
 import {AudioController} from './audio/audio-controller';
 // we need to include styles in compilation process, thus import them
 import './../style/omakase-player.scss';
@@ -35,15 +35,14 @@ import {VideoDomControllerApi} from './video/video-dom-controller-api';
 import {DetachedVideoController} from './video/detached-video-controller';
 import {ConfigWithOptionalStyle} from './layout';
 import {MarkerList, MarkerListConfig} from './marker-list/marker-list';
-import {AuthUtil} from './util/auth-util';
+import {AuthConfig} from './auth/auth-config';
 import {AuthenticationData} from './authentication/model';
 import {VIDEO_CONTROLLER_CONFIG_DEFAULT} from './video/video-controller';
-import {VideoProtocol} from './video/model';
 import {OmpHlsConfig} from './video/video-hls-loader';
+import {RouterVisualization, RouterVisualizationConfig} from './router-visualization/router-visualization';
+import {RouterVisualizationApi} from './api/router-visualization-api';
 
 export interface OmakasePlayerConfig {
-  protocol: VideoProtocol;
-
   playerHTMLElementId?: string;
   mediaChromeHTMLElementId?: string;
   crossorigin?: 'anonymous' | 'use-credentials';
@@ -84,10 +83,14 @@ export interface OmakasePlayerConfig {
    *  Function to get thumbnail url from time (used for preview in media chrome time range)
    */
   thumbnailFn?: (time: number) => string | undefined;
+
+  /**
+   *  Custom video player click handler
+   */
+  playerClickHandler?: () => void;
 }
 
 const configDefault: OmakasePlayerConfig = {
-  protocol: 'hls',
   playerHTMLElementId: VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT.playerHTMLElementId,
   crossorigin: VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT.crossorigin,
   hlsConfig: VIDEO_CONTROLLER_CONFIG_DEFAULT.hlsConfig,
@@ -111,7 +114,7 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
 
   private _destroyed$ = new Subject<void>();
 
-  constructor(config?: WithOptionalPartial<OmakasePlayerConfig, 'protocol'>) {
+  constructor(config?: Partial<OmakasePlayerConfig>) {
     this._config = {
       ...configDefault,
       ...(config ? config : {}),
@@ -123,7 +126,7 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
 
     OmakasePlayer.instance = this;
 
-    AuthUtil.authentication = this._config.authentication;
+    AuthConfig.authentication = this._config.authentication;
 
     if (config?.vttDownsamplePeriod) {
       VTT_DOWNSAMPLE_CONFIG_DEFAULT.downsamplePeriod = config.vttDownsamplePeriod;
@@ -139,12 +142,13 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
       mediaChromeHTMLElementId: this._config.mediaChromeHTMLElementId,
       thumbnailVttUrl: this._config.thumbnailVttUrl,
       thumbnailFn: this._config.thumbnailFn,
+      playerClickHandler: this._config.playerClickHandler,
     });
 
     let createLocalVideoController = () => {
       return new VideoController(
         {
-          hlsConfig: this._config.hlsConfig
+          hlsConfig: this._config.hlsConfig,
         },
         this._videoDomController
       );
@@ -169,7 +173,7 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
   }
 
   setAuthentication(authentication: AuthenticationData) {
-    AuthUtil.authentication = authentication;
+    AuthConfig.authentication = authentication;
   }
 
   setThumbnailVttUrl(thumbnailVttUrl: string) {
@@ -224,6 +228,10 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
         });
       }
     });
+  }
+
+  initializeRouterVisualization(config: RouterVisualizationConfig): RouterVisualizationApi {
+    return new RouterVisualization(config, this._audioController);
   }
 
   get timeline(): TimelineApi | undefined {

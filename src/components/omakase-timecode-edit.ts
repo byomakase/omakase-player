@@ -1,28 +1,21 @@
-import {timecodeNonDropRegex, timecodeDropRegex, TimecodeUtil} from '../util/timecode-util';
+import Decimal from 'decimal.js';
+import {TimecodeUtil} from '../util/timecode-util';
+import {FrameRateUtil} from '../util/frame-rate-util';
+import {TimecodeObject, Video} from '../video/model';
 
 export class OmakaseTimecodeEdit extends HTMLElement {
-  static get observedAttributes() {
-    return ['frameRate', 'duration', 'maxTimecode', 'minTimecode'];
-  }
-
   private _timecode: string = '';
   private _container: HTMLDivElement;
   private _input: HTMLInputElement;
-  private _frameRate: number = 30;
-  private _isDropFrameRate: boolean = false;
-  private _duration: number;
-  private _maxTimecode?: string;
-  private _minTimecode?: string;
-  private _dropFrameRates = ['29.97', '59.94'];
+  private _video?: Video;
+
+  private _ffom?: TimecodeObject;
+  private _maxTime?: number;
+  private _minTime?: number;
+  private _isValidTimecode: boolean = true;
 
   constructor() {
     super();
-
-    this.frameRate = parseFloat(this.getAttribute('frameRate') ?? '30');
-    this._duration = parseFloat(this.getAttribute('duration') ?? '0');
-
-    this._maxTimecode = this.getAttribute('maxTimecode') ?? undefined;
-    this._minTimecode = this.getAttribute('minTimecode') ?? undefined;
 
     this._container = document.createElement('div');
     this._container.classList.add('omakase-timecode-edit');
@@ -30,9 +23,6 @@ export class OmakaseTimecodeEdit extends HTMLElement {
     this._input = document.createElement('input');
     this._input.type = 'text';
 
-    if (!this.isTimecodeValid()) {
-      this._input.classList.add('omakase-timecode-edit-input-invalid');
-    }
     this._input.classList.add('omakase-timecode-edit-input');
 
     this._input.addEventListener('keyup', this.handleKeyUp.bind(this));
@@ -74,48 +64,67 @@ export class OmakaseTimecodeEdit extends HTMLElement {
     this.appendChild(style);
   }
 
-  set minTimecode(timecode: string) {
-    if ((this._isDropFrameRate && timecode.match(timecodeDropRegex)) || timecode.match(timecodeNonDropRegex)) {
-      this._minTimecode = timecode;
-    } else {
-      throw Error('Timecode format for minTimecode is incorrect');
+  set minTime(time: number | undefined) {
+    if (time && time < 0) {
+      time = 0;
     }
+    this._minTime = time;
   }
 
-  set maxTimecode(timecode: string) {
-    if ((this._isDropFrameRate && timecode.match(timecodeDropRegex)) || timecode.match(timecodeNonDropRegex)) {
-      this._maxTimecode = timecode;
-    } else {
-      throw Error('Timecode format for maxTimecode is incorrect');
-    }
+  set maxTime(time: number | undefined) {
+    this._maxTime = time;
   }
 
-  set duration(duration: number) {
-    this._duration = duration;
+  set ffom(ffom: TimecodeObject | undefined) {
+    this._ffom = ffom;
   }
 
-  set frameRate(newFrameRate: number) {
-    this._frameRate = newFrameRate;
-    this._isDropFrameRate = this._dropFrameRates.includes(this._frameRate.toFixed(2));
+  get video(): Video | undefined {
+    return this._video;
+  }
+
+  set video(video: Video | undefined) {
+    this._video = video;
+    this._ffom = video?.ffomTimecodeObject;
   }
 
   get frameRate() {
-    return this._frameRate;
+    if (!this._video) {
+      throw new Error('Video not set');
+    }
+    return this._video.frameRate;
   }
 
-  get currentTime() {
-    if (!this.isTimecodeValid) {
-      return undefined;
+  get duration() {
+    if (!this._video) {
+      throw new Error('Video not set');
+    }
+    return this._video.duration;
+  }
+
+  get isDropFrameRate() {
+    if (!this._video) {
+      throw new Error('Video not set');
     }
 
-    const timecodeElements = this.timecode.split(/[:;]/).map((el) => parseInt(el));
+    return this._video.dropFrame;
+  }
 
-    let time = timecodeElements[2] + timecodeElements[3] * (1 / this.frameRate);
-    time += timecodeElements[1] * 60;
-    time += timecodeElements[0] * 3600;
-    time += 0.02 / this.frameRate;
+  get currentFrame() {
+    try {
+      return TimecodeUtil.parseTimecodeToFrame(this.timecode, new Decimal(this.frameRate), this._ffom);
+    } catch (e) {
+      console.log(e);
+      return undefined;
+    }
+  }
 
-    return time;
+  get durationInFrames() {
+    return new Decimal(this.duration).mul(new Decimal(this.frameRate)).toNumber();
+  }
+
+  set disabled(disabled: boolean) {
+    this._input.disabled = disabled;
   }
 
   public override focus(options?: FocusOptions): void {
@@ -123,40 +132,47 @@ export class OmakaseTimecodeEdit extends HTMLElement {
   }
 
   public isTimecodeValid() {
-    const timecodeElements = this.timecode.split(/[:;]/).map((el) => parseInt(el));
-    if (timecodeElements.filter((el) => !Number.isNaN(el)).length !== 4) {
+    if (!this._video) {
+      console.error('Video not set');
       return false;
     }
 
-    if (this._minTimecode && this.timecode < this._minTimecode) {
+    console.log(this.timecode);
+
+    const currentFrame = this.currentFrame;
+
+    if (currentFrame === undefined) {
       return false;
     }
 
-    if (this._maxTimecode && this.timecode > this._maxTimecode) {
+    console.log(this.timecode, 'after check');
+
+    const currentFrameObject = TimecodeUtil.parseTimecodeToTimecodeObject(this.timecode);
+
+    if (currentFrameObject.frames >= this.frameRate) {
+      return false;
+    }
+    if (this._minTime && currentFrame < FrameRateUtil.videoTimeToVideoFrameNumber(this._minTime, this._video)) {
       return false;
     }
 
-    if (timecodeElements[3] >= this.frameRate) {
+    if (this._maxTime && currentFrame > FrameRateUtil.videoTimeToVideoFrameNumber(this._maxTime, this._video)) {
       return false;
-    }
-    if (this.timecode.match(timecodeDropRegex) && this._isDropFrameRate && this.currentTime! < this._duration) {
-      if (timecodeElements[1] % 10 === 0 || timecodeElements[2] !== 0) {
-        return true;
-      }
-      if (timecodeElements[1] % 10 !== 0 && timecodeElements[2] === 0 && timecodeElements[3] >= this.numberOfDropFrames!) {
-        return true;
-      }
-      return false;
-    }
-    if (this.timecode.match(timecodeNonDropRegex) && !this._isDropFrameRate && this.currentTime! < this._duration) {
-      return true;
     }
 
-    return false;
+    if (currentFrame > this.durationInFrames) {
+      return false;
+    }
+
+    return true;
   }
 
   private handleKeyUp(event: KeyboardEvent) {
     event.preventDefault();
+
+    if (this._input.disabled) {
+      return;
+    }
 
     if (event.key === 'ArrowUp') {
       this.nextTimecode();
@@ -171,6 +187,8 @@ export class OmakaseTimecodeEdit extends HTMLElement {
   private handleKeyDown(event: KeyboardEvent) {
     if (event.key === 'ArrowUp') {
       event.preventDefault();
+    } else if (event.key === 'Enter' && this.isTimecodeValid() && !this._input.disabled) {
+      this.dispatchEvent(new Event('submit'));
     }
   }
 
@@ -180,76 +198,33 @@ export class OmakaseTimecodeEdit extends HTMLElement {
 
   private validate() {
     if (this.isTimecodeValid()) {
+      this._isValidTimecode = true;
       this._input.classList.remove('omakase-timecode-edit-input-invalid');
-    } else if (!this._input.classList.contains('omakase-timecode-edit-input-invalid')) {
+    } else {
+      this._isValidTimecode = false;
       this._input.classList.add('omakase-timecode-edit-input-invalid');
     }
   }
 
   public nextTimecode() {
-    const timecodeElements = this.timecode.split(/[:;]/).map((el) => parseInt(el));
-    timecodeElements[3]++;
-    if (timecodeElements[3] >= this.frameRate) {
-      timecodeElements[3] = 0;
-      timecodeElements[2]++;
-      if (timecodeElements[2] > 59) {
-        timecodeElements[2] = 0;
-        timecodeElements[1]++;
-
-        if (this._isDropFrameRate && timecodeElements[1] % 10 !== 0) {
-          timecodeElements[3] = this.numberOfDropFrames!;
-        }
-
-        if (timecodeElements[1] > 59) {
-          timecodeElements[1] = 0;
-          timecodeElements[0]++;
-        }
-      }
+    const currentFrame = this.currentFrame;
+    const lastFrame = FrameRateUtil.videoTimeToVideoFrameNumber(this._video!.duration, this._video!);
+    if (currentFrame === undefined || currentFrame >= lastFrame || !this._isValidTimecode) {
+      return;
     }
-
-    if (this._isDropFrameRate) {
-      const time = timecodeElements
-        .slice(0, -1)
-        .map((el) => el.toString().padStart(2, '0'))
-        .join(':');
-      this.timecode = time + ';' + timecodeElements[3].toString().padStart(2, '0');
-    } else {
-      this.timecode = timecodeElements.map((el) => el.toString().padStart(2, '0')).join(':');
-    }
+    const nextFrame = currentFrame + 1;
+    const nextFrameTimeDecimal = FrameRateUtil.frameNumberToTimeDecimal(nextFrame, this.frameRate);
+    this.timecode = TimecodeUtil.formatDecimalTimeToTimecode(nextFrameTimeDecimal, this.video!);
   }
 
   public previousTimecode() {
-    const timecodeElements = this.timecode.split(/[:;]/).map((el) => parseInt(el));
-    timecodeElements[3]--;
-    if (this._isDropFrameRate && timecodeElements[1] % 10 !== 0 && timecodeElements[3] < this.numberOfDropFrames!) {
-      timecodeElements[3] = -1;
+    const currentFrame = this.currentFrame;
+    if (currentFrame === undefined || currentFrame <= 0 || !this._isValidTimecode) {
+      return;
     }
-    if (timecodeElements[3] < 0) {
-      timecodeElements[3] = Math.round(this.frameRate) - 1;
-      timecodeElements[2]--;
-      if (timecodeElements[2] < 0) {
-        timecodeElements[2] = 59;
-        timecodeElements[1]--;
-
-        if (timecodeElements[1] < 0) {
-          timecodeElements[1] = 59;
-          timecodeElements[0]--;
-          if (timecodeElements[0] < 0) {
-            return; //invalid timecode
-          }
-        }
-      }
-    }
-
-    if (this._isDropFrameRate) {
-      const time = timecodeElements
-        .slice(0, -1)
-        .map((el) => el.toString().padStart(2, '0'))
-        .join(':');
-      this.timecode = time + ';' + timecodeElements[3].toString().padStart(2, '0');
-    } else {
-      this.timecode = timecodeElements.map((el) => el.toString().padStart(2, '0')).join(':');
-    }
+    const nextFrame = currentFrame - 1;
+    const nextFrameTimeDecimal = FrameRateUtil.frameNumberToTimeDecimal(nextFrame, this.frameRate);
+    this.timecode = TimecodeUtil.formatDecimalTimeToTimecode(nextFrameTimeDecimal, this.video!);
   }
 
   set timecode(timecode: string) {
@@ -268,12 +243,5 @@ export class OmakaseTimecodeEdit extends HTMLElement {
 
   set value(timecode: string) {
     this.timecode = timecode;
-  }
-
-  get numberOfDropFrames(): number | undefined {
-    if (this._isDropFrameRate) {
-      return Math.round(this.frameRate * 0.066666);
-    }
-    return undefined;
   }
 }

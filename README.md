@@ -152,7 +152,7 @@ omakasePlayer.video.onVideoTimeChange$.subscribe({
 
 ### Detached video player
 
-To enable full video detaching in Omakase Player we need to instantiate another *detached* instance of Omakase Player on same host, and tell our *local* instance where to find it. 
+To enable full video detaching in Omakase Player we need to instantiate another *detached* instance of Omakase Player on same host, and tell our *local* instance where to find it.
 
 Local player instance configuration on `https://my-server.com/omp-player`:
 ```javascript
@@ -193,7 +193,7 @@ omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8', 25).subscribe({
 })
 ```
 
-Due to security and usability policies, most modern browsers require a user interaction before allowing certain actions, such as video autoplay or fullscreen initiation. 
+Due to security and usability policies, most modern browsers require a user interaction before allowing certain actions, such as video autoplay or fullscreen initiation.
 It could be that one-time-only user interaction (such as clicking on play button in detached player) is needed before video playback or switching to fullscreen playback after video detaching.
 
 ### Hls.js
@@ -245,6 +245,8 @@ omakasePlayer.video.toggleFullscreen();
 
 Complete list of Audio API methods is available in API Reference Docs.
 
+There are two types of audio: **Main audio** and **Sidecar audio**. Main audio refers to audio source attached to video track. Main audio tracks are embedded audio tracks loaded with video and only single Main audio track can be active (playing) at same time. Sidecar audio tracks are loaded manually and they are independent of video load and Main audio. Sidecar audio tracks playback is synced with video (Main audio) playback and there can be multiple Sidecar audio tracks active (playing) at same time.
+
 Few common usages of Audio API:
 
 ```javascript
@@ -266,29 +268,204 @@ omakasePlayer.audio.setActiveAudioTrack(audioTracks[1].id);
 
 ```
 
-### Audio routing
+### Main audio router
+Enables routing between audio inputs and outputs.
 
 ```javascript
 
-// creates AudioContext with AudioSplitterNode and AudioMergerMode configured for routing between 2 inputs and 4 outputs
-omakasePlayer.audio.createAudioRouter(2, 4); 
+// creates Main audio router configured for routing between 2 inputs and 4 outputs
+omakasePlayer.audio.createMainAudioRouter(2, 4); 
 
 // connects 1st output with 2nd output
-omakasePlayer.audio.routeAudioInputOutputNode({
+omakasePlayer.audio.routeMainAudioRouterNodes([{
   inputNumber: 0,
   outputNumber: 1,
   connected: true
-})
+}])
 
 // disconnects 2nd input and 2nd output
-omakasePlayer.audio.routeAudioInputOutputNode({
+omakasePlayer.audio.routeMainAudioRouterNodes([{
   inputNumber: 1,
   outputNumber: 1,
   connected: false
+}])
+
+```
+
+### Main audio peak processor
+Enables audio peak processing for analyzing audio and creating audio peaks visualizations such as [VU meter](#vu-meter).
+
+```javascript
+
+// creates Main audio peak sample processor
+omakasePlayer.audio.createMainAudioPeakProcessor(); 
+
+// listens for peak processor messages
+omakasePlayer.audio.onMainAudioPeakProcessorMessage$.subscribe({
+  next: (event) => {
+	// peak processor message can be input to audio peak visualization component
+    console.log(`Peak processor message`, event)
+  }
 })
 
 ```
 
+### Sidecar audio
+
+```javascript
+
+// listens for SidecarAudioCreateEvent events
+omakasePlayer.audio.onSidecarAudioCreate$.subscribe({
+  next: (event) => {
+    console.log(`Just created Sidecar audio track: `, event.createdSidecarAudioState)
+    console.log(`Current sidecar audio tracks: `, event.sidecarAudioStates)
+  }
+})
+
+// listens for SidecarAudioRemoveEvent events
+omakasePlayer.audio.onSidecarAudioRemove$.subscribe({
+  next: (event) => {
+    console.log(`Just removed Sidecar audio track: `, event.removedSidecarAudio)
+    console.log(`Current sidecar audio tracks: `, event.sidecarAudioStates)
+  }
+})
+
+// creates new Sidecar audio track
+omakasePlayer.audio.createSidecarAudioTrack({
+  src: audio.url,		// sidecar audio source
+  active: true, 			// make it active immediately after creation
+}).subscribe({
+  next: (sidecarAudioTrack) => {
+    console.log(`Created new Sidecar audio track with id:`, sidecarAudioTrack.id)
+  }
+})
+
+// activates Sidecar audio tracks
+omakasePlayer.audio.activateSidecarAudioTracks(['sidecarAudioTrackId1', 'sidecarAudioTrackId2']);
+
+// deactivates Sidecar audio tracks
+omakasePlayer.audio.deactivateSidecarAudioTracks(['sidecarAudioTrackId1', 'sidecarAudioTrackId2']);
+
+// removes Sidecar audio tracks
+omakasePlayer.audio.removeSidecarAudioTracks(['sidecarAudioTrackId1', 'sidecarAudioTrackId2']);
+
+// exports Main audio track as Sidecar audio track
+omakasePlayer.audio.exportMainAudioTrackToSidecar('mainAudioTrackId1').subscribe({
+  next: (sidecarAudioTrack) => {
+    console.log(`Created new Sidecar audio track from Main audio track:`, sidecarAudioTrack)
+  }
+})
+
+```
+
+### Sidecar audio router
+
+```javascript
+
+// listens for SidecarAudioChangeEvent events, event is triggered ie. when Sidecar audio router changes
+omakasePlayer.audio.onSidecarAudioChange$.subscribe({
+  next: (event) => {
+    console.log(`Just changed Sidecar audio track: `, event.changedSidecarAudioState)
+    console.log(`Current sidecar audio tracks: `, event.sidecarAudioStates)
+  }
+})
+
+// creates Sidecar audio router configured for routing between 2 inputs and 4 outputs
+omakasePlayer.audio.createSidecarAudioRouter("sidecarAudioTrackId1", 2, 4);
+
+// connects 1st output with 2nd output
+omakasePlayer.audio.routeSidecarAudioRouterNodes("sidecarAudioTrackId1", [{
+  inputNumber: 0,
+  outputNumber: 1,
+  connected: true
+}])
+
+// disconnects 2nd input and 2nd output
+omakasePlayer.audio.routeSidecarAudioRouterNodes("sidecarAudioTrackId1", [{
+  inputNumber: 1,
+  outputNumber: 1,
+  connected: false
+}])
+
+```
+
+### Sidecar audio peak processor
+Enables audio peak processing for analyzing audio and creating audio peaks visualizations such as [VU meter](#vu-meter).
+
+```javascript
+
+// creates Sidecar audio peak sample processor
+omakasePlayer.audio.createSidecarAudioPeakProcessor("sidecarAudioTrackId1");
+
+// listens for peak processor messages on all Sidecar audios and filters them for single Sidecar audio track
+omakasePlayer.audio.onSidecarAudioPeakProcessorMessage$
+  .pipe(filter(p => p.sidecarAudioTrackId === "sidecarAudioTrackId1"))
+  .subscribe({
+    next: (event) => {
+      // peak processor message can be input to audio peak visualization component
+      console.log(`Peak processor message`, event)
+    }
+  })
+
+```
+
+### Audio router visualization
+Initializes the audio router visualization component. It will create the main audio router or sidecar audio routers if they are not already created.
+
+Parameters:
+
+- `routerVisualizationHTMLElementId`: optional, id of the HTML element inside which to render the router visualization component (defaults to `''omakase-audio-router''`)
+- `size`: optional, component size (`'small'`, `'medium'` or `'large'`, defaults to `'medium'`)
+- `outputNumber`: optional, number of outputs to display (defaults to the number of detected outputs from the AudioContext)
+- `outputLabels`: optional, labels to display for outputs (if not provided, default labels will be shown)
+- `mainTrack`: optional, main audio router visualization options
+  - `name`: optional, label to show for the main track
+  - `maxInputNumber`: required, number of inputs for main audio router
+  - `inputNumber`: optional, number of inputs to visualize (defaults to `maxInputNumber`)
+  - `inputLabels`: optional, labels to display for main track inputs (if not provided, default labels will be shown)
+- `sidecarTracks`: optional, array of sidecar audio router visualization options
+  - `trackId`: required, id of the sidecar audio track
+
+Usage example:
+
+```html
+
+<div id="omakase-audio-router"></div>
+```
+
+```javascript
+
+  // creates a router visualization component with one main track and one sidecar track
+  let routerVisualizationComponent = omakasePlayer.initializeRouterVisualization({
+    routerVisualizationHTMLElementId: 'omakase-audio-router',
+    size: 'medium',
+    outputNumber: 6,
+    outputLabels: ['L', 'R', 'C', 'LFE', 'Ls', 'Rs'],
+    mainTrack: {
+      name: '5.1 English',
+      inputNumber: 6,
+      maxInputNumber: 6,
+      inputLabels: ['L', 'R', 'C', 'LFE', 'Ls', 'Rs'],
+    },
+    sidecarTracks: [
+      {
+        trackId: '<sidecar_track_id>',
+        name: 'Stereo',
+        inputNumber: 2,
+        maxInputNumber: 6,
+        inputLabels: ['L', 'R', 'C', 'LFE', 'Ls', 'Rs'],
+      },
+    ],
+  });
+
+  // updates the main track on the router visualization component
+  routerVisualizationComponent.updateMainTrack({
+    name: '2.0 English',
+    inputNumber: 2,
+    inputLabels: ['L', 'R']
+  })
+
+```
 
 ## Timeline
 
@@ -915,6 +1092,10 @@ omakasePlayer.subtitles.createVttTrack({
 })
 ```
 
+## VU Meter
+
+Omakase Player easily integrates with [VU Meter](https://github.com/byomakase/vu-meter). VU Meter is using data provided by Omakase Player's peak processor created on either Main audio track or on Sidecar audio tracks. See examples provided on [VU Meter Github repository](https://github.com/byomakase/vu-meter).
+
 ## Development
 
 Player build & build watch
@@ -935,4 +1116,4 @@ Production artefacts that need to be published to NPM are created in `/dist` fol
 
 ## Known limitations
 
-- Firefox browser is not supported as it doesn't support ```requestVideoFrameCallback``` function
+- Safari browser doesn't support Main audio routing and Main audio VU Meter for HLS streams. This constraint can be bypassed by loading the Main audio as a Sidecar track using `exportMainAudioTrackToSidecar` method.

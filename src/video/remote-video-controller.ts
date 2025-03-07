@@ -15,19 +15,21 @@
  */
 
 import Hls from 'hls.js';
-import {BehaviorSubject, firstValueFrom, merge, Observable, Subject, takeUntil} from 'rxjs';
+import {BehaviorSubject, filter, firstValueFrom, map, merge, Observable, Subject, takeUntil} from 'rxjs';
 import {
-  AudioContextChangeEvent,
   AudioLoadedEvent,
-  AudioPeakProcessorWorkletNodeMessageEvent,
-  AudioRoutingEvent,
+  AudioPeakProcessorMessageEvent,
   AudioSwitchedEvent,
-  AudioWorkletNodeCreatedEvent,
   HelpMenuGroup,
-  OmakaseAudioTrack,
+  MainAudioChangeEvent,
+  OmpAudioTrack,
   OmpNamedEvent,
-  OmpNamedEvents,
+  OmpNamedEventEventName,
   OmpVideoWindowPlaybackError,
+  SidecarAudioChangeEvent,
+  SidecarAudioCreateEvent,
+  SidecarAudioPeakProcessorMessageEvent,
+  SidecarAudioRemoveEvent,
   SubtitlesCreateEvent,
   SubtitlesEvent,
   SubtitlesLoadedEvent,
@@ -59,7 +61,9 @@ import Decimal from 'decimal.js';
 import {TypedOmpBroadcastChannel} from '../common/omp-broadcast-channel';
 import {MessageChannelActionsMap} from './channel-types';
 import {fromPromise} from 'rxjs/internal/observable/innerFrom';
-import {AudioInputOutputNode, BufferedTimespan, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
+import {AudioInputOutputNode, BufferedTimespan, OmpAudioRouterState, OmpMainAudioState, OmpSidecarAudioState, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
+import {OmpAudioRouter} from './audio-router';
+import {SidecarAudioApi} from '../api/sidecar-audio-api';
 
 export class RemoteVideoController implements VideoControllerApi {
   private readonly _messageChannel: TypedOmpBroadcastChannel<MessageChannelActionsMap>;
@@ -68,7 +72,8 @@ export class RemoteVideoController implements VideoControllerApi {
   private readonly _get_onVideoLoaded$: BehaviorSubject<VideoLoadedEvent | undefined> = new BehaviorSubject<VideoLoadedEvent | undefined>(void 0);
   private readonly _get_onAudioLoaded$: BehaviorSubject<AudioLoadedEvent | undefined> = new BehaviorSubject<AudioLoadedEvent | undefined>(void 0);
   private readonly _get_onSubtitlesLoaded$: BehaviorSubject<SubtitlesLoadedEvent | undefined> = new BehaviorSubject<SubtitlesLoadedEvent | undefined>(void 0);
-  private readonly _get_onAudioWorkletNodeCreated$: BehaviorSubject<AudioWorkletNodeCreatedEvent | undefined> = new BehaviorSubject<AudioWorkletNodeCreatedEvent | undefined>(void 0);
+
+  private readonly _get_onMainAudioChange$: BehaviorSubject<MainAudioChangeEvent | undefined> = new BehaviorSubject<MainAudioChangeEvent | undefined>(void 0);
 
   // region transfer helper variables
   /**
@@ -86,10 +91,13 @@ export class RemoteVideoController implements VideoControllerApi {
   private _bufferedTimespans: BufferedTimespan[] = [];
   private _subtitlesTracks: SubtitlesVttTrack[] = [];
   private _activeSubtitlesTrack: SubtitlesVttTrack | undefined;
-  private _activeAudioTrack: OmakaseAudioTrack | undefined = void 0;
-  private _audioInputOutputNodes: AudioInputOutputNode[][] = [];
+  private _activeAudioTrack: OmpAudioTrack | undefined = void 0;
+
+  private _sidecarAudioStates: OmpSidecarAudioState[] = [];
+
   private _thumbnailVttUrl: string | undefined = void 0;
-  private _activeNamedEventStreams: OmpNamedEvents[] = [];
+  private _activeNamedEventStreams: OmpNamedEventEventName[] = [];
+
   // endregion
 
   private _destroyed$ = new Subject<void>();
@@ -125,17 +133,17 @@ export class RemoteVideoController implements VideoControllerApi {
       });
 
     this._messageChannel
-      .createRequestStream('VideoControllerApi.onAudioWorkletNodeCreated$')
-      .pipe(takeUntil(this._destroyed$))
-      .subscribe({
-        next: (value) => this._get_onAudioWorkletNodeCreated$.next(value),
-      });
-
-    this._messageChannel
       .createRequestStream('VideoControllerApi.onAudioLoaded$')
       .pipe(takeUntil(this._destroyed$))
       .subscribe({
         next: (value) => this._get_onAudioLoaded$.next(value),
+      });
+
+    this._messageChannel
+      .createRequestStream('VideoControllerApi.onMainAudioChange$')
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: (value) => this._get_onMainAudioChange$.next(value),
       });
 
     this.onPlaybackState$.pipe(takeUntil(this._destroyed$)).subscribe({
@@ -190,12 +198,12 @@ export class RemoteVideoController implements VideoControllerApi {
         },
       });
 
-    merge(this.onAudioContextChange$, this.onAudioRouting$)
+    merge(this.onSidecarAudioCreate$, this.onSidecarAudioRemove$, this.onSidecarAudioChange$)
       .pipe(takeUntil(this._destroyed$))
       .subscribe({
         next: (value) => {
           if (value) {
-            this._audioInputOutputNodes = value.audioInputOutputNodes;
+            this._sidecarAudioStates = value.sidecarAudioStates;
           }
         },
       });
@@ -229,6 +237,10 @@ export class RemoteVideoController implements VideoControllerApi {
         this._activeNamedEventStreams = value;
       },
     });
+  }
+
+  destroy(): void {
+    nextCompleteSubject(this._destroyed$);
   }
 
   get onVideoLoaded$(): BehaviorSubject<VideoLoadedEvent | undefined> {
@@ -327,27 +339,35 @@ export class RemoteVideoController implements VideoControllerApi {
     return this._messageChannel.createRequestStream('VideoControllerApi.onSubtitlesShow$');
   }
 
-  get onAudioContextChange$(): Observable<AudioContextChangeEvent> {
-    return this._messageChannel.createRequestStream('VideoControllerApi.onAudioContextChange$');
+  get onMainAudioChange$(): Observable<MainAudioChangeEvent | undefined> {
+    return this._get_onMainAudioChange$;
   }
 
-  get onAudioRouting$(): Observable<AudioRoutingEvent> {
-    return this._messageChannel.createRequestStream('VideoControllerApi.onAudioRouting$');
+  get onMainAudioPeakProcessorMessage$(): Observable<AudioPeakProcessorMessageEvent> {
+    return this._messageChannel.createRequestStream('VideoControllerApi.onMainAudioPeakProcessorMessage$');
   }
 
-  get onAudioPeakProcessorWorkletNodeMessage$(): Observable<AudioPeakProcessorWorkletNodeMessageEvent> {
-    return this._messageChannel.createRequestStream('VideoControllerApi.onAudioPeakProcessorWorkletNodeMessage$');
+  get onSidecarAudioCreate$(): Observable<SidecarAudioCreateEvent> {
+    return this._messageChannel.createRequestStream('VideoControllerApi.onSidecarAudioCreate$');
   }
 
-  get onAudioWorkletNodeCreated$(): BehaviorSubject<AudioWorkletNodeCreatedEvent | undefined> {
-    return this._get_onAudioWorkletNodeCreated$;
+  get onSidecarAudioRemove$(): Observable<SidecarAudioRemoveEvent> {
+    return this._messageChannel.createRequestStream('VideoControllerApi.onSidecarAudioRemove$');
+  }
+
+  get onSidecarAudioChange$(): Observable<SidecarAudioChangeEvent> {
+    return this._messageChannel.createRequestStream('VideoControllerApi.onSidecarAudioChange$');
+  }
+
+  get onSidecarAudioPeakProcessorMessage$(): Observable<SidecarAudioPeakProcessorMessageEvent> {
+    return this._messageChannel.createRequestStream('VideoControllerApi.onSidecarAudioPeakProcessorMessage$');
   }
 
   get onThumbnailVttUrlChanged$(): Observable<ThumnbailVttUrlChangedEvent> {
     return this._messageChannel.createRequestStream('VideoControllerApi.onThumbnailVttUrlChanged$');
   }
 
-  get onActiveNamedEventStreamsChange$(): Observable<OmpNamedEvents[]> {
+  get onActiveNamedEventStreamsChange$(): Observable<OmpNamedEventEventName[]> {
     return this._messageChannel.createRequestStream('VideoControllerApi.onActiveNamedEventStreamsChange$');
   }
 
@@ -391,11 +411,11 @@ export class RemoteVideoController implements VideoControllerApi {
     throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
   }
 
-  getAudioContext(): AudioContext | undefined {
+  getAudioContext(): AudioContext {
     throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
   }
 
-  getMediaElementAudioSourceNode(): MediaElementAudioSourceNode | undefined {
+  getMainAudioRouter(): OmpAudioRouter | undefined {
     throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
   }
 
@@ -586,10 +606,6 @@ export class RemoteVideoController implements VideoControllerApi {
     return this._videoSafeZones;
   }
 
-  destroy(): void {
-    nextCompleteSubject(this._destroyed$);
-  }
-
   getVideoWindowPlaybackState(): VideoWindowPlaybackState {
     return 'detached';
   }
@@ -648,11 +664,11 @@ export class RemoteVideoController implements VideoControllerApi {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.showSubtitlesTrack', [id])));
   }
 
-  getActiveAudioTrack(): OmakaseAudioTrack | undefined {
+  getActiveAudioTrack(): OmpAudioTrack | undefined {
     return this._activeAudioTrack;
   }
 
-  getAudioTracks(): OmakaseAudioTrack[] {
+  getAudioTracks(): OmpAudioTrack[] {
     return this.onAudioLoaded$.value ? this.onAudioLoaded$.value.audioTracks : [];
   }
 
@@ -660,37 +676,111 @@ export class RemoteVideoController implements VideoControllerApi {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.setActiveAudioTrack', [id])));
   }
 
-  createAudioContext(contextOptions?: AudioContextOptions): Observable<void> {
-    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.createAudioContext', [contextOptions])));
+  // region audio router
+
+  createMainAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<OmpAudioRouterState> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.createMainAudioRouter', [inputsNumber, outputsNumber])));
   }
 
-  createAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<void> {
-    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.createAudioRouter', [inputsNumber, outputsNumber])));
-  }
-
-  createAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void> {
+  createMainAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<OmpAudioRouterState> {
     throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
   }
 
-  getAudioInputOutputNodes(): AudioInputOutputNode[][] {
-    return this._audioInputOutputNodes;
+  createMainAudioPeakProcessor(audioMeterStandard?: AudioMeterStandard): Observable<Observable<AudioPeakProcessorMessageEvent>> {
+    // return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.createMainAudioPeakProcessor', [audioMeterStandard])));
+    return fromPromise(
+      firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.createMainAudioPeakProcessor', [audioMeterStandard]).pipe(map((p) => this.onMainAudioPeakProcessorMessage$)))
+    );
   }
 
-  routeAudioInputOutputNode(newAudioInputOutputNode: AudioInputOutputNode): Observable<void> {
-    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.routeAudioInputOutputNode', [newAudioInputOutputNode])));
-  }
-
-  routeAudioInputOutputNodes(newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void> {
-    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.routeAudioInputOutputNodes', [newAudioInputOutputNodes])));
-  }
-
-  getAudioPeakProcessorWorkletNode(): AudioWorkletNode | undefined {
+  getMainAudioSourceNode(): AudioNode {
     throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
   }
 
-  createAudioPeakProcessorWorkletNode(audioMeterStandard: AudioMeterStandard): Observable<void> {
-    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.createAudioPeakProcessorWorkletNode', [audioMeterStandard])));
+  getMainAudioState(): OmpMainAudioState | undefined {
+    return this._get_onMainAudioChange$.value?.mainAudioState;
   }
+
+  routeMainAudioRouterNodes(newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.routeMainAudioRouterNodes', [newAudioInputOutputNodes])));
+  }
+
+  // endregion
+
+  // region sidecar audio
+
+  getSidecarAudios(): SidecarAudioApi[] {
+    throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
+  }
+
+  getSidecarAudio(id: string): SidecarAudioApi | undefined {
+    throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
+  }
+
+  getSidecarAudioStates(): OmpSidecarAudioState[] {
+    return this._sidecarAudioStates;
+  }
+
+  createSidecarAudioTrack(track: Partial<OmpAudioTrack>): Observable<OmpAudioTrack> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.createSidecarAudioTrack', [track], {timeout: 60000 * 5})));
+  }
+
+  createSidecarAudioTracks(tracks: Partial<OmpAudioTrack>[]): Observable<OmpAudioTrack[]> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.createSidecarAudioTracks', [tracks], {timeout: 60000 * 5})));
+  }
+
+  activateSidecarAudioTracks(ids: string[], deactivateOthers: boolean | undefined): Observable<void> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.activateSidecarAudioTracks', [ids, deactivateOthers])));
+  }
+
+  deactivateSidecarAudioTracks(ids: string[]): Observable<void> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.deactivateSidecarAudioTracks', [ids])));
+  }
+
+  getActiveSidecarAudioTracks(): OmpAudioTrack[] {
+    return this.getSidecarAudioTracks().filter((p) => p.active);
+  }
+
+  getSidecarAudioTracks(): OmpAudioTrack[] {
+    return this._sidecarAudioStates.map((p) => p.audioTrack);
+  }
+
+  removeSidecarAudioTracks(ids: string[]): Observable<void> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.removeSidecarAudioTracks', [ids])));
+  }
+
+  removeAllSidecarAudioTracks(): Observable<void> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.removeAllSidecarAudioTracks')));
+  }
+
+  createSidecarAudioRouter(sidecarAudioTrackId: string, inputsNumber: number, outputsNumber?: number): Observable<OmpAudioRouterState> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.createSidecarAudioRouter', [sidecarAudioTrackId, inputsNumber, outputsNumber])));
+  }
+
+  routeSidecarAudioRouterNodes(sidecarAudioTrackId: string, newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.routeSidecarAudioRouterNodes', [sidecarAudioTrackId, newAudioInputOutputNodes])));
+  }
+
+  createSidecarAudioPeakProcessor(sidecarAudioTrackId: string, audioMeterStandard?: AudioMeterStandard): Observable<Observable<AudioPeakProcessorMessageEvent>> {
+    // return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.createSidecarAudioPeakProcessor', [sidecarAudioTrackId, audioMeterStandard])));
+    return fromPromise(
+      firstValueFrom(
+        this._messageChannel
+          .sendAndObserveResponse('VideoControllerApi.createSidecarAudioPeakProcessor', [sidecarAudioTrackId, audioMeterStandard])
+          .pipe(map((p) => this.onSidecarAudioPeakProcessorMessage$.pipe(filter((p) => p.sidecarAudioTrackId === sidecarAudioTrackId))))
+      )
+    );
+  }
+
+  exportMainAudioTrackToSidecar(mainAudioTrackId: string): Observable<OmpAudioTrack> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.exportMainAudioTrackToSidecar', [mainAudioTrackId])));
+  }
+
+  exportMainAudioTracksToSidecar(mainAudioTrackIds: string[]): Observable<OmpAudioTrack[]> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.exportMainAudioTracksToSidecar', [mainAudioTrackIds])));
+  }
+
+  // endregion
 
   getThumbnailVttUrl(): string | undefined {
     return this._thumbnailVttUrl;
@@ -698,6 +788,10 @@ export class RemoteVideoController implements VideoControllerApi {
 
   loadThumbnailVttUrl(thumbnailVttUrl: string): Observable<void> {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.loadThumbnailVttUrl', [thumbnailVttUrl])));
+  }
+
+  isPiPSupported(): boolean {
+    return false;
   }
 
   enablePiP(): Observable<void> {
@@ -717,11 +811,11 @@ export class RemoteVideoController implements VideoControllerApi {
     throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
   }
 
-  updateActiveNamedEventStreams(eventNames: OmpNamedEvents[]): Observable<void> {
+  updateActiveNamedEventStreams(eventNames: OmpNamedEventEventName[]): Observable<void> {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.updateActiveNamedEventStreams', [eventNames])));
   }
 
-  getActiveNamedEventStreams(): OmpNamedEvents[] {
+  getActiveNamedEventStreams(): OmpNamedEventEventName[] {
     return this._activeNamedEventStreams;
   }
 

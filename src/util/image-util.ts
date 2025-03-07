@@ -18,13 +18,13 @@ import Konva from 'konva';
 import axios from 'axios';
 import {map, Observable, of, switchMap} from 'rxjs';
 import {AuthenticationData} from '../authentication/model';
-import {AuthUtil} from './auth-util';
+import {AuthConfig} from '../auth/auth-config';
 import {BlobUtil} from './blob-util';
 
 export class ImageUtil {
   static getProtectedImageUrl(url: string, authentication: AuthenticationData): Observable<string> {
     return new Observable<string>((o$) => {
-      const axiosConfig = AuthUtil.getAuthorizedAxiosConfig(url, authentication);
+      const axiosConfig = AuthConfig.createAxiosRequestConfig(url, authentication);
       axios
         .get(url, {...axiosConfig, responseType: 'blob'})
         .then((res) => {

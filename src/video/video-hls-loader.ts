@@ -14,22 +14,40 @@
  * limitations under the License.
  */
 
-import {first, forkJoin, fromEvent, map, Observable, Subject, takeUntil} from 'rxjs';
+import {first, forkJoin, from, fromEvent, map, Observable, Subject, takeUntil} from 'rxjs';
 import {Video, VideoLoadOptions} from './model';
 import {BaseVideoLoader} from './video-loader';
-import Hls, {AudioTrackSwitchingData, EMEControllerConfig, ErrorData, Events as HlsEvents, FragLoadedData, FragLoadingData, HlsConfig, ManifestParsedData, MediaAttachedData, MediaKeySessionContext, MediaPlaylist} from 'hls.js';
+import Hls, {
+  AudioTrackSwitchingData,
+  ErrorData,
+  Events as HlsEvents,
+  FragLoadedData,
+  FragLoadingData,
+  HlsConfig,
+  ManifestParsedData,
+  MediaAttachedData,
+  MediaKeySessionContext,
+  MediaPlaylist,
+} from 'hls.js';
 import {errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
-import {AuthUtil} from '../util/auth-util';
+import {AuthConfig} from '../auth/auth-config';
 import {BasicAuthenticationData, BearerAuthenticationData, CustomAuthenticationData} from '../authentication/model';
 import {isNullOrUndefined} from '../util/object-util';
 import {HTMLVideoElementEventKeys} from './video-controller';
 import {z} from 'zod';
 import {FrameRateUtil} from '../util/frame-rate-util';
-import {OmakaseAudioTrack, OmpError, OmpHlsNamedEvent, OmpNamedEvents, SubtitlesVttTrack} from '../types';
+import {OmpAudioTrack, OmpError, OmpHlsNamedEvent, OmpNamedEventEventName, SubtitlesVttTrack} from '../types';
 import {VttUtil} from '../vtt/vtt-util';
 import {StringUtil} from '../util/string-util';
 import {CryptoUtil} from '../util/crypto-util';
 import {VideoControllerApi} from './video-controller-api';
+import {M3u8Util} from '../m3u8/m3u8-util';
+import {UrlUtil} from '../util/url-util';
+import {AudioGroup} from '../m3u8/m3u8.model';
+import {httpGet} from '../http';
+import {BlobUtil} from '../util/blob-util';
+import {AudioUtil} from '../util/audio-util';
+import {M3u8File} from '../m3u8/m3u8-file';
 
 export type HlsLicenseXhrSetupFn = (xhr: XMLHttpRequest, url: string, keyContext: MediaKeySessionContext, licenseChallenge: Uint8Array) => void | Uint8Array | Promise<Uint8Array | void>;
 
@@ -57,16 +75,22 @@ export interface OmpHlsConfig extends HlsConfig {
 
 type OmpHlsEventListener = (event: any, data: any) => void;
 
+export interface OmpHlsAudioTrackPackage {
+  audioTrackName: string;
+  audioGroup: AudioGroup;
+  m3u8File: M3u8File;
+}
+
 export class VideoHlsLoader extends BaseVideoLoader {
-  public _eventMapping: Map<OmpNamedEvents, HlsEvents> = new Map<OmpNamedEvents, HlsEvents>([
-    [OmpNamedEvents.hlsManifestParsed, HlsEvents.MANIFEST_PARSED],
-    [OmpNamedEvents.hlsMediaAttached, HlsEvents.MEDIA_ATTACHED],
-    [OmpNamedEvents.hlsFragLoading, HlsEvents.FRAG_LOADING],
-    [OmpNamedEvents.hlsFragLoaded, HlsEvents.FRAG_LOADED],
-    [OmpNamedEvents.hlsError, HlsEvents.ERROR],
+  public _eventMapping: Map<OmpNamedEventEventName, HlsEvents> = new Map<OmpNamedEventEventName, HlsEvents>([
+    ['hlsManifestParsed', HlsEvents.MANIFEST_PARSED],
+    ['hlsMediaAttached', HlsEvents.MEDIA_ATTACHED],
+    ['hlsFragLoading', HlsEvents.FRAG_LOADING],
+    ['hlsFragLoaded', HlsEvents.FRAG_LOADED],
+    ['hlsError', HlsEvents.ERROR],
   ]);
   protected _hls: Hls | undefined;
-  protected _hlsEventListenersMap: Map<OmpNamedEvents, OmpHlsEventListener> = new Map<OmpNamedEvents, OmpHlsEventListener>();
+  protected _hlsEventListenersMap: Map<OmpNamedEventEventName, OmpHlsEventListener> = new Map<OmpNamedEventEventName, OmpHlsEventListener>();
 
   protected _videoEventBreaker$ = new Subject<void>();
 
@@ -90,9 +114,11 @@ export class VideoHlsLoader extends BaseVideoLoader {
 
       this._hls = new Hls({
         ...hlsConfig,
-        licenseXhrSetup: hlsConfig.loadVideoLicenseXhrSetup ? (xhr: XMLHttpRequest, url: string, keyContext: MediaKeySessionContext, licenseChallenge: Uint8Array) => {
-          return hlsConfig.loadVideoLicenseXhrSetup!(sourceUrl, frameRate, options)(xhr, url, keyContext, licenseChallenge);
-        } : hlsConfig.licenseXhrSetup
+        licenseXhrSetup: hlsConfig.loadVideoLicenseXhrSetup
+          ? (xhr: XMLHttpRequest, url: string, keyContext: MediaKeySessionContext, licenseChallenge: Uint8Array) => {
+              return hlsConfig.loadVideoLicenseXhrSetup!(sourceUrl, frameRate, options)(xhr, url, keyContext, licenseChallenge);
+            }
+          : hlsConfig.licenseXhrSetup,
       });
 
       this.updateActiveNamedEventStreams(this._videoController.getActiveNamedEventStreams());
@@ -104,7 +130,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
       });
 
       let onAudioTracksUpdated = () => {
-        let audioTracks = this._hls!.audioTracks.map((mediaPlaylist) => this.createOmakaseAudioTrack(mediaPlaylist));
+        let audioTracks = this._hls!.audioTracks.map((mediaPlaylist) => this.createOmpAudioTrack(mediaPlaylist));
 
         let activeHlsAudioTrack = this._hls!.audioTracks[this._hls!.audioTrack];
         let activeAudioTrack = activeHlsAudioTrack ? audioTracks.find((p) => p.id === `${activeHlsAudioTrack.id}`) : void 0;
@@ -119,7 +145,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
         let hlsAudioTrack = this._hls!.audioTracks[this._hls!.audioTrack];
         if (hlsAudioTrack) {
           this.onAudioSwitched$.next({
-            activeAudioTrack: this.createOmakaseAudioTrack(hlsAudioTrack),
+            activeAudioTrack: this.createOmpAudioTrack(hlsAudioTrack),
           });
         }
       };
@@ -142,15 +168,15 @@ export class VideoHlsLoader extends BaseVideoLoader {
 
       this.overrideHlsMethods();
 
-      if (AuthUtil.authentication) {
+      if (AuthConfig.authentication) {
         this._hls.config.xhrSetup = (xhr: XMLHttpRequest, url: string) => {
-          if (AuthUtil.authentication!.type === 'basic') {
-            const token = btoa(`${(AuthUtil.authentication as BasicAuthenticationData)!.username}:${(AuthUtil.authentication as BasicAuthenticationData)!.password}`);
+          if (AuthConfig.authentication!.type === 'basic') {
+            const token = btoa(`${(AuthConfig.authentication as BasicAuthenticationData)!.username}:${(AuthConfig.authentication as BasicAuthenticationData)!.password}`);
             xhr.setRequestHeader('Authorization', `Basic ${token}`);
-          } else if (AuthUtil.authentication!.type === 'bearer') {
-            xhr.setRequestHeader('Authorization', `Bearer ${(AuthUtil.authentication as BearerAuthenticationData)!.token}`);
+          } else if (AuthConfig.authentication!.type === 'bearer') {
+            xhr.setRequestHeader('Authorization', `Bearer ${(AuthConfig.authentication as BearerAuthenticationData)!.token}`);
           } else {
-            const authenticationData = (AuthUtil.authentication as CustomAuthenticationData)!.headers(url);
+            const authenticationData = (AuthConfig.authentication as CustomAuthenticationData)!.headers(url);
             for (const header in authenticationData.headers) {
               xhr.setRequestHeader(header, authenticationData.headers[header]);
             }
@@ -169,8 +195,6 @@ export class VideoHlsLoader extends BaseVideoLoader {
          * are not to be playable by OmakasePlayer
          */
         if (!errorDetails.includes('audioTrackLoadError')) {
-
-
           errorCompleteObserver(observer, `Error loading video. Hls error details: ${errorDetails}`);
         }
       });
@@ -179,14 +203,18 @@ export class VideoHlsLoader extends BaseVideoLoader {
         // MEDIA_ATTACHED event is fired by hls object once MediaSource is ready
         this._hls!.once(HlsEvents.MEDIA_ATTACHED, function (event, data) {
           // console.debug('video element and hls.js are now bound together');
-          nextCompleteObserver(observer, true)
+          nextCompleteObserver(observer, true);
         });
       });
 
       let audioOnly = false;
       let hlsManifestParsed$ = new Observable<boolean>((observer) => {
-        this._hls!.once(HlsEvents.MANIFEST_PARSED, function (event, data) {
+        this._hls!.once(HlsEvents.MANIFEST_PARSED, (event, data) => {
           // console.debug(event, data);
+
+          // set audio track with 6 channels as default, if it exists
+          let defaultAudioTrack = this._hls!.allAudioTracks.find((track) => track.channels === '6');
+          this._hls!.setAudioOption(defaultAudioTrack);
 
           let firstLevelIndex = data.firstLevel;
           let firstLevel = data.levels[firstLevelIndex];
@@ -199,7 +227,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
 
           audioOnly = !hasVideo; // if it doesn't contain video / audio, it'll still be audioOnly for now
 
-          nextCompleteObserver(observer, true)
+          nextCompleteObserver(observer, true);
         });
       });
 
@@ -209,7 +237,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
           if ((data as FragLoadedData).frag.sn === 'initSegment' && (data as FragLoadedData).frag.data) {
             hasInitSegment = true;
           }
-          nextCompleteObserver(observer, true)
+          nextCompleteObserver(observer, true);
         });
       });
 
@@ -239,7 +267,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
             frameDuration: FrameRateUtil.frameDuration(frameRate),
             audioOnly: audioOnly,
             initSegmentTimeOffset: initSegmentTimeOffset,
-            drm: isDrm
+            drm: isDrm,
           };
 
           // audio
@@ -255,7 +283,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
           }
           if (!!hlsConfig.fetchManifestSubtitleTracks && this._hls!.allSubtitleTracks && this._hls!.allSubtitleTracks.length > 0) {
             let os$ = this._hls!.allSubtitleTracks.map((subtitleTrack) => {
-              return VttUtil.fetchFromM3u8SegmentedConcat(subtitleTrack.url, void 0, AuthUtil.authentication).pipe(
+              return M3u8Util.fetchVttSegmentedConcat(subtitleTrack.url, AuthConfig.authentication).pipe(
                 map((webvttText) => {
                   return {
                     mediaPlaylist: subtitleTrack,
@@ -326,12 +354,15 @@ export class VideoHlsLoader extends BaseVideoLoader {
     });
   }
 
-  protected createOmakaseAudioTrack(mediaPlaylist: MediaPlaylist): OmakaseAudioTrack {
+  protected createOmpAudioTrack(mediaPlaylist: MediaPlaylist): OmpAudioTrack {
     return {
       id: `${mediaPlaylist.id}`,
       label: mediaPlaylist.name,
       src: mediaPlaylist.url,
       language: mediaPlaylist.lang,
+      embedded: true,
+      active: false,
+      channelCount: StringUtil.isNonEmpty(mediaPlaylist.channels) ? parseInt(mediaPlaylist.channels!) : void 0,
     };
   }
 
@@ -345,9 +376,14 @@ export class VideoHlsLoader extends BaseVideoLoader {
     }
   }
 
-  override setActiveAudioTrack(omakaseAudioTrackId: string): Observable<void> {
+  // override getActiveAudioTracks(): OmpAudioTrack[] {
+  //   let activeMediaPlaylist = this._hls!.audioTracks[this._hls!.audioTrack];
+  //   return activeMediaPlaylist ? [this._audioTracks.get(this._mediaPlaylistsMapping.get(activeMediaPlaylist.id)!)!] : []
+  // }
+
+  override setActiveAudioTrack(ompAudioTrackId: string): Observable<void> {
     return new Observable((observer) => {
-      let hlsAudioTrackId = parseInt(omakaseAudioTrackId);
+      let hlsAudioTrackId = parseInt(ompAudioTrackId);
       if (this._hls!.audioTrack !== hlsAudioTrackId) {
         // proceed with change
         this._hls!.once(HlsEvents.AUDIO_TRACK_SWITCHED, (event: string, data: AudioTrackSwitchingData) => {
@@ -361,7 +397,89 @@ export class VideoHlsLoader extends BaseVideoLoader {
     });
   }
 
-  updateActiveNamedEventStreams(eventNames: OmpNamedEvents[]): void {
+  override exportAudioTrack(ompAudioTrackId: string): Observable<Partial<OmpAudioTrack>> {
+    let hlsAudioTrackId = parseInt(ompAudioTrackId);
+
+    return new Observable<Partial<OmpAudioTrack>>((observer) => {
+      if (this._hls && this._hls.audioTracks.length > 0 && this._hls.audioTracks.find((p) => p.id === hlsAudioTrackId)) {
+        let hlsMediaPlaylist = this._hls.audioTracks.find((p) => p.id === hlsAudioTrackId)!;
+        let hlsMediaPlaylistRootUrl = hlsMediaPlaylist.url.substring(0, hlsMediaPlaylist.url.lastIndexOf('/'));
+
+        M3u8File.create(hlsMediaPlaylist.url, AuthConfig.authentication)
+          .pipe(
+            map(
+              (m3u8File) =>
+                ({
+                  audioTrackName: hlsMediaPlaylist.name,
+                  audioGroup: {
+                    uri: hlsMediaPlaylist.url,
+                    default: hlsMediaPlaylist.default,
+                    autoselect: hlsMediaPlaylist.autoselect,
+                    language: hlsMediaPlaylist.lang,
+                    forced: hlsMediaPlaylist.forced,
+                    instreamId: hlsMediaPlaylist.instreamId,
+                    characteristics: hlsMediaPlaylist.characteristics,
+                  },
+                  m3u8File: m3u8File,
+                }) as OmpHlsAudioTrackPackage
+            )
+          )
+          .subscribe({
+            next: (audioPackage: OmpHlsAudioTrackPackage) => {
+              const firstSegment = audioPackage.m3u8File.manifest!.segments[0];
+              const firstSegmentAbsUrl = UrlUtil.absolutizeUrl(hlsMediaPlaylistRootUrl, firstSegment.uri);
+              const isNonFragmented = audioPackage.m3u8File.manifest!.segments.every((segment) => UrlUtil.absolutizeUrl(hlsMediaPlaylistRootUrl, segment.uri) === firstSegmentAbsUrl);
+
+              if (isNonFragmented) {
+                from(
+                  httpGet<ArrayBuffer>(firstSegmentAbsUrl, {
+                    ...AuthConfig.createAxiosRequestConfig(firstSegmentAbsUrl, AuthConfig.authentication),
+                    responseType: 'arraybuffer',
+                  })
+                ).subscribe({
+                  next: (response) => {
+                    let audioTrack: Partial<OmpAudioTrack> = {
+                      src: BlobUtil.createBlobURL([response.data]),
+                      label: hlsMediaPlaylist.name,
+                      language: hlsMediaPlaylist.lang,
+                    };
+
+                    nextCompleteObserver(observer, audioTrack);
+                  },
+                  error: (error) => {
+                    errorCompleteObserver(observer, error);
+                  },
+                });
+              } else {
+                let fragmentsAbsUrls = audioPackage.m3u8File.manifest!.segments.map((segment) => UrlUtil.absolutizeUrl(hlsMediaPlaylistRootUrl, segment.uri));
+                let initSegmentUrl = StringUtil.isNonEmpty(firstSegment.map.uri) ? UrlUtil.absolutizeUrl(hlsMediaPlaylistRootUrl, firstSegment.map.uri) : void 0;
+
+                fragmentsAbsUrls = initSegmentUrl ? [initSegmentUrl, ...fragmentsAbsUrls] : fragmentsAbsUrls;
+
+                AudioUtil.fetchAndMergeAudioFiles(fragmentsAbsUrls, AuthConfig.authentication).subscribe({
+                  next: (audioArrayBuffer) => {
+                    let audioTrack: Partial<OmpAudioTrack> = {
+                      src: BlobUtil.createBlobURL([audioArrayBuffer]),
+                      label: hlsMediaPlaylist.name,
+                      language: hlsMediaPlaylist.lang,
+                    };
+
+                    nextCompleteObserver(observer, audioTrack);
+                  },
+                  error: (error) => {
+                    errorCompleteObserver(observer, error);
+                  },
+                });
+              }
+            },
+          });
+      } else {
+        errorCompleteObserver(observer, new OmpError(`Audio track not found`));
+      }
+    });
+  }
+
+  updateActiveNamedEventStreams(eventNames: OmpNamedEventEventName[]): void {
     for (let eventName of this._eventMapping.keys()) {
       if (eventNames.filter((p) => this.isEventSupported(p)).find((p) => p === eventName)) {
         if (!this._hlsEventListenersMap.has(eventName)) {
@@ -382,11 +500,11 @@ export class VideoHlsLoader extends BaseVideoLoader {
     return this._hls;
   }
 
-  protected isEventSupported(eventName: OmpNamedEvents): boolean {
+  protected isEventSupported(eventName: OmpNamedEventEventName): boolean {
     return this._eventMapping.has(eventName);
   }
 
-  protected resolveHlsEventName(eventName: OmpNamedEvents): HlsEvents {
+  protected resolveHlsEventName(eventName: OmpNamedEventEventName): HlsEvents {
     if (this._eventMapping.has(eventName)) {
       return this._eventMapping.get(eventName)!;
     } else {
@@ -394,11 +512,11 @@ export class VideoHlsLoader extends BaseVideoLoader {
     }
   }
 
-  protected createHlsEventListener(eventName: OmpNamedEvents): OmpHlsEventListener {
+  protected createHlsEventListener(eventName: OmpNamedEventEventName): OmpHlsEventListener {
     let listener: OmpHlsEventListener;
 
     switch (eventName) {
-      case OmpNamedEvents.hlsManifestParsed:
+      case 'hlsManifestParsed':
         listener = (event: string, data: ManifestParsedData) => {
           let serializableData = {
             ...data,
@@ -410,7 +528,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
           } as OmpHlsNamedEvent);
         };
         break;
-      case OmpNamedEvents.hlsMediaAttached:
+      case 'hlsMediaAttached':
         listener = (event: string, data: MediaAttachedData) => {
           let serializableData = {};
           this.onNamedEvent$.next({
@@ -420,7 +538,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
           } as OmpHlsNamedEvent);
         };
         break;
-      case OmpNamedEvents.hlsFragLoading:
+      case 'hlsFragLoading':
         listener = (event: string, data: FragLoadingData) => {
           let serializableData = {};
           this.onNamedEvent$.next({
@@ -430,7 +548,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
           } as OmpHlsNamedEvent);
         };
         break;
-      case OmpNamedEvents.hlsFragLoaded:
+      case 'hlsFragLoaded':
         listener = (event: string, data: FragLoadedData) => {
           let serializableData = {};
           this.onNamedEvent$.next({
@@ -440,7 +558,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
           } as OmpHlsNamedEvent);
         };
         break;
-      case OmpNamedEvents.hlsError:
+      case 'hlsError':
         listener = (event: string, data: ErrorData) => {
           let serializableData: Partial<ErrorData> = {
             error: data.error,

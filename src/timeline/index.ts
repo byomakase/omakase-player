@@ -15,6 +15,7 @@
  */
 
 export type {TimelineLaneStyle, TimelineLaneConfig, TimelineLaneComponentConfig} from './timeline-lane';
+export type {TextLabelStyle} from './timeline-component';
 export * from './timeline-component';
 export * from './scrubber';
 export * from './marker';

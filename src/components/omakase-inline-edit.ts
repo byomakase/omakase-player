@@ -1,5 +1,6 @@
-import {min, Subject} from 'rxjs';
+import {Subject} from 'rxjs';
 import {OmakaseTimecodeEdit} from './omakase-timecode-edit';
+import {TimecodeObject, Video} from '../video/model';
 
 export class OmakaseInlineEdit extends HTMLElement {
   onEdit$: Subject<string> = new Subject();
@@ -81,20 +82,19 @@ export class OmakaseInlineEdit extends HTMLElement {
     this._input.value = text;
   }
 
-  setTimecode(timecode: string, frameRate: number, duration: number, minTimecode?: string, maxTimecode?: string) {
+  setTimecode(timecode: string, video: Video, minTime?: number, maxTime?: number) {
     this._container.removeChild(this._input);
     this._input = document.createElement('omakase-timecode-edit') as OmakaseTimecodeEdit;
     this._container.appendChild(this._input);
-    this._input.frameRate = frameRate;
-    this._input.duration = duration;
+    this._input.video = video;
     this._input.value = timecode;
 
-    if (minTimecode) {
-      this._input.minTimecode = minTimecode;
+    if (minTime) {
+      this._input.minTime = minTime;
     }
 
-    if (maxTimecode) {
-      this._input.maxTimecode = maxTimecode;
+    if (maxTime) {
+      this._input.maxTime = maxTime;
     }
 
     this._validationFn = () => (this._input as OmakaseTimecodeEdit).isTimecodeValid();

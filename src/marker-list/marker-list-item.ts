@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {MarkerApi, MarkerStyle, MarkerTimeObservation} from '../api/marker-api';
+import {MarkerApi, MarkerStyle, MarkerTimeObservation} from '../api';
 import {MarkerAwareApi} from '../api/marker-aware-api';
 import {MomentObservation, PeriodObservation} from '../types';
 import {CryptoUtil} from '../util/crypto-util';

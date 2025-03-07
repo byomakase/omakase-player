@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {concat, concatMap, filter, Observable, Subject, takeUntil} from 'rxjs';
+import {concatMap, filter, Observable, Subject, takeUntil} from 'rxjs';
 import {ClickEvent, MouseEnterEvent, MouseLeaveEvent} from '../types';
 import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle, KonvaComponent} from '../layout/konva-component';
 import Konva from 'konva';

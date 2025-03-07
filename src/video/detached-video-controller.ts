@@ -17,7 +17,7 @@
 import {VideoControllerApi} from './video-controller-api';
 import {TypedOmpBroadcastChannel} from '../common/omp-broadcast-channel';
 import {HandshakeChannelActionsMap, MessageChannelActionsMap} from './channel-types';
-import {BehaviorSubject, catchError, filter, interval, Observable, Subject, take, takeUntil, timeout, timer} from 'rxjs';
+import {BehaviorSubject, catchError, filter, interval, map, Observable, Subject, take, takeUntil, timeout, timer} from 'rxjs';
 import {Constants} from '../constants';
 import {CryptoUtil} from '../util/crypto-util';
 import {nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
@@ -25,16 +25,19 @@ import {destroyer} from '../util/destroy-util';
 import {OmakasePlayer} from '../omakase-player';
 import {Alert} from '../alerts/model';
 import {
-  AudioContextChangeEvent,
   AudioLoadedEvent,
-  AudioPeakProcessorWorkletNodeMessageEvent,
-  AudioRoutingEvent,
+  AudioPeakProcessorMessageEvent,
   AudioSwitchedEvent,
-  AudioWorkletNodeCreatedEvent,
   HelpMenuGroup,
+  MainAudioChangeEvent,
+  OmpAudioTrack,
   OmpNamedEvent,
-  OmpNamedEvents,
+  OmpNamedEventEventName,
   OmpVideoWindowPlaybackError,
+  SidecarAudioChangeEvent,
+  SidecarAudioCreateEvent,
+  SidecarAudioPeakProcessorMessageEvent,
+  SidecarAudioRemoveEvent,
   SubtitlesCreateEvent,
   SubtitlesEvent,
   SubtitlesLoadedEvent,
@@ -56,10 +59,25 @@ import {
   VideoVolumeEvent,
   VideoWindowPlaybackStateChangeEvent,
 } from '../types';
-import {AudioInputOutputNode, AudioMeterStandard, BufferedTimespan, PlaybackState, Video, VideoLoadOptions, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
+import {
+  AudioInputOutputNode,
+  AudioMeterStandard,
+  BufferedTimespan,
+  OmpAudioRouterState,
+  OmpMainAudioState,
+  OmpSidecarAudioState,
+  PlaybackState,
+  Video,
+  VideoLoadOptions,
+  VideoLoadOptionsInternal,
+  VideoSafeZone,
+  VideoWindowPlaybackState,
+} from './model';
 import {VideoController, VideoControllerConfig} from './video-controller';
 import Hls from 'hls.js';
 import {WindowUtil} from '../util/window-util';
+import {OmpAudioRouter} from './audio-router';
+import {SidecarAudioApi} from '../api/sidecar-audio-api';
 
 interface OutboundLatest {
   heartbeat?: number;
@@ -75,6 +93,7 @@ export class DetachedVideoController implements VideoControllerApi {
   private readonly _handshakeChannel: TypedOmpBroadcastChannel<HandshakeChannelActionsMap>;
 
   private readonly _videoController: VideoController;
+  private readonly _onConnectSuccess$ = new BehaviorSubject<boolean | undefined>(void 0);
 
   private _messageChannel: TypedOmpBroadcastChannel<MessageChannelActionsMap> | undefined;
 
@@ -100,14 +119,24 @@ export class DetachedVideoController implements VideoControllerApi {
   private _destroyed$ = new Subject<void>();
 
   constructor(videoController: VideoController) {
-    this._handshakeChannel = new TypedOmpBroadcastChannel(Constants.OMP_HANDSHAKE_BROADCAST_CHANNEL_ID);
-
     this._videoController = videoController;
 
+    this._handshakeChannel = new TypedOmpBroadcastChannel(Constants.OMP_HANDSHAKE_BROADCAST_CHANNEL_ID);
     this._proxyId = CryptoUtil.uuid();
 
-    this.startConnectLoop();
+    this._onConnectSuccess$
+      .pipe(
+        filter((p) => !!p),
+        take(1)
+      )
+      .subscribe({
+        next: () => {
+          // we have to propagate values potentially set in VideoController.constructor
+          this._messageChannel!.send('VideoControllerApi.onMainAudioChange$', this._videoController.onMainAudioChange$.value);
+        },
+      });
 
+    this.startConnectLoop();
     this.initHeartbeatWatchdog();
   }
 
@@ -138,6 +167,7 @@ export class DetachedVideoController implements VideoControllerApi {
               .subscribe({
                 next: (response) => {
                   console.debug(`Connection established response received, proxy is now connected, proxyId: ${this._proxyId}`);
+                  this._onConnectSuccess$.next(true);
                   this.startHeartbeatLoop();
                 },
                 error: (error) => {
@@ -341,27 +371,43 @@ export class DetachedVideoController implements VideoControllerApi {
       },
     });
 
-    this._videoController.onAudioContextChange$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
+    // audio router
+
+    this._videoController.onMainAudioChange$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
-        this._messageChannel!.send('VideoControllerApi.onAudioContextChange$', value);
+        this._messageChannel!.send('VideoControllerApi.onMainAudioChange$', value);
       },
     });
 
-    this._videoController.onAudioPeakProcessorWorkletNodeMessage$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
+    this._videoController.onMainAudioPeakProcessorMessage$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
-        this._messageChannel!.send('VideoControllerApi.onAudioPeakProcessorWorkletNodeMessage$', value);
+        this._messageChannel!.send('VideoControllerApi.onMainAudioPeakProcessorMessage$', value);
       },
     });
 
-    this._videoController.onAudioWorkletNodeCreated$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
+    // sidecar audio
+
+    this._videoController.onSidecarAudioCreate$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
-        this._messageChannel!.send('VideoControllerApi.onAudioWorkletNodeCreated$', value);
+        this._messageChannel!.send('VideoControllerApi.onSidecarAudioCreate$', value);
       },
     });
 
-    this._videoController.onAudioRouting$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
+    this._videoController.onSidecarAudioRemove$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
-        this._messageChannel!.send('VideoControllerApi.onAudioRouting$', value);
+        this._messageChannel!.send('VideoControllerApi.onSidecarAudioRemove$', value);
+      },
+    });
+
+    this._videoController.onSidecarAudioChange$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
+      next: (value) => {
+        this._messageChannel!.send('VideoControllerApi.onSidecarAudioChange$', value);
+      },
+    });
+
+    this._videoController.onSidecarAudioPeakProcessorMessage$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
+      next: (value) => {
+        this._messageChannel!.send('VideoControllerApi.onSidecarAudioPeakProcessorMessage$', value);
       },
     });
 
@@ -766,43 +812,120 @@ export class DetachedVideoController implements VideoControllerApi {
         },
       });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.createAudioContext')
+    // audio router
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.createMainAudioRouter')
       .pipe(takeUntil(this._messageChannelBreaker$))
       .subscribe({
         next: ([request, sendResponseHook]) => {
-          sendResponseHook(this._videoController.createAudioContext(request[0]));
+          sendResponseHook(this._videoController.createMainAudioRouter(request[0], request[1]));
         },
       });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.createAudioRouter')
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.createMainAudioPeakProcessor')
       .pipe(takeUntil(this._messageChannelBreaker$))
       .subscribe({
         next: ([request, sendResponseHook]) => {
-          sendResponseHook(this._videoController.createAudioRouter(request[0], request[1]));
+          // sendResponseHook(this._videoController.createMainAudioPeakProcessor(request[0]));
+          sendResponseHook(this._videoController.createMainAudioPeakProcessor(request[0]).pipe(map((p) => void 0))); // FlattenObservableToVoid used
         },
       });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.routeAudioInputOutputNode')
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.routeMainAudioRouterNodes')
       .pipe(takeUntil(this._messageChannelBreaker$))
       .subscribe({
         next: ([request, sendResponseHook]) => {
-          sendResponseHook(this._videoController.routeAudioInputOutputNode(request[0]));
+          sendResponseHook(this._videoController.routeMainAudioRouterNodes(request[0]));
         },
       });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.routeAudioInputOutputNodes')
+    // sidecar audio
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.createSidecarAudioTrack')
       .pipe(takeUntil(this._messageChannelBreaker$))
       .subscribe({
         next: ([request, sendResponseHook]) => {
-          sendResponseHook(this._videoController.routeAudioInputOutputNodes(request[0]));
+          sendResponseHook(this._videoController.createSidecarAudioTrack(request[0]));
         },
       });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.createAudioPeakProcessorWorkletNode')
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.createSidecarAudioTracks')
       .pipe(takeUntil(this._messageChannelBreaker$))
       .subscribe({
         next: ([request, sendResponseHook]) => {
-          sendResponseHook(this._videoController.createAudioPeakProcessorWorkletNode(request[0]));
+          sendResponseHook(this._videoController.createSidecarAudioTracks(request[0]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.removeSidecarAudioTracks')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.removeSidecarAudioTracks(request[0]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.removeAllSidecarAudioTracks')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.removeAllSidecarAudioTracks());
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.activateSidecarAudioTracks')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.activateSidecarAudioTracks(request[0], request[1]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.deactivateSidecarAudioTracks')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.deactivateSidecarAudioTracks(request[0]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.createSidecarAudioRouter')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.createSidecarAudioRouter(request[0], request[1], request[2]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.routeSidecarAudioRouterNodes')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.routeSidecarAudioRouterNodes(request[0], request[1]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.createSidecarAudioPeakProcessor')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.createSidecarAudioPeakProcessor(request[0], request[1]).pipe(map((p) => void 0))); // FlattenObservableToVoid used
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.exportMainAudioTrackToSidecar')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.exportMainAudioTrackToSidecar(request[0]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.exportMainAudioTracksToSidecar')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.exportMainAudioTracksToSidecar(request[0]));
         },
       });
 
@@ -890,10 +1013,6 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.onAudioSwitched$;
   }
 
-  get onAudioPeakProcessorWorkletNodeMessage$(): Observable<AudioPeakProcessorWorkletNodeMessageEvent> {
-    return this._videoController.onAudioPeakProcessorWorkletNodeMessage$;
-  }
-
   get onPlaybackState$(): Observable<PlaybackState> {
     return this._videoController.onPlaybackState$;
   }
@@ -950,28 +1069,44 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.onSubtitlesShow$;
   }
 
-  get onAudioContextChange$(): Observable<AudioContextChangeEvent> {
-    return this._videoController.onAudioContextChange$;
-  }
-
-  get onAudioRouting$(): Observable<AudioRoutingEvent> {
-    return this._videoController.onAudioRouting$;
-  }
-
-  get onAudioWorkletNodeCreated$(): BehaviorSubject<AudioWorkletNodeCreatedEvent | undefined> {
-    return this._videoController.onAudioWorkletNodeCreated$;
-  }
-
   get onThumbnailVttUrlChanged$(): Observable<ThumnbailVttUrlChangedEvent> {
     return this._videoController.onThumbnailVttUrlChanged$;
   }
 
-  get onActiveNamedEventStreamsChange$(): Observable<OmpNamedEvents[]> {
+  get onActiveNamedEventStreamsChange$(): Observable<OmpNamedEventEventName[]> {
     return this._videoController.onActiveNamedEventStreamsChange$;
   }
 
   get onNamedEvent$(): Observable<OmpNamedEvent> {
     return this._videoController.onNamedEvent$;
+  }
+
+  // audio router
+
+  get onMainAudioChange$(): Observable<MainAudioChangeEvent | undefined> {
+    return this._videoController.onMainAudioChange$;
+  }
+
+  get onMainAudioPeakProcessorMessage$(): Observable<AudioPeakProcessorMessageEvent> {
+    return this._videoController.onMainAudioPeakProcessorMessage$;
+  }
+
+  // sidecar audio
+
+  get onSidecarAudioCreate$(): Observable<SidecarAudioCreateEvent> {
+    return this._videoController.onSidecarAudioCreate$;
+  }
+
+  get onSidecarAudioRemove$(): Observable<SidecarAudioRemoveEvent> {
+    return this._videoController.onSidecarAudioRemove$;
+  }
+
+  get onSidecarAudioChange$(): Observable<SidecarAudioChangeEvent> {
+    return this._videoController.onSidecarAudioChange$;
+  }
+
+  get onSidecarAudioPeakProcessorMessage$(): Observable<SidecarAudioPeakProcessorMessageEvent> {
+    return this._videoController.onSidecarAudioPeakProcessorMessage$;
   }
 
   addSafeZone(videoSafeZone: VideoSafeZone): Observable<VideoSafeZone> {
@@ -1038,12 +1173,12 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.getHTMLVideoElement();
   }
 
-  getAudioContext(): AudioContext | undefined {
+  getAudioContext(): AudioContext {
     return this._videoController.getAudioContext();
   }
 
-  getMediaElementAudioSourceNode(): MediaElementAudioSourceNode | undefined {
-    return this._videoController.getMediaElementAudioSourceNode();
+  getMainAudioRouter(): OmpAudioRouter | undefined {
+    return this._videoController.getMainAudioRouter();
   }
 
   getHelpMenuGroups(): HelpMenuGroup[] {
@@ -1268,37 +1403,102 @@ export class DetachedVideoController implements VideoControllerApi {
   }
 
   // endregion
-  createAudioContext(contextOptions?: AudioContextOptions): Observable<void> {
-    return this._videoController.createAudioContext(contextOptions);
+
+  // region audio router
+
+  createMainAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<OmpAudioRouterState> {
+    return this._videoController.createMainAudioRouter(inputsNumber, outputsNumber);
   }
 
-  createAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<void> {
-    return this._videoController.createAudioRouter(inputsNumber, outputsNumber);
+  createMainAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<OmpAudioRouterState> {
+    return this._videoController.createMainAudioRouterWithOutputsResolver(inputsNumber, outputsNumberResolver);
   }
 
-  createAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<void> {
-    return this._videoController.createAudioRouterWithOutputsResolver(inputsNumber, outputsNumberResolver);
+  createMainAudioPeakProcessor(audioMeterStandard?: AudioMeterStandard): Observable<Observable<AudioPeakProcessorMessageEvent>> {
+    return this._videoController.createMainAudioPeakProcessor(audioMeterStandard);
   }
 
-  getAudioInputOutputNodes(): AudioInputOutputNode[][] {
-    return this._videoController.getAudioInputOutputNodes();
+  getMainAudioSourceNode(): AudioNode {
+    return this._videoController.getMainAudioSourceNode();
   }
 
-  routeAudioInputOutputNode(newAudioInputOutputNode: AudioInputOutputNode): Observable<void> {
-    return this._videoController.routeAudioInputOutputNode(newAudioInputOutputNode);
+  getMainAudioState(): OmpMainAudioState | undefined {
+    return this._videoController.getMainAudioState();
   }
 
-  routeAudioInputOutputNodes(newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void> {
-    return this._videoController.routeAudioInputOutputNodes(newAudioInputOutputNodes);
+  routeMainAudioRouterNodes(newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void> {
+    return this._videoController.routeMainAudioRouterNodes(newAudioInputOutputNodes);
   }
 
-  getAudioPeakProcessorWorkletNode(): AudioWorkletNode | undefined {
-    return this._videoController.getAudioPeakProcessorWorkletNode();
+  // endregion
+
+  // region sidecar audio
+
+  getSidecarAudios(): SidecarAudioApi[] {
+    return this._videoController.getSidecarAudios();
   }
 
-  createAudioPeakProcessorWorkletNode(audioMeterStandard: AudioMeterStandard): Observable<void> {
-    return this._videoController.createAudioPeakProcessorWorkletNode(audioMeterStandard);
+  getSidecarAudio(id: string): SidecarAudioApi | undefined {
+    return this._videoController.getSidecarAudio(id);
   }
+
+  getSidecarAudioStates(): OmpSidecarAudioState[] {
+    return this._videoController.getSidecarAudioStates();
+  }
+
+  createSidecarAudioTrack(track: Partial<OmpAudioTrack>): Observable<OmpAudioTrack> {
+    return this._videoController.createSidecarAudioTrack(track);
+  }
+
+  createSidecarAudioTracks(tracks: Partial<OmpAudioTrack>[]): Observable<OmpAudioTrack[]> {
+    return this._videoController.createSidecarAudioTracks(tracks);
+  }
+
+  activateSidecarAudioTracks(ids: string[], deactivateOthers: boolean | undefined): Observable<void> {
+    return this._videoController.activateSidecarAudioTracks(ids, deactivateOthers);
+  }
+
+  deactivateSidecarAudioTracks(ids: string[]): Observable<void> {
+    return this._videoController.deactivateSidecarAudioTracks(ids);
+  }
+
+  getActiveSidecarAudioTracks(): OmpAudioTrack[] {
+    return this._videoController.getActiveSidecarAudioTracks();
+  }
+
+  getSidecarAudioTracks(): OmpAudioTrack[] {
+    return this._videoController.getSidecarAudioTracks();
+  }
+
+  removeSidecarAudioTracks(ids: string[]): Observable<void> {
+    return this._videoController.removeSidecarAudioTracks(ids);
+  }
+
+  removeAllSidecarAudioTracks(): Observable<void> {
+    return this._videoController.removeAllSidecarAudioTracks();
+  }
+
+  createSidecarAudioRouter(sidecarAudioTrackId: string, inputsNumber: number, outputsNumber?: number): Observable<OmpAudioRouterState> {
+    return this._videoController.createSidecarAudioRouter(sidecarAudioTrackId, inputsNumber, outputsNumber);
+  }
+
+  routeSidecarAudioRouterNodes(sidecarAudioTrackId: string, newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void> {
+    return this._videoController.routeSidecarAudioRouterNodes(sidecarAudioTrackId, newAudioInputOutputNodes);
+  }
+
+  createSidecarAudioPeakProcessor(sidecarAudioTrackId: string, audioMeterStandard?: AudioMeterStandard): Observable<Observable<AudioPeakProcessorMessageEvent>> {
+    return this._videoController.createSidecarAudioPeakProcessor(sidecarAudioTrackId, audioMeterStandard);
+  }
+
+  exportMainAudioTrackToSidecar(mainAudioTrackId: string): Observable<OmpAudioTrack> {
+    return this._videoController.exportMainAudioTrackToSidecar(mainAudioTrackId);
+  }
+
+  exportMainAudioTracksToSidecar(mainAudioTrackIds: string[]): Observable<OmpAudioTrack[]> {
+    return this._videoController.exportMainAudioTracksToSidecar(mainAudioTrackIds);
+  }
+
+  // endregion
 
   getThumbnailVttUrl(): string | undefined {
     return this._videoController.getThumbnailVttUrl();
@@ -1306,6 +1506,10 @@ export class DetachedVideoController implements VideoControllerApi {
 
   loadThumbnailVttUrl(thumbnailVttUrl: string): Observable<void> {
     return this._videoController.loadThumbnailVttUrl(thumbnailVttUrl);
+  }
+
+  isPiPSupported(): boolean {
+    return this._videoController.isPiPSupported();
   }
 
   enablePiP(): Observable<void> {
@@ -1324,11 +1528,11 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.getHls();
   }
 
-  updateActiveNamedEventStreams(eventNames: OmpNamedEvents[]): Observable<void> {
+  updateActiveNamedEventStreams(eventNames: OmpNamedEventEventName[]): Observable<void> {
     return this._videoController.updateActiveNamedEventStreams(eventNames);
   }
 
-  getActiveNamedEventStreams(): OmpNamedEvents[] {
+  getActiveNamedEventStreams(): OmpNamedEventEventName[] {
     return this._videoController.getActiveNamedEventStreams();
   }
 

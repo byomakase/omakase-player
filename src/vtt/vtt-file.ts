@@ -23,9 +23,7 @@ import {VttUtil} from './vtt-util';
 import {StringUtil} from '../util/string-util';
 import {VttLoadOptions} from '../api/vtt-aware-api';
 
-export enum OmakaseWebVttExtensionVersion {
-  V1_0 = 'V1.0',
-}
+export type OmakaseWebVttExtensionVersion = 'V1.0';
 
 export interface OmakaseRemoteVttFile<T extends OmakaseVttCue> extends OmakaseVttFile<T> {
   get url(): string;
@@ -96,7 +94,7 @@ export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements Oma
         let firstLine = noteRowsMatch[1];
         let secondLine = noteRowsMatch[2];
         if (firstLine.trim() === 'Omakase Player Web VTT' && secondLine.trim() === 'V1.0') {
-          return OmakaseWebVttExtensionVersion.V1_0;
+          return 'V1.0';
         }
       }
     }
@@ -227,7 +225,7 @@ export abstract class BaseOmakaseRemoteVttFile<T extends OmakaseVttCue> extends 
   }
 
   fetch(): Observable<boolean> {
-    return from(httpGet<string, AxiosRequestConfig>(this.url, this._axiosConfig)).pipe(
+    return from(httpGet<string>(this.url, this._axiosConfig)).pipe(
       map((result) => {
         let vttFileText = result.data;
 

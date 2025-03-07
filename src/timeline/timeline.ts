@@ -17,21 +17,10 @@
 import Konva from 'konva';
 import Decimal from 'decimal.js';
 import {ScrollableHorizontally, Scrollbar} from './scrollbar/scrollbar';
-import {Dimension, Horizontals, Position, RectMeasurement} from '../common';
+import {Dimension, Horizontals, Position, RectMeasurement, StyleAdapter} from '../common';
 import {animate} from '../util/animation-util';
 import {BehaviorSubject, debounceTime, filter, fromEvent, map, merge, Observable, sampleTime, Subject, take, takeUntil} from 'rxjs';
-import {
-  Destroyable,
-  PlayheadMoveEvent,
-  ScrubberMoveEvent,
-  ThumbnailVttCue,
-  TimecodeClickEvent,
-  TimecodeMouseMoveEvent,
-  TimelineReadyEvent,
-  TimelineScrollEvent,
-  TimelineZoomEvent,
-  VideoLoadedEvent,
-} from '../types';
+import {Destroyable, PlayheadMoveEvent, ScrubberMoveEvent, ThumbnailVttCue, TimecodeClickEvent, TimecodeMouseMoveEvent, TimelineReadyEvent, TimelineScrollEvent, TimelineZoomEvent, VideoLoadedEvent} from '../types';
 import {Playhead} from './playhead';
 import {Thumbnail} from './thumbnail/thumbnail';
 import {ImageUtil} from '../util/image-util';
@@ -44,7 +33,6 @@ import {completeUnsubscribeSubjects, nextCompleteObserver, nextCompleteSubject, 
 import {PlaybackState, VideoControllerApi} from '../video';
 import {destroyer, nullifier} from '../util/destroy-util';
 import {KonvaFlexGroup} from '../layout/konva-flex';
-import {StyleAdapter} from '../common/style-adapter';
 import {FlexNode, FlexSpacingBuilder} from '../layout/flex-node';
 import {MeasurementUtil} from '../util/measurement-util';
 import {KonvaFactory} from '../factory/konva-factory';
@@ -161,6 +149,7 @@ export interface TimelineConfig {
   scrollEasingDuration: number;
 
   scrubberClickSeek: boolean;
+  timecodeClickEdit: boolean;
 
   style: TimelineStyle;
 }
@@ -184,6 +173,7 @@ const configDefault: TimelineConfig = {
   scrollEasingDuration: 200,
 
   scrubberClickSeek: true,
+  timecodeClickEdit: true,
 
   style: {
     stageMinWidth: 700,
@@ -1863,6 +1853,10 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
 
   get descriptionPaneVisible(): boolean {
     return this._descriptionPaneVisible;
+  }
+
+  toggleTimecodeEdit(): void {
+    this._timelineDomController.toggleTimecodeEdit();
   }
 
   destroy(): void {

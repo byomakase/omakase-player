@@ -16,7 +16,7 @@
 
 import Decimal from 'decimal.js';
 import {Video} from '../video';
-import {InitSegmentUtil} from './init-segment-util';
+import {VideoUtil} from './video-util';
 import {isNullOrUndefined} from './object-util';
 import {StringUtil} from './string-util';
 import {FrameRateModel} from '../video/model';
@@ -44,6 +44,8 @@ const initFrameRates: {fraction: string; dropFramesOnMinute?: number}[] = [
 ];
 
 export class FrameRateUtil {
+  static AUDIO_FRAME_RATE = 100;
+
   private static frameRateModels: FrameRateModel[];
   private static frameRateModelByValue: Map<number, FrameRateModel> = new Map<number, FrameRateModel>();
 
@@ -87,7 +89,7 @@ export class FrameRateUtil {
    */
   static videoTimeToVideoFrameNumber(time: number, video: Video): number {
     if (video.initSegmentTimeOffset) {
-      if (InitSegmentUtil.isInitSegment(video, time)) {
+      if (VideoUtil.isInitSegment(video, time)) {
         return 0;
       } else {
         let offsettedTime = time - video.initSegmentTimeOffset;
