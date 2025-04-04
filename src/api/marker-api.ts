@@ -40,4 +40,8 @@ export interface MarkerApi {
   get style(): MarkerStyle;
 
   set style(style: Partial<MarkerStyle>);
+
+  get editable(): boolean;
+
+  set editable(editable: boolean);
 }

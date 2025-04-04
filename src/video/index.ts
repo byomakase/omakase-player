@@ -15,6 +15,23 @@
  */
 
 export {VideoController} from './video-controller';
-export type {Video, VideoLoadOptions, PlaybackState, AudioMeterStandard} from './model';
+export type {
+  Video,
+  VideoLoadOptions,
+  VideoSafeZone,
+  FrameRateModel,
+  PlaybackState,
+  AudioMeterStandard,
+  OmpMainAudioState,
+  OmpSidecarAudioState,
+  OmpAudioState,
+  OmpAudioRouterState,
+  AudioInputOutputNode,
+  OmpAudioPeakProcessorState,
+  OmpPeakProcessorDataMessage,
+  OmpPeakProcessorDataPeaks,
+  BufferedTimespan,
+  VideoWindowPlaybackState,
+} from './model';
 export {PlaybackStateMachine} from './model';
 export type {VideoControllerApi} from './video-controller-api';

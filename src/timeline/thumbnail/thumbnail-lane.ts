@@ -33,6 +33,7 @@ import {ThumbnailVttFile} from '../../vtt';
 import {VttAdapter, VttAdapterConfig} from '../../common/vtt-adapter';
 import {VttTimelineLane, VttTimelineLaneConfig} from '../vtt-timeline-lane';
 import {AuthConfig} from '../../auth/auth-config';
+import {lightPlaceholder, darkPlaceholder} from './thumbnail-preview-svgs';
 
 export interface ThumbnailLaneConfig extends VttTimelineLaneConfig<ThumbnailLaneStyle>, VttAdapterConfig<ThumbnailVttFile> {
   axiosConfig?: AxiosRequestConfig;
@@ -68,14 +69,15 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
   public readonly onClick$: Subject<ThumbnailEvent> = new Subject<ThumbnailEvent>();
 
   protected readonly _vttAdapter: VttAdapter<ThumbnailVttFile> = new VttAdapter(ThumbnailVttFile);
-  protected readonly _onSettleLayout$: Subject<void> = new Subject<void>();
 
   protected readonly _itemsMap: Map<number, Thumbnail | undefined> = new Map<number, Thumbnail | undefined>();
+  protected readonly _placeholdersMap: Map<number, Thumbnail> = new Map<number, Thumbnail>();
   protected readonly _itemsVisibleSet: Set<number> = new Set<number>();
+
+  protected _thumbnailPlaceholderUrl?: string;
 
   protected _thumbnailHover?: Thumbnail;
 
-  protected _timecodedGroup?: Konva.Group;
   protected _timecodedEventCatcher?: Konva.Rect;
   protected _thumbnailsGroup?: Konva.Group;
 
@@ -90,6 +92,12 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
 
   override prepareForTimeline(timeline: Timeline, videoController: VideoControllerApi) {
     super.prepareForTimeline(timeline, videoController);
+
+    if (this._timeline!.style.loadingAnimationTheme === 'light') {
+      this._thumbnailPlaceholderUrl = `data:image/svg+xml;base64,${btoa(lightPlaceholder)}`;
+    } else {
+      this._thumbnailPlaceholderUrl = `data:image/svg+xml;base64,${btoa(darkPlaceholder)}`;
+    }
 
     let timecodedRect = this.getTimecodedRect();
 
@@ -212,6 +220,21 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
     this._thumbnailsGroup?.destroyChildren();
   }
 
+  protected override startLoadingAnimation(): void {
+    this._loadingGroup = new Konva.Group({
+      x: 0,
+      y: this.style.height / 2 - this.style.thumbnailHeight / 2,
+      width: this._timecodedGroup!.width(),
+      height: this._config.style.height,
+    });
+
+    this._timecodedGroup!.add(this._loadingGroup);
+  }
+
+  protected override stopLoadingAnimation(): void {
+    return;
+  }
+
   private fireEventStreamBreaker() {
     nextCompleteSubject(this._eventStreamBreaker$);
     this._eventStreamBreaker$ = new Subject<void>();
@@ -226,6 +249,31 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
       return;
     }
 
+    let createAndAdjustThumbnail = (x: number, visible: boolean, cue: ThumbnailVttCue) => {
+      this._itemsMap.set(cue.startTime, void 0); // this indicates that thumbnail started to load
+      ImageUtil.createKonvaImageSizedByHeight(cue.url, this.style.thumbnailHeight, AuthConfig.authentication).subscribe({
+        next: (image) => {
+          // use fresh visible status, maybe it has changed while waiting for response
+          if (this._config.loadingAnimationEnabled) {
+            this._placeholdersMap.get(x)!.setVisible(false);
+          }
+
+          let mostRecentVisible = this._itemsVisibleSet.has(cue.startTime);
+          let thumbnail = this.createThumbnail(cue, image, mostRecentVisible);
+          let createdThumbnail = this._itemsMap.get(cue.startTime);
+          if (createdThumbnail) {
+            this._itemsMap.delete(cue.startTime);
+            createdThumbnail.destroy();
+          }
+          this._itemsMap.set(cue.startTime, thumbnail);
+          this._thumbnailsGroup!.add(thumbnail.konvaNode);
+        },
+        error: (err) => {
+          console.debug(`Error loading: ${cue.url}`, err);
+        },
+      });
+    };
+
     this.resolveVisibleTimestamps();
     this.vttFile.cues.forEach((cue) => {
       let x = this._timeline!.timeToTimelinePosition(cue.startTime);
@@ -237,25 +285,35 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
           if (thumbnail) {
             thumbnail.setVisibleAndX(visible, x);
           }
-        } else {
-          if (visible) {
-            this._itemsMap.set(cue.startTime, void 0); // this indicates that thumbnail started to load
-            ImageUtil.createKonvaImageSizedByHeight(cue.url, this.style.thumbnailHeight, AuthConfig.authentication).subscribe({
+        } else if (this._config.loadingAnimationEnabled) {
+          let placeholder = this._placeholdersMap.get(x);
+          if (placeholder) {
+            placeholder.setVisibleAndX(visible, x);
+          } else if (visible) {
+            this.createAndAdjustPlaceholder().subscribe({
               next: (image) => {
-                // use fresh visible status, maybe it has changed while waiting for response
-                let mostRecentVisible = this._itemsVisibleSet.has(cue.startTime);
-                let thumbnail = this.createThumbnail(cue, image, mostRecentVisible);
-                this._itemsMap.set(cue.startTime, thumbnail);
-                this._thumbnailsGroup!.add(thumbnail.konvaNode);
-              },
-              error: (err) => {
-                console.debug(`Error loading: ${cue.url}`, err);
+                let placeholder = this.createThumbnailPlaceholder(x, image, visible);
+                let createdPlaceholder = this._placeholdersMap.get(x);
+                if (createdPlaceholder) {
+                  this._placeholdersMap.delete(x);
+                  createdPlaceholder.destroy();
+                }
+                this._placeholdersMap.set(x, placeholder);
+                this._loadingGroup!.add(placeholder.konvaNode);
+
+                createAndAdjustThumbnail(x, visible, cue);
               },
             });
           }
+        } else if (visible) {
+          createAndAdjustThumbnail(x, visible, cue);
         }
       }
     });
+  }
+
+  private createAndAdjustPlaceholder(): Observable<Konva.Image> {
+    return ImageUtil.createKonvaImageSizedByHeight(this._thumbnailPlaceholderUrl!, this.style.thumbnailHeight);
   }
 
   private adjustThumbnails() {
@@ -332,6 +390,23 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
     thumbnail.onMouseLeave$.pipe(takeUntil(this._eventStreamBreaker$)).subscribe((event) => {
       this.hideThumbnailHover();
     });
+
+    return thumbnail;
+  }
+
+  private createThumbnailPlaceholder(x: number, image: Konva.Image, visible: boolean) {
+    let thumbnail = new Thumbnail({
+      listening: false,
+      style: {
+        x: x,
+        y: 0,
+        visible: visible,
+        stroke: this.style.thumbnailStroke,
+        strokeWidth: 0,
+      },
+    });
+
+    thumbnail.setImage(image);
 
     return thumbnail;
   }

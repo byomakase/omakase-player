@@ -28,6 +28,7 @@ export class MarkerListItem implements MarkerApi {
   private _timeObservation: PeriodObservation | MomentObservation;
   private _data?: Record<string, any>;
   private _style: MarkerStyle;
+  private _editable: boolean;
 
   constructor(initData: Partial<MarkerApi> = {}, source: MarkerAwareApi) {
     this.id = initData.id ?? CryptoUtil.uuid();
@@ -36,6 +37,7 @@ export class MarkerListItem implements MarkerApi {
     this._timeObservation = initData.timeObservation ?? {};
     this._data = initData.data;
     this._source = source;
+    this._editable = initData.editable ?? true;
   }
 
   get name(): string | undefined {
@@ -96,5 +98,13 @@ export class MarkerListItem implements MarkerApi {
     } else {
       return undefined;
     }
+  }
+
+  get editable(): boolean {
+    return this._editable;
+  }
+
+  set editable(editable: boolean) {
+    this.editable = editable;
   }
 }

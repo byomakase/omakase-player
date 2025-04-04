@@ -20,7 +20,18 @@ import {ScrollableHorizontally, Scrollbar} from './scrollbar/scrollbar';
 import {Dimension, Horizontals, Position, RectMeasurement, StyleAdapter} from '../common';
 import {animate} from '../util/animation-util';
 import {BehaviorSubject, debounceTime, filter, fromEvent, map, merge, Observable, sampleTime, Subject, take, takeUntil} from 'rxjs';
-import {Destroyable, PlayheadMoveEvent, ScrubberMoveEvent, ThumbnailVttCue, TimecodeClickEvent, TimecodeMouseMoveEvent, TimelineReadyEvent, TimelineScrollEvent, TimelineZoomEvent, VideoLoadedEvent} from '../types';
+import {
+  Destroyable,
+  PlayheadMoveEvent,
+  ScrubberMoveEvent,
+  ThumbnailVttCue,
+  TimecodeClickEvent,
+  TimecodeMouseMoveEvent,
+  TimelineReadyEvent,
+  TimelineScrollEvent,
+  TimelineZoomEvent,
+  VideoLoadedEvent,
+} from '../types';
 import {Playhead} from './playhead';
 import {Thumbnail} from './thumbnail/thumbnail';
 import {ImageUtil} from '../util/image-util';
@@ -123,7 +134,10 @@ export interface TimelineStyle {
   scrubberTextYOffset: number;
   scrubberTextFontSize: number;
 
+  scrubberHeight: number;
   scrubberMarginBottom: number;
+
+  loadingAnimationTheme: 'light' | 'dark';
 }
 
 export interface TimelineConfig {
@@ -249,7 +263,10 @@ const configDefault: TimelineConfig = {
     scrubberTextYOffset: 0,
     scrubberTextFontSize: 12,
 
+    scrubberHeight: 60,
     scrubberMarginBottom: 15,
+
+    loadingAnimationTheme: 'light',
   },
 };
 
@@ -637,6 +654,7 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
 
     this._scrubberLane = new ScrubberLane({
       style: {
+        height: this.style.scrubberHeight,
         marginBottom: this.style.scrubberMarginBottom,
       },
     });

@@ -71,7 +71,8 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
 
     .omakase-video-controls {
       z-index: 1;
-      .omakase-video-safe-zone-wrapper {
+      .omakase-video-safe-zone-wrapper,
+      .omakase-watermark-wrapper {
         position: absolute;
         left: 0;
         right: 0;
@@ -79,6 +80,15 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
         bottom: 0;
         overflow: hidden;
         margin: auto;
+
+        .omakase-watermark {
+          position: absolute;
+          left: 2.5%;
+          top: 2.5%;
+          line-height: var(--timecode-font-size, var(--timecode-font-size-default));
+          font-size: var(--timecode-font-size, var(--timecode-font-size-default));
+          color: rgba(255, 255, 255, 0.9);
+        }
 
         .omakase-video-safe-zone {
           position: absolute;
@@ -323,7 +333,7 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
 .omakase-player-detached,
 :not(.omakase-player-fullscreen) > .media-chrome-fullscreen-only {
   media-controller {
-    > *:not(video, .omakase-video-controls) {
+    > *:not(video, .omakase-video-controls, omakase-dropdown) {
       display: none;
     }
   }
@@ -331,7 +341,7 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
 
 :not(.omakase-player-detached) > .media-chrome-enabled,
 .omakase-player-fullscreen > .media-chrome-fullscreen-only {
-  media-controller > *:not(video, .d-none) {
+  media-controller > *:not(video, .d-none, omakase-dropdown) {
     display: block !important;
     &.lower-control-bar {
       display: grid !important;
@@ -556,6 +566,7 @@ media-controller {
 
   .upper-control-bar {
     padding: 0 var(--padding-size, var(--padding-size-default));
+    position: relative;
 
     omakase-time-range {
       height: var(--time-range-height, var(--time-range-height-default));
@@ -596,16 +607,33 @@ media-controller {
       overflow: hidden;
       width: var(--volume-container-width, var(--volume-container-width-default));
       padding-left: var(--controls-left-padding, var(--controls-left-padding-default));
-      media-volume-range {
-        transition: 200ms ease;
-        width: 0;
-        overflow: hidden;
-        margin-left: -10px;
-        height: var(--time-range-height, var(--time-range-height-default));
-      }
-      &:hover {
+      display: flex;
+      white-space: nowrap;
+      .volume-container {
         media-volume-range {
-          width: var(--volume-range-width, var(--volume-range-width-default));
+          // transition: 200ms ease;
+          width: 0;
+          overflow: hidden;
+          margin-left: -10px;
+          height: var(--time-range-height, var(--time-range-height-default));
+        }
+        &:hover {
+          media-volume-range {
+            width: var(--volume-range-width, var(--volume-range-width-default));
+          }
+          ~ omakase-dropdown-toggle {
+            opacity: 0;
+          }
+        }
+      }
+      omakase-dropdown-toggle {
+        margin-left: 10px;
+        cursor: pointer;
+
+        .omakase-dropdown-toggle {
+          display: inline-block;
+          vertical-align: top;
+          min-width: 20px;
         }
       }
     }
@@ -618,6 +646,47 @@ media-controller {
       justify-self: end;
       padding-right: var(--controls-right-padding, var(--controls-right-padding-default));
     }
+  }
+
+  omakase-dropdown {
+    position: absolute;
+    color: white;
+    text-align: center;
+    font-size: 13px;
+    bottom: 25px;
+
+    .omakase-dropdown-title {
+      line-height: 20px;
+      background-color: black;
+      padding: 5px;
+      font-size: 11px;
+      border-radius: 3px 3px 0 0;
+    }
+
+    .omakase-dropdown-container {
+      background-color: rgba(0, 0, 0, 0.5);
+      border-radius: 0 0 3px 3px;
+
+      omakase-dropdown-option {
+        display: block;
+        line-height: 25px;
+        cursor: pointer;
+
+        &:hover {
+          background-color: rgba(0, 0, 0, 0.7);
+        }
+
+        &.active {
+          background-color: white;
+          color: black;
+        }
+      }
+    }
+  }
+
+  omakase-dropdown-toggle {
+    line-height: var(--icon-size-default);
+    font-size: calc(var(--icon-size-default) * 0.75);
   }
 
   @container (inline-size < 600px) {
@@ -643,6 +712,22 @@ media-controller {
       --volume-range-width: 60px;
       --center-control-size: calc(var(--center-control-size-default) * 0.85);
     }
+
+    omakase-dropdown-toggle {
+      line-height: calc(var(--icon-size-default) * 0.85);
+      font-size: calc(var(--icon-size-default) * 0.65);
+    }
+
+    omakase-dropdown {
+      font-size: 12px;
+      bottom: 20px;
+      .omakase-dropdown-title {
+        font-size: 10px;
+      }
+      .omakase-dropdown-container omakase-dropdown-option {
+        line-height: 20px;
+      }
+    }
   }
 
   @container (inline-size < 500px) {
@@ -664,6 +749,19 @@ media-controller {
     .omakase-player-fast-rewind,
     .omakase-player-fast-forward {
       display: none;
+    }
+    omakase-dropdown-toggle {
+      line-height: calc(var(--icon-size-default) * 0.75);
+      font-size: calc(var(--icon-size-default) * 0.6);
+    }
+    omakase-dropdown {
+      font-size: 11px;
+      .omakase-dropdown-title {
+        font-size: 9px;
+      }
+      .omakase-dropdown-container omakase-dropdown-option {
+        line-height: 15px;
+      }
     }
   }
 
@@ -709,6 +807,17 @@ media-controller {
       --volume-range-width: calc(var(--volume-range-width-default) * 1.125);
       --center-control-size: calc(var(--center-control-size-default) * 1.125);
     }
+    omakase-dropdown-toggle {
+      line-height: calc(var(--icon-size-default) * 1.125);
+      font-size: calc(var(--icon-size-default) * 1.075);
+    }
+    omakase-dropdown {
+      font-size: 14px;
+      bottom: 30px;
+      .omakase-dropdown-title {
+        font-size: 12px;
+      }
+    }
   }
 
   @container (inline-size > 1600px) {
@@ -731,6 +840,20 @@ media-controller {
       --volume-container-width: calc(var(--volume-container-width-default) * 1.25);
       --volume-range-width: calc(var(--volume-range-width-default) * 1.25);
       --center-control-size: calc(var(--center-control-size-default) * 1.25);
+    }
+
+    omakase-dropdown-toggle {
+      line-height: calc(var(--icon-size-default) * 1.25);
+      font-size: calc(var(--icon-size-default) * 1.125);
+    }
+    omakase-dropdown {
+      font-size: 16px;
+      .omakase-dropdown-title {
+        font-size: 14px;
+      }
+      .omakase-dropdown-container omakase-dropdown-option {
+        line-height: 30px;
+      }
     }
   }
 
@@ -761,6 +884,19 @@ media-controller {
       --volume-range-width: calc(var(--volume-range-width-default) * 1.5);
       --volume-range-margin: calc(var(--volume-range-margin-default) * 1.5);
     }
+    omakase-dropdown-toggle {
+      line-height: calc(var(--icon-size-default) * 1.5);
+      font-size: calc(var(--icon-size-default) * 1.25);
+    }
+    omakase-dropdown {
+      font-size: 18px;
+      .omakase-dropdown-title {
+        font-size: 16px;
+      }
+      .omakase-dropdown-container omakase-dropdown-option {
+        line-height: 35px;
+      }
+    }
   }
 
   @container (inline-size > 4000px) {
@@ -790,6 +926,19 @@ media-controller {
       --volume-range-width: calc(var(--volume-range-width-default) * 2);
       --volume-range-margin: calc(var(--volume-range-margin-default) * 2);
       --center-control-size: calc(var(--center-control-size-default) * 1.5);
+    }
+    omakase-dropdown-toggle {
+      line-height: calc(var(--icon-size-default) * 2);
+      font-size: calc(var(--icon-size-default) * 1.5);
+    }
+    omakase-dropdown {
+      font-size: 22px;
+      .omakase-dropdown-title {
+        font-size: 20px;
+      }
+      .omakase-dropdown-container omakase-dropdown-option {
+        line-height: 40px;
+      }
     }
   }
 }
@@ -938,6 +1087,7 @@ omakase-audio-router {
       display: inline-block;
       cursor: pointer;
       position: relative;
+      box-sizing: content-box;
 
       &:not(.active) {
         .omakase-router-toggle-inner {
@@ -947,8 +1097,8 @@ omakase-audio-router {
 
       .omakase-router-toggle-inner {
         position: absolute;
-        left: 3px;
-        top: 3px;
+        left: 4px;
+        top: 4px;
         width: 8px;
         height: 8px;
         border-radius: 50%;

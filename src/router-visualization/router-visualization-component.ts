@@ -1,5 +1,5 @@
 import {AudioApi} from '../api';
-import {OmpMainAudioState, OmpSidecarAudioState} from '../video/model';
+import {AudioInputOutputNode, OmpMainAudioState, OmpSidecarAudioState} from '../video/model';
 import {defaultRouterVisualizationLabels, RouterVisualizationSidecarTrack, RouterVisualizationSize, RouterVisualizationTrack} from './router-visualization';
 
 const classes = {
@@ -14,6 +14,7 @@ export class RouterVisualizationComponent extends HTMLElement {
   private _sidecarTracks?: RouterVisualizationSidecarTrack[];
   private _audio?: AudioApi;
   private _size: RouterVisualizationSize = 'medium';
+  private _defaultMatrix?: AudioInputOutputNode[][];
   private _tableElement!: HTMLTableElement;
   private _wrapperElement!: HTMLDivElement;
 
@@ -27,7 +28,15 @@ export class RouterVisualizationComponent extends HTMLElement {
     this.renderOutputs();
   }
 
-  set mainTrack(track: RouterVisualizationTrack) {
+  get mainTrack(): RouterVisualizationTrack | undefined {
+    return this._mainTrack;
+  }
+
+  set mainTrack(track: RouterVisualizationTrack | undefined) {
+    if (!track) {
+      this._mainTrack = undefined;
+      return;
+    }
     this._mainTrack = this.prepareTrackForVisualization(track);
 
     if (!this._audio!.getMainAudioState()?.audioRouterState?.audioInputOutputNodes.length) {
@@ -77,13 +86,22 @@ export class RouterVisualizationComponent extends HTMLElement {
     this._wrapperElement.classList.add(`size-${this._size}`);
   }
 
+  set defaultMatrix(defaultMatrix: AudioInputOutputNode[][] | undefined) {
+    this._defaultMatrix = defaultMatrix;
+    setTimeout(() => {
+      this.resetAllNodes();
+    });
+  }
+
   deselectAllNodes(track?: RouterVisualizationTrack) {
     return this.setAllNodes(track, (_inputNumber, _outputNumber) => false);
   }
 
   resetAllNodes(track?: RouterVisualizationTrack) {
     return this.setAllNodes(track, (inputNumber, outputNumber) => {
-      if (this._outputs!.length === 2) {
+      if (this._defaultMatrix) {
+        return this._defaultMatrix[inputNumber][outputNumber].connected ?? false;
+      } else if (this._outputs!.length === 2) {
         return inputNumber === 2 || inputNumber === outputNumber || inputNumber - 4 === outputNumber;
       } else {
         return inputNumber === outputNumber;

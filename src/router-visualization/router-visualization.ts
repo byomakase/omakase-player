@@ -22,6 +22,8 @@ import {RouterVisualizationDomController} from './router-visualization-dom-contr
 import {nullifier} from '../util/destroy-util';
 import {AudioController} from '../audio/audio-controller';
 import {RouterVisualizationApi} from '../api/router-visualization-api';
+import {AudioInputOutputNode} from '../video';
+import {AudioApi} from '../api';
 
 export type RouterVisualizationSize = 'small' | 'medium' | 'large';
 
@@ -45,6 +47,7 @@ export interface RouterVisualizationConfig {
   outputLabels?: string[];
   mainTrack?: RouterVisualizationTrack;
   sidecarTracks?: RouterVisualizationSidecarTrack[];
+  defaultMatrix?: AudioInputOutputNode[][];
 }
 
 export const defaultRouterVisualizationLabels = ['L', 'R', 'C', 'LFE', 'Ls', 'Rs'];
@@ -58,6 +61,7 @@ export class RouterVisualization implements Destroyable, RouterVisualizationApi 
   private _config: RouterVisualizationConfig;
   private _routerVisualizationDomController: RouterVisualizationDomController;
   private _routerVisualizationComponent: RouterVisualizationComponent;
+  private _audio: AudioApi;
   private readonly _destroyed$ = new Subject<void>();
 
   constructor(config: RouterVisualizationConfig, audio: AudioController) {
@@ -65,8 +69,10 @@ export class RouterVisualization implements Destroyable, RouterVisualizationApi 
       ...configDefault,
       ...config,
     };
+    this._audio = audio;
     this._routerVisualizationDomController = new RouterVisualizationDomController(this);
     this._routerVisualizationComponent = this._routerVisualizationDomController.routerVisualizationComponent;
+    this._routerVisualizationComponent.defaultMatrix = this._config.defaultMatrix;
     this._routerVisualizationComponent.audio = audio;
     if (this._config.outputNumber || this._config.outputLabels) {
       this._routerVisualizationComponent.outputs = this._config.outputLabels
@@ -87,10 +93,17 @@ export class RouterVisualization implements Destroyable, RouterVisualizationApi 
   }
 
   updateMainTrack(track: RouterVisualizationTrackUpdate) {
-    this._routerVisualizationComponent.mainTrack = {
-      ...this._routerVisualizationComponent.mainTrack,
-      ...track,
-    };
+    let channelCount = this._audio.getActiveAudioTrack()?.channelCount;
+
+    if (this._routerVisualizationComponent.mainTrack) {
+      this._routerVisualizationComponent.mainTrack = {
+        ...this._routerVisualizationComponent.mainTrack,
+        ...track,
+        inputNumber: channelCount,
+      };
+    } else {
+      throw Error('Main track is not defined');
+    }
   }
 
   updateSize(size: RouterVisualizationSize): void {

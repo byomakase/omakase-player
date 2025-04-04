@@ -39,6 +39,8 @@ import '../components';
 import silentWavBase64 from '../../assets/silent.wav.base64.txt?raw';
 import {HTMLVideoElementEventKeys} from './video-controller';
 import {UrlUtil} from '../util/url-util';
+import {OmakaseDropdown} from '../components/omakase-dropdown';
+import {SvgUtil} from '../util/svg-util';
 
 const domClasses = {
   player: 'omakase-player',
@@ -69,6 +71,8 @@ const domClasses = {
   errorMessage: 'omakase-error-message',
   safeZoneWrapper: 'omakase-video-safe-zone-wrapper',
   safeZone: 'omakase-video-safe-zone',
+  watermarkWrapper: 'omakase-watermark-wrapper',
+  watermark: 'omakase-watermark',
   alerts: 'omakase-player-alerts',
   detachedBackground: 'omakase-detached-background',
   backgroundImage: 'omakase-background-image',
@@ -108,6 +112,8 @@ export interface VideoDomControllerConfig {
   thumbnailVttUrl?: string;
   thumbnailFn?: (time: number) => string | undefined;
   playerClickHandler?: () => void;
+  playbackRateOptions?: number[];
+  watermark?: string;
 }
 
 export const VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT: VideoDomControllerConfig = {
@@ -160,6 +166,8 @@ export class VideoDomController implements VideoDomControllerApi {
 
   protected _divErrorMessage!: HTMLElement;
   protected _divSafeZoneWrapper!: HTMLElement;
+  protected _divWatermarkWrapper!: HTMLElement;
+  protected _divWatermark!: HTMLElement;
   protected _divAlerts!: HTMLElement;
   protected _divBackgroundImage!: HTMLElement;
   protected _divDetachedBackground!: HTMLElement;
@@ -177,6 +185,7 @@ export class VideoDomController implements VideoDomControllerApi {
   protected _currentTimecode?: OmakaseTimeDisplay;
   protected _previewTimecode?: OmakaseTimeDisplay;
   protected _previewThumbnail?: OmakasePreviewThumbnail;
+  protected _speedDropdown?: OmakaseDropdown;
 
   protected _bitcEnabled = false;
 
@@ -236,6 +245,9 @@ export class VideoDomController implements VideoDomControllerApi {
               <video slot="media" class="${domClasses.video}" playsinline=""></video>
               <div slot="centered-chrome" class="${domClasses.videoControls}" noautohide>
                   <div class="${domClasses.safeZoneWrapper}"></div>
+                  <div class="${domClasses.watermarkWrapper}">
+                    <div class="${domClasses.watermark}"></div>
+                  </div>
                   <div class="${domClasses.help} d-none">
                       <div class="omakase-help-dropdown">
                         <button class="omakase-help-button d-none"></button>
@@ -302,6 +314,8 @@ export class VideoDomController implements VideoDomControllerApi {
     this._divAlerts = this.getPlayerElement<HTMLElement>(domClasses.alerts);
     this._divBackgroundImage = this.getPlayerElement<HTMLElement>(domClasses.backgroundImage);
     this._divDetachedBackground = this.getPlayerElement<HTMLElement>(domClasses.detachedBackground);
+    this._divWatermarkWrapper = this.getPlayerElement<HTMLElement>(domClasses.watermarkWrapper);
+    this._divWatermark = this.getPlayerElement<HTMLElement>(domClasses.watermark);
 
     this._mediaControllerElement = this._divPlayer.getElementsByTagName('media-controller')[0] as MediaController;
     this._buttonFastRewind = this.getPlayerElement<MediaChromeButton>(domClasses.mediaFastRewindButton);
@@ -317,6 +331,15 @@ export class VideoDomController implements VideoDomControllerApi {
     this._currentTimecode = this.getPlayerElement<OmakaseTimeDisplay>(domClasses.mediaChromeCurrentTimecode);
     this._previewTimecode = this.getPlayerElement<OmakaseTimeDisplay>(domClasses.mediaChromePreviewTimecode);
     this._previewThumbnail = this.getPlayerElement<OmakasePreviewThumbnail>(domClasses.mediaChromePreviewThumbnail);
+    this._speedDropdown = DomUtil.getElementById('speed-dropdown');
+
+    if (this._config.watermark) {
+      if (SvgUtil.isValidSVG(this._config.watermark)) {
+        this._divWatermark.innerHTML = this._config.watermark;
+      } else {
+        this._divWatermark.innerText = this._config.watermark;
+      }
+    }
   }
 
   private getMediaChromeTemplate() {
@@ -337,16 +360,22 @@ export class VideoDomController implements VideoDomControllerApi {
               <omakase-time-display class="${domClasses.mediaChromePreviewTimecode}"></omakase-time-display>
             </div>
           </omakase-time-range>
+          <omakase-dropdown id="speed-dropdown" title="SPEED" width="76">
+              ${this.getPlaybackRateOptions()}
+          </omakase-dropdown>
       </media-control-bar>
       <media-control-bar style="display:none" class="lower-control-bar">
           <div class="start-container">
-              <media-mute-button class="${domClasses.mediaChromeButton} omakase-player-mute">
-                <span slot="high" class="${domClasses.mediaChromeAudioHigh}"></span>
-                <span slot="medium" class="${domClasses.mediaChromeAudioMedium}"></span>
-                <span slot="low" class="${domClasses.mediaChromeAudioLow}"></span>
-                <span slot="off" class="${domClasses.mediaChromeAudioMute}"></span>
-              </media-mute-button>
-              <media-volume-range></media-volume-range>
+              <div class="volume-container">
+                  <media-mute-button class="${domClasses.mediaChromeButton} omakase-player-mute">
+                    <span slot="high" class="${domClasses.mediaChromeAudioHigh}"></span>
+                    <span slot="medium" class="${domClasses.mediaChromeAudioMedium}"></span>
+                    <span slot="low" class="${domClasses.mediaChromeAudioLow}"></span>
+                    <span slot="off" class="${domClasses.mediaChromeAudioMute}"></span>
+                  </media-mute-button>
+                  <media-volume-range></media-volume-range>
+              </div>
+              <omakase-dropdown-toggle dropdown="speed-dropdown"></omakase-dropdown-toggle>
           </div>
           <div class="center-container">
               <media-chrome-button class="${domClasses.mediaChromeButton} omakase-player-fast-rewind">
@@ -386,6 +415,16 @@ export class VideoDomController implements VideoDomControllerApi {
           </div>
       </media-control-bar>`;
     return defaultMediaChromeTemplate;
+  }
+
+  private getPlaybackRateOptions() {
+    const playbackRates = this._config.playbackRateOptions ?? [0.25, 0.5, 0.75, 1, 2, 4, 8];
+    return playbackRates
+      .map((rate) => {
+        if (rate === 1) return `<omakase-dropdown-option selected value="${rate}">${rate}x</omakase-dropdown-option>`;
+        else return `<omakase-dropdown-option value="${rate}">${rate}x</omakase-dropdown-option>`;
+      })
+      .join('\n');
   }
 
   private getPlayerElement<T>(className: string): T {
@@ -592,6 +631,7 @@ export class VideoDomController implements VideoDomControllerApi {
   setSafeZoneAspectRatio(aspectRatio: string): Observable<void> {
     return passiveObservable((observer) => {
       this._divSafeZoneWrapper.style.aspectRatio = aspectRatio;
+      this._divWatermarkWrapper.style.aspectRatio = aspectRatio;
       nextCompleteObserver(observer);
     });
   }
@@ -822,6 +862,26 @@ export class VideoDomController implements VideoDomControllerApi {
       this._timeRangeControl.onSeek$.pipe(takeUntil(this._videoEventBreaker$)).subscribe({
         next: (time) => {
           this._videoController.seekToTime(time);
+        },
+      });
+    }
+
+    if (this._speedDropdown) {
+      this._speedDropdown.selectedOption$.pipe(takeUntil(this._videoEventBreaker$)).subscribe({
+        next: (speedOption) => {
+          if (speedOption && parseFloat(speedOption.value) !== this._videoController.getPlaybackRate()) {
+            this._videoController.setPlaybackRate(parseFloat(speedOption.value));
+          }
+        },
+      });
+      this._videoController.onPlaybackRateChange$.pipe(takeUntil(this._videoEventBreaker$)).subscribe({
+        next: (event) => {
+          if (event.playbackRate !== this._speedDropdown?.selectedOption$.getValue()?.value) {
+            this._speedDropdown?.selectedOption$.next({
+              value: event.playbackRate.toString(),
+              label: `${event.playbackRate}x`,
+            });
+          }
         },
       });
     }

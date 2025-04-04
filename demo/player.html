@@ -20,11 +20,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Omakase Player demo</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@0.15.0-SNAPSHOT.1741082736/dist/style.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@0.16.0/dist/style.css" />
     <link rel="stylesheet" href="css/player.css" />
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@0.15.0-SNAPSHOT.1741082736/dist/omakase-player.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@byomakase/vu-meter@1.0.0/dist/vu-meter.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@0.16.0/dist/omakase-player.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@byomakase/vu-meter@1.0.1-SNAPSHOT.1740512209/dist/vu-meter.umd.min.js"></script>
     <script src="js/index.js"></script>
   </head>
 
@@ -82,7 +82,7 @@
       </div>
       <div class="content-right">
         <ul id="tabs" class="tabs">
-          <li id="tab-mlc" class="active" style="width: 87px;">Marker List</li>
+          <li id="tab-mlc" class="active" style="width: 87px">Marker List</li>
           <li id="tab-separator" class="separator">|</li>
           <li id="tab-rvc">Audio Router</li>
         </ul>
@@ -112,11 +112,11 @@
                   </div>
                   <div>
                     <span style="display: inline-block; width: 35px; font-weight: bold">IN:</span>
-                    <span slot="start">00:00:00:00</span>
+                    <span style="display: inline-block" slot="start"></span>
                   </div>
                   <div>
                     <span style="display: inline-block; width: 35px; font-weight: bold">OUT:</span>
-                    <span slot="end">00:00:30:00</span>
+                    <span style="display: inline-block" slot="end"></span>
                   </div>
                 </div>
               </template>

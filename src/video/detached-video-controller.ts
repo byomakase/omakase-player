@@ -429,6 +429,12 @@ export class DetachedVideoController implements VideoControllerApi {
       },
     });
 
+    this._videoController.onPlaybackRateChange$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
+      next: (value) => {
+        this._messageChannel!.send('VideoControllerApi.onPlaybackRateChange$', value);
+      },
+    });
+
     this._videoController.onFullscreenChange$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onFullscreenChange$', value);

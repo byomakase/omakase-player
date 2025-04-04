@@ -68,10 +68,8 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
 
   protected _lineStyleFn: (index: number, count: number) => Partial<LineChartLaneStyle> = () => ({});
 
-  protected readonly _onSettleLayout$: Subject<void> = new Subject<void>();
   protected readonly _itemsMap: Map<number, LineChartLaneItem> = new Map<number, LineChartLaneItem>();
 
-  protected _timecodedGroup?: Konva.Group;
   protected _timecodedEventCatcher?: Konva.Rect;
 
   protected _group?: Konva.Group;
@@ -159,6 +157,84 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
     if (this.vttUrl) {
       this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig));
     }
+  }
+
+  protected override startLoadingAnimation(): void {
+    this._loadingGroup = new Konva.Group({
+      width: this._timecodedGroup!.width(),
+      height: this._timecodedGroup!.height(),
+    });
+
+    this._timecodedGroup!.add(this._loadingGroup);
+    const circles: {animatedCircle: Konva.Circle; staticCircles: Konva.Circle[]; lines: Konva.Line[]}[] = [];
+
+    const yPos = (index: number) => {
+      return index === 1 ? 2 : index === 3 ? 1 : index === 4 ? 4 : 3;
+    };
+
+    const range = this._timeline!.getVisiblePositionRange();
+    for (let x = range.start; x <= range.end; x += 50) {
+      const animatedCircle = KonvaFactory.createCircle({
+        x,
+        y: (3 * this._loadingGroup!.height()) / 5,
+        radius: 3,
+        fill: this.resolveLoadingAnimationColor(),
+      });
+      this._loadingGroup!.add(animatedCircle);
+      const staticCircles = [];
+      const lines = [];
+      for (let i = 0; i < 5; i++) {
+        const circle = KonvaFactory.createCircle({
+          x: x + i * 10,
+          y: (yPos(i) * this._loadingGroup!.height()) / 5,
+          radius: 3,
+          fill: this.resolveLoadingAnimationColor(),
+        });
+        const line = KonvaFactory.createLine({
+          points: [circle.x(), circle.y(), circle.x() + 10, (yPos((i + 1) % 5) * this._loadingGroup!.height()) / 5],
+          stroke: this.resolveLoadingAnimationColor(),
+          strokeWidth: 0.5,
+        });
+        this._loadingGroup!.add(circle);
+        this._loadingGroup!.add(line);
+        staticCircles.push(circle);
+        lines.push(line);
+      }
+      circles.push({animatedCircle, staticCircles, lines});
+    }
+
+    this._loadingAnimation = new Konva.Animation((frame) => {
+      const frameTime = Math.round((frame?.time ?? 0) / 50);
+      const frameNumber = frameTime % 60;
+      for (const circleGroup of circles) {
+        if (frameNumber === 0) {
+          circleGroup.animatedCircle.setAttrs({
+            x: circleGroup.staticCircles[0].x(),
+            y: circleGroup.staticCircles[0].y(),
+          });
+        } else if (frameNumber < 50) {
+          const circleIndex = Math.floor(frameNumber / 10);
+          const newY = circleGroup.animatedCircle.y() + ((yPos((circleIndex + 1) % 5) * this._loadingGroup!.height()) / 5 - circleGroup.animatedCircle.y()) / 5;
+          circleGroup.animatedCircle.setAttrs({
+            opacity: 1,
+            x: circleGroup.animatedCircle.x() + (frame?.timeDiff ?? 0) / 50,
+            y: newY,
+          });
+          for (const circle of circleGroup.staticCircles) {
+            circle.opacity(circle.x() < circleGroup.animatedCircle.x() ? 1 : 0);
+          }
+          circleGroup.lines.forEach((line, lineIndex) => {
+            line.opacity(line.points()[0] < circleGroup.animatedCircle.x() ? 1 : 0);
+            if (lineIndex === circleIndex) {
+              line.points([circleGroup.staticCircles[circleIndex].x(), circleGroup.staticCircles[circleIndex].y(), circleGroup.staticCircles[circleIndex].x() + (frameNumber % 10), newY]);
+            }
+          });
+        } else {
+          circleGroup.animatedCircle.opacity(0);
+        }
+      }
+    });
+    this._loadingAnimation.start();
   }
 
   protected settleLayout() {

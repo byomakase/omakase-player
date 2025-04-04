@@ -67,10 +67,8 @@ const configDefault: AudioTrackLaneConfig = {
 export class AudioTrackLane extends VttTimelineLane<AudioTrackLaneConfig, AudioTrackLaneStyle, AudioVttCue, AudioVttFile> implements AudioTrackLaneApi {
   protected readonly _vttAdapter: VttAdapter<AudioVttFile> = new VttAdapter(AudioVttFile);
 
-  protected readonly _onSettleLayout$: Subject<void> = new Subject<void>();
   protected readonly _itemsMap: Map<number, AudioTrackLaneItem> = new Map<number, AudioTrackLaneItem>();
 
-  protected _timecodedGroup?: Konva.Group;
   protected _timecodedEventCatcher?: Konva.Rect;
   protected _itemsGroup?: Konva.Group;
 
@@ -160,6 +158,45 @@ export class AudioTrackLane extends VttTimelineLane<AudioTrackLaneConfig, AudioT
 
   override clearContent() {
     this.clearItems();
+  }
+
+  protected override startLoadingAnimation(): void {
+    this._loadingGroup = new Konva.Group({
+      width: this._timecodedGroup!.width(),
+      height: this._timecodedGroup!.height(),
+    });
+
+    this._timecodedGroup!.add(this._loadingGroup);
+    const rects: Konva.Rect[] = [];
+
+    const range = this._timeline!.getVisiblePositionRange();
+    for (let x = range.start; x <= range.end; x += 4) {
+      const height = Math.round(((Math.sin((rects.length * 173 * Math.PI) / 16) + 1.5) * this._timecodedGroup!.height()) / 8);
+
+      const rect = KonvaFactory.createRect({
+        x,
+        y: this._loadingGroup.height() / 2 - height / 2,
+        width: 3,
+        height,
+        fill: this.resolveLoadingAnimationColor(),
+        opacity: 1,
+        cornerRadius: 5,
+      });
+      this._loadingGroup!.add(rect);
+      rects.push(rect);
+    }
+
+    this._loadingAnimation = new Konva.Animation((frame) => {
+      rects.forEach((rect, index) => {
+        const frameTime = Math.round((frame?.time ?? 0) / 50);
+        const height = (Math.sin((index / 16 + frameTime * Math.PI) / 32) / 4 + 0.8) * Math.round(((Math.sin(((index * 173 + frameTime) * Math.PI) / 16) + 1.5) * this._timecodedGroup!.height()) / 8);
+        rect.setAttrs({
+          height,
+          y: this._timecodedGroup!.height() / 2 - height / 2,
+        });
+      });
+    });
+    this._loadingAnimation.start();
   }
 
   private clearItems() {

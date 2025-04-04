@@ -1,4 +1,4 @@
-import {map, mergeAll, Observable, sampleTime, takeUntil} from 'rxjs';
+import {debounce, debounceTime, map, mergeAll, Observable, sampleTime, Subject, take, takeUntil} from 'rxjs';
 import {DownsampleConfig, VttAwareApi, VttLoadOptions} from '../api/vtt-aware-api';
 import {OmakaseVttCue, OmakaseVttCueEvent, PlayheadMoveEvent, ScrubberMoveEvent, VideoTimeChangeEvent} from '../types';
 import {BaseTimelineLane, TimelineLaneConfig, TimelineLaneStyle, VTT_DOWNSAMPLE_CONFIG_DEFAULT} from './timeline-lane';
@@ -7,10 +7,14 @@ import {AuthConfig} from '../auth/auth-config';
 import {AxiosRequestConfig} from 'axios';
 import {OmakaseVttFile} from '../vtt';
 import {errorCompleteObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
+import {KonvaFactory} from '../factory/konva-factory';
+import Konva from 'konva';
 
 const sampleTimeSyncVideoMetadata = 100;
 
-export interface VttTimelineLaneConfig<S extends TimelineLaneStyle> extends TimelineLaneConfig<S>, Partial<DownsampleConfig> {}
+export interface VttTimelineLaneConfig<S extends TimelineLaneStyle> extends TimelineLaneConfig<S>, Partial<DownsampleConfig> {
+  loadingAnimationEnabled?: boolean;
+}
 
 export abstract class VttTimelineLane<C extends VttTimelineLaneConfig<S>, S extends TimelineLaneStyle, Q extends OmakaseVttCue, T extends OmakaseVttFile<Q>>
   extends BaseTimelineLane<C, S>
@@ -22,8 +26,30 @@ export abstract class VttTimelineLane<C extends VttTimelineLaneConfig<S>, S exte
   protected _onPlayheadCueEvent$?: Observable<OmakaseVttCueEvent<Q>>;
   protected _onScrubberCueEvent$?: Observable<OmakaseVttCueEvent<Q>>;
 
+  protected readonly _onSettleLayout$: Subject<void> = new Subject<void>();
+  protected readonly _isVttLoading$: Subject<void> = new Subject();
+  protected readonly _isVttFinishedLoading$: Subject<void> = new Subject();
+
+  protected _timecodedGroup?: Konva.Group;
+  protected _loadingGroup?: Konva.Group;
+  protected _loadingAnimation?: Konva.Animation;
+
   constructor(config: C) {
     super(config);
+    if (this._config.loadingAnimationEnabled) {
+      this._isVttLoading$.pipe(takeUntil(this._destroyed$), take(1)).subscribe(() => {
+        this.startLoadingAnimation();
+      });
+      this._isVttFinishedLoading$.pipe(takeUntil(this._destroyed$)).subscribe(() => {
+        this.stopLoadingAnimation();
+      });
+      this._onSettleLayout$.pipe(takeUntil(this._destroyed$), debounceTime(500)).subscribe(() => {
+        if (this._loadingAnimation?.isRunning()) {
+          this.stopLoadingAnimation();
+          this.startLoadingAnimation();
+        }
+      });
+    }
   }
 
   get onVttFileLoaded$(): Observable<T> {
@@ -75,12 +101,16 @@ export abstract class VttTimelineLane<C extends VttTimelineLaneConfig<S>, S exte
       if (!options.axiosConfig && AuthConfig.authentication) {
         options.axiosConfig = AuthConfig.createAxiosRequestConfig(vttUrl, AuthConfig.authentication);
       }
+      this._isVttLoading$.next();
       this._vttAdapter.loadVtt(vttUrl, options).subscribe({
         next: (value) => {
           nextCompleteObserver(observer, value);
         },
         error: (error) => {
           errorCompleteObserver(observer, error);
+        },
+        complete: () => {
+          this._isVttFinishedLoading$.next();
         },
       });
     });
@@ -94,6 +124,55 @@ export abstract class VttTimelineLane<C extends VttTimelineLaneConfig<S>, S exte
         downsampleStrategy: this._config.downsampleStrategy ?? VTT_DOWNSAMPLE_CONFIG_DEFAULT.downsampleStrategy,
       },
     };
+  }
+
+  protected startLoadingAnimation() {
+    this._loadingGroup = new Konva.Group({
+      width: this._timecodedGroup!.width(),
+      height: this._timecodedGroup!.height(),
+    });
+
+    this._timecodedGroup!.add(this._loadingGroup);
+
+    const rect1 = KonvaFactory.createRect({
+      x: this._timecodedGroup!.width() / 2 - 100,
+      y: this._timecodedGroup!.height() / 2 - 5,
+      width: 200,
+      height: 10,
+      fill: this.resolveLoadingAnimationColor(),
+      opacity: 0.5,
+    });
+    const rect2 = KonvaFactory.createRect({
+      x: this._timecodedGroup!.width() / 2 - 100,
+      y: this._timecodedGroup!.height() / 2 - 5,
+      width: 0,
+      height: 10,
+      fill: this.resolveLoadingAnimationColor(),
+      opacity: 1,
+    });
+    this._loadingGroup.add(rect1);
+    this._loadingGroup.add(rect2);
+
+    this._loadingAnimation = new Konva.Animation((_frame) => {
+      rect2.width((rect2.width() + 0.25) % rect1.width());
+    });
+    this._loadingAnimation.start();
+  }
+
+  protected stopLoadingAnimation() {
+    this._loadingAnimation?.stop();
+    this._loadingGroup?.destroy();
+  }
+
+  protected resolveLoadingAnimationColor(): string {
+    switch (this._timeline?.config.style.loadingAnimationTheme) {
+      case 'light':
+        return '#C8CACD';
+      case 'dark':
+        return '#7B85B4';
+      default:
+        return '#C8CACD';
+    }
   }
 
   private getCueEvents(source$: Observable<VideoTimeChangeEvent | PlayheadMoveEvent | ScrubberMoveEvent>): Observable<OmakaseVttCueEvent<Q>> {

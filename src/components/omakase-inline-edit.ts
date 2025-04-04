@@ -86,6 +86,7 @@ export class OmakaseInlineEdit extends HTMLElement {
     this._container.removeChild(this._input);
     this._input = document.createElement('omakase-timecode-edit') as OmakaseTimecodeEdit;
     this._container.appendChild(this._input);
+    this._input.style.display = 'none';
     this._input.video = video;
     this._input.value = timecode;
 

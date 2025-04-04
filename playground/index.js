@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import {AudioTrackLane, MarkerLane, MomentMarker, OmakasePlayer, PeriodMarker, SubtitlesLane, ThumbnailLane} from '../src';
-import {RandomUtil} from '../src/util/random-util';
-import {ColorUtil} from '../src/util/color-util';
+import { AudioTrackLane, MarkerLane, MomentMarker, OmakasePlayer, PeriodMarker, SubtitlesLane, ThumbnailLane } from '../src';
+import { RandomUtil } from '../src/util/random-util';
+import { ColorUtil } from '../src/util/color-util';
 
 window.addEventListener('load', () => {
   let eventProcessor = (eventKey, event) => {
@@ -134,6 +134,9 @@ window.addEventListener('load', () => {
     omakasePlayer
       .createTimeline({
         thumbnailVttUrl: activeStreamData.thumbs_vtt,
+        style: {
+          loadingAnimationTheme: 'dark'
+        }
       })
       .subscribe((timeline) => {
         // console.log('Timeline created')
@@ -165,10 +168,11 @@ window.addEventListener('load', () => {
               leftBackgroundFill: '#72e79f',
               leftBackgroundOpacity: 0.8,
             },
+            loadingAnimationEnabled: true
           });
 
           thumbnailLane.onClick$.subscribe((event) => {
-            omakasePlayer.video.seekToTime(event.thumbnail.cue.startTime).subscribe(() => {});
+            omakasePlayer.video.seekToTime(event.thumbnail.cue.startTime).subscribe(() => { });
           });
 
           timeline.addTimelineLane(thumbnailLane);
@@ -377,7 +381,7 @@ window.addEventListener('load', () => {
     };
   };
 
-  let attachButtonHandlers = (timeline) => {};
+  let attachButtonHandlers = (timeline) => { };
 
   let buttonZoomTo = document.getElementById('buttonZoomTo');
   buttonZoomTo.onclick = function () {
@@ -433,23 +437,23 @@ window.addEventListener('load', () => {
   let buttonFrameSeek = document.getElementById('buttonFrameSeek');
   buttonFrameSeek.onclick = function () {
     let frame = document.getElementById('inputFrameSeek').value;
-    omakasePlayer.video.seekToFrame(frame).subscribe(() => {});
+    omakasePlayer.video.seekToFrame(frame).subscribe(() => { });
   };
 
   let buttonFramePrevious = document.getElementById('buttonFramePrevious');
   buttonFramePrevious.onclick = function () {
-    omakasePlayer.video.seekPreviousFrame().subscribe(() => {});
+    omakasePlayer.video.seekPreviousFrame().subscribe(() => { });
   };
 
   let buttonFrameNext = document.getElementById('buttonFrameNext');
   buttonFrameNext.onclick = function () {
-    omakasePlayer.video.seekNextFrame().subscribe(() => {});
+    omakasePlayer.video.seekNextFrame().subscribe(() => { });
   };
 
   let buttonFrameAdd = document.getElementById('buttonFrameAdd');
   buttonFrameAdd.onclick = function () {
     let frames = document.getElementById('inputFrameAdd').value;
-    omakasePlayer.video.seekFromCurrentFrame(frames).subscribe(() => {});
+    omakasePlayer.video.seekFromCurrentFrame(frames).subscribe(() => { });
   };
 
   let buttonPlay = document.getElementById('buttonPlay');
@@ -470,7 +474,7 @@ window.addEventListener('load', () => {
   let buttonTimestampSeek = document.getElementById('buttonTimestampSeek');
   buttonTimestampSeek.onclick = function () {
     let timestamp = document.getElementById('inputTimestamp').value;
-    omakasePlayer.video.seekToTime(timestamp).subscribe(() => {});
+    omakasePlayer.video.seekToTime(timestamp).subscribe(() => { });
   };
 
   let datasetSelect = document.getElementById('datasetSelect');
@@ -498,14 +502,14 @@ window.addEventListener('load', () => {
     if (event.code === 'ArrowLeft') {
       if (event.target === document.body) {
         event.preventDefault();
-        omakasePlayer.video.seekPreviousFrame().subscribe(() => {});
+        omakasePlayer.video.seekPreviousFrame().subscribe(() => { });
       }
     }
 
     if (event.code === 'ArrowRight') {
       if (event.target === document.body) {
         event.preventDefault();
-        omakasePlayer.video.seekNextFrame().subscribe(() => {});
+        omakasePlayer.video.seekNextFrame().subscribe(() => { });
       }
     }
   });

@@ -74,14 +74,12 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
   protected readonly _vttAdapter: VttAdapter<OgChartVttFile> = new VttAdapter(OgChartVttFile);
 
   protected readonly _itemsMap: Map<number, OgChartLaneItem> = new Map<number, OgChartLaneItem>();
-  protected readonly _onSettleLayout$: Subject<void> = new Subject<void>();
 
   protected _valueTransformFn: (value: number) => number;
   protected _itemProcessFn?: (item: OgChartLaneItem, index: number) => void;
 
   protected _numOfInterpolations?: number;
 
-  protected _timecodedGroup?: Konva.Group;
   protected _timecodedEventCatcher?: Konva.Rect;
   protected _itemsGroup?: Konva.Group;
 
@@ -153,6 +151,55 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
     if (this.vttUrl) {
       this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig));
     }
+  }
+
+  protected override startLoadingAnimation(): void {
+    this._loadingGroup = new Konva.Group({
+      width: this._timecodedGroup!.width(),
+      height: this._timecodedGroup!.height(),
+    });
+
+    this._timecodedGroup!.add(this._loadingGroup);
+    const rects: Konva.Rect[][] = [];
+
+    const range = this._timeline!.getVisiblePositionRange();
+    for (let x = range.start; x <= range.end; x += 7) {
+      const column = [];
+      for (let y = this._loadingGroup.height() / 2 - 13; y <= this._loadingGroup.height() / 2 + 13; y += 7) {
+        const rect = KonvaFactory.createRect({
+          x,
+          y,
+          width: 5,
+          height: 5,
+          fill: this.resolveLoadingAnimationColor(),
+          opacity: column.length === 3 || rects.length % 7 === 3 ? 1 : 0,
+        });
+        this._loadingGroup!.add(rect);
+        column.push(rect);
+      }
+      rects.push(column);
+    }
+
+    this._loadingAnimation = new Konva.Animation((frame) => {
+      const frameTime = Math.round((frame?.time ?? 0) / 300);
+      const frameNumber = frameTime % 6;
+      rects.forEach((column, columnIndex) => {
+        column.forEach((rect, rowIndex) => {
+          const showRect = ((frame: number, column: number, row: number) => {
+            if (row === 3) return true;
+            else if (frame === 0) return column == 3;
+            else if (frame === 1) return column > 1 && column < 5 && (row === 2 || (row === 1 && column === 3));
+            else if (frame === 2) return (row === 1 && (column === 2 || column === 4)) || (row === 2 && column !== 0 && column !== 6);
+            else if (frame === 3) return column !== 3 && ((row === 0 && (column === 2 || column === 4)) || (row === 1 && column !== 0 && column !== 6) || row === 2);
+            else if (frame === 4) return row === 2 || (row === 1 && column !== 3) || column === 1 || column === 5;
+            else if (frame === 5) return row === 2 || column === 0 || column === 6 || (row === 1 && (column === 1 || column === 5));
+            return false;
+          })(frameNumber, columnIndex % 7, rowIndex);
+          rect.opacity(showRect ? 1 : 0);
+        });
+      });
+    });
+    this._loadingAnimation.start();
   }
 
   private createEntities() {

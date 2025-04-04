@@ -283,7 +283,7 @@ export class MarkerListComponent extends HTMLElement {
     }
     const nameSlot = element.querySelector<HTMLElement>('[slot="name"]');
     if (nameSlot) {
-      if (this._nameEditable) {
+      if (this._nameEditable && item.editable) {
         nameSlot.innerHTML = `<omakase-inline-edit></omakase-inline-edit>`;
         const inlineEdit = element.querySelector<OmakaseInlineEdit>('omakase-inline-edit');
         inlineEdit!.setText(item.name ?? '');
@@ -307,7 +307,7 @@ export class MarkerListComponent extends HTMLElement {
     const startSlot = element.querySelector<HTMLElement>('[slot="start"]');
     if (startSlot) {
       const timecode = item.start !== undefined ? this._videoController!.formatToTimecode(item.start) : '';
-      if (this._timeEditable) {
+      if (this._timeEditable && item.editable) {
         startSlot.innerHTML = `<omakase-inline-edit></omakase-inline-edit>`;
         const inlineEdit = startSlot.querySelector<OmakaseInlineEdit>('omakase-inline-edit');
         inlineEdit!.setTimecode!(timecode, this._videoController!.getVideo()!, undefined, item.end);
@@ -330,7 +330,7 @@ export class MarkerListComponent extends HTMLElement {
     const endSlot = element.querySelector<HTMLElement>('[slot="end"]');
     if (endSlot) {
       const timecode = item.end !== undefined ? this._videoController!.formatToTimecode(item.end) : '';
-      if (this._timeEditable && 'start' in item.timeObservation) {
+      if (this._timeEditable && item.editable && 'start' in item.timeObservation) {
         endSlot.innerHTML = `<omakase-inline-edit></omakase-inline-edit>`;
         const inlineEdit = endSlot.querySelector<OmakaseInlineEdit>('omakase-inline-edit');
 

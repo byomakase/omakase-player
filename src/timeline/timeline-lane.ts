@@ -60,12 +60,11 @@ export interface TimelineLaneStyle {
   backgroundOpacity?: number;
   descriptionTextFill?: string;
   descriptionTextFontSize?: number;
+  descriptionTextFontStyle?: string;
   descriptionTextYOffset?: number;
 
   leftBackgroundFill?: string;
   leftBackgroundOpacity?: number;
-  leftPaddingLeft?: number;
-  leftPaddingRight?: number;
   rightBackgroundFill?: string;
   rightBackgroundOpacity?: number;
 }
@@ -290,7 +289,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
         style: {
           fontSize: this._styleAdapter.style.descriptionTextFontSize,
           fontFamily: this._timeline?.style.textFontFamily,
-          fontStyle: this._timeline?.style.textFontStyle,
+          fontStyle: this._styleAdapter.style.descriptionTextFontStyle ?? this._timeline?.style.textFontStyle,
           fill: this._styleAdapter.style.descriptionTextFill,
           offsetY: this._styleAdapter.style.descriptionTextYOffset,
           align: 'right',
@@ -337,7 +336,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig<S>, S extend
     if (this._descriptionTextLabel) {
       this._descriptionTextLabel.style = {
         fontFamily: this._timeline?.style.textFontFamily,
-        fontStyle: this._timeline?.style.textFontStyle,
+        fontStyle: this._styleAdapter.style.descriptionTextFontStyle ?? this._timeline?.style.textFontStyle,
       };
     }
 

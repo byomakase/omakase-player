@@ -74,14 +74,12 @@ export class BarChartLane extends VttTimelineLane<BarChartLaneConfig, BarChartLa
   protected readonly _vttAdapter: VttAdapter<BarChartVttFile> = new VttAdapter(BarChartVttFile);
 
   protected readonly _itemsMap: Map<number, BarChartLaneItem> = new Map<number, BarChartLaneItem>();
-  protected readonly _onSettleLayout$: Subject<void> = new Subject<void>();
 
   protected _valueTransformFn: (value: number) => number;
   protected _itemProcessFn?: (item: BarChartLaneItem, index: number) => void;
 
   protected _numOfInterpolations?: number;
 
-  protected _timecodedGroup?: Konva.Group;
   protected _timecodedEventCatcher?: Konva.Rect;
   protected _itemsGroup?: Konva.Group;
 
@@ -153,6 +151,46 @@ export class BarChartLane extends VttTimelineLane<BarChartLaneConfig, BarChartLa
     if (this.vttUrl) {
       this.loadVtt(this.vttUrl, this.getVttLoadOptions(this._config.axiosConfig));
     }
+  }
+
+  protected override startLoadingAnimation(): void {
+    this._loadingGroup = new Konva.Group({
+      width: this._timecodedGroup!.width(),
+      height: this._timecodedGroup!.height(),
+    });
+
+    this._timecodedGroup!.add(this._loadingGroup);
+    const rects: Konva.Rect[] = [];
+
+    const maxHeight = 0.75 * this._loadingGroup.height();
+
+    const range = this._timeline!.getVisiblePositionRange();
+    for (let x = range.start; x <= range.end; x += 8) {
+      const heightFactor = 0.2;
+      const rect = KonvaFactory.createRect({
+        x,
+        y: 5 + (1 - heightFactor) * maxHeight,
+        width: 6,
+        height: heightFactor * maxHeight,
+        fill: this.resolveLoadingAnimationColor(),
+      });
+      this._loadingGroup!.add(rect);
+      rects.push(rect);
+    }
+
+    this._loadingAnimation = new Konva.Animation((frame) => {
+      const frameTime = Math.round((frame?.time ?? 0) / 50);
+      rects.forEach((rect, index) => {
+        const frameNumber = frameTime % 95;
+        const frameOffset = (index % 6) * 6;
+        const heightFactor = 0.2 + (0.8 - 0.8 * Math.min(Math.abs(frameNumber - frameOffset - 15) / 15, Math.abs(frameNumber - frameOffset - 51) / 15, 1));
+        rect.setAttrs({
+          y: 5 + (1 - heightFactor) * maxHeight,
+          height: heightFactor * maxHeight,
+        });
+      });
+    });
+    this._loadingAnimation.start();
   }
 
   private createEntities() {

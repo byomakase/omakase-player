@@ -36,6 +36,14 @@ export class KonvaFactory {
     return new Konva.Rect(config);
   }
 
+  static createCircle(config?: Konva.CircleConfig): Konva.Circle {
+    return new Konva.Circle(config);
+  }
+
+  static createLine(config?: Konva.LineConfig): Konva.Line {
+    return new Konva.Line(config);
+  }
+
   static createEventCatcherRect(config: Konva.RectConfig = {}) {
     return KonvaFactory.createRect({
       opacity: 0,

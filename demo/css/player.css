@@ -86,6 +86,8 @@ body {
   border-right: 2px solid #235067;
   opacity: 0.7;
   position: relative;
+  height: 47px;
+  display: flex;
 }
 
 .omakase-marker-list-row.active {
@@ -113,14 +115,21 @@ body {
 
 .marker-image {
   float: left;
-  height: 45px;
   cursor: pointer;
 }
 
 .marker-details {
-  padding-left: 90px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
   font-size: 10pt;
   cursor: pointer;
+  padding-left: 2px;
+}
+
+.omakase-timecode-edit-input {
+  font-size: 10pt;
+  height: 15px;
 }
 
 .markers-title {

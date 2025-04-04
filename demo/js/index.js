@@ -70,8 +70,8 @@ detectBrowser();
 
 window.addEventListener('load', () => {
   if (browserIsSafari) {
-    domHelper.setStyle(domHelper.getById('tab-rvc'), {display: 'none'});
-    domHelper.setStyle(domHelper.getById('tab-separator'), {display: 'none'});
+    domHelper.setStyle(domHelper.getById('tab-rvc'), { display: 'none' });
+    domHelper.setStyle(domHelper.getById('tab-separator'), { display: 'none' });
   }
 
   createOmakasePlayer();
@@ -305,7 +305,7 @@ function initializeOmakaseTimeline() {
           marker.onClick$.subscribe({
             next: (event) => {
               console.log(`Clicked on marker with text: `, marker.text);
-              omakasePlayer.video.seekToTime(marker.timeObservation.start).subscribe(() => {});
+              omakasePlayer.video.seekToTime(marker.timeObservation.start);
             },
           });
         },
@@ -389,7 +389,7 @@ function initializeOmakaseTimeline() {
           marker.onClick$.subscribe({
             next: (event) => {
               console.log(`Clicked on marker with text: `, marker.text);
-              omakasePlayer.video.seekToTime(marker.timeObservation.time).subscribe(() => {});
+              omakasePlayer.video.seekToTime(marker.timeObservation.time);
             },
           });
         },
@@ -451,7 +451,7 @@ function initializeOmakaseTimeline() {
 
       //automatic position to thumb start frame
       defaultThumbnailLane.onClick$.subscribe((event) => {
-        omakasePlayer.video.seekToTime(event.thumbnail.cue.startTime).subscribe(() => {});
+        omakasePlayer.video.seekToTime(event.thumbnail.cue.startTime);
       });
 
       // Add thumbnails to the marker list
@@ -488,6 +488,7 @@ function initializeOmakaseTimeline() {
           emptyHTMLElementId: 'marker-empty',
           source: [inAndOutMarkersLane],
           styleUrl: './css/player.css',
+          timeEditable: true
         })
         .subscribe((markerList) => {
           omakaseMarkerList = markerList;
@@ -496,13 +497,13 @@ function initializeOmakaseTimeline() {
           }
           markerList.toggleMarker(marker.id);
           activeMarker = marker;
-          markerList.onMarkerClick$.subscribe(({marker}) => {
+          markerList.onMarkerClick$.subscribe(({ marker }) => {
             if (marker.id !== markerList.getSelectedMarker()?.id) {
               markerList.toggleMarker(marker.id);
               activeMarker = markerList.getSelectedMarker();
             }
           });
-          markerList.onMarkerSelected$.subscribe(({marker}) => {
+          markerList.onMarkerSelected$.subscribe(({ marker }) => {
             if (marker) {
               activeMarkerIndex = markerList.getMarkers().findIndex((m) => m.id === marker.id);
             }
@@ -755,15 +756,15 @@ function initializeOmakaseTimeline() {
     }
 
     if (lineChartLaneForMultipleMeasurements) {
-      lineChartLaneForMultipleMeasurements.style = {marginBottom: 1};
+      lineChartLaneForMultipleMeasurements.style = { marginBottom: 1 };
     } else if (stereoRmsBarChartLane) {
-      stereoRmsBarChartLane.style = {marginBottom: 1};
+      stereoRmsBarChartLane.style = { marginBottom: 1 };
     } else if (stereoAudioTrackLaneL) {
-      stereoAudioTrackLaneL.style = {marginBottom: 1};
+      stereoAudioTrackLaneL.style = { marginBottom: 1 };
     } else if (stereoAudioTrackLaneR) {
-      stereoAudioTrackLaneR.style = {marginBottom: 1};
+      stereoAudioTrackLaneR.style = { marginBottom: 1 };
     } else {
-      stereoAudioTrackLane.style = {marginBottom: 1};
+      stereoAudioTrackLane.style = { marginBottom: 1 };
     }
 
     let textLabel20 = new omakase.TextLabel({
@@ -1276,15 +1277,15 @@ function createMLCAndRVCSwitcher() {
   const rvcTab = domHelper.getById('tab-rvc');
 
   mlcTab.onclick = () => {
-    domHelper.setStyle(RVC, {display: 'none'});
-    domHelper.setStyle(MLC, {display: 'inline-block'});
+    domHelper.setStyle(RVC, { display: 'none' });
+    domHelper.setStyle(MLC, { display: 'inline-block' });
     mlcTab.classList.add('active');
     rvcTab.classList.remove('active');
   };
 
   rvcTab.onclick = () => {
-    domHelper.setStyle(MLC, {display: 'none'});
-    domHelper.setStyle(RVC, {display: 'inline-block'});
+    domHelper.setStyle(MLC, { display: 'none' });
+    domHelper.setStyle(RVC, { display: 'inline-block' });
     rvcTab.classList.add('active');
     mlcTab.classList.remove('active');
   };
@@ -1304,32 +1305,32 @@ function initializePlayerEventListeners() {
 
   omakasePlayer.video.onSeeked$.subscribe((event) => {
     let buttonReplay = domHelper.getById('buttonReplay');
-    domHelper.setStyle(buttonReplay, {display: 'none'});
+    domHelper.setStyle(buttonReplay, { display: 'none' });
 
     if (omakasePlayer.video.isPlaying()) {
       let buttonPause = domHelper.getById('buttonPause');
-      domHelper.setStyle(buttonPause, {display: 'inline'});
+      domHelper.setStyle(buttonPause, { display: 'inline' });
 
       let buttonPlay = domHelper.getById('buttonPlay');
-      domHelper.setStyle(buttonPlay, {display: 'none'});
+      domHelper.setStyle(buttonPlay, { display: 'none' });
     } else {
       let buttonPause = domHelper.getById('buttonPause');
-      domHelper.setStyle(buttonPause, {display: 'none'});
+      domHelper.setStyle(buttonPause, { display: 'none' });
 
       let buttonPlay = domHelper.getById('buttonPlay');
-      domHelper.setStyle(buttonPlay, {display: 'inline'});
+      domHelper.setStyle(buttonPlay, { display: 'inline' });
     }
   });
 
   omakasePlayer.video.onEnded$.subscribe((event) => {
     let buttonReplay = domHelper.getById('buttonReplay');
-    domHelper.setStyle(buttonReplay, {display: 'inline'});
+    domHelper.setStyle(buttonReplay, { display: 'inline' });
 
     let buttonPause = domHelper.getById('buttonPause');
-    domHelper.setStyle(buttonPause, {display: 'none'});
+    domHelper.setStyle(buttonPause, { display: 'none' });
 
     let buttonPlay = domHelper.getById('buttonPlay');
-    domHelper.setStyle(buttonPlay, {display: 'none'});
+    domHelper.setStyle(buttonPlay, { display: 'none' });
   });
 
   omakasePlayer.video.onVideoLoaded$.subscribe((event) => {
@@ -1341,24 +1342,24 @@ function initializePlayerEventListeners() {
 
     omakasePlayer.video.onPlay$.subscribe(() => {
       let buttonReplay = domHelper.getById('buttonReplay');
-      domHelper.setStyle(buttonReplay, {display: 'none'});
+      domHelper.setStyle(buttonReplay, { display: 'none' });
 
       let buttonPause = domHelper.getById('buttonPause');
-      domHelper.setStyle(buttonPause, {display: 'inline'});
+      domHelper.setStyle(buttonPause, { display: 'inline' });
 
       let buttonPlay = domHelper.getById('buttonPlay');
-      domHelper.setStyle(buttonPlay, {display: 'none'});
+      domHelper.setStyle(buttonPlay, { display: 'none' });
     });
 
     omakasePlayer.video.onPause$.subscribe(() => {
       let buttonReplay = domHelper.getById('buttonReplay');
-      domHelper.setStyle(buttonReplay, {display: 'none'});
+      domHelper.setStyle(buttonReplay, { display: 'none' });
 
       let buttonPause = domHelper.getById('buttonPause');
-      domHelper.setStyle(buttonPause, {display: 'none'});
+      domHelper.setStyle(buttonPause, { display: 'none' });
 
       let buttonPlay = domHelper.getById('buttonPlay');
-      domHelper.setStyle(buttonPlay, {display: 'inline'});
+      domHelper.setStyle(buttonPlay, { display: 'inline' });
     });
   });
 }
@@ -1376,89 +1377,64 @@ function initializePlayerControlButtons() {
 
   let buttonReplay = domHelper.getById('buttonReplay');
   buttonReplay.onclick = function () {
-    omakasePlayer.video.seekToFrame(0).subscribe(() => {});
+    omakasePlayer.video.seekToFrame(0);
   };
 
   let buttonFfBack = domHelper.getById('ff-back');
   buttonFfBack.onclick = function () {
-    omakasePlayer.video.pause();
+    omakasePlayer.video.pause().subscribe({
+      next: () => {
+        let frame = omakasePlayer.video.getCurrentFrame();
+        if (frame < 10) {
+          frame = 0;
+        } else {
+          frame = frame - 10;
+        }
+        omakasePlayer.video.seekToFrame(frame);
+      }
+    });
 
-    let buttonReplay = domHelper.getById('buttonReplay');
-    domHelper.setStyle(buttonReplay, {display: 'none'});
 
-    let buttonPause = domHelper.getById('buttonPause');
-    domHelper.setStyle(buttonPause, {display: 'none'});
-
-    let buttonPlay = domHelper.getById('buttonPlay');
-    domHelper.setStyle(buttonPlay, {display: 'inline'});
-
-    let frame = omakasePlayer.video.getCurrentFrame();
-    if (frame < 10) {
-      frame = 0;
-    } else {
-      frame = frame - 10;
-    }
-    omakasePlayer.video.seekToFrame(frame).subscribe(() => {});
   };
 
   let buttonBack = domHelper.getById('back');
   buttonBack.onclick = function () {
-    omakasePlayer.video.pause();
+    omakasePlayer.video.pause().subscribe({
+      next: () => {
+        omakasePlayer.video.seekPreviousFrame();
+      }
+    });
 
-    let buttonReplay = domHelper.getById('buttonReplay');
-    domHelper.setStyle(buttonReplay, {display: 'none'});
-
-    let buttonPause = domHelper.getById('buttonPause');
-    domHelper.setStyle(buttonPause, {display: 'none'});
-
-    let buttonPlay = domHelper.getById('buttonPlay');
-    domHelper.setStyle(buttonPlay, {display: 'inline'});
-
-    omakasePlayer.video.seekPreviousFrame().subscribe(() => {});
   };
 
   let buttonFfForward = domHelper.getById('ff-forward');
   buttonFfForward.onclick = function () {
-    omakasePlayer.video.pause();
-
-    let buttonReplay = domHelper.getById('buttonReplay');
-    domHelper.setStyle(buttonReplay, {display: 'none'});
-
-    let buttonPause = domHelper.getById('buttonPause');
-    domHelper.setStyle(buttonPause, {display: 'none'});
-
-    let buttonPlay = domHelper.getById('buttonPlay');
-    domHelper.setStyle(buttonPlay, {display: 'inline'});
-
-    let frame = omakasePlayer.video.getCurrentFrame();
-    if (frame + 10 >= omakasePlayer.video.getVideo().totalFrames) {
-      frame = omakasePlayer.video.getVideo().totalFrames;
-    } else {
-      frame = frame + 10;
-    }
-    omakasePlayer.video.seekToFrame(frame).subscribe(() => {});
+    omakasePlayer.video.pause().subscribe({
+      next: () => {
+        let frame = omakasePlayer.video.getCurrentFrame();
+        if (frame + 10 >= omakasePlayer.video.getVideo().totalFrames) {
+          frame = omakasePlayer.video.getVideo().totalFrames;
+        } else {
+          frame = frame + 10;
+        }
+        omakasePlayer.video.seekToFrame(frame);
+      }
+    });
   };
 
   let buttonForward = domHelper.getById('forward');
   buttonForward.onclick = function () {
-    omakasePlayer.video.pause();
-
-    let buttonReplay = domHelper.getById('buttonReplay');
-    domHelper.setStyle(buttonReplay, {display: 'none'});
-
-    let buttonPause = domHelper.getById('buttonPause');
-    domHelper.setStyle(buttonPause, {display: 'none'});
-
-    let buttonPlay = domHelper.getById('buttonPlay');
-    domHelper.setStyle(buttonPlay, {display: 'inline'});
-
-    let frame = omakasePlayer.video.getCurrentFrame();
-    if (frame + 1 >= omakasePlayer.video.getVideo().totalFrames) {
-      frame = omakasePlayer.video.getVideo().totalFrames;
-    } else {
-      frame = frame + 1;
-    }
-    omakasePlayer.video.seekToFrame(frame).subscribe(() => {});
+    omakasePlayer.video.pause().subscribe({
+      next: () => {
+        let frame = omakasePlayer.video.getCurrentFrame();
+        if (frame + 1 >= omakasePlayer.video.getVideo().totalFrames) {
+          frame = omakasePlayer.video.getVideo().totalFrames;
+        } else {
+          frame = frame + 1;
+        }
+        omakasePlayer.video.seekToFrame(frame);
+      }
+    });
   };
 
   // Playback rate toggle and indicator
@@ -1472,11 +1448,11 @@ function initializePlayerControlButtons() {
   let muted = false;
   buttonMute.onclick = function () {
     if (muted) {
-      domHelper.setStyle(buttonMute, {opacity: '1'});
+      domHelper.setStyle(buttonMute, { opacity: '1' });
       omakasePlayer.video.unmute();
       muted = false;
     } else {
-      domHelper.setStyle(buttonMute, {opacity: '0.5'});
+      domHelper.setStyle(buttonMute, { opacity: '0.5' });
       omakasePlayer.video.mute();
       muted = true;
     }
@@ -1492,10 +1468,10 @@ function initializePlayerControlButtons() {
     let activeTrack = omakasePlayer.subtitles.getActiveTrack();
     if (activeTrack.hidden) {
       omakasePlayer.subtitles.showActiveTrack();
-      domHelper.setStyle(buttonSub, {opacity: '1'});
+      domHelper.setStyle(buttonSub, { opacity: '1' });
     } else {
       omakasePlayer.subtitles.hideActiveTrack();
-      domHelper.setStyle(buttonSub, {opacity: '0.5'});
+      domHelper.setStyle(buttonSub, { opacity: '0.5' });
     }
   };
   let buttonCaption = domHelper.getById('caption');
@@ -1548,22 +1524,6 @@ function initializePlayerControlButtons() {
     }
   });
 
-  videoElement.addEventListener('play', (event) => {
-    let buttonPause = domHelper.getById('buttonPause');
-    domHelper.setStyle(buttonPause, {display: 'inline'});
-
-    let buttonPlay = domHelper.getById('buttonPlay');
-    domHelper.setStyle(buttonPlay, {display: 'none'});
-  });
-
-  videoElement.addEventListener('pause', (event) => {
-    let buttonPause = domHelper.getById('buttonPause');
-    domHelper.setStyle(buttonPause, {display: 'none'});
-
-    let buttonPlay = domHelper.getById('buttonPlay');
-    domHelper.setStyle(buttonPlay, {display: 'inline'});
-  });
-
   let userAgent = (window.navigator && window.navigator.userAgent) || '';
   let isFirefox = /Firefox/i.test(userAgent);
   if (!isFirefox) {
@@ -1582,9 +1542,9 @@ function initializePlayerControlButtons() {
     };
   } else {
     let detachPIP = domHelper.getById('detach-pip');
-    domHelper.setStyle(detachPIP, {display: 'none'});
+    domHelper.setStyle(detachPIP, { display: 'none' });
     let attachPIP = domHelper.getById('attach-pip');
-    domHelper.setStyle(attachPIP, {display: 'none'});
+    domHelper.setStyle(attachPIP, { display: 'none' });
   }
 
   let buttonFullscreen = domHelper.getById('full-screen');
@@ -1597,8 +1557,8 @@ function togglePIP(isActive) {
   let detachPIP = domHelper.getById('detach-pip');
   let attachPIP = domHelper.getById('attach-pip');
 
-  domHelper.setStyle(detachPIP, {display: isActive ? 'none' : 'inline'});
-  domHelper.setStyle(attachPIP, {display: isActive ? 'inline' : 'none'});
+  domHelper.setStyle(detachPIP, { display: isActive ? 'none' : 'inline' });
+  domHelper.setStyle(attachPIP, { display: isActive ? 'inline' : 'none' });
 }
 
 function uninitializeVuMeter() {
@@ -1707,76 +1667,65 @@ function keyListener(event) {
   }
 }
 
-function play() {
-  omakasePlayer.video.play();
-
-  let buttonPause = domHelper.getById('buttonPause');
-  domHelper.setStyle(buttonPause, {display: 'inline'});
-
-  let buttonPlay = domHelper.getById('buttonPlay');
-  domHelper.setStyle(buttonPlay, {display: 'none'});
-}
-
-function pause() {
-  omakasePlayer.video.pause();
-  let buttonReplay = domHelper.getById('buttonReplay');
-  domHelper.setStyle(buttonReplay, {display: 'none'});
-
-  let buttonPause = domHelper.getById('buttonPause');
-  domHelper.setStyle(buttonPause, {display: 'none'});
-
-  let buttonPlay = domHelper.getById('buttonPlay');
-  domHelper.setStyle(buttonPlay, {display: 'inline'});
-}
-
 function seekPreviousFrame() {
-  pause();
-
-  omakasePlayer.video.seekPreviousFrame().subscribe(() => {});
+  omakasePlayer.video.pause().subscribe({
+    next: () => {
+      omakasePlayer.video.seekPreviousFrame();
+    }
+  });
 }
 
 function seekNextFrame() {
-  pause();
-  let frame = omakasePlayer.video.getCurrentFrame();
-  if (frame + 1 >= omakasePlayer.video.getVideo().totalFrames) {
-    frame = omakasePlayer.video.getVideo().totalFrames;
-  } else {
-    frame = frame + 1;
-  }
-  omakasePlayer.video.seekToFrame(frame).subscribe(() => {});
+  omakasePlayer.video.pause().subscribe({
+    next: () => {
+      let frame = omakasePlayer.video.getCurrentFrame();
+      if (frame + 1 >= omakasePlayer.video.getVideo().totalFrames) {
+        frame = omakasePlayer.video.getVideo().totalFrames;
+      } else {
+        frame = frame + 1;
+      }
+      omakasePlayer.video.seekToFrame(frame);
+    }
+  })
+
 }
 
 function navigateBackwardsInSeconds(numOfSecs) {
-  pause();
+  omakasePlayer.video.pause().subscribe({
+    next: () => {
+      let frameRate = omakasePlayer.video.getFrameRate();
+      let frame = omakasePlayer.video.getCurrentFrame();
+      let framesToMove = numOfSecs * frameRate;
+      console.debug('Frames to move backwards', framesToMove);
 
-  let frameRate = omakasePlayer.video.getFrameRate();
-  let frame = omakasePlayer.video.getCurrentFrame();
-  let framesToMove = numOfSecs * frameRate;
-  console.debug('Frames to move backwards', framesToMove);
-
-  if (framesToMove > frame) {
-    frame = 0;
-  } else {
-    frame = frame - framesToMove;
-  }
-  omakasePlayer.video.seekToFrame(frame).subscribe(() => {});
+      if (framesToMove > frame) {
+        frame = 0;
+      } else {
+        frame = frame - framesToMove;
+      }
+      omakasePlayer.video.seekToFrame(frame);
+    }
+  })
 }
 
 function navigateForwardsInSeconds(numOfSecs) {
-  pause();
+  omakasePlayer.video.pause().subscribe({
+    next: () => {
 
-  let frameRate = omakasePlayer.video.getFrameRate();
-  let frame = omakasePlayer.video.getCurrentFrame();
-  let totalFrames = omakasePlayer.video.getVideo().totalFrames;
-  let framesToMove = numOfSecs * frameRate;
-  console.debug('Frames to move forwards', framesToMove);
+      let frameRate = omakasePlayer.video.getFrameRate();
+      let frame = omakasePlayer.video.getCurrentFrame();
+      let totalFrames = omakasePlayer.video.getVideo().totalFrames;
+      let framesToMove = numOfSecs * frameRate;
+      console.debug('Frames to move forwards', framesToMove);
 
-  if (frame + framesToMove >= totalFrames) {
-    frame = totalFrames;
-  } else {
-    frame = frame + framesToMove;
-  }
-  omakasePlayer.video.seekToFrame(frame).subscribe(() => {});
+      if (frame + framesToMove >= totalFrames) {
+        frame = totalFrames;
+      } else {
+        frame = frame + framesToMove;
+      }
+      omakasePlayer.video.seekToFrame(frame);
+    }
+  })
 }
 
 function setInMarkerToPlayhead() {
@@ -1790,7 +1739,7 @@ function setInMarkerToPlayhead() {
   let timeObservation = activeMarker.timeObservation;
   if (playhead <= timeObservation.end) {
     timeObservation.start = playhead;
-    omakaseMarkerList.updateMarker(activeMarker.id, {timeObservation});
+    omakaseMarkerList.updateMarker(activeMarker.id, { timeObservation });
   }
 }
 
@@ -1805,7 +1754,7 @@ function setOutMarkertoPlayhead() {
   let timeObservation = activeMarker.timeObservation;
   if (timeObservation.start <= playhead) {
     timeObservation.end = playhead;
-    omakaseMarkerList.updateMarker(activeMarker.id, {timeObservation});
+    omakaseMarkerList.updateMarker(activeMarker.id, { timeObservation });
   }
 }
 
@@ -1816,7 +1765,7 @@ function setPlayheadToInMarker() {
 
   console.debug('set Playhead to IN Marker', activeMarker.id);
   let inTimeStamp = activeMarker.timeObservation.start;
-  omakasePlayer.video.seekToTime(inTimeStamp).subscribe(() => {});
+  omakasePlayer.video.seekToTime(inTimeStamp);
 }
 
 function setPlayheadToOutMarker() {
@@ -1826,7 +1775,7 @@ function setPlayheadToOutMarker() {
 
   console.debug('set Playhead to OUT Marker', activeMarker.id);
   let outTimeStamp = activeMarker.timeObservation.end;
-  omakasePlayer.video.seekToTime(outTimeStamp).subscribe(() => {});
+  omakasePlayer.video.seekToTime(outTimeStamp);
 }
 
 function addMarker() {
@@ -1921,21 +1870,23 @@ function toggleAudio() {
 
 function setActiveAudioTrack(audio) {
   if ('5.1' === audio) {
-    omakasePlayer.audio.setActiveAudioTrack('0');
-    router.updateMainTrack({
-      name: '5.1',
-      inputNumber: 6,
+    omakasePlayer.audio.setActiveAudioTrack('0').subscribe(() => {
+      router.updateMainTrack({
+        name: '5.1',
+        inputLabels: ['L', 'R', 'C', 'LFE', 'Ls', 'Rs']
+      })
     });
     let vuLabelSurround = domHelper.getById('vu-label-surround');
-    domHelper.setStyle(vuLabelSurround, {display: 'inline-block'});
+    domHelper.setStyle(vuLabelSurround, { display: 'inline-block' });
   } else {
-    omakasePlayer.audio.setActiveAudioTrack('1');
-    router.updateMainTrack({
-      name: '2.0',
-      inputNumber: 2,
+    omakasePlayer.audio.setActiveAudioTrack('1').subscribe(() => {
+      router.updateMainTrack({
+        name: '2.0',
+        inputLabels: ['L', 'R']
+      });
     });
     let vuLabelSurround = domHelper.getById('vu-label-surround');
-    domHelper.setStyle(vuLabelSurround, {display: 'none'});
+    domHelper.setStyle(vuLabelSurround, { display: 'none' });
   }
   currentAudio = audio;
   let _audio = domHelper.getById('audio');
@@ -1948,8 +1899,8 @@ function enableSafeZone(safeZone) {
 
   if (safeZone) {
     omakasePlayer.video.clearSafeZones();
-    domHelper.setStyle(safeZoneOn, {display: 'none'});
-    domHelper.setStyle(safeZoneoOff, {display: 'inline'});
+    domHelper.setStyle(safeZoneOn, { display: 'none' });
+    domHelper.setStyle(safeZoneoOff, { display: 'inline' });
   } else {
     omakasePlayer.video.addSafeZone({
       topRightBottomLeftPercent: [10, 10, 10, 10],
@@ -1957,8 +1908,8 @@ function enableSafeZone(safeZone) {
     omakasePlayer.video.addSafeZone({
       topRightBottomLeftPercent: [20, 20, 20, 20],
     });
-    domHelper.setStyle(safeZoneOn, {display: 'inline'});
-    domHelper.setStyle(safeZoneoOff, {display: 'none'});
+    domHelper.setStyle(safeZoneOn, { display: 'inline' });
+    domHelper.setStyle(safeZoneoOff, { display: 'none' });
   }
 }
 
@@ -2043,29 +1994,29 @@ function subscribeToComments(poiLane) {
 function subscribeToMeasurements(bitrateLane) {
   return bitrateLane.onVideoCueEvent$.subscribe((event) => {
     if (event.action === 'entry') {
-      omakasePlayer.alerts.warn(`Bitrate: ${event.cue.value}`, {autodismiss: true, duration: 2500});
+      omakasePlayer.alerts.warn(`Bitrate: ${event.cue.value}`, { autodismiss: true, duration: 2500 });
     }
   });
 }
 
 function reloadVideoAndTimeline(url) {
   let buttonReplay = domHelper.getById('buttonReplay');
-  domHelper.setStyle(buttonReplay, {display: 'none'});
+  domHelper.setStyle(buttonReplay, { display: 'none' });
 
   let buttonPause = domHelper.getById('buttonPause');
-  domHelper.setStyle(buttonPause, {display: 'none'});
+  domHelper.setStyle(buttonPause, { display: 'none' });
 
   let buttonPlay = domHelper.getById('buttonPlay');
-  domHelper.setStyle(buttonPlay, {display: 'inline'});
+  domHelper.setStyle(buttonPlay, { display: 'inline' });
 
   if (markerCount > maxMarkerCount) {
     let _addMarker = domHelper.create('span');
     domHelper.setProperty(_addMarker, 'id', 'addMarker');
-    domHelper.setStyle(_addMarker, {cursor: 'pointer'});
+    domHelper.setStyle(_addMarker, { cursor: 'pointer' });
 
     let img = domHelper.create('img');
     domHelper.setProperty(img, 'src', 'images/add.svg');
-    domHelper.setStyle(img, {height: '12px', paddingLeft: '15px'});
+    domHelper.setStyle(img, { height: '12px', paddingLeft: '15px' });
     domHelper.append(_addMarker, [img]);
 
     let _markersTitle = domHelper.querySelector('.markers-title');

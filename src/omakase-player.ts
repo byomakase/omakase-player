@@ -88,6 +88,16 @@ export interface OmakasePlayerConfig {
    *  Custom video player click handler
    */
   playerClickHandler?: () => void;
+
+  /**
+   *  Custom options for playback speed rate
+   */
+  playbackRateOptions?: number[];
+
+  /**
+   *  Watermark text or svg
+   */
+  watermark?: string;
 }
 
 const configDefault: OmakasePlayerConfig = {
@@ -143,6 +153,8 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
       thumbnailVttUrl: this._config.thumbnailVttUrl,
       thumbnailFn: this._config.thumbnailFn,
       playerClickHandler: this._config.playerClickHandler,
+      playbackRateOptions: this._config.playbackRateOptions,
+      watermark: this._config.watermark,
     });
 
     let createLocalVideoController = () => {

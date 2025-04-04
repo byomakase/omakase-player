@@ -60,11 +60,9 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
   protected readonly _vttAdapter: VttAdapter<SubtitlesVttFile> = new VttAdapter(SubtitlesVttFile);
 
   protected readonly _itemsMap: Map<number, SubtitlesLaneItem> = new Map<number, SubtitlesLaneItem>();
-  protected readonly _onSettleLayout$: Subject<void> = new Subject<void>();
 
   protected _itemProcessFn?: (item: SubtitlesLaneItem, index: number) => void;
 
-  protected _timecodedGroup?: Konva.Group;
   protected _timecodedEventCatcher?: Konva.Rect;
   protected _itemsGroup?: Konva.Group;
 
@@ -231,6 +229,43 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
       x: startTimeX,
       width: endTimeX - startTimeX,
     };
+  }
+
+  protected override startLoadingAnimation(): void {
+    this._loadingGroup = new Konva.Group({
+      width: this._timecodedGroup!.width(),
+      height: this._timecodedGroup!.height(),
+    });
+
+    this._timecodedGroup!.add(this._loadingGroup);
+    const rects: Konva.Rect[] = [];
+
+    const range = this._timeline!.getVisiblePositionRange();
+    for (let x = range.start; x <= range.end; x += 6) {
+      const height = this._timecodedGroup!.height() / 2.5;
+
+      const rect = KonvaFactory.createRect({
+        x,
+        y: this._timecodedGroup!.height() / 2 - height / 2,
+        width: 5,
+        height,
+        fill: this.resolveLoadingAnimationColor(),
+        opacity: 0,
+      });
+      this._loadingGroup!.add(rect);
+      rects.push(rect);
+    }
+
+    this._loadingAnimation = new Konva.Animation((frame) => {
+      rects.forEach((rect, index) => {
+        const frameTime = Math.round((frame?.time ?? 0) / 50);
+        const frameNumber = frameTime % 98 > 48 ? 48 - (frameTime % 49) : frameTime % 49;
+        const indexNumber = Math.floor(index / 7) % 2 ? 6 - (index % 7) : index % 7;
+        const opacity = Math.max(Math.min((frameNumber - indexNumber * 7) / 7, 1), 0);
+        rect.opacity(opacity);
+      });
+    });
+    this._loadingAnimation.start();
   }
 
   private createEntities() {
