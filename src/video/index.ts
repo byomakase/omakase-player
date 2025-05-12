@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-export {VideoController} from './video-controller';
+export {VideoController, PlaybackStateMachine} from './video-controller';
 export type {
   Video,
   VideoLoadOptions,
@@ -26,12 +26,18 @@ export type {
   OmpSidecarAudioState,
   OmpAudioState,
   OmpAudioRouterState,
-  AudioInputOutputNode,
   OmpAudioPeakProcessorState,
   OmpPeakProcessorDataMessage,
   OmpPeakProcessorDataPeaks,
   BufferedTimespan,
   VideoWindowPlaybackState,
+  OmpAudioNodeParamType,
+  OmpAudioNodeParamPropType,
+  TimecodeObject,
+  VideoProtocol,
+  OmpAudioNodeType,
+  OmpAudioRoutingConnection,
+  OmpAudioRoutingPath,
+  OmpAudioRoutingRoute,
 } from './model';
-export {PlaybackStateMachine} from './model';
 export type {VideoControllerApi} from './video-controller-api';

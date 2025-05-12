@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {BehaviorSubject, Subject} from 'rxjs';
 import {OmpAudioTrack} from '../types';
+import {OmpAudioEffectsGraphDef} from '../audio';
 
 export type VideoProtocol = 'hls' | 'native';
 
@@ -25,6 +25,7 @@ export interface Video {
   dropFrame: boolean;
   duration: number;
   totalFrames: number;
+  protocol: VideoProtocol;
 
   /**
    * Frame duration in seconds
@@ -80,131 +81,12 @@ export interface PlaybackState {
   ended: boolean;
 }
 
-export class PlaybackStateMachine {
-  public readonly onChange$: Subject<PlaybackState>;
-
-  private _state: PlaybackState = {
-    playing: false,
-    paused: true,
-    pausing: false,
-    waiting: false,
-    seeking: false,
-    buffering: false,
-    ended: false,
-  };
-
-  constructor() {
-    this.onChange$ = new BehaviorSubject(this._state);
-  }
-
-  private updateState(partialState: Partial<PlaybackState>) {
-    let newState = {
-      ...this._state,
-      ...partialState,
-    };
-    let isEqual = this.compare(this._state, newState) === 0;
-    this._state = newState;
-    if (!isEqual) {
-      this.onChange$.next(this._state);
-    }
-  }
-
-  private compare(o1: PlaybackState, o2: PlaybackState): number {
-    return o1.playing === o2.playing &&
-      o1.paused === o2.paused &&
-      o1.pausing === o2.pausing &&
-      o1.waiting === o2.waiting &&
-      o1.seeking === o2.seeking &&
-      o1.buffering === o2.buffering &&
-      o1.ended === o2.ended
-      ? 0
-      : -1;
-  }
-
-  get state(): PlaybackState {
-    return this._state;
-  }
-
-  setPlaying() {
-    this.updateState({
-      playing: true,
-      paused: false,
-      pausing: false,
-      waiting: false,
-      seeking: false,
-      buffering: false,
-      ended: false,
-    });
-  }
-
-  setPaused() {
-    this.updateState({
-      playing: false,
-      paused: true,
-      pausing: false,
-      waiting: false,
-      seeking: false,
-      buffering: false,
-      ended: false,
-    });
-  }
-
-  get pausing(): boolean {
-    return this._state.pausing;
-  }
-
-  setPausing() {
-    this.updateState({
-      pausing: true,
-    });
-  }
-
-  setEnded() {
-    this.updateState({
-      playing: false,
-      paused: true,
-      pausing: false,
-      waiting: false,
-      seeking: false,
-      buffering: false,
-      ended: true,
-    });
-  }
-
-  get waiting(): boolean {
-    return this._state.waiting;
-  }
-
-  set waiting(value: boolean) {
-    this.updateState({
-      waiting: value,
-    });
-  }
-
-  get seeking(): boolean {
-    return this._state.seeking;
-  }
-
-  set seeking(value: boolean) {
-    this.updateState({
-      seeking: value,
-      pausing: false,
-      ended: false,
-    });
-  }
-
-  get buffering(): boolean {
-    return this._state.buffering;
-  }
-
-  set buffering(value: boolean) {
-    this.updateState({
-      buffering: value,
-    });
-  }
-}
-
 export interface VideoLoadOptions {
+  /**
+   * Video frame rate
+   */
+  frameRate?: number | string;
+
   /**
    * Set video duration explicitly
    */
@@ -274,26 +156,6 @@ export interface VideoSafeZone {
 export type VideoWindowPlaybackState = 'detaching' | 'detached' | 'attaching' | 'attached';
 
 /**
- * Represents connected or disconnected {@link AudioNode} or input-output point
- */
-export interface AudioInputOutputNode {
-  /**
-   * Input
-   */
-  inputNumber: number;
-
-  /**
-   * Output
-   */
-  outputNumber: number;
-
-  /**
-   * Connected status, true = connected, false = not connected
-   */
-  connected: boolean;
-}
-
-/**
  * Audio peak processing strategy
  */
 export type AudioMeterStandard = 'peak-sample' | 'true-peak';
@@ -320,10 +182,19 @@ export interface OmpAudioState {
   numberOfChannels: number;
 }
 
+export interface OmpAudioInputSoloMuteState {
+  /**
+   * Audio router input state
+   */
+  audioRouterInputSoloMuteState: OmpAudioRouterInputSoloMuteState | undefined;
+}
+
 /**
  * Main audio state
  */
 export interface OmpMainAudioState extends OmpAudioState {}
+
+export interface OmpMainAudioInputSoloMuteState extends OmpAudioInputSoloMuteState {}
 
 /**
  * Sidecar audio state
@@ -338,6 +209,73 @@ export interface OmpSidecarAudioState extends OmpAudioState {
    * Number of channels from {@link AudioBuffer}.numberOfChannels From {@link AudioBuffer} in which sidecar audio is loaded
    */
   numberOfChannels: number;
+
+  /**
+   * Audio volume level
+   */
+  volume: number;
+
+  /**
+   * Is audio muted
+   */
+  muted: boolean;
+}
+
+export interface OmpSidecarAudioInputSoloMuteState extends OmpAudioInputSoloMuteState {
+  /**
+   * Sidecar audio track
+   */
+  audioTrack: OmpAudioTrack;
+}
+
+/**
+ * Describes routing path - channel splitter output and channel merger input
+ */
+export interface OmpAudioRoutingPath {
+  /**
+   * Input - Channel splitter output
+   */
+  input: number;
+
+  /**
+   * Output - Channel merger input
+   */
+  output: number;
+}
+
+/**
+ * Describes {@ OmpAudioRoutingPoint} connection status - connected or disconnected
+ */
+export interface OmpAudioRoutingConnection {
+  /**
+   * Routing path - channel splitter output and channel merger input
+   */
+  path: OmpAudioRoutingPath;
+
+  /**
+   * Connected status, true = connected, false = disconnected
+   */
+  connected: boolean;
+}
+
+/**
+ * Describes state on {@link OmpAudioRoutingPath}
+ */
+export interface OmpAudioRoutingRoute {
+  /**
+   * Routing path
+   */
+  path: OmpAudioRoutingPath;
+
+  /**
+   * Connection status
+   */
+  connection: OmpAudioRoutingConnection;
+
+  /**
+   * Audio graph definition
+   */
+  audioEffectsGraph: OmpAudioEffectsGraphDef | undefined;
 }
 
 /**
@@ -357,7 +295,14 @@ export interface OmpAudioRouterState {
   /**
    * Audio routing matrix
    */
-  audioInputOutputNodes: AudioInputOutputNode[][];
+  routingConnections: OmpAudioRoutingConnection[][];
+
+  /**
+   * Audio router initial/default connections
+   */
+  initialRoutingConnections: OmpAudioRoutingConnection[];
+
+  routingRoutes: OmpAudioRoutingRoute[];
 }
 
 /**
@@ -378,4 +323,57 @@ export interface OmpPeakProcessorDataMessage {
 export interface OmpPeakProcessorDataPeaks {
   type: 'peaks';
   peaks: number[];
+}
+
+export interface OmpAudioRouterInputSoloMuteState {
+  /**
+   * Audio router input number
+   */
+  inputNumber: number;
+
+  /**
+   * Flag that tells if audio router input is soloed
+   */
+  soloed: boolean;
+
+  /**
+   * Flag that tells if audio router input is muted
+   */
+  muted: boolean;
+
+  /**
+   * Audio router soloed input connections
+   */
+  inputSoloedConnections: OmpAudioRoutingConnection[];
+
+  /**
+   * Audio router muted input connections
+   */
+  inputMutedConnections: OmpAudioRoutingConnection[];
+
+  /**
+   * Audio router connections before input solo action (current input connections are not included)
+   */
+  unsoloConnections: OmpAudioRoutingConnection[];
+}
+
+/**
+ * Type of supported wrapped Web Audio API {@link AudioNode}.
+ */
+export type OmpAudioNodeType = 'gain' | 'delay';
+
+/**
+ * Wrapper for {@link AudioParam} attributes
+ */
+export interface OmpAudioNodeParamPropType {
+  name: string;
+  value: any;
+}
+
+/**
+ * Wrapper for {@link AudioParam}
+ */
+export interface OmpAudioNodeParamType {
+  name: string;
+  props: OmpAudioNodeParamPropType[];
 }

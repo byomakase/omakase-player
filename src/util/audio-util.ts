@@ -15,93 +15,88 @@
  */
 
 import {catchError, from, map, mergeMap, Observable, of, toArray} from 'rxjs';
-import {AudioInputOutputNode} from '../video/model';
 import {httpGet} from '../http';
 import {AuthenticationData} from '../authentication/model';
 import {AuthConfig} from '../auth/auth-config';
+import {OmpAudioRoutingConnection} from '../video';
 
 export class AudioUtil {
-  static resolveDefaultAudioRouting(inputsNumber: number, outputsNumber: number): AudioInputOutputNode[] {
+  static resolveDefaultAudioRouting(inputsNumber: number, outputsNumber: number): OmpAudioRoutingConnection[] {
     if (inputsNumber && outputsNumber) {
       if ((inputsNumber === 2 && outputsNumber === 2) || (inputsNumber === 2 && outputsNumber === 6) || (inputsNumber === 6 && outputsNumber === 6)) {
-        return [...Array(inputsNumber).keys()].map((p) => ({
-          inputNumber: p,
-          outputNumber: p,
-          connected: true,
-        }));
+        return [...Array(inputsNumber).keys()].flatMap((input) => {
+          return [...Array(outputsNumber).keys()].map((output) => ({
+            path: {
+              input,
+              output,
+            },
+            connected: input === output,
+          }));
+        });
       } else if (inputsNumber === 6 && outputsNumber === 8) {
-        return [...Array(inputsNumber).keys()]
-          .map((p) => {
-            return {
-              inputNumber: p,
-              outputNumber: p,
-            };
-          })
-          .concat([
-            {
-              inputNumber: 4,
-              outputNumber: 6,
+        return [...Array(inputsNumber).keys()].flatMap((input) => {
+          return [...Array(outputsNumber).keys()].map((output) => ({
+            path: {
+              input,
+              output,
             },
-            {
-              inputNumber: 5,
-              outputNumber: 7,
+            connected: input === output || (input === 4 && output === 6) || (input === 5 && output === 7),
+          }));
+        });
+      } else if (inputsNumber === 6 && outputsNumber === 2) {
+        return [...Array(inputsNumber).keys()].flatMap((input) => {
+          return [...Array(outputsNumber).keys()].map((output) => ({
+            path: {
+              input,
+              output,
             },
-          ])
-          .map((p) => ({
-            ...p,
+            connected: input === 2 || input === output || input - 4 === output,
+          }));
+        });
+      } else if (outputsNumber === 1 || (inputsNumber === 1 && outputsNumber <= 2)) {
+        return [...Array(inputsNumber).keys()].flatMap((input) => {
+          return [...Array(outputsNumber).keys()].map((output) => ({
+            path: {
+              input,
+              output,
+            },
             connected: true,
           }));
-      } else if (inputsNumber === 6 && outputsNumber === 2) {
-        return [
-          {
-            inputNumber: 0,
-            outputNumber: 0,
-          },
-          {
-            inputNumber: 1,
-            outputNumber: 1,
-          },
-          {
-            inputNumber: 2,
-            outputNumber: 0,
-          },
-          {
-            inputNumber: 2,
-            outputNumber: 1,
-          },
-          {
-            inputNumber: 4,
-            outputNumber: 0,
-          },
-          {
-            inputNumber: 5,
-            outputNumber: 1,
-          },
-        ].map((p) => ({
-          ...p,
-          connected: true,
-        }));
-      } else if (outputsNumber === 1) {
-        return [...Array(inputsNumber).keys()].map((p) => ({
-          inputNumber: p,
-          outputNumber: 0,
-          connected: true,
-        }));
-      } else if (inputsNumber === 1 && outputsNumber <= 2) {
-        return [...Array(outputsNumber).keys()].map((p) => ({
-          inputNumber: 0,
-          outputNumber: p,
-          connected: true,
-        }));
+        });
       } else if (inputsNumber === 1 && outputsNumber >= 6) {
-        return [0, 1, 2, 4, 5].map((p) => ({
-          inputNumber: 0,
-          outputNumber: p,
+        return [0, 1, 2, 4, 5].map((output) => ({
+          path: {
+            input: 0,
+            output,
+          },
           connected: true,
         }));
       }
     }
+
     return [];
+  }
+
+  /**
+   * Used for solo or unmute action if initial connections are disconnected
+   * @param inputNumber
+   * @param inputsNumber
+   * @param outputsNumber
+   */
+  static resolveDefaultInputAudioRouting(inputNumber: number, inputsNumber: number, outputsNumber: number): OmpAudioRoutingConnection[] {
+    let defaultInputAudioRouting = this.resolveDefaultAudioRouting(inputsNumber, outputsNumber).filter((p) => p.path.input === inputNumber);
+
+    if (inputNumber === 3 && inputsNumber === 6 && outputsNumber === 2) {
+      return [...Array(outputsNumber).keys()].map((outputNumber) => ({
+        path: {
+          input: inputNumber,
+          output: outputNumber,
+        },
+        connected: true,
+      }));
+    } else {
+      return defaultInputAudioRouting;
+    }
   }
 
   static fetchAndMergeAudioFiles(urls: string[], authentication?: AuthenticationData): Observable<ArrayBuffer> {

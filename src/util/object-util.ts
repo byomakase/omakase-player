@@ -17,3 +17,19 @@
 export function isNullOrUndefined(value: any) {
   return value === null || value === void 0;
 }
+
+export function hasFunction(obj: any, functionName: string): boolean {
+  return functionName in obj && typeof obj[functionName] === 'function';
+}
+
+export function hasProperty(obj: any, prop: string): boolean {
+  return prop in obj;
+}
+
+export function callFunctionByName<T extends object>(obj: T, fnName: keyof T, ...args: any[]): any {
+  const fn = obj[fnName];
+  if (typeof fn === 'function') {
+    return fn.apply(obj, args);
+  }
+  throw new Error(`Function '${String(fnName)}' does not exist or is not callable.`);
+}

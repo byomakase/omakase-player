@@ -22,7 +22,7 @@ import {OnMeasurementsChange} from '../common';
 import {konvaUnlistener} from '../util/konva-util';
 import {WindowUtil} from '../util/window-util';
 import {ImageUtil} from '../util/image-util';
-import {KonvaFactory} from '../factory/konva-factory';
+import {KonvaFactory} from '../konva/konva-factory';
 import {isNullOrUndefined} from '../util/object-util';
 import {nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
 

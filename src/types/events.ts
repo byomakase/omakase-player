@@ -20,7 +20,19 @@ import {OmakaseChartCue} from './chart';
 import {MarkerApi} from '../api';
 import {OmakaseTextTrackCue, OmpAudioTrack, SubtitlesVttTrack} from './track';
 import {Video, VideoLoadOptions} from '../video';
-import {BufferedTimespan, OmpAudioRouterState, OmpMainAudioState, OmpPeakProcessorDataMessage, OmpPeakProcessorDataPeaks, OmpSidecarAudioState, VideoSafeZone, VideoWindowPlaybackState} from '../video/model';
+import {
+  BufferedTimespan,
+  OmpAudioRouterInputSoloMuteState,
+  OmpAudioRouterState,
+  OmpMainAudioInputSoloMuteState,
+  OmpMainAudioState,
+  OmpPeakProcessorDataMessage,
+  OmpPeakProcessorDataPeaks,
+  OmpSidecarAudioInputSoloMuteState,
+  OmpSidecarAudioState,
+  VideoSafeZone,
+  VideoWindowPlaybackState,
+} from '../video/model';
 import {Events as HlsEvents} from 'hls.js';
 
 export interface OmpEvent {}
@@ -63,7 +75,7 @@ export interface VideoEvent extends OmpEvent {}
 
 export interface VideoLoadingEvent extends VideoEvent {
   sourceUrl: string;
-  frameRate: number;
+  frameRate?: number;
   options?: VideoLoadOptions;
   isAttaching?: boolean;
   isDetaching?: boolean;
@@ -148,18 +160,6 @@ export interface VideoBufferingEvent extends VideoEvent {
   bufferedTimespans: BufferedTimespan[];
 }
 
-export interface VideoVolumeEvent extends VideoEvent {
-  /**
-   * Volume
-   */
-  volume: number;
-
-  /**
-   * Muted
-   */
-  muted: boolean;
-}
-
 export interface VideoPlaybackRateEvent extends VideoEvent {
   /**
    * Playback rate
@@ -201,6 +201,23 @@ export interface VideoErrorEvent extends VideoEvent {
 
 export interface AudioEvent extends OmpEvent {}
 
+export interface VolumeChangeEvent extends AudioEvent {
+  /**
+   * Volume
+   */
+  volume: number;
+
+  /**
+   * Muted
+   */
+  muted: boolean;
+
+  /**
+   * Previous volume value
+   */
+  oldVolume: number;
+}
+
 export interface AudioLoadedEvent extends AudioEvent {
   /**
    * Audio tracks
@@ -232,6 +249,14 @@ export interface OmpAudioRouterChangeEvent extends AudioEvent {
 
 export interface AudioPeakProcessorMessageEvent extends AudioEvent {
   data: OmpPeakProcessorDataMessage | OmpPeakProcessorDataPeaks;
+}
+
+export interface OmpAudioRouterInputSoloMuteEvent extends AudioEvent {
+  audioRouterInputSoloMuteState: OmpAudioRouterInputSoloMuteState;
+}
+
+export interface MainAudioInputSoloMuteEvent extends MainAudioEvent {
+  mainAudioInputSoloMuteState: OmpMainAudioInputSoloMuteState;
 }
 
 export interface SidecarAudioEvent extends AudioEvent {}
@@ -272,8 +297,27 @@ export interface SidecarAudioChangeEvent extends SidecarAudioEvent {
   sidecarAudioStates: OmpSidecarAudioState[];
 }
 
+export interface SidecarAudioVolumeChangeEvent extends SidecarAudioEvent, VolumeChangeEvent {
+  /**
+   * Sidecar audio state
+   */
+  sidecarAudioState: OmpSidecarAudioState;
+}
+
 export interface SidecarAudioPeakProcessorMessageEvent extends AudioPeakProcessorMessageEvent {
   sidecarAudioTrackId: string; // keep object as light as possible
+}
+
+export interface SidecarAudioInputSoloMuteEvent extends SidecarAudioEvent {
+  /**
+   * Changed sidecar audio input state
+   */
+  changedSidecarAudioInputSoloMuteState: OmpSidecarAudioInputSoloMuteState;
+
+  /**
+   * All available Sidecar audio input states
+   */
+  sidecarAudioInputSoloMuteStates: OmpSidecarAudioInputSoloMuteState[];
 }
 
 // endregion

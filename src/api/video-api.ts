@@ -33,12 +33,12 @@ import {
   VideoSeekedEvent,
   VideoSeekingEvent,
   VideoTimeChangeEvent,
-  VideoVolumeEvent,
+  VolumeChangeEvent,
   VideoWindowPlaybackStateChangeEvent,
 } from '../types';
 import Hls from 'hls.js';
 import {Video, VideoLoadOptions} from '../video';
-import {VideoSafeZone, VideoWindowPlaybackState} from '../video/model';
+import {VideoSafeZone, VideoWindowPlaybackState} from '../video';
 
 export interface VideoApi extends Api {
   /**
@@ -106,7 +106,7 @@ export interface VideoApi extends Api {
    *  Fires on volume change
    *  @readonly
    */
-  onVolumeChange$: Observable<VideoVolumeEvent>;
+  onVolumeChange$: Observable<VolumeChangeEvent>;
 
   /**
    * Fires on playback rate change
@@ -141,18 +141,16 @@ export interface VideoApi extends Api {
    * Loads new video
    *
    * @param sourceUrl Video manifest URL
-   * @param frameRate Video frame rate
    */
-  loadVideo(sourceUrl: string, frameRate: number | string): Observable<Video>;
+  loadVideo(sourceUrl: string): Observable<Video>;
 
   /**
    * Loads new video
    *
    * @param sourceUrl Video manifest URL
-   * @param frameRate Video frame rate
    * @param options
    */
-  loadVideo(sourceUrl: string, frameRate: number | string, options?: VideoLoadOptions): Observable<Video>;
+  loadVideo(sourceUrl: string, options?: VideoLoadOptions): Observable<Video>;
 
   /**
    * Reloads video
@@ -206,7 +204,7 @@ export interface VideoApi extends Api {
   setPlaybackRate(playbackRate: number): Observable<void>;
 
   /**
-   * @returns current volume level
+   * @returns volume level
    */
   getVolume(): number;
 

@@ -137,15 +137,11 @@ export class OmakaseTimecodeEdit extends HTMLElement {
       return false;
     }
 
-    console.log(this.timecode);
-
     const currentFrame = this.currentFrame;
 
     if (currentFrame === undefined) {
       return false;
     }
-
-    console.log(this.timecode, 'after check');
 
     const currentFrameObject = TimecodeUtil.parseTimecodeToTimecodeObject(this.timecode);
 

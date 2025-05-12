@@ -15,5 +15,5 @@
  */
 
 export function isNonNullable<T>(value: T | null | undefined): value is NonNullable<T> {
-  return value != null; // Excludes both null and undefined
+  return value !== void 0 && value !== null; // Excludes both null and undefined
 }

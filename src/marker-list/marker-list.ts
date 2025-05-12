@@ -24,7 +24,19 @@ import {map, merge, Subject, takeUntil} from 'rxjs';
 import {VttAdapter} from '../common/vtt-adapter';
 import {VttLoadOptions} from '../api/vtt-aware-api';
 import {ColorUtil} from '../util/color-util';
-import {Destroyable, MarkerCreateEvent, MarkerDeleteEvent, MarkerInitEvent, MarkerListActionEvent, MarkerListClickEvent, MarkerSelectedEvent, MarkerUpdateEvent, MarkerVttCue, MomentObservation, PeriodObservation} from '../types';
+import {
+  Destroyable,
+  MarkerCreateEvent,
+  MarkerDeleteEvent,
+  MarkerInitEvent,
+  MarkerListActionEvent,
+  MarkerListClickEvent,
+  MarkerSelectedEvent,
+  MarkerUpdateEvent,
+  MarkerVttCue,
+  MomentObservation,
+  PeriodObservation,
+} from '../types';
 import {nullifier} from '../util/destroy-util';
 import {MarkerListItem} from './marker-list-item';
 import {MarkerListController} from './marker-list-controller';
@@ -38,6 +50,7 @@ export interface MarkerListConfig {
   loadingHTMLElementId?: string;
   styleUrl?: string | string[];
   thumbnailVttFile?: ThumbnailVttFile;
+  thumbnailVttUrl?: string;
   vttUrl?: string;
   vttLoadOptions?: VttLoadOptions;
   vttMarkerCreateFn?: (marker: MarkerVttCue, index: number) => MarkerListItem;
@@ -69,7 +82,9 @@ export class MarkerList implements Destroyable, MarkerListApi {
   private _config: MarkerListConfig;
   private _sources: MarkerAwareApi[];
   private _thumbnailVttFile?: ThumbnailVttFile;
-  private _vttAdapter = new VttAdapter(MarkerVttFile);
+  private _thumbnailVttUrl?: string;
+  private _thumbnailVttAdapter = new VttAdapter(ThumbnailVttFile);
+  private _markerVttAdapter = new VttAdapter(MarkerVttFile);
   private _lastActiveMarker?: MarkerListItem;
   private readonly _destroyed$ = new Subject<void>();
 
@@ -88,7 +103,11 @@ export class MarkerList implements Destroyable, MarkerListApi {
       marker.source.removeMarker(marker.id);
       this.onMarkerDelete$.next({marker});
     });
-    this._thumbnailVttFile = this._config.thumbnailVttFile;
+    if (this._config.thumbnailVttFile) {
+      this.thumbnailVttFile = this._config.thumbnailVttFile;
+    } else if (this._config.thumbnailVttUrl) {
+      this.thumbnailVttUrl = this._config.thumbnailVttUrl;
+    }
     this._markerListComponent.onClick$.pipe(takeUntil(this._destroyed$)).subscribe((marker) => {
       this.onMarkerClick$.next({marker});
     });
@@ -115,7 +134,7 @@ export class MarkerList implements Destroyable, MarkerListApi {
     }
     if (this.config.vttUrl) {
       this._markerListComponent.isLoading = true;
-      this._vttAdapter
+      this._markerVttAdapter
         .loadVtt(this.config.vttUrl, {...this.config.vttLoadOptions})
         .pipe(takeUntil(this._destroyed$))
         .subscribe((vttFile) => {
@@ -155,6 +174,22 @@ export class MarkerList implements Destroyable, MarkerListApi {
           thumbnail: marker.start !== undefined ? thumbnailVttFile?.findNearestCue(marker.start)?.url : undefined,
         });
       }
+    }
+  }
+
+  get thumbnailVttUrl(): string | undefined {
+    return this._thumbnailVttUrl;
+  }
+
+  set thumbnailVttUrl(thumbnailVttUrl: string | undefined) {
+    this._thumbnailVttUrl = thumbnailVttUrl;
+    if (this._thumbnailVttUrl) {
+      this._thumbnailVttAdapter
+        .loadVtt(this._thumbnailVttUrl, {...this.config.vttLoadOptions})
+        .pipe(takeUntil(this._destroyed$))
+        .subscribe((thumbnailVttFile) => {
+          this.thumbnailVttFile = thumbnailVttFile;
+        });
     }
   }
 

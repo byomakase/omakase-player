@@ -70,8 +70,8 @@ detectBrowser();
 
 window.addEventListener('load', () => {
   if (browserIsSafari) {
-    domHelper.setStyle(domHelper.getById('tab-rvc'), { display: 'none' });
-    domHelper.setStyle(domHelper.getById('tab-separator'), { display: 'none' });
+    domHelper.setStyle(domHelper.getById('tab-rvc'), {display: 'none'});
+    domHelper.setStyle(domHelper.getById('tab-separator'), {display: 'none'});
   }
 
   createOmakasePlayer();
@@ -170,7 +170,7 @@ function loadOmakaseVideo(url, frameRate = 30) {
 
     throw new Error('Video url is required!');
   } else {
-    omakasePlayer.loadVideo(url, frameRate).subscribe();
+    omakasePlayer.loadVideo(url, {frameRate}).subscribe();
   }
 }
 
@@ -488,7 +488,7 @@ function initializeOmakaseTimeline() {
           emptyHTMLElementId: 'marker-empty',
           source: [inAndOutMarkersLane],
           styleUrl: './css/player.css',
-          timeEditable: true
+          timeEditable: true,
         })
         .subscribe((markerList) => {
           omakaseMarkerList = markerList;
@@ -497,13 +497,13 @@ function initializeOmakaseTimeline() {
           }
           markerList.toggleMarker(marker.id);
           activeMarker = marker;
-          markerList.onMarkerClick$.subscribe(({ marker }) => {
+          markerList.onMarkerClick$.subscribe(({marker}) => {
             if (marker.id !== markerList.getSelectedMarker()?.id) {
               markerList.toggleMarker(marker.id);
               activeMarker = markerList.getSelectedMarker();
             }
           });
-          markerList.onMarkerSelected$.subscribe(({ marker }) => {
+          markerList.onMarkerSelected$.subscribe(({marker}) => {
             if (marker) {
               activeMarkerIndex = markerList.getMarkers().findIndex((m) => m.id === marker.id);
             }
@@ -756,15 +756,15 @@ function initializeOmakaseTimeline() {
     }
 
     if (lineChartLaneForMultipleMeasurements) {
-      lineChartLaneForMultipleMeasurements.style = { marginBottom: 1 };
+      lineChartLaneForMultipleMeasurements.style = {marginBottom: 1};
     } else if (stereoRmsBarChartLane) {
-      stereoRmsBarChartLane.style = { marginBottom: 1 };
+      stereoRmsBarChartLane.style = {marginBottom: 1};
     } else if (stereoAudioTrackLaneL) {
-      stereoAudioTrackLaneL.style = { marginBottom: 1 };
+      stereoAudioTrackLaneL.style = {marginBottom: 1};
     } else if (stereoAudioTrackLaneR) {
-      stereoAudioTrackLaneR.style = { marginBottom: 1 };
+      stereoAudioTrackLaneR.style = {marginBottom: 1};
     } else {
-      stereoAudioTrackLane.style = { marginBottom: 1 };
+      stereoAudioTrackLane.style = {marginBottom: 1};
     }
 
     let textLabel20 = new omakase.TextLabel({
@@ -1277,15 +1277,15 @@ function createMLCAndRVCSwitcher() {
   const rvcTab = domHelper.getById('tab-rvc');
 
   mlcTab.onclick = () => {
-    domHelper.setStyle(RVC, { display: 'none' });
-    domHelper.setStyle(MLC, { display: 'inline-block' });
+    domHelper.setStyle(RVC, {display: 'none'});
+    domHelper.setStyle(MLC, {display: 'inline-block'});
     mlcTab.classList.add('active');
     rvcTab.classList.remove('active');
   };
 
   rvcTab.onclick = () => {
-    domHelper.setStyle(MLC, { display: 'none' });
-    domHelper.setStyle(RVC, { display: 'inline-block' });
+    domHelper.setStyle(MLC, {display: 'none'});
+    domHelper.setStyle(RVC, {display: 'inline-block'});
     rvcTab.classList.add('active');
     mlcTab.classList.remove('active');
   };
@@ -1305,32 +1305,32 @@ function initializePlayerEventListeners() {
 
   omakasePlayer.video.onSeeked$.subscribe((event) => {
     let buttonReplay = domHelper.getById('buttonReplay');
-    domHelper.setStyle(buttonReplay, { display: 'none' });
+    domHelper.setStyle(buttonReplay, {display: 'none'});
 
     if (omakasePlayer.video.isPlaying()) {
       let buttonPause = domHelper.getById('buttonPause');
-      domHelper.setStyle(buttonPause, { display: 'inline' });
+      domHelper.setStyle(buttonPause, {display: 'inline'});
 
       let buttonPlay = domHelper.getById('buttonPlay');
-      domHelper.setStyle(buttonPlay, { display: 'none' });
+      domHelper.setStyle(buttonPlay, {display: 'none'});
     } else {
       let buttonPause = domHelper.getById('buttonPause');
-      domHelper.setStyle(buttonPause, { display: 'none' });
+      domHelper.setStyle(buttonPause, {display: 'none'});
 
       let buttonPlay = domHelper.getById('buttonPlay');
-      domHelper.setStyle(buttonPlay, { display: 'inline' });
+      domHelper.setStyle(buttonPlay, {display: 'inline'});
     }
   });
 
   omakasePlayer.video.onEnded$.subscribe((event) => {
     let buttonReplay = domHelper.getById('buttonReplay');
-    domHelper.setStyle(buttonReplay, { display: 'inline' });
+    domHelper.setStyle(buttonReplay, {display: 'inline'});
 
     let buttonPause = domHelper.getById('buttonPause');
-    domHelper.setStyle(buttonPause, { display: 'none' });
+    domHelper.setStyle(buttonPause, {display: 'none'});
 
     let buttonPlay = domHelper.getById('buttonPlay');
-    domHelper.setStyle(buttonPlay, { display: 'none' });
+    domHelper.setStyle(buttonPlay, {display: 'none'});
   });
 
   omakasePlayer.video.onVideoLoaded$.subscribe((event) => {
@@ -1342,24 +1342,24 @@ function initializePlayerEventListeners() {
 
     omakasePlayer.video.onPlay$.subscribe(() => {
       let buttonReplay = domHelper.getById('buttonReplay');
-      domHelper.setStyle(buttonReplay, { display: 'none' });
+      domHelper.setStyle(buttonReplay, {display: 'none'});
 
       let buttonPause = domHelper.getById('buttonPause');
-      domHelper.setStyle(buttonPause, { display: 'inline' });
+      domHelper.setStyle(buttonPause, {display: 'inline'});
 
       let buttonPlay = domHelper.getById('buttonPlay');
-      domHelper.setStyle(buttonPlay, { display: 'none' });
+      domHelper.setStyle(buttonPlay, {display: 'none'});
     });
 
     omakasePlayer.video.onPause$.subscribe(() => {
       let buttonReplay = domHelper.getById('buttonReplay');
-      domHelper.setStyle(buttonReplay, { display: 'none' });
+      domHelper.setStyle(buttonReplay, {display: 'none'});
 
       let buttonPause = domHelper.getById('buttonPause');
-      domHelper.setStyle(buttonPause, { display: 'none' });
+      domHelper.setStyle(buttonPause, {display: 'none'});
 
       let buttonPlay = domHelper.getById('buttonPlay');
-      domHelper.setStyle(buttonPlay, { display: 'inline' });
+      domHelper.setStyle(buttonPlay, {display: 'inline'});
     });
   });
 }
@@ -1391,10 +1391,8 @@ function initializePlayerControlButtons() {
           frame = frame - 10;
         }
         omakasePlayer.video.seekToFrame(frame);
-      }
+      },
     });
-
-
   };
 
   let buttonBack = domHelper.getById('back');
@@ -1402,9 +1400,8 @@ function initializePlayerControlButtons() {
     omakasePlayer.video.pause().subscribe({
       next: () => {
         omakasePlayer.video.seekPreviousFrame();
-      }
+      },
     });
-
   };
 
   let buttonFfForward = domHelper.getById('ff-forward');
@@ -1418,7 +1415,7 @@ function initializePlayerControlButtons() {
           frame = frame + 10;
         }
         omakasePlayer.video.seekToFrame(frame);
-      }
+      },
     });
   };
 
@@ -1433,7 +1430,7 @@ function initializePlayerControlButtons() {
           frame = frame + 1;
         }
         omakasePlayer.video.seekToFrame(frame);
-      }
+      },
     });
   };
 
@@ -1448,11 +1445,11 @@ function initializePlayerControlButtons() {
   let muted = false;
   buttonMute.onclick = function () {
     if (muted) {
-      domHelper.setStyle(buttonMute, { opacity: '1' });
+      domHelper.setStyle(buttonMute, {opacity: '1'});
       omakasePlayer.video.unmute();
       muted = false;
     } else {
-      domHelper.setStyle(buttonMute, { opacity: '0.5' });
+      domHelper.setStyle(buttonMute, {opacity: '0.5'});
       omakasePlayer.video.mute();
       muted = true;
     }
@@ -1468,10 +1465,10 @@ function initializePlayerControlButtons() {
     let activeTrack = omakasePlayer.subtitles.getActiveTrack();
     if (activeTrack.hidden) {
       omakasePlayer.subtitles.showActiveTrack();
-      domHelper.setStyle(buttonSub, { opacity: '1' });
+      domHelper.setStyle(buttonSub, {opacity: '1'});
     } else {
       omakasePlayer.subtitles.hideActiveTrack();
-      domHelper.setStyle(buttonSub, { opacity: '0.5' });
+      domHelper.setStyle(buttonSub, {opacity: '0.5'});
     }
   };
   let buttonCaption = domHelper.getById('caption');
@@ -1542,9 +1539,9 @@ function initializePlayerControlButtons() {
     };
   } else {
     let detachPIP = domHelper.getById('detach-pip');
-    domHelper.setStyle(detachPIP, { display: 'none' });
+    domHelper.setStyle(detachPIP, {display: 'none'});
     let attachPIP = domHelper.getById('attach-pip');
-    domHelper.setStyle(attachPIP, { display: 'none' });
+    domHelper.setStyle(attachPIP, {display: 'none'});
   }
 
   let buttonFullscreen = domHelper.getById('full-screen');
@@ -1557,8 +1554,8 @@ function togglePIP(isActive) {
   let detachPIP = domHelper.getById('detach-pip');
   let attachPIP = domHelper.getById('attach-pip');
 
-  domHelper.setStyle(detachPIP, { display: isActive ? 'none' : 'inline' });
-  domHelper.setStyle(attachPIP, { display: isActive ? 'inline' : 'none' });
+  domHelper.setStyle(detachPIP, {display: isActive ? 'none' : 'inline'});
+  domHelper.setStyle(attachPIP, {display: isActive ? 'inline' : 'none'});
 }
 
 function uninitializeVuMeter() {
@@ -1671,7 +1668,7 @@ function seekPreviousFrame() {
   omakasePlayer.video.pause().subscribe({
     next: () => {
       omakasePlayer.video.seekPreviousFrame();
-    }
+    },
   });
 }
 
@@ -1685,9 +1682,8 @@ function seekNextFrame() {
         frame = frame + 1;
       }
       omakasePlayer.video.seekToFrame(frame);
-    }
-  })
-
+    },
+  });
 }
 
 function navigateBackwardsInSeconds(numOfSecs) {
@@ -1704,14 +1700,13 @@ function navigateBackwardsInSeconds(numOfSecs) {
         frame = frame - framesToMove;
       }
       omakasePlayer.video.seekToFrame(frame);
-    }
-  })
+    },
+  });
 }
 
 function navigateForwardsInSeconds(numOfSecs) {
   omakasePlayer.video.pause().subscribe({
     next: () => {
-
       let frameRate = omakasePlayer.video.getFrameRate();
       let frame = omakasePlayer.video.getCurrentFrame();
       let totalFrames = omakasePlayer.video.getVideo().totalFrames;
@@ -1724,8 +1719,8 @@ function navigateForwardsInSeconds(numOfSecs) {
         frame = frame + framesToMove;
       }
       omakasePlayer.video.seekToFrame(frame);
-    }
-  })
+    },
+  });
 }
 
 function setInMarkerToPlayhead() {
@@ -1739,7 +1734,7 @@ function setInMarkerToPlayhead() {
   let timeObservation = activeMarker.timeObservation;
   if (playhead <= timeObservation.end) {
     timeObservation.start = playhead;
-    omakaseMarkerList.updateMarker(activeMarker.id, { timeObservation });
+    omakaseMarkerList.updateMarker(activeMarker.id, {timeObservation});
   }
 }
 
@@ -1754,7 +1749,7 @@ function setOutMarkertoPlayhead() {
   let timeObservation = activeMarker.timeObservation;
   if (timeObservation.start <= playhead) {
     timeObservation.end = playhead;
-    omakaseMarkerList.updateMarker(activeMarker.id, { timeObservation });
+    omakaseMarkerList.updateMarker(activeMarker.id, {timeObservation});
   }
 }
 
@@ -1873,20 +1868,20 @@ function setActiveAudioTrack(audio) {
     omakasePlayer.audio.setActiveAudioTrack('0').subscribe(() => {
       router.updateMainTrack({
         name: '5.1',
-        inputLabels: ['L', 'R', 'C', 'LFE', 'Ls', 'Rs']
-      })
+        inputLabels: ['L', 'R', 'C', 'LFE', 'Ls', 'Rs'],
+      });
     });
     let vuLabelSurround = domHelper.getById('vu-label-surround');
-    domHelper.setStyle(vuLabelSurround, { display: 'inline-block' });
+    domHelper.setStyle(vuLabelSurround, {display: 'inline-block'});
   } else {
     omakasePlayer.audio.setActiveAudioTrack('1').subscribe(() => {
       router.updateMainTrack({
         name: '2.0',
-        inputLabels: ['L', 'R']
+        inputLabels: ['L', 'R'],
       });
     });
     let vuLabelSurround = domHelper.getById('vu-label-surround');
-    domHelper.setStyle(vuLabelSurround, { display: 'none' });
+    domHelper.setStyle(vuLabelSurround, {display: 'none'});
   }
   currentAudio = audio;
   let _audio = domHelper.getById('audio');
@@ -1899,8 +1894,8 @@ function enableSafeZone(safeZone) {
 
   if (safeZone) {
     omakasePlayer.video.clearSafeZones();
-    domHelper.setStyle(safeZoneOn, { display: 'none' });
-    domHelper.setStyle(safeZoneoOff, { display: 'inline' });
+    domHelper.setStyle(safeZoneOn, {display: 'none'});
+    domHelper.setStyle(safeZoneoOff, {display: 'inline'});
   } else {
     omakasePlayer.video.addSafeZone({
       topRightBottomLeftPercent: [10, 10, 10, 10],
@@ -1908,8 +1903,8 @@ function enableSafeZone(safeZone) {
     omakasePlayer.video.addSafeZone({
       topRightBottomLeftPercent: [20, 20, 20, 20],
     });
-    domHelper.setStyle(safeZoneOn, { display: 'inline' });
-    domHelper.setStyle(safeZoneoOff, { display: 'none' });
+    domHelper.setStyle(safeZoneOn, {display: 'inline'});
+    domHelper.setStyle(safeZoneoOff, {display: 'none'});
   }
 }
 
@@ -1994,29 +1989,29 @@ function subscribeToComments(poiLane) {
 function subscribeToMeasurements(bitrateLane) {
   return bitrateLane.onVideoCueEvent$.subscribe((event) => {
     if (event.action === 'entry') {
-      omakasePlayer.alerts.warn(`Bitrate: ${event.cue.value}`, { autodismiss: true, duration: 2500 });
+      omakasePlayer.alerts.warn(`Bitrate: ${event.cue.value}`, {autodismiss: true, duration: 2500});
     }
   });
 }
 
 function reloadVideoAndTimeline(url) {
   let buttonReplay = domHelper.getById('buttonReplay');
-  domHelper.setStyle(buttonReplay, { display: 'none' });
+  domHelper.setStyle(buttonReplay, {display: 'none'});
 
   let buttonPause = domHelper.getById('buttonPause');
-  domHelper.setStyle(buttonPause, { display: 'none' });
+  domHelper.setStyle(buttonPause, {display: 'none'});
 
   let buttonPlay = domHelper.getById('buttonPlay');
-  domHelper.setStyle(buttonPlay, { display: 'inline' });
+  domHelper.setStyle(buttonPlay, {display: 'inline'});
 
   if (markerCount > maxMarkerCount) {
     let _addMarker = domHelper.create('span');
     domHelper.setProperty(_addMarker, 'id', 'addMarker');
-    domHelper.setStyle(_addMarker, { cursor: 'pointer' });
+    domHelper.setStyle(_addMarker, {cursor: 'pointer'});
 
     let img = domHelper.create('img');
     domHelper.setProperty(img, 'src', 'images/add.svg');
-    domHelper.setStyle(img, { height: '12px', paddingLeft: '15px' });
+    domHelper.setStyle(img, {height: '12px', paddingLeft: '15px'});
     domHelper.append(_addMarker, [img]);
 
     let _markersTitle = domHelper.querySelector('.markers-title');

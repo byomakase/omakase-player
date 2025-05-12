@@ -17,18 +17,7 @@
 import {first, forkJoin, from, fromEvent, map, Observable, Subject, takeUntil} from 'rxjs';
 import {Video, VideoLoadOptions} from './model';
 import {BaseVideoLoader} from './video-loader';
-import Hls, {
-  AudioTrackSwitchingData,
-  ErrorData,
-  Events as HlsEvents,
-  FragLoadedData,
-  FragLoadingData,
-  HlsConfig,
-  ManifestParsedData,
-  MediaAttachedData,
-  MediaKeySessionContext,
-  MediaPlaylist,
-} from 'hls.js';
+import Hls, {AudioTrackSwitchingData, ErrorData, Events as HlsEvents, FragLoadedData, FragLoadingData, HlsConfig, ManifestParsedData, MediaAttachedData, MediaKeySessionContext, MediaPlaylist} from 'hls.js';
 import {errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {AuthConfig} from '../auth/auth-config';
 import {BasicAuthenticationData, BearerAuthenticationData, CustomAuthenticationData} from '../authentication/model';
@@ -67,10 +56,9 @@ export interface OmpHlsConfig extends HlsConfig {
    * If set, created function takes precedence over {@link licenseXhrSetup}
    *
    * @param sourceUrl
-   * @param frameRate
    * @param options
    */
-  loadVideoLicenseXhrSetup?: (sourceUrl: string, frameRate: number, options?: VideoLoadOptions | undefined) => HlsLicenseXhrSetupFn;
+  loadVideoLicenseXhrSetup?: (sourceUrl: string, options?: VideoLoadOptions | undefined) => HlsLicenseXhrSetupFn;
 }
 
 type OmpHlsEventListener = (event: any, data: any) => void;
@@ -103,10 +91,14 @@ export class VideoHlsLoader extends BaseVideoLoader {
     }
   }
 
-  override loadVideo(sourceUrl: string, frameRate: number, options?: VideoLoadOptions | undefined): Observable<Video> {
+  override loadVideo(sourceUrl: string, options?: VideoLoadOptions | undefined): Observable<Video> {
+    nextCompleteSubject(this._loadVideoBreaker$);
+    this._loadVideoBreaker$ = new Subject<void>();
+
+    nextCompleteSubject(this._videoEventBreaker$);
+    this._videoEventBreaker$ = new Subject<void>();
+
     return passiveObservable<Video>((observer) => {
-      nextCompleteSubject(this._videoEventBreaker$);
-      this._videoEventBreaker$ = new Subject<void>();
 
       this.destroyHls();
 
@@ -116,7 +108,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
         ...hlsConfig,
         licenseXhrSetup: hlsConfig.loadVideoLicenseXhrSetup
           ? (xhr: XMLHttpRequest, url: string, keyContext: MediaKeySessionContext, licenseChallenge: Uint8Array) => {
-              return hlsConfig.loadVideoLicenseXhrSetup!(sourceUrl, frameRate, options)(xhr, url, keyContext, licenseChallenge);
+              return hlsConfig.loadVideoLicenseXhrSetup!(sourceUrl, options)(xhr, url, keyContext, licenseChallenge);
             }
           : hlsConfig.licenseXhrSetup,
       });
@@ -210,8 +202,6 @@ export class VideoHlsLoader extends BaseVideoLoader {
       let audioOnly = false;
       let hlsManifestParsed$ = new Observable<boolean>((observer) => {
         this._hls!.once(HlsEvents.MANIFEST_PARSED, (event, data) => {
-          // console.debug(event, data);
-
           // set audio track with 6 channels as default, if it exists
           let defaultAudioTrack = this._hls!.allAudioTracks.find((track) => track.channels === '6');
           this._hls!.setAudioOption(defaultAudioTrack);
@@ -241,10 +231,22 @@ export class VideoHlsLoader extends BaseVideoLoader {
         });
       });
 
+      let frameRateResolved$ = new Observable<number | undefined>((observer) => {
+        this._hls!.once(HlsEvents.MANIFEST_PARSED, function (event, data) {
+          if (options?.frameRate) {
+            nextCompleteObserver(observer, FrameRateUtil.resolveFrameRate(options.frameRate));
+          } else {
+            let firstLevelIndex = data.firstLevel;
+            let firstLevel = data.levels[firstLevelIndex];
+            nextCompleteObserver(observer, FrameRateUtil.resolveFrameRate(firstLevel.frameRate));
+          }
+        });
+      });
+
       let videoLoadedData$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEventKeys.LOADEDDATA).pipe(first());
       let videoLoadedMetadata$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEventKeys.LOADEDMETEDATA).pipe(first());
 
-      forkJoin([hlsMediaAttached$, hlsManifestParsed$, hlsFragParsingInitSegment$, videoLoadedData$, videoLoadedMetadata$])
+      forkJoin([hlsMediaAttached$, hlsManifestParsed$, hlsFragParsingInitSegment$, videoLoadedData$, videoLoadedMetadata$, frameRateResolved$])
         .pipe(first())
         .subscribe((result) => {
           let duration: number;
@@ -256,9 +258,16 @@ export class VideoHlsLoader extends BaseVideoLoader {
           }
 
           let dropFrame = options && options.dropFrame !== void 0 ? options.dropFrame : false;
+
+          const frameRate = result[5];
+          if (!frameRate) {
+            throw new Error('Frame rate could not be determined');
+          }
+
           let initSegmentTimeOffset = hasInitSegment ? FrameRateUtil.frameNumberToTime(2, frameRate) : void 0; // TODO resolve time offset dynamically
 
           let video: Video = {
+            protocol: 'hls',
             sourceUrl: sourceUrl,
             frameRate: frameRate,
             dropFrame: dropFrame,
@@ -345,6 +354,9 @@ export class VideoHlsLoader extends BaseVideoLoader {
           }
 
           nextCompleteObserver(observer, video);
+        })
+        .add(() => {
+          nextCompleteSubject(this._loadVideoBreaker$);
         });
 
       this._hls.loadSource(sourceUrl);
@@ -608,6 +620,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
   protected destroyHls() {
     try {
       if (this._hls) {
+        this._hls.detachMedia();
         this._hls.off(HlsEvents.ERROR);
         this._hls.destroy();
         this._hls = void 0;
@@ -618,6 +631,8 @@ export class VideoHlsLoader extends BaseVideoLoader {
   }
 
   override destroy() {
+    nextCompleteSubject(this._videoEventBreaker$);
+
     this.destroyHls();
     super.destroy();
   }

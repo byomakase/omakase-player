@@ -41,6 +41,8 @@ import {HTMLVideoElementEventKeys} from './video-controller';
 import {UrlUtil} from '../util/url-util';
 import {OmakaseDropdown} from '../components/omakase-dropdown';
 import {SvgUtil} from '../util/svg-util';
+import {OmakaseVolumeRange} from '../components/omakase-volume-range';
+import {OmakaseMuteButton} from '../components/omakase-mute-button';
 
 const domClasses = {
   player: 'omakase-player',
@@ -182,10 +184,12 @@ export class VideoDomController implements VideoDomControllerApi {
   protected _buttonBitc?: MediaChromeButton;
   protected _tooltipBitc?: MediaTooltip;
   protected _timeRangeControl?: OmakaseTimeRange;
+  protected _volumeRangeControl?: OmakaseVolumeRange;
   protected _currentTimecode?: OmakaseTimeDisplay;
   protected _previewTimecode?: OmakaseTimeDisplay;
   protected _previewThumbnail?: OmakasePreviewThumbnail;
   protected _speedDropdown?: OmakaseDropdown;
+  protected _muteButton?: OmakaseMuteButton;
 
   protected _bitcEnabled = false;
 
@@ -284,9 +288,6 @@ export class VideoDomController implements VideoDomControllerApi {
           <audio controls loop class="${domClasses.audioUtil} d-none">
             <source src="${this._silentWavUrl}">
           </audio>
-<!--          <audio id="ble" controls style="width: 800px">-->
-<!--                <source src="http://127.0.0.1:8080/Sven%20Va%CC%88th%20-%20L'Esperanza%20(1993)%20HQ%20%5BrZKV4KIeIrU%5D.aac" type="audio/mpeg">-->
-<!--              </audio>-->
       </div>`;
 
     this._videoElement = this.getPlayerElement<HTMLVideoElement>(domClasses.video);
@@ -327,6 +328,8 @@ export class VideoDomController implements VideoDomControllerApi {
     this._buttonBitc = this.getPlayerElement<MediaChromeButton>(domClasses.mediaChromeBitcDisabled);
     this._tooltipBitc = this.getPlayerElement<MediaTooltip>(domClasses.mediaChromeBitcTooltip);
     this._timeRangeControl = this._divPlayer.getElementsByTagName('omakase-time-range')[0] as OmakaseTimeRange;
+    this._volumeRangeControl = this._divPlayer.getElementsByTagName('omakase-volume-range')[0] as OmakaseVolumeRange;
+    this._muteButton = this._divPlayer.getElementsByTagName('omakase-mute-button')[0] as OmakaseMuteButton;
     this._divTimecode = this.getPlayerElement<HTMLElement>(domClasses.timecodeContainer);
     this._currentTimecode = this.getPlayerElement<OmakaseTimeDisplay>(domClasses.mediaChromeCurrentTimecode);
     this._previewTimecode = this.getPlayerElement<OmakaseTimeDisplay>(domClasses.mediaChromePreviewTimecode);
@@ -367,13 +370,13 @@ export class VideoDomController implements VideoDomControllerApi {
       <media-control-bar style="display:none" class="lower-control-bar">
           <div class="start-container">
               <div class="volume-container">
-                  <media-mute-button class="${domClasses.mediaChromeButton} omakase-player-mute">
+                  <omakase-mute-button class="${domClasses.mediaChromeButton} omakase-player-mute">
                     <span slot="high" class="${domClasses.mediaChromeAudioHigh}"></span>
                     <span slot="medium" class="${domClasses.mediaChromeAudioMedium}"></span>
                     <span slot="low" class="${domClasses.mediaChromeAudioLow}"></span>
                     <span slot="off" class="${domClasses.mediaChromeAudioMute}"></span>
-                  </media-mute-button>
-                  <media-volume-range></media-volume-range>
+                  </omakase-mute-button>
+                  <omakase-volume-range></omakase-volume-range>
               </div>
               <omakase-dropdown-toggle dropdown="speed-dropdown"></omakase-dropdown-toggle>
           </div>
@@ -784,7 +787,9 @@ export class VideoDomController implements VideoDomControllerApi {
         .pipe(takeUntil(this._videoEventBreaker$))
         .subscribe({
           next: (event) => {
-            this._videoController.seekNextFrame();
+            this._videoController.pause().subscribe(() => {
+              this._videoController.seekNextFrame();
+            });
           },
         });
     }
@@ -793,7 +798,9 @@ export class VideoDomController implements VideoDomControllerApi {
         .pipe(takeUntil(this._videoEventBreaker$))
         .subscribe({
           next: (event) => {
-            this._videoController.seekPreviousFrame();
+            this._videoController.pause().subscribe(() => {
+              this._videoController.seekPreviousFrame();
+            });
           },
         });
     }
@@ -802,7 +809,9 @@ export class VideoDomController implements VideoDomControllerApi {
         .pipe(takeUntil(this._videoEventBreaker$))
         .subscribe({
           next: (event) => {
-            this._videoController.seekFromCurrentFrame(10);
+            this._videoController.pause().subscribe(() => {
+              this._videoController.seekFromCurrentFrame(10);
+            });
           },
         });
     }
@@ -811,7 +820,9 @@ export class VideoDomController implements VideoDomControllerApi {
         .pipe(takeUntil(this._videoEventBreaker$))
         .subscribe({
           next: (event) => {
-            this._videoController.seekFromCurrentFrame(-10);
+            this._videoController.pause().subscribe(() => {
+              this._videoController.seekFromCurrentFrame(-10);
+            });
           },
         });
     }
@@ -864,6 +875,14 @@ export class VideoDomController implements VideoDomControllerApi {
           this._videoController.seekToTime(time);
         },
       });
+    }
+
+    if (this._volumeRangeControl) {
+      this._volumeRangeControl.videoController = this._videoController;
+    }
+
+    if (this._muteButton) {
+      this._muteButton.videoController = this._videoController;
     }
 
     if (this._speedDropdown) {
@@ -1086,7 +1105,7 @@ export class VideoDomController implements VideoDomControllerApi {
   }
 
   appendHTMLTrackElement(omakaseTextTrack: OmakaseTextTrack): Observable<HTMLTrackElement | undefined> {
-    return new Observable<HTMLTrackElement>((o$) => {
+    return new Observable<HTMLTrackElement | undefined>((o$) => {
       let track = VideoDomController.createHTMLTrackElement(omakaseTextTrack);
 
       fromEvent(track, 'load')
@@ -1118,8 +1137,8 @@ export class VideoDomController implements VideoDomControllerApi {
     });
   }
 
-  getTextTrackList(): TextTrackList | undefined {
-    return this._videoElement ? this._videoElement.textTracks : void 0;
+  getTextTrackList(): TextTrackList {
+    return this._videoElement.textTracks;
   }
 
   getTextTrackById(id: string): TextTrack | undefined {

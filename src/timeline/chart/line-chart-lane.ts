@@ -24,7 +24,7 @@ import {AxiosRequestConfig} from 'axios';
 import {LineChartVttFile} from '../../vtt';
 import Decimal from 'decimal.js';
 import {LineChartVttCue} from '../../types';
-import {KonvaFactory} from '../../factory/konva-factory';
+import {KonvaFactory} from '../../konva/konva-factory';
 import {isNullOrUndefined} from '../../util/object-util';
 import {VideoControllerApi} from '../../video';
 import {LineChartLaneApi} from '../../api';
@@ -159,14 +159,8 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
     }
   }
 
-  protected override startLoadingAnimation(): void {
-    this._loadingGroup = new Konva.Group({
-      width: this._timecodedGroup!.width(),
-      height: this._timecodedGroup!.height(),
-    });
-
-    this._timecodedGroup!.add(this._loadingGroup);
-    const circles: {animatedCircle: Konva.Circle; staticCircles: Konva.Circle[]; lines: Konva.Line[]}[] = [];
+  protected override createLoadingGroupObjects(): Array<Konva.Shape | Konva.Group> {
+    const circleGroups: Konva.Group[] = [];
 
     const yPos = (index: number) => {
       return index === 1 ? 2 : index === 3 ? 1 : index === 4 ? 4 : 3;
@@ -174,6 +168,7 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
 
     const range = this._timeline!.getVisiblePositionRange();
     for (let x = range.start; x <= range.end; x += 50) {
+      const circleGroup = new Konva.Group();
       const animatedCircle = KonvaFactory.createCircle({
         x,
         y: (3 * this._loadingGroup!.height()) / 5,
@@ -181,7 +176,7 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
         fill: this.resolveLoadingAnimationColor(),
       });
       this._loadingGroup!.add(animatedCircle);
-      const staticCircles = [];
+      const circles = [];
       const lines = [];
       for (let i = 0; i < 5; i++) {
         const circle = KonvaFactory.createCircle({
@@ -197,44 +192,54 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
         });
         this._loadingGroup!.add(circle);
         this._loadingGroup!.add(line);
-        staticCircles.push(circle);
+        circles.push(circle);
         lines.push(line);
       }
-      circles.push({animatedCircle, staticCircles, lines});
+      circleGroup.add(animatedCircle, ...circles, ...lines);
+      circleGroups.push(circleGroup);
     }
+    return circleGroups;
+  }
 
-    this._loadingAnimation = new Konva.Animation((frame) => {
+  protected override createLoadingAnimation(): Konva.Animation {
+    const yPos = (index: number) => {
+      return index === 1 ? 2 : index === 3 ? 1 : index === 4 ? 4 : 3;
+    };
+    return new Konva.Animation((frame) => {
       const frameTime = Math.round((frame?.time ?? 0) / 50);
       const frameNumber = frameTime % 60;
-      for (const circleGroup of circles) {
+      const circleGroups = this._loadingGroup!.getChildren() as Konva.Group[];
+      for (const circleGroup of circleGroups) {
+        const [animatedCircle, ...staticObjects] = circleGroup.getChildren();
+        const circles = staticObjects.filter((obj) => obj instanceof Konva.Circle) as Konva.Circle[];
+        const lines = staticObjects.filter((obj) => obj instanceof Konva.Line) as Konva.Line[];
         if (frameNumber === 0) {
-          circleGroup.animatedCircle.setAttrs({
-            x: circleGroup.staticCircles[0].x(),
-            y: circleGroup.staticCircles[0].y(),
+          animatedCircle.setAttrs({
+            x: circles[0].x(),
+            y: circles[0].y(),
           });
         } else if (frameNumber < 50) {
           const circleIndex = Math.floor(frameNumber / 10);
-          const newY = circleGroup.animatedCircle.y() + ((yPos((circleIndex + 1) % 5) * this._loadingGroup!.height()) / 5 - circleGroup.animatedCircle.y()) / 5;
-          circleGroup.animatedCircle.setAttrs({
+          const newY = animatedCircle.y() + ((yPos((circleIndex + 1) % 5) * this._loadingGroup!.height()) / 5 - animatedCircle.y()) / 5;
+          animatedCircle.setAttrs({
             opacity: 1,
-            x: circleGroup.animatedCircle.x() + (frame?.timeDiff ?? 0) / 50,
+            x: animatedCircle.x() + (frame?.timeDiff ?? 0) / 50,
             y: newY,
           });
-          for (const circle of circleGroup.staticCircles) {
-            circle.opacity(circle.x() < circleGroup.animatedCircle.x() ? 1 : 0);
+          for (const circle of circles) {
+            circle.opacity(circle.x() < animatedCircle.x() ? 1 : 0);
           }
-          circleGroup.lines.forEach((line, lineIndex) => {
-            line.opacity(line.points()[0] < circleGroup.animatedCircle.x() ? 1 : 0);
+          lines.forEach((line, lineIndex) => {
+            line.opacity(line.points()[0] < animatedCircle.x() ? 1 : 0);
             if (lineIndex === circleIndex) {
-              line.points([circleGroup.staticCircles[circleIndex].x(), circleGroup.staticCircles[circleIndex].y(), circleGroup.staticCircles[circleIndex].x() + (frameNumber % 10), newY]);
+              line.points([circles[circleIndex].x(), circles[circleIndex].y(), circles[circleIndex].x() + (frameNumber % 10), newY]);
             }
           });
         } else {
-          circleGroup.animatedCircle.opacity(0);
+          animatedCircle.opacity(0);
         }
       }
     });
-    this._loadingAnimation.start();
   }
 
   protected settleLayout() {

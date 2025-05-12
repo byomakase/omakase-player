@@ -23,7 +23,7 @@ import {ScrollbarScrollEvent, ScrollbarZoomEvent} from '../../types';
 import {Constants} from '../../constants';
 import {WindowUtil} from '../../util/window-util';
 import {filter, Observable, of, Subject, takeUntil} from 'rxjs';
-import {KonvaFactory} from '../../factory/konva-factory';
+import {KonvaFactory} from '../../konva/konva-factory';
 
 export interface ScrollableHorizontally {
   scrollHorizontallyToPercent(percent: number): void;
@@ -98,7 +98,7 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
     });
 
     this._bgRect = KonvaFactory.createRect({
-      ...Constants.POSITION_TOP_LEFT,
+      ...Constants.positionTopLeft,
       width: this._group.width(),
       height: this.style.height,
       fill: this.style.backgroundFill,
@@ -106,13 +106,13 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
     });
 
     this._handleGroup = KonvaFactory.createGroup({
-      ...Constants.POSITION_TOP_LEFT,
+      ...Constants.positionTopLeft,
       width: this._group.width(),
       height: this.style.height,
     });
 
     this._handleBar = KonvaFactory.createRect({
-      ...Constants.POSITION_TOP_LEFT,
+      ...Constants.positionTopLeft,
       width: this._handleGroup.width(),
       height: this.style.height,
       fill: this.style.handleBarFill,
@@ -121,7 +121,7 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
     });
 
     this._leftZoomHandle = new Konva.Circle({
-      ...Constants.POSITION_TOP_LEFT,
+      ...Constants.positionTopLeft,
       fill: this.style.handleBarFill,
       radius: this.style.height / 2,
       y: this.style.height / 2,
@@ -130,7 +130,7 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
     });
 
     this._rightZoomHandle = new Konva.Circle({
-      ...Constants.POSITION_TOP_LEFT,
+      ...Constants.positionTopLeft,
       fill: this.style.handleBarFill,
       radius: this.style.height / 2,
       y: this.style.height / 2,

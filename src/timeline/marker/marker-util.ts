@@ -17,7 +17,7 @@
 import Konva from 'konva';
 import Decimal from 'decimal.js';
 import {MarkerSymbolType} from './marker-types';
-import {KonvaFactory} from '../../factory/konva-factory';
+import {KonvaFactory} from '../../konva/konva-factory';
 import {ColorUtil} from '../../util/color-util';
 
 export class MarkerUtil {

@@ -26,7 +26,7 @@ import {z} from 'zod';
 import {isNullOrUndefined} from '../../util/object-util';
 import {MarkerUtil} from './marker-util';
 import {MARKER_STYLE_DEFAULT, MarkerHandleStyle, MarkerStyle} from './marker-types';
-import {KonvaFactory} from '../../factory/konva-factory';
+import {KonvaFactory} from '../../konva/konva-factory';
 import {ConfigWithOptionalStyle} from '../../layout';
 
 // region marker handle

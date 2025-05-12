@@ -22,7 +22,7 @@ import Decimal from 'decimal.js';
 import {Constants} from '../../constants';
 import {nullifier} from '../../util/destroy-util';
 import {Subject} from 'rxjs';
-import {KonvaFactory} from '../../factory/konva-factory';
+import {KonvaFactory} from '../../konva/konva-factory';
 
 export interface OgChartLaneItemStyle {
   height: number;
@@ -52,7 +52,7 @@ const configDefault: Omit<OgChartLaneItemConfig, 'cue' | 'value' | 'valueScale' 
     height: 20,
     opacity: 1,
     visible: true,
-    fillLinearGradientColorStops: Constants.FILL_LINEAR_GRADIENT_AUDIO_PEAK,
+    fillLinearGradientColorStops: Constants.fillLinearGradientAudioPeak,
     paddingX: 2,
     paddingY: 2,
     scaleRatio: 1,
@@ -138,7 +138,7 @@ export class OgChartLaneItem extends BaseKonvaComponent<OgChartLaneItemConfig, O
         let y = clipGroup.height() - yFromTop;
 
         // ctx.arc(circleX, y, circleMaxRadius, 0, Constants.TWO_PI_RADIANS, false);
-        ctx.arc(circleX, y, circleRadius, 0, Constants.TWO_PI_RADIANS, false);
+        ctx.arc(circleX, y, circleRadius, 0, Constants.twoPiRadians, false);
       }
     });
   }

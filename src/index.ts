@@ -25,6 +25,7 @@ export * from './timeline/marker';
 export * from './timeline';
 // TODO consolidate in next major version
 
+export * from './audio';
 export * from './video';
 
 // export type {VideoProtocol, OmakasePlayerConfig} from './omakase-player';

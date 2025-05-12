@@ -46,7 +46,7 @@ import {destroyer, nullifier} from '../util/destroy-util';
 import {KonvaFlexGroup} from '../layout/konva-flex';
 import {FlexNode, FlexSpacingBuilder} from '../layout/flex-node';
 import {MeasurementUtil} from '../util/measurement-util';
-import {KonvaFactory} from '../factory/konva-factory';
+import {KonvaFactory} from '../konva/konva-factory';
 import {TimelineScrollbar} from './scrollbar';
 import {ThumbnailVttFile} from '../vtt';
 import {TimelineDomController} from './timeline-dom-controller';

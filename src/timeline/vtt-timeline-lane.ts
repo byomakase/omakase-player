@@ -7,7 +7,7 @@ import {AuthConfig} from '../auth/auth-config';
 import {AxiosRequestConfig} from 'axios';
 import {OmakaseVttFile} from '../vtt';
 import {errorCompleteObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
-import {KonvaFactory} from '../factory/konva-factory';
+import {KonvaFactory} from '../konva/konva-factory';
 import Konva from 'konva';
 
 const sampleTimeSyncVideoMetadata = 100;
@@ -126,14 +126,14 @@ export abstract class VttTimelineLane<C extends VttTimelineLaneConfig<S>, S exte
     };
   }
 
-  protected startLoadingAnimation() {
-    this._loadingGroup = new Konva.Group({
+  protected createLoadingGroup(): Konva.Group {
+    return new Konva.Group({
       width: this._timecodedGroup!.width(),
       height: this._timecodedGroup!.height(),
     });
+  }
 
-    this._timecodedGroup!.add(this._loadingGroup);
-
+  protected createLoadingGroupObjects(): Array<Konva.Shape | Konva.Group> {
     const rect1 = KonvaFactory.createRect({
       x: this._timecodedGroup!.width() / 2 - 100,
       y: this._timecodedGroup!.height() / 2 - 5,
@@ -150,18 +150,38 @@ export abstract class VttTimelineLane<C extends VttTimelineLaneConfig<S>, S exte
       fill: this.resolveLoadingAnimationColor(),
       opacity: 1,
     });
-    this._loadingGroup.add(rect1);
-    this._loadingGroup.add(rect2);
+    return [rect1, rect2];
+  }
 
-    this._loadingAnimation = new Konva.Animation((_frame) => {
+  protected createLoadingAnimation(): Konva.Animation {
+    return new Konva.Animation((_frame) => {
+      const [rect1, rect2] = this._loadingGroup!.getChildren();
       rect2.width((rect2.width() + 0.25) % rect1.width());
     });
+  }
+
+  protected startLoadingAnimation() {
+    if (!this._loadingGroup) {
+      this._loadingGroup = this.createLoadingGroup();
+      this._timecodedGroup!.add(this._loadingGroup);
+    } else {
+      this._loadingGroup.destroyChildren();
+    }
+    this._loadingGroup.add(...this.createLoadingGroupObjects());
+    if (!this._loadingAnimation) {
+      this._loadingAnimation = this.createLoadingAnimation();
+    }
     this._loadingAnimation.start();
   }
 
   protected stopLoadingAnimation() {
-    this._loadingAnimation?.stop();
-    this._loadingGroup?.destroy();
+    if (this._loadingAnimation) {
+      this._loadingAnimation.stop();
+    }
+    if (this._loadingGroup) {
+      this._loadingGroup.destroy();
+      delete this._loadingGroup;
+    }
   }
 
   protected resolveLoadingAnimationColor(): string {

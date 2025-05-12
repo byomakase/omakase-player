@@ -1,6 +1,6 @@
 {
     "name": "@byomakase/omakase-player",
-    "version": "0.16.0",
+    "version": "0.17.0",
     "description": "## Omakase Player - Open source JavaScript framework for building frame accurate video experiences",
     "author": "ByOmakase",
     "homepage": "https://player.byomakase.org",
@@ -39,7 +39,7 @@
         "m3u8-parser": "^7.2.0",
         "media-chrome": "^4.2.1",
         "node-webvtt": "1.9.4",
-        "rxjs": "7.8.1",
+        "rxjs": "7.8.2",
         "yoga-layout": "2.0.1",
         "zod": "3.23.8"
     },

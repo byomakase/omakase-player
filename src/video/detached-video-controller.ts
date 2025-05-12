@@ -30,14 +30,17 @@ import {
   AudioSwitchedEvent,
   HelpMenuGroup,
   MainAudioChangeEvent,
+  MainAudioInputSoloMuteEvent,
   OmpAudioTrack,
   OmpNamedEvent,
   OmpNamedEventEventName,
   OmpVideoWindowPlaybackError,
   SidecarAudioChangeEvent,
   SidecarAudioCreateEvent,
+  SidecarAudioInputSoloMuteEvent,
   SidecarAudioPeakProcessorMessageEvent,
   SidecarAudioRemoveEvent,
+  SidecarAudioVolumeChangeEvent,
   SubtitlesCreateEvent,
   SubtitlesEvent,
   SubtitlesLoadedEvent,
@@ -56,15 +59,18 @@ import {
   VideoSeekedEvent,
   VideoSeekingEvent,
   VideoTimeChangeEvent,
-  VideoVolumeEvent,
   VideoWindowPlaybackStateChangeEvent,
+  VolumeChangeEvent,
 } from '../types';
 import {
-  AudioInputOutputNode,
   AudioMeterStandard,
   BufferedTimespan,
   OmpAudioRouterState,
+  OmpAudioRoutingConnection,
+  OmpAudioRoutingPath,
+  OmpMainAudioInputSoloMuteState,
   OmpMainAudioState,
+  OmpSidecarAudioInputSoloMuteState,
   OmpSidecarAudioState,
   PlaybackState,
   Video,
@@ -78,6 +84,9 @@ import Hls from 'hls.js';
 import {WindowUtil} from '../util/window-util';
 import {OmpAudioRouter} from './audio-router';
 import {SidecarAudioApi} from '../api/sidecar-audio-api';
+import {OmpAudioEffectFilter, OmpAudioEffectParam, OmpAudioEffectsGraphDef} from '../audio';
+import {util} from 'zod';
+import Omit = util.Omit;
 
 interface OutboundLatest {
   heartbeat?: number;
@@ -121,7 +130,7 @@ export class DetachedVideoController implements VideoControllerApi {
   constructor(videoController: VideoController) {
     this._videoController = videoController;
 
-    this._handshakeChannel = new TypedOmpBroadcastChannel(Constants.OMP_HANDSHAKE_BROADCAST_CHANNEL_ID);
+    this._handshakeChannel = new TypedOmpBroadcastChannel(Constants.ompHandshakeBroadcastChannelId);
     this._proxyId = CryptoUtil.uuid();
 
     this._onConnectSuccess$
@@ -385,6 +394,12 @@ export class DetachedVideoController implements VideoControllerApi {
       },
     });
 
+    this._videoController.onMainAudioInputSoloMute$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
+      next: (value) => {
+        this._messageChannel!.send('VideoControllerApi.onMainAudioInputSoloMute$', value);
+      },
+    });
+
     // sidecar audio
 
     this._videoController.onSidecarAudioCreate$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
@@ -405,9 +420,21 @@ export class DetachedVideoController implements VideoControllerApi {
       },
     });
 
+    this._videoController.onSidecarAudioVolumeChange$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
+      next: (value) => {
+        this._messageChannel!.send('VideoControllerApi.onSidecarAudioVolumeChange$', value);
+      },
+    });
+
     this._videoController.onSidecarAudioPeakProcessorMessage$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onSidecarAudioPeakProcessorMessage$', value);
+      },
+    });
+
+    this._videoController.onSidecarAudioInputSoloMute$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
+      next: (value) => {
+        this._messageChannel!.send('VideoControllerApi.onSidecarAudioInputSoloMute$', value);
       },
     });
 
@@ -501,6 +528,12 @@ export class DetachedVideoController implements VideoControllerApi {
       },
     });
 
+    this._videoController.onAudioOutputVolumeChange$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
+      next: (value) => {
+        this._messageChannel!.send('VideoControllerApi.onAudioOutputVolumeChange$', value);
+      },
+    });
+
     this._videoController.onActiveNamedEventStreamsChange$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onActiveNamedEventStreamsChange$', value);
@@ -519,7 +552,7 @@ export class DetachedVideoController implements VideoControllerApi {
       .pipe(takeUntil(this._messageChannelBreaker$))
       .subscribe({
         next: ([request, sendResponseHook]) => {
-          sendResponseHook(this._videoController.loadVideoInternal(request[0], request[1], request[2], request[3]));
+          sendResponseHook(this._videoController.loadVideoInternal(request[0], request[1], request[2]));
         },
       });
 
@@ -527,7 +560,7 @@ export class DetachedVideoController implements VideoControllerApi {
       .pipe(takeUntil(this._messageChannelBreaker$))
       .subscribe({
         next: ([request, sendResponseHook]) => {
-          sendResponseHook(this._videoController.loadVideo(request[0], request[1], request[2]));
+          sendResponseHook(this._videoController.loadVideo(request[0], request[1]));
         },
       });
 
@@ -828,6 +861,54 @@ export class DetachedVideoController implements VideoControllerApi {
         },
       });
 
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.setAudioOutputVolume')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.setAudioOutputVolume(request[0]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.toggleAudioOutputMuteUnmute')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.toggleAudioOutputMuteUnmute());
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.muteAudioOutput')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.muteAudioOutput());
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.unmuteAudioOutput')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.unmuteAudioOutput());
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.setAudioOutputMuted')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.setAudioOutputMuted(request[0]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.setMainAudioRouterInitialRoutingConnections')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.setMainAudioRouterInitialRoutingConnections(request[0]));
+        },
+      });
+
     this._messageChannel!.createRequestResponseStream('VideoControllerApi.createMainAudioPeakProcessor')
       .pipe(takeUntil(this._messageChannelBreaker$))
       .subscribe({
@@ -837,11 +918,51 @@ export class DetachedVideoController implements VideoControllerApi {
         },
       });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.routeMainAudioRouterNodes')
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.updateMainAudioRouterConnections')
       .pipe(takeUntil(this._messageChannelBreaker$))
       .subscribe({
         next: ([request, sendResponseHook]) => {
-          sendResponseHook(this._videoController.routeMainAudioRouterNodes(request[0]));
+          sendResponseHook(this._videoController.updateMainAudioRouterConnections(request[0]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.toggleMainAudioRouterSolo')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.toggleMainAudioRouterSolo(request[0]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.toggleMainAudioRouterMute')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.toggleMainAudioRouterMute(request[0]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.setMainAudioEffectsGraphs')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.setMainAudioEffectsGraphs(request[0], request[1]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.removeMainAudioEffectsGraphs')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.removeMainAudioEffectsGraphs(request[0]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.setMainAudioEffectsParams')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.setMainAudioEffectsParams(request[0], request[1]));
         },
       });
 
@@ -895,6 +1016,46 @@ export class DetachedVideoController implements VideoControllerApi {
         },
       });
 
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.setSidecarVolume')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.setSidecarVolume(request[0], request[1]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.setSidecarMuted')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.setSidecarMuted(request[0], request[1]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.muteSidecar')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.muteSidecar(request[0]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.unmuteSidecar')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.unmuteSidecar(request[0]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.setSidecarAudioRouterInitialRoutingConnections')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.setSidecarAudioRouterInitialRoutingConnections(request[0], request[1]));
+        },
+      });
+
     this._messageChannel!.createRequestResponseStream('VideoControllerApi.createSidecarAudioRouter')
       .pipe(takeUntil(this._messageChannelBreaker$))
       .subscribe({
@@ -903,11 +1064,35 @@ export class DetachedVideoController implements VideoControllerApi {
         },
       });
 
-    this._messageChannel!.createRequestResponseStream('VideoControllerApi.routeSidecarAudioRouterNodes')
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.updateSidecarAudioRouterConnections')
       .pipe(takeUntil(this._messageChannelBreaker$))
       .subscribe({
         next: ([request, sendResponseHook]) => {
-          sendResponseHook(this._videoController.routeSidecarAudioRouterNodes(request[0], request[1]));
+          sendResponseHook(this._videoController.updateSidecarAudioRouterConnections(request[0], request[1]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.setSidecarAudioEffectsGraph')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.setSidecarAudioEffectsGraph(request[0], request[1], request[2]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.removeSidecarAudioEffectsGraphs')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.removeSidecarAudioEffectsGraphs(request[0], request[1]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.setSidecarAudioEffectsParams')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.setSidecarAudioEffectsParams(request[0], request[1], request[2]));
         },
       });
 
@@ -932,6 +1117,22 @@ export class DetachedVideoController implements VideoControllerApi {
       .subscribe({
         next: ([request, sendResponseHook]) => {
           sendResponseHook(this._videoController.exportMainAudioTracksToSidecar(request[0]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.toggleSidecarAudioRouterSolo')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.toggleSidecarAudioRouterSolo(request[0], request[1]));
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.toggleSidecarAudioRouterMute')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.toggleSidecarAudioRouterMute(request[0], request[1]));
         },
       });
 
@@ -1039,7 +1240,7 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.onVideoError$;
   }
 
-  get onVolumeChange$(): Observable<VideoVolumeEvent> {
+  get onVolumeChange$(): Observable<VolumeChangeEvent> {
     return this._videoController.onVolumeChange$;
   }
 
@@ -1097,6 +1298,15 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.onMainAudioPeakProcessorMessage$;
   }
 
+  get onMainAudioInputSoloMute$(): Observable<MainAudioInputSoloMuteEvent | undefined> {
+    return this._videoController.onMainAudioInputSoloMute$;
+  }
+
+  // audio output
+  get onAudioOutputVolumeChange$(): Observable<VolumeChangeEvent> {
+    return this._videoController.onAudioOutputVolumeChange$;
+  }
+
   // sidecar audio
 
   get onSidecarAudioCreate$(): Observable<SidecarAudioCreateEvent> {
@@ -1111,8 +1321,16 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.onSidecarAudioChange$;
   }
 
+  get onSidecarAudioVolumeChange$(): Observable<SidecarAudioVolumeChangeEvent> {
+    return this._videoController.onSidecarAudioVolumeChange$;
+  }
+
   get onSidecarAudioPeakProcessorMessage$(): Observable<SidecarAudioPeakProcessorMessageEvent> {
     return this._videoController.onSidecarAudioPeakProcessorMessage$;
+  }
+
+  get onSidecarAudioInputSoloMute$(): Observable<SidecarAudioInputSoloMuteEvent> {
+    return this._videoController.onSidecarAudioInputSoloMute$;
   }
 
   addSafeZone(videoSafeZone: VideoSafeZone): Observable<VideoSafeZone> {
@@ -1183,6 +1401,38 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.getAudioContext();
   }
 
+  getAudioOutputVolume(): number {
+    return this._videoController.getAudioOutputVolume();
+  }
+
+  isAudioOutputMuted(): boolean {
+    return this._videoController.isAudioOutputMuted();
+  }
+
+  setAudioOutputMuted(muted: boolean): Observable<void> {
+    return this._videoController.setAudioOutputMuted(muted);
+  }
+
+  toggleAudioOutputMuteUnmute(): Observable<void> {
+    return this._videoController.toggleAudioOutputMuteUnmute();
+  }
+
+  setAudioOutputVolume(volume: number): Observable<void> {
+    return this._videoController.setAudioOutputVolume(volume);
+  }
+
+  muteAudioOutput(): Observable<void> {
+    return this._videoController.muteAudioOutput();
+  }
+
+  unmuteAudioOutput(): Observable<void> {
+    return this._videoController.unmuteAudioOutput();
+  }
+
+  getAudioOutputNode(): AudioNode {
+    return this._videoController.getAudioOutputNode();
+  }
+
   getMainAudioRouter(): OmpAudioRouter | undefined {
     return this._videoController.getMainAudioRouter();
   }
@@ -1239,12 +1489,12 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.isVideoLoaded();
   }
 
-  loadVideoInternal(sourceUrl: string, frameRate: number | string, options: VideoLoadOptions | undefined, optionsInternal: VideoLoadOptionsInternal): Observable<Video> {
-    return this._videoController.loadVideoInternal(sourceUrl, frameRate, options, optionsInternal);
+  loadVideoInternal(sourceUrl: string, options: VideoLoadOptions | undefined, optionsInternal: VideoLoadOptionsInternal): Observable<Video> {
+    return this._videoController.loadVideoInternal(sourceUrl, options, optionsInternal);
   }
 
-  loadVideo(sourceUrl: string, frameRate: number | string, options?: VideoLoadOptions): Observable<Video> {
-    return this._videoController.loadVideo(sourceUrl, frameRate, options);
+  loadVideo(sourceUrl: string, options?: VideoLoadOptions): Observable<Video> {
+    return this._videoController.loadVideo(sourceUrl, options);
   }
 
   reloadVideo(): Observable<Video> {
@@ -1424,16 +1674,53 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.createMainAudioPeakProcessor(audioMeterStandard);
   }
 
-  getMainAudioSourceNode(): AudioNode {
-    return this._videoController.getMainAudioSourceNode();
+  getMainAudioNode(): AudioNode {
+    return this._videoController.getMainAudioNode();
   }
 
   getMainAudioState(): OmpMainAudioState | undefined {
     return this._videoController.getMainAudioState();
   }
 
-  routeMainAudioRouterNodes(newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void> {
-    return this._videoController.routeMainAudioRouterNodes(newAudioInputOutputNodes);
+  getMainAudioInputSoloMuteState(): OmpMainAudioInputSoloMuteState | undefined {
+    return this._videoController.getMainAudioInputSoloMuteState();
+  }
+
+  getMainAudioRouterInitialRoutingConnections(): OmpAudioRoutingConnection[] | undefined {
+    return this._videoController.getMainAudioRouterInitialRoutingConnections();
+  }
+
+  setMainAudioRouterInitialRoutingConnections(connections: OmpAudioRoutingConnection[]): Observable<void> {
+    return this._videoController.setMainAudioRouterInitialRoutingConnections(connections);
+  }
+
+  updateMainAudioRouterConnections(connections: OmpAudioRoutingConnection[]): Observable<void> {
+    return this._videoController.updateMainAudioRouterConnections(connections);
+  }
+
+  toggleMainAudioRouterSolo(routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+    return this._videoController.toggleMainAudioRouterSolo(routingPath);
+  }
+
+  toggleMainAudioRouterMute(routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+    return this._videoController.toggleMainAudioRouterMute(routingPath);
+  }
+
+  setMainAudioEffectsGraphs(effectsGraphDef: OmpAudioEffectsGraphDef, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
+    return this._videoController.setMainAudioEffectsGraphs(effectsGraphDef, routingPath);
+  }
+
+  removeMainAudioEffectsGraphs(routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
+    return this._videoController.removeMainAudioEffectsGraphs(routingPath);
+  }
+
+  setMainAudioEffectsParams(
+    param: OmpAudioEffectParam,
+    filter?: {
+      routingPath?: Partial<OmpAudioRoutingPath>;
+    } & OmpAudioEffectFilter
+  ): Observable<void> {
+    return this._videoController.setMainAudioEffectsParams(param, filter);
   }
 
   // endregion
@@ -1448,8 +1735,28 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.getSidecarAudio(id);
   }
 
+  getSidecarAudioState(id: string): OmpSidecarAudioState | undefined {
+    return this._videoController.getSidecarAudioState(id);
+  }
+
   getSidecarAudioStates(): OmpSidecarAudioState[] {
     return this._videoController.getSidecarAudioStates();
+  }
+
+  getSidecarAudioInputSoloMuteState(id: string): OmpSidecarAudioInputSoloMuteState | undefined {
+    return this._videoController.getSidecarAudioInputSoloMuteState(id);
+  }
+
+  getSidecarAudioInputSoloMuteStates(): OmpSidecarAudioInputSoloMuteState[] {
+    return this._videoController.getSidecarAudioInputSoloMuteStates();
+  }
+
+  getSidecarAudioRouterInitialRoutingConnections(id: string): OmpAudioRoutingConnection[] | undefined {
+    return this._videoController.getSidecarAudioRouterInitialRoutingConnections(id);
+  }
+
+  setSidecarAudioRouterInitialRoutingConnections(id: string, connections: OmpAudioRoutingConnection[]): Observable<void> {
+    return this._videoController.setSidecarAudioRouterInitialRoutingConnections(id, connections);
   }
 
   createSidecarAudioTrack(track: Partial<OmpAudioTrack>): Observable<OmpAudioTrack> {
@@ -1460,12 +1767,28 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.createSidecarAudioTracks(tracks);
   }
 
-  activateSidecarAudioTracks(ids: string[], deactivateOthers: boolean | undefined): Observable<void> {
+  activateSidecarAudioTracks(ids: string[] | undefined, deactivateOthers: boolean | undefined): Observable<void> {
     return this._videoController.activateSidecarAudioTracks(ids, deactivateOthers);
   }
 
-  deactivateSidecarAudioTracks(ids: string[]): Observable<void> {
+  deactivateSidecarAudioTracks(ids: string[] | undefined): Observable<void> {
     return this._videoController.deactivateSidecarAudioTracks(ids);
+  }
+
+  muteSidecar(ids: string[] | undefined): Observable<void> {
+    return this._videoController.muteSidecar(ids);
+  }
+
+  setSidecarMuted(muted: boolean, ids: string[] | undefined): Observable<void> {
+    return this._videoController.setSidecarMuted(muted, ids);
+  }
+
+  setSidecarVolume(volume: number, ids: string[] | undefined): Observable<void> {
+    return this._videoController.setSidecarVolume(volume, ids);
+  }
+
+  unmuteSidecar(ids: string[] | undefined): Observable<void> {
+    return this._videoController.unmuteSidecar(ids);
   }
 
   getActiveSidecarAudioTracks(): OmpAudioTrack[] {
@@ -1488,8 +1811,26 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.createSidecarAudioRouter(sidecarAudioTrackId, inputsNumber, outputsNumber);
   }
 
-  routeSidecarAudioRouterNodes(sidecarAudioTrackId: string, newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void> {
-    return this._videoController.routeSidecarAudioRouterNodes(sidecarAudioTrackId, newAudioInputOutputNodes);
+  updateSidecarAudioRouterConnections(sidecarAudioTrackId: string, connections: OmpAudioRoutingConnection[]): Observable<void> {
+    return this._videoController.updateSidecarAudioRouterConnections(sidecarAudioTrackId, connections);
+  }
+
+  setSidecarAudioEffectsGraph(sidecarAudioTrackId: string, effectsGraphDef: OmpAudioEffectsGraphDef, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
+    return this._videoController.setSidecarAudioEffectsGraph(sidecarAudioTrackId, effectsGraphDef, routingPath);
+  }
+
+  removeSidecarAudioEffectsGraphs(sidecarAudioTrackId: string, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
+    return this._videoController.removeSidecarAudioEffectsGraphs(sidecarAudioTrackId, routingPath);
+  }
+
+  setSidecarAudioEffectsParams(
+    sidecarAudioTrackId: string,
+    param: OmpAudioEffectParam,
+    filter?: {
+      routingPath?: Partial<OmpAudioRoutingPath>;
+    } & OmpAudioEffectFilter
+  ): Observable<void> {
+    return this._videoController.setSidecarAudioEffectsParams(sidecarAudioTrackId, param, filter);
   }
 
   createSidecarAudioPeakProcessor(sidecarAudioTrackId: string, audioMeterStandard?: AudioMeterStandard): Observable<Observable<AudioPeakProcessorMessageEvent>> {
@@ -1502,6 +1843,14 @@ export class DetachedVideoController implements VideoControllerApi {
 
   exportMainAudioTracksToSidecar(mainAudioTrackIds: string[]): Observable<OmpAudioTrack[]> {
     return this._videoController.exportMainAudioTracksToSidecar(mainAudioTrackIds);
+  }
+
+  toggleSidecarAudioRouterSolo(sidecarAudioTrackId: string, routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+    return this._videoController.toggleSidecarAudioRouterSolo(sidecarAudioTrackId, routingPath);
+  }
+
+  toggleSidecarAudioRouterMute(sidecarAudioTrackId: string, routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+    return this._videoController.toggleSidecarAudioRouterMute(sidecarAudioTrackId, routingPath);
   }
 
   // endregion

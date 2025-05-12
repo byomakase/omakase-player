@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Destroyable, OmpAudioTrack, SyncTickEvent, VideoPlayEvent, VideoSeekedEvent, VideoSeekingEvent} from '../types';
+import {Destroyable, OmpAudioTrack, VideoPlaybackRateEvent, VideoPlayEvent, VideoSeekedEvent, VideoSeekingEvent, VolumeChangeEvent} from '../types';
 import {filter, Observable, Subject, takeUntil} from 'rxjs';
 import {OmpAudioRouter} from './audio-router';
 import {VideoController} from './video-controller';
@@ -23,10 +23,12 @@ import {isNullOrUndefined} from '../util/object-util';
 import {SidecarAudioApi} from '../api/sidecar-audio-api';
 import {AudioRouterApi} from '../api/audio-router-api';
 import {OmpAudioPeakProcessor} from './audio-peak-processor';
-import {AudioMeterStandard, OmpSidecarAudioState, PlaybackState} from './model';
+import {AudioMeterStandard, OmpSidecarAudioInputSoloMuteState, OmpSidecarAudioState, PlaybackState} from './model';
 
 export class OmpSidecarAudio implements SidecarAudioApi, Destroyable {
   public readonly onStateChange$: Subject<OmpSidecarAudioState> = new Subject<OmpSidecarAudioState>();
+  public readonly onInputSoloMute$: Subject<OmpSidecarAudioInputSoloMuteState> = new Subject<OmpSidecarAudioInputSoloMuteState>();
+  public readonly onVolumeChange$: Subject<VolumeChangeEvent> = new Subject<VolumeChangeEvent>();
 
   protected _videoController: VideoController;
 
@@ -35,9 +37,12 @@ export class OmpSidecarAudio implements SidecarAudioApi, Destroyable {
   protected _eventBreaker: Subject<void>;
 
   protected _audioBufferSourceNode?: AudioBufferSourceNode;
-  protected _audioInterfaceNode: GainNode;
+  protected _audioInputIfNode: GainNode;
   protected _audioRouter?: OmpAudioRouter;
   protected _audioPeakProcessor?: OmpAudioPeakProcessor;
+
+  protected _muted = VideoController.videoMutedDefault;
+  protected _volume = VideoController.videoVolumeDefault;
 
   protected _sidecarAudioPlaying = false;
   protected _audioStartTime?: number;
@@ -53,24 +58,32 @@ export class OmpSidecarAudio implements SidecarAudioApi, Destroyable {
     this._audioBuffer = audioBuffer;
     this._eventBreaker = new Subject<void>();
 
-    let audioContext = this._videoController.getAudioContext()!;
-    this._audioInterfaceNode = audioContext.createGain();
-    this._audioInterfaceNode.channelCountMode = 'max';
-    this._audioInterfaceNode.channelCount = this._audioBuffer.numberOfChannels;
+    let audioContext = this._videoController.getAudioContext();
+    let audioOutputNode = this._videoController.getAudioOutputNode();
 
-    // initially connect to destination
-    this._audioInterfaceNode.connect(audioContext.destination);
+    this._audioInputIfNode = audioContext.createGain();
+    this._audioInputIfNode.channelCountMode = 'max';
+    this._audioInputIfNode.channelCount = this._audioBuffer.numberOfChannels;
+
+    this._audioInputIfNode.connect(audioOutputNode);
 
     this.setupPlayback();
   }
 
-  protected _emitChange() {
+  protected emitStateChange() {
     this.onStateChange$.next(this.getSidecarAudioState());
   }
 
+  protected emitInputSoloMute() {
+    this.onInputSoloMute$.next(this.getSidecarAudioInputSoloMuteState());
+  }
+
   createAudioRouter(inputsNumber?: number, outputsNumber?: number): OmpAudioRouter {
-    let audioContext = this._videoController.getAudioContext()!;
+    let audioContext = this._videoController.getAudioContext();
+    let audioOutputNode = this._videoController.getAudioOutputNode();
+
     if (this._audioRouter) {
+      this._audioRouter.resetInputsSoloMuteState();
       console.debug(`Sidecar audio router already created for ${this.audioTrack.id}`);
       return this._audioRouter;
     } else {
@@ -79,23 +92,28 @@ export class OmpSidecarAudio implements SidecarAudioApi, Destroyable {
       }
 
       if (isNullOrUndefined(outputsNumber)) {
-        this._audioRouter = new OmpAudioRouter(audioContext, inputsNumber!);
+        this._audioRouter = new OmpAudioRouter(audioContext, audioOutputNode, inputsNumber!);
       } else {
-        this._audioRouter = new OmpAudioRouter(audioContext, inputsNumber!, (maxChannelCount: number) => outputsNumber!);
+        this._audioRouter = new OmpAudioRouter(audioContext, audioOutputNode, inputsNumber!, (maxChannelCount: number) => outputsNumber!);
       }
 
       // rewire to router
       // in case of router deletion, we'll have to re-wire it back to destination
-      this._audioInterfaceNode.disconnect(audioContext.destination);
+      this._audioInputIfNode.disconnect(audioOutputNode);
 
-      this._audioInterfaceNode.channelCount = inputsNumber!;
+      this._audioInputIfNode.channelCount = inputsNumber!;
 
-      this._audioRouter.connectSource(this._audioInterfaceNode);
+      this._audioRouter.connectSource(this._audioInputIfNode);
 
-      this._emitChange();
+      this.emitStateChange();
+      this.emitInputSoloMute();
 
       this._audioRouter.onChange$.pipe(takeUntil(this._eventBreaker), takeUntil(this._destroyed$)).subscribe((event) => {
-        this._emitChange();
+        this.emitStateChange();
+      });
+
+      this._audioRouter.onInputSoloMute$.pipe(takeUntil(this._eventBreaker), takeUntil(this._destroyed$)).subscribe((event) => {
+        this.emitInputSoloMute();
       });
 
       return this._audioRouter;
@@ -112,9 +130,9 @@ export class OmpSidecarAudio implements SidecarAudioApi, Destroyable {
         this._audioPeakProcessor = new OmpAudioPeakProcessor(audioContext, audioMeterStandard);
         this._audioPeakProcessor.onAudioWorkletLoaded$.pipe(filter((p) => !!p)).subscribe({
           next: () => {
-            this._audioPeakProcessor!.connectSource(this._audioInterfaceNode);
+            this._audioPeakProcessor!.connectSource(this._audioInputIfNode);
 
-            this._emitChange();
+            this.emitStateChange();
             nextCompleteObserver(observer, this._audioPeakProcessor);
           },
         });
@@ -125,11 +143,7 @@ export class OmpSidecarAudio implements SidecarAudioApi, Destroyable {
   protected createSourceNode() {
     this._audioBufferSourceNode = this._videoController.getAudioContext().createBufferSource();
     this._audioBufferSourceNode.buffer = this._audioBuffer;
-
-    // this._audioBufferSourceNode.channelCountMode = 'max';
-    // this._audioBufferSourceNode.channelCount = this._audioBuffer.numberOfChannels;
-
-    this._audioBufferSourceNode.connect(this._audioInterfaceNode);
+    this._audioBufferSourceNode.connect(this._audioInputIfNode);
   }
 
   protected audioPlay(driftOffset = 0) {
@@ -139,7 +153,9 @@ export class OmpSidecarAudio implements SidecarAudioApi, Destroyable {
     this._audioStartTime = this._videoController.getAudioContext().currentTime;
     this._audioOffset = this._videoController.getCurrentTime();
 
+    this._audioBufferSourceNode!.playbackRate.value = this._videoController.getPlaybackRate();
     this._audioBufferSourceNode!.start(this._audioStartTime, this._audioOffset + driftOffset);
+
     this._sidecarAudioPlaying = true;
   }
 
@@ -251,6 +267,18 @@ export class OmpSidecarAudio implements SidecarAudioApi, Destroyable {
         },
       });
 
+    this._videoController.onPlaybackRateChange$
+      .pipe(createAttachedModeFilter<VideoPlaybackRateEvent>())
+      .pipe(createAudioTrackActiveFilter<VideoPlaybackRateEvent>())
+      .pipe(takeUntil(this._eventBreaker), takeUntil(this._destroyed$))
+      .subscribe({
+        next: (event: VideoPlaybackRateEvent) => {
+          if (this._sidecarAudioPlaying) {
+            this.audioPlay();
+          }
+        },
+      });
+
     // this._videoController.onSyncTick$
     //   // maybe reduced frequency?
     //   .pipe(createAttachedModeFilter<SyncTickEvent>())
@@ -326,9 +354,59 @@ export class OmpSidecarAudio implements SidecarAudioApi, Destroyable {
     this.setActiveInactive(false);
   }
 
+  getVolume(): number {
+    return this._volume;
+  }
+
+  setVolume(volume: number): void {
+    let oldVolume = this._volume;
+    this._volume = volume;
+    this._muted = false;
+    this.updateAudioInputIfVolume();
+    this.onVolumeChange$.next({
+      oldVolume: oldVolume,
+      volume: this.getVolume(),
+      muted: this.isMuted(),
+    });
+    this.emitStateChange();
+  }
+
+  mute(): void {
+    this.setMuted(true);
+  }
+
+  unmute() {
+    this.setMuted(false);
+  }
+
+  isMuted(): boolean {
+    return this._muted;
+  }
+
+  toggleMuteUnmute() {
+    this.setMuted(!this._muted);
+  }
+
+  setMuted(muted: boolean = true): void {
+    if (this._muted !== muted) {
+      this._muted = muted;
+      this.updateAudioInputIfVolume();
+      this.onVolumeChange$.next({
+        oldVolume: this.getVolume(),
+        volume: this.getVolume(),
+        muted: this.isMuted(),
+      });
+      this.emitStateChange();
+    }
+  }
+
+  protected updateAudioInputIfVolume() {
+    this._audioInputIfNode.gain.value = this._muted ? 0 : this._volume;
+  }
+
   protected setActiveInactive(value: boolean): void {
     this._audioTrack.active = value;
-    this._emitChange();
+    this.emitStateChange();
   }
 
   getSidecarAudioState(): OmpSidecarAudioState {
@@ -337,6 +415,15 @@ export class OmpSidecarAudio implements SidecarAudioApi, Destroyable {
       audioRouterState: this.audioRouter?.getAudioRouterState(),
       audioPeakProcessorState: this.audioPeakProcessor?.getAudioPeakProcessorState(),
       numberOfChannels: this._audioBuffer.numberOfChannels,
+      volume: this.getVolume(),
+      muted: this.isMuted(),
+    };
+  }
+
+  getSidecarAudioInputSoloMuteState(): OmpSidecarAudioInputSoloMuteState {
+    return {
+      audioTrack: this._audioTrack,
+      audioRouterInputSoloMuteState: this.audioRouter?.getAudioRouterInputSoloMuteState(),
     };
   }
 
@@ -355,7 +442,7 @@ export class OmpSidecarAudio implements SidecarAudioApi, Destroyable {
   destroy(): void {
     this.stopSourceNode();
 
-    this._audioInterfaceNode.disconnect();
+    this._audioInputIfNode.disconnect();
 
     if (this._audioRouter) {
       this._audioRouter.destroy();
@@ -368,6 +455,8 @@ export class OmpSidecarAudio implements SidecarAudioApi, Destroyable {
     nextCompleteSubject(this._eventBreaker);
 
     completeUnsubscribeSubjects(this.onStateChange$);
+    completeUnsubscribeSubjects(this.onInputSoloMute$);
+    completeUnsubscribeSubjects(this.onVolumeChange$);
 
     nextCompleteSubject(this._destroyed$);
   }

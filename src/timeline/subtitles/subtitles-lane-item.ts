@@ -19,7 +19,7 @@ import Konva from 'konva';
 import {Dimension, HasRectMeasurement, Horizontals, OnMeasurementsChange, Position, RectMeasurement} from '../../common/measurement';
 import {Comparable, OmakaseTextTrackCue, SubtitlesChartEvent} from '../../types';
 import {nullifier} from '../../util/destroy-util';
-import {KonvaFactory} from '../../factory/konva-factory';
+import {KonvaFactory} from '../../konva/konva-factory';
 import {Subject} from 'rxjs/internal/Subject';
 import {SubtitlesLane} from './subtitles-lane';
 

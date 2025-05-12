@@ -21,7 +21,7 @@ import {OnMeasurementsChange, Position} from '../common/measurement';
 import {Timeline} from './timeline';
 import {BehaviorSubject, combineLatest, filter, merge, Subject, takeUntil} from 'rxjs';
 import {PlaybackState, VideoControllerApi} from '../video';
-import {KonvaFactory} from '../factory/konva-factory';
+import {KonvaFactory} from '../konva/konva-factory';
 import {WindowUtil} from '../util/window-util';
 import {KonvaUtil} from '../util/konva-util';
 import {nextCompleteSubject} from '../util/rxjs-util';
@@ -152,12 +152,12 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     this._playbackState = this._videoController.getPlaybackState();
 
     this._group = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
+      ...Constants.positionTopLeft,
       listening: true,
     });
 
     this._bgRect = KonvaFactory.createRect({
-      ...Constants.POSITION_TOP_LEFT,
+      ...Constants.positionTopLeft,
       height: this.style.scrubberHeight,
       fill: this.style.backgroundFill,
       opacity: this.style.backgroundOpacity,
@@ -165,7 +165,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     });
 
     this._playProgressBgRect = KonvaFactory.createRect({
-      ...Constants.POSITION_TOP_LEFT,
+      ...Constants.positionTopLeft,
       height: this.style.scrubberHeight,
       fill: this.style.playProgressFill,
       opacity: this.style.playProgressOpacity,
@@ -173,7 +173,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     });
 
     this._playheadGroup = KonvaFactory.createGroup({
-      ...Constants.POSITION_TOP_LEFT,
+      ...Constants.positionTopLeft,
       visible: this.style.visible,
       listening: true,
       draggable: true,
@@ -201,7 +201,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
       fontSize: this.style.textFontSize,
       fontFamily: this._timeline.style.textFontFamily,
       fill: this.style.textFill,
-      ...Constants.POSITION_TOP_LEFT,
+      ...Constants.positionTopLeft,
       text: ``,
       listening: false,
     });
@@ -210,7 +210,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     this._playheadGroup.add(this._timecodeLabel);
 
     this._bufferedGroup = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
+      ...Constants.positionTopLeft,
       listening: false,
     });
 

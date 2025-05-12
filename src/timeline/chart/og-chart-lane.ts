@@ -23,7 +23,7 @@ import Decimal from 'decimal.js';
 import {OgChartCue, OgChartVttCue, WithOptionalPartial} from '../../types';
 import {Timeline} from '../timeline';
 import {destroyer} from '../../util/destroy-util';
-import {KonvaFactory} from '../../factory/konva-factory';
+import {KonvaFactory} from '../../konva/konva-factory';
 import {VideoControllerApi} from '../../video';
 import {AxiosRequestConfig} from 'axios';
 import {OgChartVttFile} from '../../vtt';
@@ -64,7 +64,7 @@ const configDefault: OgChartLaneConfig = {
     paddingBottom: 0,
 
     interpolationWidth: 10,
-    itemFillLinearGradientColorStops: Constants.FILL_LINEAR_GRADIENT_AUDIO_PEAK,
+    itemFillLinearGradientColorStops: Constants.fillLinearGradientAudioPeak,
     itemPadding: 1,
     itemScaleRatio: 1,
   },
@@ -153,38 +153,34 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
     }
   }
 
-  protected override startLoadingAnimation(): void {
-    this._loadingGroup = new Konva.Group({
-      width: this._timecodedGroup!.width(),
-      height: this._timecodedGroup!.height(),
-    });
-
-    this._timecodedGroup!.add(this._loadingGroup);
-    const rects: Konva.Rect[][] = [];
-
+  protected override createLoadingGroupObjects(): Array<Konva.Shape | Konva.Group> {
+    const rects: Konva.Group[] = [];
     const range = this._timeline!.getVisiblePositionRange();
     for (let x = range.start; x <= range.end; x += 7) {
-      const column = [];
-      for (let y = this._loadingGroup.height() / 2 - 13; y <= this._loadingGroup.height() / 2 + 13; y += 7) {
+      const column = new Konva.Group();
+      for (let y = this._loadingGroup!.height() / 2 - 13; y <= this._loadingGroup!.height() / 2 + 13; y += 7) {
         const rect = KonvaFactory.createRect({
           x,
           y,
           width: 5,
           height: 5,
           fill: this.resolveLoadingAnimationColor(),
-          opacity: column.length === 3 || rects.length % 7 === 3 ? 1 : 0,
+          opacity: column.getChildren().length === 3 || rects.length % 7 === 3 ? 1 : 0,
         });
         this._loadingGroup!.add(rect);
-        column.push(rect);
+        column.add(rect);
       }
       rects.push(column);
     }
+    return rects;
+  }
 
-    this._loadingAnimation = new Konva.Animation((frame) => {
+  protected override createLoadingAnimation(): Konva.Animation {
+    return new Konva.Animation((frame) => {
       const frameTime = Math.round((frame?.time ?? 0) / 300);
       const frameNumber = frameTime % 6;
-      rects.forEach((column, columnIndex) => {
-        column.forEach((rect, rowIndex) => {
+      this._loadingGroup!.getChildren().forEach((column, columnIndex) => {
+        (column as Konva.Group).getChildren().forEach((rect, rowIndex) => {
           const showRect = ((frame: number, column: number, row: number) => {
             if (row === 3) return true;
             else if (frame === 0) return column == 3;
@@ -199,7 +195,6 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
         });
       });
     });
-    this._loadingAnimation.start();
   }
 
   private createEntities() {

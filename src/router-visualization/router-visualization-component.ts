@@ -1,5 +1,5 @@
 import {AudioApi} from '../api';
-import {AudioInputOutputNode, OmpMainAudioState, OmpSidecarAudioState} from '../video/model';
+import {OmpAudioRoutingConnection, OmpMainAudioState, OmpSidecarAudioState} from '../video/model';
 import {defaultRouterVisualizationLabels, RouterVisualizationSidecarTrack, RouterVisualizationSize, RouterVisualizationTrack} from './router-visualization';
 
 const classes = {
@@ -8,13 +8,24 @@ const classes = {
   routerVisualizationToggle: 'omakase-router-toggle',
 };
 
+interface MainTrackConfig {
+  track?: RouterVisualizationTrack;
+  defaultMatrix?: OmpAudioRoutingConnection[][];
+}
+
+interface SidecarTracksConfig {
+  tracks: RouterVisualizationSidecarTrack[];
+  defaultMatrix?: OmpAudioRoutingConnection[][];
+}
+
+type SetNodesAction = 'deselect' | 'reset';
+
 export class RouterVisualizationComponent extends HTMLElement {
   private _outputs?: string[];
   private _mainTrack?: RouterVisualizationTrack;
   private _sidecarTracks?: RouterVisualizationSidecarTrack[];
   private _audio?: AudioApi;
   private _size: RouterVisualizationSize = 'medium';
-  private _defaultMatrix?: AudioInputOutputNode[][];
   private _tableElement!: HTMLTableElement;
   private _wrapperElement!: HTMLDivElement;
 
@@ -28,28 +39,40 @@ export class RouterVisualizationComponent extends HTMLElement {
     this.renderOutputs();
   }
 
-  get mainTrack(): RouterVisualizationTrack | undefined {
-    return this._mainTrack;
+  get mainTrack(): MainTrackConfig | undefined {
+    return {
+      track: this._mainTrack,
+    };
   }
 
-  set mainTrack(track: RouterVisualizationTrack | undefined) {
-    if (!track) {
+  set mainTrack(config: MainTrackConfig | undefined) {
+    if (!config?.track) {
       this._mainTrack = undefined;
       return;
     }
-    this._mainTrack = this.prepareTrackForVisualization(track);
+    this._mainTrack = this.prepareTrackForVisualization(config.track);
 
-    if (!this._audio!.getMainAudioState()?.audioRouterState?.audioInputOutputNodes.length) {
-      this._audio!.createMainAudioRouter(track.maxInputNumber, this._outputs!.length);
+    if (!this._audio!.getMainAudioState()?.audioRouterState) {
+      this._audio!.createMainAudioRouter(config.track.maxInputNumber, this._outputs!.length).subscribe({
+        next: () => {
+          this.setAudioRouterDefaultMatrix(config.track!, config.defaultMatrix);
+        },
+      });
+    } else {
+      this.setAudioRouterDefaultMatrix(config.track, config.defaultMatrix);
     }
-    this.renderTrack(track);
+    this.renderTrack(config.track);
   }
 
-  set sidecarTracks(tracks: RouterVisualizationSidecarTrack[]) {
-    this._sidecarTracks = tracks.map((track) => this.prepareTrackForVisualization(track));
+  set sidecarTracks(config: SidecarTracksConfig) {
+    this._sidecarTracks = config.tracks.map((track) => this.prepareTrackForVisualization(track));
 
-    for (const track of tracks) {
-      this._audio!.createSidecarAudioRouter(track.trackId, track.maxInputNumber, this._outputs!.length);
+    for (const track of config.tracks) {
+      this._audio!.createSidecarAudioRouter(track.trackId, track.maxInputNumber, this._outputs!.length).subscribe({
+        next: () => {
+          this.setAudioRouterDefaultMatrix(track, config.defaultMatrix);
+        },
+      });
     }
 
     for (const track of this._sidecarTracks) {
@@ -86,27 +109,27 @@ export class RouterVisualizationComponent extends HTMLElement {
     this._wrapperElement.classList.add(`size-${this._size}`);
   }
 
-  set defaultMatrix(defaultMatrix: AudioInputOutputNode[][] | undefined) {
-    this._defaultMatrix = defaultMatrix;
-    setTimeout(() => {
-      this.resetAllNodes();
-    });
-  }
-
   deselectAllNodes(track?: RouterVisualizationTrack) {
-    return this.setAllNodes(track, (_inputNumber, _outputNumber) => false);
+    return this.setAllNodes('deselect', track);
   }
 
   resetAllNodes(track?: RouterVisualizationTrack) {
-    return this.setAllNodes(track, (inputNumber, outputNumber) => {
-      if (this._defaultMatrix) {
-        return this._defaultMatrix[inputNumber][outputNumber].connected ?? false;
-      } else if (this._outputs!.length === 2) {
-        return inputNumber === 2 || inputNumber === outputNumber || inputNumber - 4 === outputNumber;
+    return this.setAllNodes('reset', track);
+  }
+
+  private setAudioRouterDefaultMatrix(track: RouterVisualizationTrack | RouterVisualizationSidecarTrack, defaultMatrix?: OmpAudioRoutingConnection[][]) {
+    if (defaultMatrix) {
+      const initialConnections = this.flattenDefaultMatrix(defaultMatrix);
+      if ('trackId' in track) {
+        this._audio!.setSidecarAudioRouterInitialRoutingConnections(track.trackId, initialConnections).subscribe(() => this.resetAllNodes(track));
       } else {
-        return inputNumber === outputNumber;
+        this._audio!.setMainAudioRouterInitialRoutingConnections(initialConnections).subscribe(() => this.resetAllNodes(track));
       }
-    });
+    }
+  }
+
+  private flattenDefaultMatrix(defaultMatrix: OmpAudioRoutingConnection[][]): OmpAudioRoutingConnection[] {
+    return defaultMatrix.flatMap((p) => [...p.values()]);
   }
 
   private render() {
@@ -161,12 +184,12 @@ export class RouterVisualizationComponent extends HTMLElement {
     const id = `omakase-router-visualization-${trackId}`;
     const tbody = document.getElementById(id) ?? document.createElement('tbody');
 
-    const inputOutputNodes =
+    const routingConnections =
       trackId === 'main'
-        ? this._audio!.getMainAudioState()?.audioRouterState?.audioInputOutputNodes
+        ? this._audio!.getMainAudioState()?.audioRouterState?.routingConnections
         : this._audio!.getSidecarAudios()
             .find((audio) => audio.audioTrack.id === trackId)
-            ?.audioRouter?.getAudioRouterState()?.audioInputOutputNodes;
+            ?.audioRouter?.getAudioRouterState()?.routingConnections;
 
     tbody.innerHTML = '';
     tbody.id = id;
@@ -199,21 +222,23 @@ export class RouterVisualizationComponent extends HTMLElement {
         const toggle = this.getToggleElement();
         toggle.id = `${classes.routerVisualizationToggle}-${trackId}-${inputNumber}-${outputNumber}`;
 
-        if (inputOutputNodes && inputOutputNodes[inputNumber] && inputOutputNodes[inputNumber][outputNumber] && inputOutputNodes[inputNumber][outputNumber].connected) {
+        if (routingConnections && routingConnections[inputNumber] && routingConnections[inputNumber][outputNumber] && routingConnections[inputNumber][outputNumber].connected) {
           toggle.classList.add('active');
         }
         toggle.onclick = () => {
-          const newAudioInputOutputNodes = [
+          const routingConnections: OmpAudioRoutingConnection[] = [
             {
-              inputNumber,
-              outputNumber,
+              path: {
+                input: inputNumber,
+                output: outputNumber,
+              },
               connected: !toggle.classList.contains('active'),
             },
           ];
           if (trackId === 'main') {
-            this._audio!.routeMainAudioRouterNodes(newAudioInputOutputNodes);
+            this._audio!.updateMainAudioRouterConnections(routingConnections);
           } else {
-            this._audio!.routeSidecarAudioRouterNodes(trackId, newAudioInputOutputNodes);
+            this._audio!.updateSidecarAudioRouterConnections(trackId, routingConnections);
           }
         };
 
@@ -241,30 +266,40 @@ export class RouterVisualizationComponent extends HTMLElement {
     return element;
   }
 
-  private setAllNodes(track?: RouterVisualizationTrack | RouterVisualizationSidecarTrack, connectedFn?: (inputNumber: number, outputNumber: number) => boolean) {
+  private setAllNodes(action: SetNodesAction, track?: RouterVisualizationTrack | RouterVisualizationSidecarTrack) {
     if (track) {
-      track.inputLabels!.forEach((_, inputNumber) => {
-        this._outputs!.forEach((_, outputNumber) => {
-          const newAudioInputOutputNodes = [
-            {
-              inputNumber,
-              outputNumber,
-              connected: connectedFn ? connectedFn(inputNumber, outputNumber) : false,
+      let routingConnections: OmpAudioRoutingConnection[];
+      if (action === 'deselect') {
+        routingConnections = [...Array(track.inputLabels!.length).keys()].flatMap((input) => {
+          return [...Array(this._outputs!.length).keys()].map((output) => ({
+            path: {
+              input,
+              output,
             },
-          ];
-          if ((track as RouterVisualizationSidecarTrack).trackId) {
-            this._audio!.routeSidecarAudioRouterNodes((track as RouterVisualizationSidecarTrack).trackId, newAudioInputOutputNodes);
-          } else {
-            this._audio!.routeMainAudioRouterNodes(newAudioInputOutputNodes);
-          }
+            connected: false,
+          }));
         });
-      });
+      } else {
+        if ('trackId' in track) {
+          routingConnections = this._audio!.getSidecarAudioRouterInitialRoutingConnections(track.trackId) ?? [];
+        } else {
+          routingConnections = this._audio!.getMainAudioRouterInitialRoutingConnections() ?? [];
+        }
+      }
+
+      if ((track as RouterVisualizationSidecarTrack).trackId) {
+        this._audio!.updateSidecarAudioRouterConnections((track as RouterVisualizationSidecarTrack).trackId, routingConnections);
+      } else {
+        this._audio!.updateMainAudioRouterConnections(routingConnections);
+      }
     } else {
       if (this._mainTrack) {
-        this.setAllNodes(this._mainTrack, connectedFn);
+        this.setAllNodes(action, this._mainTrack);
       }
       if (this._sidecarTracks) {
-        this._sidecarTracks.forEach((track) => this.setAllNodes(track, connectedFn));
+        this._sidecarTracks.forEach((track) => {
+          this.setAllNodes(action, track);
+        });
       }
     }
   }
@@ -273,7 +308,7 @@ export class RouterVisualizationComponent extends HTMLElement {
     if (!track.inputNumber) {
       track.inputNumber = track.maxInputNumber;
     }
-    if (!track.inputLabels) {
+    if (!track.inputLabels || track.inputLabels.length !== track.inputNumber) {
       track.inputLabels = defaultRouterVisualizationLabels.slice(0, track.inputNumber);
     } else {
       track.inputLabels = track.inputLabels.slice(0, track.inputNumber);
@@ -294,13 +329,13 @@ export class RouterVisualizationComponent extends HTMLElement {
 
   private updateTogglesFromState(state: OmpMainAudioState | OmpSidecarAudioState) {
     const trackId = (state as OmpSidecarAudioState).audioTrack?.id ?? 'main';
-    if (state.audioRouterState?.audioInputOutputNodes.length) {
-      state.audioRouterState.audioInputOutputNodes.forEach((inputs) => {
-        inputs.forEach((node) => {
-          if (node.connected) {
-            document.getElementById(`${classes.routerVisualizationToggle}-${trackId}-${node.inputNumber}-${node.outputNumber}`)?.classList.add('active');
+    if (state.audioRouterState) {
+      state.audioRouterState.routingConnections.forEach((connections) => {
+        connections.forEach((connection) => {
+          if (connection.connected) {
+            document.getElementById(`${classes.routerVisualizationToggle}-${trackId}-${connection.path.input}-${connection.path.output}`)?.classList.add('active');
           } else {
-            document.getElementById(`${classes.routerVisualizationToggle}-${trackId}-${node.inputNumber}-${node.outputNumber}`)?.classList.remove('active');
+            document.getElementById(`${classes.routerVisualizationToggle}-${trackId}-${connection.path.input}-${connection.path.output}`)?.classList.remove('active');
           }
         });
       });

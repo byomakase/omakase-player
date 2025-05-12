@@ -99,7 +99,7 @@ export class Scrubber extends BaseKonvaComponent<ScrubberConfig, ScrubberStyle, 
     this._timeline = timeline;
 
     this._group = new Konva.Group({
-      ...Constants.POSITION_TOP_LEFT,
+      ...Constants.positionTopLeft,
       visible: this.style.visible,
       listening: listening,
     });
@@ -140,7 +140,7 @@ export class Scrubber extends BaseKonvaComponent<ScrubberConfig, ScrubberStyle, 
       fontSize: this.style.textFontSize,
       fontFamily: this._timeline.style.textFontFamily,
       fill: this.style.textFill,
-      ...Constants.POSITION_TOP_LEFT,
+      ...Constants.positionTopLeft,
       text: ``,
       listening: listening,
     });

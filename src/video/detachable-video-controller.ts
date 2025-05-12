@@ -24,8 +24,8 @@ import {Constants} from '../constants';
 import {SwitchableVideoController} from './switchable-video-controller';
 import {WindowUtil} from '../util/window-util';
 import {HandshakeChannelActionsMap, MessageChannelActionsMap} from './channel-types';
-import {OmpSidecarAudioState, Video, VideoLoadOptions, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
-import {HelpMenuGroup, MainAudioChangeEvent, OmpAudioTrack, OmpError, OmpNamedEventEventName, SubtitlesVttTrack} from '../types';
+import {OmpSidecarAudioInputSoloMuteState, OmpSidecarAudioState, Video, VideoLoadOptions, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
+import {HelpMenuGroup, MainAudioChangeEvent, MainAudioInputSoloMuteEvent, OmpAudioTrack, OmpError, OmpNamedEventEventName, SubtitlesVttTrack} from '../types';
 import {CryptoUtil} from '../util/crypto-util';
 import {StringUtil} from '../util/string-util';
 
@@ -47,7 +47,12 @@ interface VideoControllerState {
   activeNamedEventStreams: OmpNamedEventEventName[];
 
   mainAudioChangeEvent: MainAudioChangeEvent | undefined;
+  mainAudioInputSoloMuteEvent: MainAudioInputSoloMuteEvent | undefined;
   sidecarAudioStates: OmpSidecarAudioState[];
+  sidecarAudioInputSoloMuteStates: OmpSidecarAudioInputSoloMuteState[];
+
+  audioOutputVolume: number;
+  audioOutputMuted: boolean;
 }
 
 export interface DetachableVideoControllerConfig {
@@ -103,7 +108,7 @@ export class DetachableVideoController extends SwitchableVideoController {
 
     this._localVideoController = this._videoController;
 
-    this._handshakeChannel = new TypedOmpBroadcastChannel(Constants.OMP_HANDSHAKE_BROADCAST_CHANNEL_ID);
+    this._handshakeChannel = new TypedOmpBroadcastChannel(Constants.ompHandshakeBroadcastChannelId);
 
     if (this._config.thumbnailVttUrl) {
       this.loadThumbnailVttUrl(this._config.thumbnailVttUrl);
@@ -540,7 +545,11 @@ export class DetachableVideoController extends SwitchableVideoController {
       thumbnailVttUrl: this.getThumbnailVttUrl(),
       activeNamedEventStreams: this.getActiveNamedEventStreams(),
       mainAudioChangeEvent: this.onMainAudioChange$.value,
+      mainAudioInputSoloMuteEvent: this.onMainAudioInputSoloMute$.value,
       sidecarAudioStates: this.getSidecarAudioStates(),
+      sidecarAudioInputSoloMuteStates: this.getSidecarAudioInputSoloMuteStates(),
+      audioOutputVolume: this.getAudioOutputVolume(),
+      audioOutputMuted: this.isAudioOutputMuted(),
     };
   }
 
@@ -572,7 +581,14 @@ export class DetachableVideoController extends SwitchableVideoController {
           videoWindowPlaybackState: this.getVideoWindowPlaybackState(),
         };
 
-        this.loadVideoInternal(state.video.sourceUrl, state.video.frameRate, state.videoLoadOptions, optionsInternal).subscribe({
+        this.loadVideoInternal(
+          state.video.sourceUrl,
+          {
+            frameRate: state.video.frameRate,
+            ...state.videoLoadOptions,
+          },
+          optionsInternal
+        ).subscribe({
           next: () => {
             nextCompleteObserver(observer);
           },
@@ -742,6 +758,17 @@ export class DetachableVideoController extends SwitchableVideoController {
 
     addAfterVideoLoad(
       new Observable((observer) => {
+        this.setAudioOutputVolume(state.audioOutputVolume).subscribe({
+          next: () => {
+            this.setAudioOutputMuted(state.audioOutputMuted);
+            nextCompleteObserver(observer);
+          },
+        });
+      })
+    );
+
+    addAfterVideoLoad(
+      new Observable((observer) => {
         if (state.mainAudioChangeEvent) {
           let mainAudioState = state.mainAudioChangeEvent.mainAudioState;
 
@@ -752,8 +779,27 @@ export class DetachableVideoController extends SwitchableVideoController {
             next: () => {
               // we will not wait for this to finish, just execute
               if (mainAudioState.audioRouterState) {
-                let nodes = mainAudioState.audioRouterState.audioInputOutputNodes.flatMap((byInput, inputNumber) => byInput.map((audioInputOutputNode, outputNumber) => audioInputOutputNode));
-                this.routeMainAudioRouterNodes(nodes);
+                // remove all existing graphs
+                this.removeMainAudioEffectsGraphs();
+
+                mainAudioState.audioRouterState.routingRoutes.forEach((routingRoute) => {
+                  if (routingRoute.audioEffectsGraph) {
+                    this.setMainAudioEffectsGraphs(routingRoute.audioEffectsGraph, routingRoute.path);
+                  }
+                });
+
+                if (state.mainAudioInputSoloMuteEvent?.mainAudioInputSoloMuteState.audioRouterInputSoloMuteState?.soloed) {
+                  let mainAudioInputSoloMuteState = state.mainAudioInputSoloMuteEvent.mainAudioInputSoloMuteState;
+                  this.updateMainAudioRouterConnections([
+                    ...mainAudioInputSoloMuteState.audioRouterInputSoloMuteState!.inputSoloedConnections,
+                    ...mainAudioInputSoloMuteState.audioRouterInputSoloMuteState!.unsoloConnections,
+                  ]);
+                  this.toggleMainAudioRouterSolo({input: mainAudioInputSoloMuteState.audioRouterInputSoloMuteState!.inputNumber});
+                } else {
+                  this.updateMainAudioRouterConnections(mainAudioState.audioRouterState.routingRoutes.map((p) => p.connection));
+                }
+
+                this.setMainAudioRouterInitialRoutingConnections(mainAudioState.audioRouterState.initialRoutingConnections);
               }
               nextCompleteObserver(observer);
             },
@@ -784,10 +830,32 @@ export class DetachableVideoController extends SwitchableVideoController {
                         next: () => {
                           // we will not wait for this to finish, just execute
                           if (sidecarAudioState.audioRouterState) {
-                            let nodes = sidecarAudioState.audioRouterState.audioInputOutputNodes.flatMap((byInput, inputNumber) =>
-                              byInput.map((audioInputOutputNode, outputNumber) => audioInputOutputNode)
-                            );
-                            this.routeSidecarAudioRouterNodes(sidecarAudioState.audioTrack.id, nodes);
+                            // remove all existing graphs
+                            this.removeSidecarAudioEffectsGraphs(sidecarAudioState.audioTrack.id);
+
+                            sidecarAudioState.audioRouterState.routingRoutes.forEach((routingRoute) => {
+                              if (routingRoute.audioEffectsGraph) {
+                                this.setSidecarAudioEffectsGraph(sidecarAudioState.audioTrack.id, routingRoute.audioEffectsGraph, routingRoute.path);
+                              }
+                            });
+
+                            let sidecarAudioSoloedInputState = state.sidecarAudioInputSoloMuteStates.find((inputState) => inputState.audioTrack.id === sidecarAudioState.audioTrack.id);
+                            if (sidecarAudioSoloedInputState?.audioRouterInputSoloMuteState?.soloed) {
+                              this.updateSidecarAudioRouterConnections(sidecarAudioSoloedInputState.audioTrack.id, [
+                                ...sidecarAudioSoloedInputState.audioRouterInputSoloMuteState.inputSoloedConnections,
+                                ...sidecarAudioSoloedInputState.audioRouterInputSoloMuteState.unsoloConnections,
+                              ]);
+                              this.toggleSidecarAudioRouterSolo(sidecarAudioSoloedInputState.audioTrack.id, {input: sidecarAudioSoloedInputState.audioRouterInputSoloMuteState.inputNumber});
+                            } else {
+                              this.updateSidecarAudioRouterConnections(
+                                sidecarAudioState.audioTrack.id,
+                                sidecarAudioState.audioRouterState.routingRoutes.map((p) => p.connection)
+                              );
+                            }
+
+                            this.setSidecarAudioRouterInitialRoutingConnections(sidecarAudioState.audioTrack.id, sidecarAudioState.audioRouterState.initialRoutingConnections);
+                            this.setSidecarVolume(sidecarAudioState.volume, [sidecarAudioState.audioTrack.id]);
+                            this.setSidecarMuted(sidecarAudioState.muted, [sidecarAudioState.audioTrack.id]);
                           }
 
                           nextCompleteObserver(sidecarAudioObserver);

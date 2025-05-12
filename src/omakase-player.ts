@@ -22,7 +22,7 @@ import {Destroyable} from './types';
 import {AudioController} from './audio/audio-controller';
 // we need to include styles in compilation process, thus import them
 import './../style/omakase-player.scss';
-import {nextCompleteSubject} from './util/rxjs-util';
+import {nextCompleteObserver, nextCompleteSubject} from './util/rxjs-util';
 import {Video, VideoController, VideoControllerApi, VideoLoadOptions} from './video';
 import {destroyer, nullifier} from './util/destroy-util';
 import {YogaProvider} from './common/yoga-provider';
@@ -192,24 +192,19 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
     this._videoController.loadThumbnailVttUrl(thumbnailVttUrl);
   }
 
-  loadVideo(videoSourceUrl: string, frameRate: number | string, options?: VideoLoadOptions): Observable<Video> {
-    return this._videoController.loadVideo(videoSourceUrl, frameRate, options);
+  loadVideo(videoSourceUrl: string, options?: VideoLoadOptions): Observable<Video> {
+    return this._videoController.loadVideo(videoSourceUrl, options);
   }
 
   createTimeline(config: Partial<ConfigWithOptionalStyle<TimelineConfig>>): Observable<TimelineApi> {
-    return new Observable<Timeline>((o$) => {
-      let createTimeline = () => {
-        this._timeline = new Timeline(config, this._videoController);
-      };
-
+    return new Observable<Timeline>((observer) => {
       let yogaLayoutReady$ = new Subject<void>();
 
       forkJoin([yogaLayoutReady$])
         .pipe(takeUntil(this._destroyed$))
         .subscribe(() => {
-          createTimeline();
-          o$.next(this._timeline);
-          o$.complete();
+          this._timeline = new Timeline(config, this._videoController);
+          nextCompleteObserver(observer, this._timeline);
         });
 
       // initalize yoga-layout
@@ -217,8 +212,7 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
         .init()
         .pipe(takeUntil(this._destroyed$))
         .subscribe(() => {
-          yogaLayoutReady$.next();
-          yogaLayoutReady$.complete();
+          nextCompleteSubject(yogaLayoutReady$);
         });
     });
   }

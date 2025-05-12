@@ -26,7 +26,7 @@ import {nextCompleteSubject} from '../../util/rxjs-util';
 import {Timeline} from '../timeline';
 import {destroyer} from '../../util/destroy-util';
 import Decimal from 'decimal.js';
-import {KonvaFactory} from '../../factory/konva-factory';
+import {KonvaFactory} from '../../konva/konva-factory';
 import {VideoControllerApi} from '../../video';
 import {ThumbnailLaneApi} from '../../api';
 import {ThumbnailVttFile} from '../../vtt';
@@ -207,7 +207,7 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
   override destroy() {
     super.destroy();
 
-    destroyer(this._timecodedGroup, this._thumbnailHover);
+    destroyer(this._timecodedGroup, this._thumbnailHover, this._loadingGroup);
 
     this.fireEventStreamBreaker();
   }
@@ -220,15 +220,22 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
     this._thumbnailsGroup?.destroyChildren();
   }
 
-  protected override startLoadingAnimation(): void {
-    this._loadingGroup = new Konva.Group({
+  protected override createLoadingGroup(): Konva.Group {
+    return new Konva.Group({
       x: 0,
       y: this.style.height / 2 - this.style.thumbnailHeight / 2,
       width: this._timecodedGroup!.width(),
       height: this._config.style.height,
     });
+  }
 
-    this._timecodedGroup!.add(this._loadingGroup);
+  protected override startLoadingAnimation(): void {
+    if (!this._loadingGroup) {
+      this._loadingGroup = this.createLoadingGroup();
+      this._timecodedGroup!.add(this._loadingGroup);
+    } else {
+      this._loadingGroup.destroyChildren();
+    }
   }
 
   protected override stopLoadingAnimation(): void {

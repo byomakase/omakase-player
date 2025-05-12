@@ -82,6 +82,12 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
         margin: auto;
 
         .omakase-watermark {
+          -webkit-touch-callout: none;
+          -webkit-user-select: none;
+          -khtml-user-select: none;
+          -moz-user-select: none;
+          -ms-user-select: none;
+          user-select: none;
           position: absolute;
           left: 2.5%;
           top: 2.5%;
@@ -488,6 +494,7 @@ media-controller {
     text-align: center;
 
     omakase-time-display {
+      font-family: 'Consolas', monospace;
       color: white;
       line-height: var(--timecode-line-height, var(--timecode-line-height-default));
       font-size: var(--timecode-font-size, var(--timecode-font-size-default));
@@ -610,7 +617,7 @@ media-controller {
       display: flex;
       white-space: nowrap;
       .volume-container {
-        media-volume-range {
+        omakase-volume-range {
           // transition: 200ms ease;
           width: 0;
           overflow: hidden;
@@ -618,7 +625,7 @@ media-controller {
           height: var(--time-range-height, var(--time-range-height-default));
         }
         &:hover {
-          media-volume-range {
+          omakase-volume-range {
             width: var(--volume-range-width, var(--volume-range-width-default));
           }
           ~ omakase-dropdown-toggle {
@@ -768,7 +775,7 @@ media-controller {
   @container (inline-size < 400px) {
     .start-container {
       width: 50px !important;
-      media-volume-range {
+      omakase-volume-range {
         display: none;
       }
     }

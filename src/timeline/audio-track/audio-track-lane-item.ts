@@ -22,7 +22,7 @@ import Decimal from 'decimal.js';
 import {Constants} from '../../constants';
 import {ColorUtil} from '../../util/color-util';
 import {nullifier} from '../../util/destroy-util';
-import {KonvaFactory} from '../../factory/konva-factory';
+import {KonvaFactory} from '../../konva/konva-factory';
 
 export interface AudioTrackLaneItemStyle {
   height: number;
@@ -48,8 +48,8 @@ const configDefault: Omit<AudioTrackLaneItemConfig, 'audioVttCue' | 'x' | 'width
     cornerRadius: 20,
     opacity: 1,
     visible: true,
-    maxSampleFillLinearGradientColorStops: Constants.FILL_LINEAR_GRADIENT_AUDIO_PEAK,
-    minSampleFillLinearGradientColorStops: ColorUtil.inverseFillGradient(Constants.FILL_LINEAR_GRADIENT_AUDIO_PEAK),
+    maxSampleFillLinearGradientColorStops: Constants.fillLinearGradientAudioPeak,
+    minSampleFillLinearGradientColorStops: ColorUtil.inverseFillGradient(Constants.fillLinearGradientAudioPeak),
   },
 };
 

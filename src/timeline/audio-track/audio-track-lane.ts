@@ -25,7 +25,7 @@ import {ColorUtil} from '../../util/color-util';
 import {Timeline} from '../timeline';
 import {destroyer} from '../../util/destroy-util';
 import {AxiosRequestConfig} from 'axios';
-import {KonvaFactory} from '../../factory/konva-factory';
+import {KonvaFactory} from '../../konva/konva-factory';
 import {VideoControllerApi} from '../../video';
 import {AudioTrackLaneApi} from '../../api';
 import {AudioVttFile} from '../../vtt';
@@ -59,8 +59,8 @@ const configDefault: AudioTrackLaneConfig = {
     itemWidth: 5,
     itemMinPadding: 2,
     itemCornerRadius: 5,
-    maxSampleFillLinearGradientColorStops: Constants.FILL_LINEAR_GRADIENT_AUDIO_PEAK,
-    minSampleFillLinearGradientColorStops: ColorUtil.inverseFillGradient(Constants.FILL_LINEAR_GRADIENT_AUDIO_PEAK),
+    maxSampleFillLinearGradientColorStops: Constants.fillLinearGradientAudioPeak,
+    minSampleFillLinearGradientColorStops: ColorUtil.inverseFillGradient(Constants.fillLinearGradientAudioPeak),
   },
 };
 
@@ -160,13 +160,7 @@ export class AudioTrackLane extends VttTimelineLane<AudioTrackLaneConfig, AudioT
     this.clearItems();
   }
 
-  protected override startLoadingAnimation(): void {
-    this._loadingGroup = new Konva.Group({
-      width: this._timecodedGroup!.width(),
-      height: this._timecodedGroup!.height(),
-    });
-
-    this._timecodedGroup!.add(this._loadingGroup);
+  protected override createLoadingGroupObjects(): Array<Konva.Shape | Konva.Group> {
     const rects: Konva.Rect[] = [];
 
     const range = this._timeline!.getVisiblePositionRange();
@@ -175,7 +169,7 @@ export class AudioTrackLane extends VttTimelineLane<AudioTrackLaneConfig, AudioT
 
       const rect = KonvaFactory.createRect({
         x,
-        y: this._loadingGroup.height() / 2 - height / 2,
+        y: this._loadingGroup!.height() / 2 - height / 2,
         width: 3,
         height,
         fill: this.resolveLoadingAnimationColor(),
@@ -185,9 +179,12 @@ export class AudioTrackLane extends VttTimelineLane<AudioTrackLaneConfig, AudioT
       this._loadingGroup!.add(rect);
       rects.push(rect);
     }
+    return rects;
+  }
 
-    this._loadingAnimation = new Konva.Animation((frame) => {
-      rects.forEach((rect, index) => {
+  protected override createLoadingAnimation(): Konva.Animation {
+    return new Konva.Animation((frame) => {
+      this._loadingGroup!.getChildren().forEach((rect, index) => {
         const frameTime = Math.round((frame?.time ?? 0) / 50);
         const height = (Math.sin((index / 16 + frameTime * Math.PI) / 32) / 4 + 0.8) * Math.round(((Math.sin(((index * 173 + frameTime) * Math.PI) / 16) + 1.5) * this._timecodedGroup!.height()) / 8);
         rect.setAttrs({
@@ -196,7 +193,6 @@ export class AudioTrackLane extends VttTimelineLane<AudioTrackLaneConfig, AudioT
         });
       });
     });
-    this._loadingAnimation.start();
   }
 
   private clearItems() {

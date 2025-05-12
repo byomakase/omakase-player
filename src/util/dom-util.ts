@@ -26,4 +26,20 @@ export class DomUtil {
   static createElement<K extends keyof HTMLElementTagNameMap>(tagName: K): HTMLElementTagNameMap[K] {
     return document.createElement(tagName);
   }
+
+  static getAttribute(el: HTMLElement, attrName: string, defaultValue: any = null) {
+    return el.getAttribute(attrName) ?? defaultValue;
+  }
+
+  static setAttribute(el: HTMLElement, attrName: string, value?: string) {
+    if (value === undefined) {
+      if (el.hasAttribute(attrName)) {
+        el.removeAttribute(attrName);
+      }
+      return;
+    }
+    const nextValue = `${value}`;
+    if (this.getAttribute(el, attrName, undefined) === nextValue) return;
+    el.setAttribute(attrName, nextValue);
+  }
 }

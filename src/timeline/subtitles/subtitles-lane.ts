@@ -23,7 +23,7 @@ import {SubtitlesLaneItem} from './subtitles-lane-item';
 import {Timeline} from '../timeline';
 import {AxiosRequestConfig} from 'axios';
 import {destroyer} from '../../util/destroy-util';
-import {KonvaFactory} from '../../factory/konva-factory';
+import {KonvaFactory} from '../../konva/konva-factory';
 import {VideoControllerApi} from '../../video';
 import {SubtitlesLaneApi} from '../../api';
 import {SubtitlesVttFile} from '../../vtt';
@@ -231,13 +231,7 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
     };
   }
 
-  protected override startLoadingAnimation(): void {
-    this._loadingGroup = new Konva.Group({
-      width: this._timecodedGroup!.width(),
-      height: this._timecodedGroup!.height(),
-    });
-
-    this._timecodedGroup!.add(this._loadingGroup);
+  protected override createLoadingGroupObjects(): Array<Konva.Shape | Konva.Group> {
     const rects: Konva.Rect[] = [];
 
     const range = this._timeline!.getVisiblePositionRange();
@@ -255,9 +249,12 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
       this._loadingGroup!.add(rect);
       rects.push(rect);
     }
+    return rects;
+  }
 
-    this._loadingAnimation = new Konva.Animation((frame) => {
-      rects.forEach((rect, index) => {
+  protected override createLoadingAnimation(): Konva.Animation {
+    return new Konva.Animation((frame) => {
+      this._loadingGroup!.getChildren().forEach((rect, index) => {
         const frameTime = Math.round((frame?.time ?? 0) / 50);
         const frameNumber = frameTime % 98 > 48 ? 48 - (frameTime % 49) : frameTime % 49;
         const indexNumber = Math.floor(index / 7) % 2 ? 6 - (index % 7) : index % 7;
@@ -265,7 +262,6 @@ export class SubtitlesLane extends VttTimelineLane<SubtitlesLaneConfig, Subtitle
         rect.opacity(opacity);
       });
     });
-    this._loadingAnimation.start();
   }
 
   private createEntities() {

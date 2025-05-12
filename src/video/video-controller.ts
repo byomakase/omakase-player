@@ -20,14 +20,17 @@ import {
   AudioSwitchedEvent,
   HelpMenuGroup,
   MainAudioChangeEvent,
+  MainAudioInputSoloMuteEvent,
   OmpAudioTrack,
   OmpError,
   OmpNamedEvent,
   OmpNamedEventEventName,
   SidecarAudioChangeEvent,
   SidecarAudioCreateEvent,
+  SidecarAudioInputSoloMuteEvent,
   SidecarAudioPeakProcessorMessageEvent,
   SidecarAudioRemoveEvent,
+  SidecarAudioVolumeChangeEvent,
   SubtitlesCreateEvent,
   SubtitlesEvent,
   SubtitlesLoadedEvent,
@@ -48,20 +51,36 @@ import {
   VideoSeekedEvent,
   VideoSeekingEvent,
   VideoTimeChangeEvent,
-  VideoVolumeEvent,
   VideoWindowPlaybackStateChangeEvent,
+  VolumeChangeEvent,
 } from '../types';
 import {BehaviorSubject, concatMap, delay, filter, forkJoin, from, fromEvent, interval, map, mergeMap, Observable, of, Subject, switchMap, take, takeUntil, tap, timeout, toArray} from 'rxjs';
 import {FrameRateUtil} from '../util/frame-rate-util';
 import {completeSubject, completeSubjects, completeUnsubscribeSubjects, errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
-import {z} from 'zod';
+import {util, z} from 'zod';
 import {TimecodeUtil} from '../util/timecode-util';
 import Hls from 'hls.js';
 import {Validators} from '../validators';
 import {parseErrorMessage, zodErrorMapOverload} from '../util/error-util';
 import {VideoControllerApi} from './video-controller-api';
 import {destroyer, nullifier} from '../util/destroy-util';
-import {AudioInputOutputNode, AudioMeterStandard, BufferedTimespan, OmpAudioRouterState, OmpMainAudioState, OmpSidecarAudioState, PlaybackState, PlaybackStateMachine, Video, VideoLoadOptions, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
+import {
+  AudioMeterStandard,
+  BufferedTimespan,
+  OmpAudioRouterState,
+  OmpAudioRoutingConnection,
+  OmpAudioRoutingPath,
+  OmpMainAudioInputSoloMuteState,
+  OmpMainAudioState,
+  OmpSidecarAudioInputSoloMuteState,
+  OmpSidecarAudioState,
+  PlaybackState,
+  Video,
+  VideoLoadOptions,
+  VideoLoadOptionsInternal,
+  VideoSafeZone,
+  VideoWindowPlaybackState,
+} from './model';
 import {isNullOrUndefined} from '../util/object-util';
 import {StringUtil} from '../util/string-util';
 import {VideoDomControllerApi} from './video-dom-controller-api';
@@ -76,14 +95,13 @@ import {SidecarAudioApi} from '../api/sidecar-audio-api';
 import {OmpAudioPeakProcessor} from './audio-peak-processor';
 import {BlobUtil} from '../util/blob-util';
 import {UrlUtil} from '../util/url-util';
-// @ts-ignore
-import synchronizationProcessor from '../worker/omp-synchronization-processor.js?raw';
-// @ts-ignore
-import blackMp4Base64 from '../../assets/black.mp4.base64.txt?raw';
 import {httpGet} from '../http';
 import {AuthConfig} from '../auth/auth-config';
 import {BrowserProvider} from '../common/browser-provider';
 import {FileUtil} from '../util/file-util';
+import {OmpAudioEffectFilter, OmpAudioEffectParam, OmpAudioEffectsGraphDef} from '../audio'; // @ts-ignore
+import synchronizationProcessor from '../worker/omp-synchronization-processor.js?raw'; // @ts-ignore
+import blackMp4Base64 from '../../assets/black.mp4.base64.txt?raw';
 
 export const HTMLVideoElementEventKeys = {
   PAUSE: 'pause',
@@ -102,6 +120,7 @@ export const HTMLVideoElementEventKeys = {
   DURATIONCHANGE: 'durationchange',
   ENTERPIP: 'enterpictureinpicture',
   LEAVEPIP: 'leavepictureinpicture',
+  ERROR: 'error',
 };
 
 export interface VideoControllerConfig {
@@ -134,7 +153,135 @@ interface SyncConditions {
   newTimecode?: string;
 }
 
+export class PlaybackStateMachine {
+  public readonly onChange$: Subject<PlaybackState>;
+
+  private _state: PlaybackState = {
+    playing: false,
+    paused: true,
+    pausing: false,
+    waiting: false,
+    seeking: false,
+    buffering: false,
+    ended: false,
+  };
+
+  constructor() {
+    this.onChange$ = new BehaviorSubject(this._state);
+  }
+
+  private updateState(partialState: Partial<PlaybackState>) {
+    let newState = {
+      ...this._state,
+      ...partialState,
+    };
+    let isEqual = this.compare(this._state, newState) === 0;
+    this._state = newState;
+    if (!isEqual) {
+      this.onChange$.next(this._state);
+    }
+  }
+
+  private compare(o1: PlaybackState, o2: PlaybackState): number {
+    return o1.playing === o2.playing &&
+      o1.paused === o2.paused &&
+      o1.pausing === o2.pausing &&
+      o1.waiting === o2.waiting &&
+      o1.seeking === o2.seeking &&
+      o1.buffering === o2.buffering &&
+      o1.ended === o2.ended
+      ? 0
+      : -1;
+  }
+
+  get state(): PlaybackState {
+    return this._state;
+  }
+
+  setPlaying() {
+    this.updateState({
+      playing: true,
+      paused: false,
+      pausing: false,
+      waiting: false,
+      seeking: false,
+      buffering: false,
+      ended: false,
+    });
+  }
+
+  setPaused() {
+    this.updateState({
+      playing: false,
+      paused: true,
+      pausing: false,
+      waiting: false,
+      seeking: false,
+      buffering: false,
+      ended: false,
+    });
+  }
+
+  get pausing(): boolean {
+    return this._state.pausing;
+  }
+
+  setPausing() {
+    this.updateState({
+      pausing: true,
+    });
+  }
+
+  setEnded() {
+    this.updateState({
+      playing: false,
+      paused: true,
+      pausing: false,
+      waiting: false,
+      seeking: false,
+      buffering: false,
+      ended: true,
+    });
+  }
+
+  get waiting(): boolean {
+    return this._state.waiting;
+  }
+
+  set waiting(value: boolean) {
+    this.updateState({
+      waiting: value,
+    });
+  }
+
+  get seeking(): boolean {
+    return this._state.seeking;
+  }
+
+  set seeking(value: boolean) {
+    this.updateState({
+      seeking: value,
+      pausing: false,
+      ended: false,
+    });
+  }
+
+  get buffering(): boolean {
+    return this._state.buffering;
+  }
+
+  set buffering(value: boolean) {
+    this.updateState({
+      buffering: value,
+    });
+  }
+}
+
 export class VideoController implements VideoControllerApi {
+  public static readonly videoVolumeDefault: number = 1;
+  public static readonly videoPlaybackRateDefault: number = 1;
+  public static readonly videoMutedDefault: boolean = false;
+
   public readonly onSyncTick$: Subject<SyncTickEvent> = new Subject<SyncTickEvent>();
 
   public readonly onVideoLoaded$: BehaviorSubject<VideoLoadedEvent | undefined> = new BehaviorSubject<VideoLoadedEvent | undefined>(void 0);
@@ -157,7 +304,7 @@ export class VideoController implements VideoControllerApi {
   public readonly onBuffering$: Subject<VideoBufferingEvent> = new Subject<VideoBufferingEvent>();
   public readonly onEnded$: Subject<VideoEndedEvent> = new Subject<VideoEndedEvent>();
   public readonly onVideoError$: Subject<VideoErrorEvent> = new Subject<VideoErrorEvent>();
-  public readonly onVolumeChange$: Subject<VideoVolumeEvent> = new Subject<VideoVolumeEvent>();
+  public readonly onVolumeChange$: Subject<VolumeChangeEvent> = new Subject<VolumeChangeEvent>();
   public readonly onFullscreenChange$: Subject<VideoFullscreenChangeEvent> = new Subject<VideoFullscreenChangeEvent>();
   public readonly onVideoSafeZoneChange$: Subject<VideoSafeZoneChangeEvent> = new Subject<VideoSafeZoneChangeEvent>();
   public readonly onVideoWindowPlaybackStateChange$: Subject<VideoWindowPlaybackStateChangeEvent> = new Subject<VideoWindowPlaybackStateChangeEvent>();
@@ -172,12 +319,18 @@ export class VideoController implements VideoControllerApi {
   // audio router
   public readonly onMainAudioChange$: BehaviorSubject<MainAudioChangeEvent | undefined> = new BehaviorSubject<MainAudioChangeEvent | undefined>(void 0);
   public readonly onMainAudioPeakProcessorMessage$: Subject<AudioPeakProcessorMessageEvent> = new Subject<AudioPeakProcessorMessageEvent>();
+  public readonly onMainAudioInputSoloMute$: BehaviorSubject<MainAudioInputSoloMuteEvent | undefined> = new BehaviorSubject<MainAudioInputSoloMuteEvent | undefined>(void 0);
 
   // sidecar audio
   public readonly onSidecarAudioCreate$: Subject<SidecarAudioCreateEvent> = new Subject<SidecarAudioCreateEvent>();
   public readonly onSidecarAudioRemove$: Subject<SidecarAudioRemoveEvent> = new Subject<SidecarAudioRemoveEvent>();
   public readonly onSidecarAudioChange$: Subject<SidecarAudioChangeEvent> = new Subject<SidecarAudioChangeEvent>();
+  public readonly onSidecarAudioVolumeChange$: Subject<SidecarAudioVolumeChangeEvent> = new Subject<SidecarAudioVolumeChangeEvent>();
   public readonly onSidecarAudioPeakProcessorMessage$: Subject<SidecarAudioPeakProcessorMessageEvent> = new Subject<SidecarAudioPeakProcessorMessageEvent>();
+  public readonly onSidecarAudioInputSoloMute$: Subject<SidecarAudioInputSoloMuteEvent> = new Subject<SidecarAudioInputSoloMuteEvent>();
+
+  // audio output
+  public readonly onAudioOutputVolumeChange$: Subject<VolumeChangeEvent> = new Subject<VolumeChangeEvent>();
 
   // VideoHlsLoader specific
   public readonly onActiveNamedEventStreamsChange$: Subject<OmpNamedEventEventName[]> = new Subject<OmpNamedEventEventName[]>();
@@ -217,11 +370,17 @@ export class VideoController implements VideoControllerApi {
    */
   protected _audioContext!: AudioContext;
 
+  protected _audioOutputNode!: GainNode;
+  protected _audioOutputMuted = VideoController.videoMutedDefault;
+  protected _audioOutputVolume = VideoController.videoVolumeDefault;
+
+  protected _mediaElementAudioSourceNode?: MediaElementAudioSourceNode;
+
   /**
    * Created in constructor
    * @protected
    */
-  protected _mainAudioInterfaceSourceNode!: AudioNode;
+  protected _mainAudioNode!: AudioNode;
   protected _mainAudioRouter?: OmpAudioRouter;
   protected _mainAudioPeakProcessor?: OmpAudioPeakProcessor;
 
@@ -235,6 +394,13 @@ export class VideoController implements VideoControllerApi {
   protected _syncWorkletSource?: MediaElementAudioSourceNode;
 
   protected _blackMp4Url: string;
+
+  protected _lastMainVolumeChangeEvent?: VolumeChangeEvent;
+  /**
+   * Volume tracking for Safari
+   * @protected
+   */
+  protected _lastProvidedMainVolumeHlsLoaderSafari?: number;
 
   protected _thumbnailVttUrl?: string;
   protected _helpMenuGroups: HelpMenuGroup[] = [];
@@ -277,7 +443,10 @@ export class VideoController implements VideoControllerApi {
     this._videoDomController = videoDomController;
 
     this.createAudioContext();
-    this.createMainAudio();
+
+    if (!this.isMainAudioCreationDelayed()) {
+      this.createMainAudio();
+    }
 
     this._videoFrameCallback$.pipe(takeUntil(this._destroyed$)).subscribe((videoFrameCallbackData) => {
       if (videoFrameCallbackData) {
@@ -294,9 +463,35 @@ export class VideoController implements VideoControllerApi {
     this._blackMp4Url = UrlUtil.formatBase64Url('video/mp4', blackMp4Base64);
 
     this.createSyncWorklet();
+
+    this.onAudioOutputVolumeChange$.pipe(takeUntil(this._destroyed$)).subscribe((audioOutputVolumeEvent) => {
+      if (this.isVideoHlsLoaderInSafari()) {
+        let newMainVolume = this.getVolume() * audioOutputVolumeEvent.volume;
+        this._setVolume(newMainVolume);
+        this.setMuted(audioOutputVolumeEvent.muted);
+      }
+    });
+
+    this.onVolumeChange$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
+      this._lastMainVolumeChangeEvent = event;
+    });
   }
 
-  loadVideoInternal(sourceUrl: string, frameRate: number | string, options: VideoLoadOptions | undefined, optionsInternal?: VideoLoadOptionsInternal): Observable<Video> {
+  private isVideoHlsLoaderInSafari = () => {
+    return this._videoLoader instanceof VideoHlsLoader && BrowserProvider.instance().isSafari;
+  };
+
+  /**
+   * For DRM'd videos Firefox doesn't allow tampering with audio source before setting up keys inside <video> element
+   * That's why we are creating main audio after applying DRM keyes
+   *
+   * @protected
+   */
+  protected isMainAudioCreationDelayed(): boolean {
+    return BrowserProvider.instance().isFirefox;
+  }
+
+  loadVideoInternal(sourceUrl: string, options: VideoLoadOptions | undefined, optionsInternal?: VideoLoadOptionsInternal): Observable<Video> {
     return passiveObservable<Video>((observer) => {
       let handleOnError = (err: any) => {
         this.onVideoError$.next({
@@ -332,14 +527,14 @@ export class VideoController implements VideoControllerApi {
 
         sourceUrl = Validators.url()(sourceUrl);
 
-        frameRate = FrameRateUtil.resolveFrameRate(FileUtil.isAudioFile(sourceUrl) ? FrameRateUtil.AUDIO_FRAME_RATE : frameRate);
+        const frameRate = FrameRateUtil.resolveFrameRate(FileUtil.isAudioFile(sourceUrl) ? FrameRateUtil.AUDIO_FRAME_RATE : options?.frameRate);
 
         if (options && !isNullOrUndefined(options.dropFrame)) {
           z.coerce.boolean().parse(options?.dropFrame, zodErrorMapOverload('Invalid dropFrame'));
         }
         let dropFrame = options && options.dropFrame !== void 0 ? options.dropFrame : false;
 
-        if (dropFrame && !FrameRateUtil.isSupportedDropFrameRate(frameRate)) {
+        if (frameRate && dropFrame && !FrameRateUtil.isSupportedDropFrameRate(frameRate)) {
           throw new Error(`Frame rate not supported: ${frameRate}, drop frame: ${dropFrame}`);
         }
 
@@ -358,10 +553,14 @@ export class VideoController implements VideoControllerApi {
         let videoLoader = this.resolveAndAttachVideoLoader(sourceUrl, options);
 
         videoLoader
-          .loadVideo(sourceUrl, frameRate as number, options)
+          .loadVideo(sourceUrl, options)
           .pipe(take(1))
           .subscribe({
             next: (video) => {
+              if (this.isMainAudioCreationDelayed()) {
+                this.createMainAudio();
+              }
+
               this._video = video;
 
               if (options && !StringUtil.isNullUndefinedOrWhitespace(options.ffom)) {
@@ -385,6 +584,12 @@ export class VideoController implements VideoControllerApi {
                 isAttaching: optionsInternal && optionsInternal.videoWindowPlaybackState === 'attaching',
                 isDetaching: optionsInternal && optionsInternal.videoWindowPlaybackState === 'detaching',
               });
+
+              if (!this._lastMainVolumeChangeEvent && this.getVideoElementVolume() !== VideoController.videoVolumeDefault) {
+                // some browsers automatically set video element volume to last value set in previous sessions
+                // we have to align that value with audioOutputVolume
+                this.setVolume(VideoController.videoVolumeDefault);
+              }
 
               this._videoDomController.setSafeZoneAspectRatio(`${this.videoElement.videoWidth} / ${this.videoElement.videoHeight}`);
 
@@ -518,14 +723,14 @@ export class VideoController implements VideoControllerApi {
     return this._videoLoader;
   }
 
-  loadVideo(sourceUrl: string, frameRate: number | string, options?: VideoLoadOptions): Observable<Video> {
-    return this.loadVideoInternal(sourceUrl, frameRate, options);
+  loadVideo(sourceUrl: string, options?: VideoLoadOptions): Observable<Video> {
+    return this.loadVideoInternal(sourceUrl, options);
   }
 
   reloadVideo(): Observable<Video> {
     this.validateVideoLoaded();
 
-    return this.loadVideo(this._video!.sourceUrl, this._video!.frameRate, this._videoLoadOptions);
+    return this.loadVideo(this._video!.sourceUrl, this._videoLoadOptions);
   }
 
   get videoElement(): HTMLVideoElement {
@@ -607,10 +812,7 @@ export class VideoController implements VideoControllerApi {
     fromEvent(this.videoElement, HTMLVideoElementEventKeys.VOLUMECHANGE)
       .pipe(takeUntil(this._videoEventBreaker$))
       .subscribe((event) => {
-        this.onVolumeChange$.next({
-          volume: this.getVolume(),
-          muted: this.isMuted(),
-        });
+        this.dispatchOnVolumeChange();
       });
 
     fromEvent(this.videoElement, HTMLVideoElementEventKeys.RATECHANGE)
@@ -1463,25 +1665,23 @@ export class VideoController implements VideoControllerApi {
   setPlaybackRate(playbackRate: number): Observable<void> {
     return passiveObservable((observer) => {
       if (this.isVideoLoaded()) {
+        let newPlaybackRate: number;
         try {
-          playbackRate = z.coerce.number().min(0.1).max(16).default(1).parse(playbackRate);
+          newPlaybackRate = z.coerce.number().min(0.1).max(16).default(VideoController.videoPlaybackRateDefault).parse(playbackRate);
         } catch (e) {
-          playbackRate = 1;
+          newPlaybackRate = VideoController.videoPlaybackRateDefault;
         }
 
-        if (playbackRate !== this.getPlaybackRate()) {
+        if (newPlaybackRate !== this.getPlaybackRate()) {
           this.onPlaybackRateChange$.pipe(take(1), timeout(60000), takeUntil(this._destroyed$)).subscribe({
             next: () => {
               nextCompleteObserver(observer);
             },
           });
+          this.videoElement.playbackRate = playbackRate;
         } else {
           nextCompleteObserver(observer);
         }
-
-        this.videoElement.playbackRate = playbackRate;
-
-        // TODO we could wait for change event before resolution
       } else {
         nextCompleteObserver(observer);
       }
@@ -1489,27 +1689,58 @@ export class VideoController implements VideoControllerApi {
   }
 
   getVolume(): number {
-    return this.isVideoLoaded() ? this.videoElement.volume : 0;
+    if (this.isVideoHlsLoaderInSafari()) {
+      return this._lastProvidedMainVolumeHlsLoaderSafari !== void 0 ? this._lastProvidedMainVolumeHlsLoaderSafari : VideoController.videoVolumeDefault;
+    } else {
+      return this.getVideoElementVolume();
+    }
   }
 
   setVolume(volume: number): Observable<void> {
+    if (this.isVideoHlsLoaderInSafari()) {
+      this._lastProvidedMainVolumeHlsLoaderSafari = Validators.volume()(volume);
+      volume = this._lastProvidedMainVolumeHlsLoaderSafari * this._audioOutputVolume;
+    }
+
+    return this._setVolume(volume);
+  }
+
+  protected getVideoElementVolume(): number {
+    return this.videoElement.volume;
+  }
+
+  protected _setVolume(volume: number): Observable<void> {
     return passiveObservable((observer) => {
-      if (this.isVideoLoaded()) {
-        try {
-          volume = z.coerce.number().min(0).max(1).default(1).parse(volume);
+      let newVolume: number;
+      try {
+        newVolume = Validators.volume()(volume);
 
-          this.videoElement.volume = volume;
-
-          // TODO we could wait for change event before resolution
-
-          nextCompleteObserver(observer);
-        } catch (e) {
-          // nop
+        if (newVolume !== this.getVideoElementVolume()) {
+          this.onVolumeChange$.pipe(take(1), timeout(60000), takeUntil(this._destroyed$)).subscribe({
+            next: () => {
+              nextCompleteObserver(observer);
+            },
+            error: () => {
+              // ignore
+              nextCompleteObserver(observer);
+            },
+          });
+          this.videoElement.volume = newVolume;
+        } else {
           nextCompleteObserver(observer);
         }
-      } else {
+      } catch (e) {
+        // nop
         nextCompleteObserver(observer);
       }
+    });
+  }
+
+  private dispatchOnVolumeChange() {
+    this.onVolumeChange$.next({
+      volume: this.getVolume(),
+      muted: this.isMuted(),
+      oldVolume: this._lastMainVolumeChangeEvent ? this._lastMainVolumeChangeEvent.volume : VideoController.videoVolumeDefault,
     });
   }
 
@@ -1692,20 +1923,22 @@ export class VideoController implements VideoControllerApi {
 
   mute(): Observable<void> {
     return passiveObservable((observer) => {
-      if (this.isVideoLoaded()) {
-        this.videoElement.muted = true;
-      }
+      this.setMuted(true);
       nextCompleteObserver(observer);
     });
   }
 
   unmute(): Observable<void> {
     return passiveObservable((observer) => {
-      if (this.isVideoLoaded()) {
-        this.videoElement.muted = false;
-      }
+      this.setMuted(false);
       nextCompleteObserver(observer);
     });
+  }
+
+  protected setMuted(muted: boolean): void {
+    if (this.videoElement.muted !== muted) {
+      this.videoElement.muted = muted;
+    }
   }
 
   isMuted(): boolean {
@@ -1766,6 +1999,9 @@ export class VideoController implements VideoControllerApi {
         this._videoLoader!.setActiveAudioTrack(id).subscribe({
           next: (event) => {
             this.updateActiveAudioTrack(id);
+            if (this._mainAudioRouter) {
+              this._mainAudioRouter.updateConnections(this._mainAudioRouter.getInitialRoutingConnections());
+            }
             nextCompleteObserver(observer);
           },
           error: (err) => {
@@ -1884,7 +2120,9 @@ export class VideoController implements VideoControllerApi {
         errorCompleteObserver(observer, 'Picture in picture is not supported in this browser');
       } else {
         if (!document.pictureInPictureElement && document.pictureInPictureEnabled) {
-          this.getHTMLVideoElement().requestPictureInPicture();
+          this.getHTMLVideoElement()
+            .requestPictureInPicture()
+            .then(() => console.debug('Video entered picture in picture mode'));
         }
         nextCompleteObserver(observer);
       }
@@ -1895,7 +2133,7 @@ export class VideoController implements VideoControllerApi {
     return passiveObservable((observer) => {
       if (this.isVideoLoaded()) {
         if (document.pictureInPictureElement && document.pictureInPictureEnabled) {
-          document.exitPictureInPicture();
+          document.exitPictureInPicture().then(() => console.debug('Video exited picture in picture mode'));
         }
         nextCompleteObserver(observer);
       } else {
@@ -2072,6 +2310,10 @@ export class VideoController implements VideoControllerApi {
       console.debug('Creating AudioContext');
       this._audioContext = new AudioContext(contextOptions);
 
+      this._audioOutputNode = this._audioContext.createGain();
+      this._audioOutputNode.channelCountMode = 'max';
+      this._audioOutputNode.connect(this._audioContext.destination);
+
       this.onPlay$.pipe(takeUntil(this._audioContextResumeBreaker$), takeUntil(this._destroyed$)).subscribe({
         next: () => {
           if (this._audioContext?.state !== 'running') {
@@ -2090,28 +2332,94 @@ export class VideoController implements VideoControllerApi {
   }
 
   protected createMainAudio() {
-    this._mainAudioInterfaceSourceNode = this._audioContext.createGain();
-    this._mainAudioInterfaceSourceNode.channelCountMode = 'max';
+    this._mainAudioNode = this._audioContext.createGain();
+    this._mainAudioNode.channelCountMode = 'max';
 
-    let mediaElementAudioSourceNode = this._audioContext.createMediaElementSource(this.getHTMLVideoElement());
-    mediaElementAudioSourceNode.connect(this._mainAudioInterfaceSourceNode).connect(this._audioContext.destination);
+    if (this._mediaElementAudioSourceNode) {
+      this._mediaElementAudioSourceNode.disconnect();
+    }
+
+    this._mediaElementAudioSourceNode = this._audioContext.createMediaElementSource(this.getHTMLVideoElement());
+    this._mediaElementAudioSourceNode.connect(this._mainAudioNode).connect(this._audioOutputNode);
 
     this._emitMainAudioChange();
+    this._emitSoloMute();
   }
 
   getAudioContext(): AudioContext {
     return this._audioContext;
   }
 
-  getMainAudioSourceNode(): AudioNode {
-    return this._mainAudioInterfaceSourceNode;
+  getAudioOutputNode(): AudioNode {
+    return this._audioOutputNode;
+  }
+
+  getAudioOutputVolume(): number {
+    return this._audioOutputVolume;
+  }
+
+  isAudioOutputMuted(): boolean {
+    return this._audioOutputMuted;
+  }
+
+  setAudioOutputMuted(muted: boolean): Observable<void> {
+    return passiveObservable((observer) => {
+      this.updateAudioOutputVolume(this._audioOutputVolume, muted);
+      nextCompleteObserver(observer);
+    });
+  }
+
+  toggleAudioOutputMuteUnmute(): Observable<void> {
+    return passiveObservable((observer) => {
+      this.updateAudioOutputVolume(this._audioOutputVolume, !this.isAudioOutputMuted());
+      nextCompleteObserver(observer);
+    });
+  }
+
+  setAudioOutputVolume(volume: number): Observable<void> {
+    return passiveObservable((observer) => {
+      this.updateAudioOutputVolume(volume, false); // unmutes as well
+      nextCompleteObserver(observer);
+    });
+  }
+
+  muteAudioOutput(): Observable<void> {
+    return passiveObservable((observer) => {
+      this.updateAudioOutputVolume(this._audioOutputVolume, true);
+      nextCompleteObserver(observer);
+    });
+  }
+
+  unmuteAudioOutput(): Observable<void> {
+    return passiveObservable((observer) => {
+      this.updateAudioOutputVolume(this._audioOutputVolume, false);
+      nextCompleteObserver(observer);
+    });
+  }
+
+  protected updateAudioOutputVolume(volume: number, muted: boolean) {
+    let oldVolume = this._audioOutputVolume;
+    this._audioOutputVolume = volume;
+    this._audioOutputMuted = muted;
+
+    this._audioOutputNode.gain.value = this._audioOutputMuted ? 0 : this._audioOutputVolume;
+
+    this.onAudioOutputVolumeChange$.next({
+      volume: this._audioOutputVolume,
+      muted: this._audioOutputMuted,
+      oldVolume: oldVolume,
+    });
+  }
+
+  getMainAudioNode(): AudioNode {
+    return this._mainAudioNode;
   }
 
   getMainAudioState(): OmpMainAudioState | undefined {
     return {
       audioRouterState: this._mainAudioRouter?.getAudioRouterState(),
       audioPeakProcessorState: this._mainAudioPeakProcessor?.getAudioPeakProcessorState(),
-      numberOfChannels: this._mainAudioInterfaceSourceNode.channelCount,
+      numberOfChannels: this._mainAudioNode.channelCount,
     };
   }
 
@@ -2119,9 +2427,32 @@ export class VideoController implements VideoControllerApi {
     return this._mainAudioRouter;
   }
 
+  getMainAudioInputSoloMuteState(): OmpMainAudioInputSoloMuteState | undefined {
+    return {
+      audioRouterInputSoloMuteState: this._mainAudioRouter?.getAudioRouterInputSoloMuteState(),
+    };
+  }
+
+  getMainAudioRouterInitialRoutingConnections(): OmpAudioRoutingConnection[] | undefined {
+    return this._mainAudioRouter?.getInitialRoutingConnections();
+  }
+
+  setMainAudioRouterInitialRoutingConnections(connections: OmpAudioRoutingConnection[]): Observable<void> {
+    return passiveObservable((observer) => {
+      if (this._mainAudioRouter) {
+        this._mainAudioRouter.setInitialRoutingConnections(connections);
+        nextCompleteObserver(observer);
+      } else {
+        console.debug('Main audio router not created.');
+        nextCompleteObserver(observer);
+      }
+    });
+  }
+
   createMainAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<OmpAudioRouterState> {
     return passiveObservable((observer) => {
       if (this._mainAudioRouter) {
+        this._mainAudioRouter.resetInputsSoloMuteState();
         console.debug('Main audio router already created');
         nextCompleteObserver(observer, this._mainAudioRouter.getAudioRouterState());
       } else {
@@ -2129,15 +2460,20 @@ export class VideoController implements VideoControllerApi {
           next: (audioRouter) => {
             this._mainAudioRouter = audioRouter;
 
-            this._mainAudioInterfaceSourceNode.channelCount = this._mainAudioRouter.inputsNumber;
+            this._mainAudioNode.channelCount = this._mainAudioRouter.inputsNumber;
 
-            this._mainAudioInterfaceSourceNode.disconnect(this._audioContext.destination);
-            this._mainAudioRouter.connectSource(this._mainAudioInterfaceSourceNode);
+            this._mainAudioNode.disconnect(this._audioOutputNode);
+            this._mainAudioRouter.connectSource(this._mainAudioNode);
 
             this._emitMainAudioChange();
+            this._emitSoloMute();
 
             this._mainAudioRouter.onChange$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
               this._emitMainAudioChange();
+            });
+
+            this._mainAudioRouter.onInputSoloMute$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
+              this._emitSoloMute();
             });
 
             nextCompleteObserver(observer, this._mainAudioRouter.getAudioRouterState());
@@ -2150,6 +2486,7 @@ export class VideoController implements VideoControllerApi {
   createMainAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<OmpAudioRouterState> {
     return passiveObservable((observer) => {
       if (this._mainAudioRouter) {
+        this._mainAudioRouter.resetInputsSoloMuteState();
         console.debug('Main audio router already created');
         nextCompleteObserver(observer, this._mainAudioRouter.getAudioRouterState());
       } else {
@@ -2157,15 +2494,20 @@ export class VideoController implements VideoControllerApi {
           next: (audioRouter) => {
             this._mainAudioRouter = audioRouter;
 
-            this._mainAudioInterfaceSourceNode.channelCount = this._mainAudioRouter.inputsNumber;
+            this._mainAudioNode.channelCount = this._mainAudioRouter.inputsNumber;
 
-            this._mainAudioInterfaceSourceNode.disconnect(this._audioContext.destination);
-            this._mainAudioRouter.connectSource(this._mainAudioInterfaceSourceNode);
+            this._mainAudioNode.disconnect(this._audioOutputNode);
+            this._mainAudioRouter.connectSource(this._mainAudioNode);
 
             this._emitMainAudioChange();
+            this._emitSoloMute();
 
             this._mainAudioRouter.onChange$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
               this._emitMainAudioChange();
+            });
+
+            this._mainAudioRouter.onInputSoloMute$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
+              this._emitSoloMute();
             });
 
             nextCompleteObserver(observer, this._mainAudioRouter.getAudioRouterState());
@@ -2185,6 +2527,16 @@ export class VideoController implements VideoControllerApi {
     this.onMainAudioChange$.next(event);
   }
 
+  protected _emitSoloMute() {
+    let mainAudioInputSoloMuteState = this.getMainAudioInputSoloMuteState();
+    let event: MainAudioInputSoloMuteEvent | undefined = mainAudioInputSoloMuteState
+      ? {
+          mainAudioInputSoloMuteState,
+        }
+      : void 0;
+    this.onMainAudioInputSoloMute$.next(event);
+  }
+
   createMainAudioPeakProcessor(audioMeterStandard?: AudioMeterStandard): Observable<Observable<AudioPeakProcessorMessageEvent>> {
     return passiveObservable<Observable<AudioPeakProcessorMessageEvent>>((observer) => {
       if (this._mainAudioPeakProcessor) {
@@ -2194,7 +2546,7 @@ export class VideoController implements VideoControllerApi {
         this._mainAudioPeakProcessor = new OmpAudioPeakProcessor(this._audioContext, audioMeterStandard);
         this._mainAudioPeakProcessor.onAudioWorkletLoaded$.pipe(filter((p) => !!p)).subscribe({
           next: () => {
-            this._mainAudioPeakProcessor!.connectSource(this._mainAudioInterfaceSourceNode);
+            this._mainAudioPeakProcessor!.connectSource(this._mainAudioNode);
 
             this._emitMainAudioChange();
             nextCompleteObserver(observer, this.onMainAudioPeakProcessorMessage$);
@@ -2213,10 +2565,75 @@ export class VideoController implements VideoControllerApi {
     });
   }
 
-  routeMainAudioRouterNodes(newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void> {
+  updateMainAudioRouterConnections(connections: OmpAudioRoutingConnection[]): Observable<void> {
     return passiveObservable((observer) => {
       if (this._mainAudioRouter) {
-        this._mainAudioRouter.routeAudioInputOutputNodes(newAudioInputOutputNodes);
+        this._mainAudioRouter.updateConnections(connections);
+        nextCompleteObserver(observer);
+      } else {
+        console.debug('Main audio router not created.');
+        nextCompleteObserver(observer);
+      }
+    });
+  }
+
+  setMainAudioEffectsGraphs(effectsGraphDef: OmpAudioEffectsGraphDef, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
+    return passiveObservable((observer) => {
+      if (this._mainAudioRouter) {
+        this._mainAudioRouter.setAudioEffectsGraphs(effectsGraphDef, routingPath);
+        nextCompleteObserver(observer);
+      } else {
+        console.debug('Main audio router not created.');
+        nextCompleteObserver(observer);
+      }
+    });
+  }
+
+  removeMainAudioEffectsGraphs(routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
+    return passiveObservable((observer) => {
+      if (this._mainAudioRouter) {
+        this._mainAudioRouter.removeAudioEffectsGraphs(routingPath);
+        nextCompleteObserver(observer);
+      } else {
+        console.debug('Main audio router not created.');
+        nextCompleteObserver(observer);
+      }
+    });
+  }
+
+  setMainAudioEffectsParams(
+    param: OmpAudioEffectParam,
+    filter?: {
+      routingPath?: Partial<OmpAudioRoutingPath>;
+    } & OmpAudioEffectFilter
+  ): Observable<void> {
+    return passiveObservable((observer) => {
+      if (this._mainAudioRouter) {
+        this._mainAudioRouter.setAudioEffectsParams(param, filter);
+        nextCompleteObserver(observer);
+      } else {
+        console.debug('Main audio router not created.');
+        nextCompleteObserver(observer);
+      }
+    });
+  }
+
+  toggleMainAudioRouterSolo(routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+    return passiveObservable((observer) => {
+      if (this._mainAudioRouter) {
+        this._mainAudioRouter.toggleSolo(routingPath);
+        nextCompleteObserver(observer);
+      } else {
+        console.debug('Main audio router not created.');
+        nextCompleteObserver(observer);
+      }
+    });
+  }
+
+  toggleMainAudioRouterMute(routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+    return passiveObservable((observer) => {
+      if (this._mainAudioRouter) {
+        this._mainAudioRouter.toggleMute(routingPath);
         nextCompleteObserver(observer);
       } else {
         console.debug('Main audio router not created.');
@@ -2228,7 +2645,7 @@ export class VideoController implements VideoControllerApi {
   protected _createAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<OmpAudioRouter> {
     if (isNullOrUndefined(outputsNumber)) {
       return passiveObservable((observer) => {
-        let audioRouter = new OmpAudioRouter(this._audioContext, inputsNumber);
+        let audioRouter = new OmpAudioRouter(this._audioContext, this._audioOutputNode, inputsNumber);
         nextCompleteObserver(observer, audioRouter);
       });
     } else {
@@ -2238,7 +2655,7 @@ export class VideoController implements VideoControllerApi {
 
   protected _createAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<OmpAudioRouter> {
     return passiveObservable((observer) => {
-      let audioRouter = new OmpAudioRouter(this._audioContext, inputsNumber, outputsNumberResolver);
+      let audioRouter = new OmpAudioRouter(this._audioContext, this._audioOutputNode, inputsNumber, outputsNumberResolver);
       nextCompleteObserver(observer, audioRouter);
     });
   }
@@ -2302,7 +2719,8 @@ export class VideoController implements VideoControllerApi {
   }
 
   loadBlackVideo(): Observable<Video> {
-    return this.loadVideo(this._blackMp4Url, 30, {
+    return this.loadVideo(this._blackMp4Url, {
+      frameRate: 30,
       protocol: 'native',
     });
   }
@@ -2315,8 +2733,36 @@ export class VideoController implements VideoControllerApi {
     return this._sidecarAudios.get(id);
   }
 
+  getSidecarAudioState(id: string): OmpSidecarAudioState | undefined {
+    return this.getSidecarAudio(id)?.getSidecarAudioState();
+  }
+
   getSidecarAudioStates(): OmpSidecarAudioState[] {
     return this.getSidecarAudios().map((p) => p.getSidecarAudioState());
+  }
+
+  getSidecarAudioInputSoloMuteState(id: string): OmpSidecarAudioInputSoloMuteState | undefined {
+    return this.getSidecarAudio(id)?.getSidecarAudioInputSoloMuteState();
+  }
+
+  getSidecarAudioInputSoloMuteStates(): OmpSidecarAudioInputSoloMuteState[] {
+    return this.getSidecarAudios().map((p) => p.getSidecarAudioInputSoloMuteState());
+  }
+
+  getSidecarAudioRouterInitialRoutingConnections(id: string): OmpAudioRoutingConnection[] | undefined {
+    return this.getSidecarAudio(id)?.audioRouter?.getInitialRoutingConnections();
+  }
+
+  setSidecarAudioRouterInitialRoutingConnections(id: string, connections: OmpAudioRoutingConnection[]): Observable<void> {
+    return passiveObservable((observer) => {
+      let sidecarAudio = this.getSidecarAudio(id);
+      if (sidecarAudio && sidecarAudio.audioRouter) {
+        sidecarAudio.audioRouter.setInitialRoutingConnections(connections);
+        nextCompleteObserver(observer);
+      } else {
+        errorCompleteObserver(observer, 'Sidecar audio or sidecar audio router not found');
+      }
+    });
   }
 
   createSidecarAudioTrack(track: Partial<OmpAudioTrack>): Observable<OmpAudioTrack> {
@@ -2404,6 +2850,30 @@ export class VideoController implements VideoControllerApi {
                   },
                 });
 
+              sidecarAudio.onInputSoloMute$
+                .pipe(takeUntil(removed$))
+                .pipe(takeUntil(this._destroyed$))
+                .subscribe({
+                  next: (sidecarAudioInputSoloMuteState) => {
+                    this.onSidecarAudioInputSoloMute$.next({
+                      changedSidecarAudioInputSoloMuteState: sidecarAudioInputSoloMuteState,
+                      sidecarAudioInputSoloMuteStates: this.getSidecarAudioInputSoloMuteStates(),
+                    });
+                  },
+                });
+
+              sidecarAudio.onVolumeChange$
+                .pipe(takeUntil(removed$)) // take until removed
+                .pipe(takeUntil(this._destroyed$))
+                .subscribe({
+                  next: (event) => {
+                    this.onSidecarAudioVolumeChange$.next({
+                      sidecarAudioState: sidecarAudio.getSidecarAudioState(),
+                      ...event,
+                    });
+                  },
+                });
+
               nextCompleteObserver(observer, sidecarAudioTrack);
             },
             error: (err) => {
@@ -2465,9 +2935,9 @@ export class VideoController implements VideoControllerApi {
     return this.getSidecarAudioTracks().filter((p) => p.active);
   }
 
-  activateSidecarAudioTracks(ids: string[], deactivateOthers?: boolean | undefined): Observable<void> {
+  activateSidecarAudioTracks(ids: string[] | undefined, deactivateOthers?: boolean | undefined): Observable<void> {
     return passiveObservable((observer) => {
-      let newActiveSidecarAudioTracks = this.getSidecarAudioTracks().filter((p) => !p.active && !!ids.find((id) => id === p.id));
+      let newActiveSidecarAudioTracks = this.getSidecarAudioTracks().filter((p) => !p.active && (ids === void 0 ? true : !!ids.find((id) => id === p.id)));
       let newInactiveSidecarAudioTracks = deactivateOthers ? this.getActiveSidecarAudioTracks().filter((p) => newActiveSidecarAudioTracks.find((p2) => p !== p2)) : [];
 
       if (newActiveSidecarAudioTracks.length > 0 || newInactiveSidecarAudioTracks.length > 0) {
@@ -2479,9 +2949,49 @@ export class VideoController implements VideoControllerApi {
     });
   }
 
-  deactivateSidecarAudioTracks(ids: string[]): Observable<void> {
+  deactivateSidecarAudioTracks(ids: string[] | undefined): Observable<void> {
     return passiveObservable((observer) => {
-      this._deactivateSidecarAudioTracks(ids);
+      this._deactivateSidecarAudioTracks(ids === void 0 ? this.getSidecarAudioTracks().map((p) => p.id) : ids);
+      nextCompleteObserver(observer);
+    });
+  }
+
+  setSidecarVolume(volume: number, ids: string[] | undefined): Observable<void> {
+    return passiveObservable((observer) => {
+      let sidecarAudioTracks = this.getSidecarAudios().filter((p) => (ids === void 0 ? true : !!ids.find((id) => id === p.audioTrack.id)));
+      sidecarAudioTracks.forEach((sidecarAudioTrack) => {
+        sidecarAudioTrack.setVolume(volume);
+      });
+      nextCompleteObserver(observer);
+    });
+  }
+
+  setSidecarMuted(muted: boolean, ids: string[] | undefined): Observable<void> {
+    return passiveObservable((observer) => {
+      let sidecarAudioTracks = this.getSidecarAudios().filter((p) => (ids === void 0 ? true : !!ids.find((id) => id === p.audioTrack.id)));
+      sidecarAudioTracks.forEach((sidecarAudioTrack) => {
+        sidecarAudioTrack.setMuted(muted);
+      });
+      nextCompleteObserver(observer);
+    });
+  }
+
+  muteSidecar(ids: string[] | undefined): Observable<void> {
+    return passiveObservable((observer) => {
+      let sidecarAudioTracks = this.getSidecarAudios().filter((p) => (ids === void 0 ? true : !!ids.find((id) => id === p.audioTrack.id)));
+      sidecarAudioTracks.forEach((sidecarAudioTrack) => {
+        sidecarAudioTrack.mute();
+      });
+      nextCompleteObserver(observer);
+    });
+  }
+
+  unmuteSidecar(ids: string[] | undefined): Observable<void> {
+    return passiveObservable((observer) => {
+      let sidecarAudioTracks = this.getSidecarAudios().filter((p) => (ids === void 0 ? true : !!ids.find((id) => id === p.audioTrack.id)));
+      sidecarAudioTracks.forEach((sidecarAudioTrack) => {
+        sidecarAudioTrack.unmute();
+      });
       nextCompleteObserver(observer);
     });
   }
@@ -2500,15 +3010,58 @@ export class VideoController implements VideoControllerApi {
 
   // createSidecarAudioRouterWithOutputsResolver(sidecarAudioTrackId: string, inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<OmpAudioRouterState> {}
 
-  routeSidecarAudioRouterNodes(sidecarAudioTrackId: string, newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void> {
-    let sidecarAudio = this._sidecarAudios.get(sidecarAudioTrackId);
-    if (sidecarAudio && sidecarAudio.audioRouter) {
-      return sidecarAudio.audioRouter.routeAudioInputOutputNodes(newAudioInputOutputNodes);
-    } else {
-      return passiveObservable((observer) => {
+  updateSidecarAudioRouterConnections(sidecarAudioTrackId: string, connections: OmpAudioRoutingConnection[]): Observable<void> {
+    return passiveObservable((observer) => {
+      let sidecarAudio = this._sidecarAudios.get(sidecarAudioTrackId);
+      if (sidecarAudio && sidecarAudio.audioRouter) {
+        sidecarAudio.audioRouter.updateConnections(connections);
+        nextCompleteObserver(observer);
+      } else {
         errorCompleteObserver(observer, 'Sidecar audio or sidecar audio router not found');
-      });
-    }
+      }
+    });
+  }
+
+  setSidecarAudioEffectsGraph(sidecarAudioTrackId: string, effectsGraphDef: OmpAudioEffectsGraphDef, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
+    return passiveObservable((observer) => {
+      let sidecarAudio = this._sidecarAudios.get(sidecarAudioTrackId);
+      if (sidecarAudio && sidecarAudio.audioRouter) {
+        sidecarAudio.audioRouter.setAudioEffectsGraphs(effectsGraphDef, routingPath);
+        nextCompleteObserver(observer);
+      } else {
+        errorCompleteObserver(observer, 'Sidecar audio or sidecar audio router not found');
+      }
+    });
+  }
+
+  removeSidecarAudioEffectsGraphs(sidecarAudioTrackId: string, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
+    return passiveObservable((observer) => {
+      let sidecarAudio = this._sidecarAudios.get(sidecarAudioTrackId);
+      if (sidecarAudio && sidecarAudio.audioRouter) {
+        sidecarAudio.audioRouter.removeAudioEffectsGraphs(routingPath);
+        nextCompleteObserver(observer);
+      } else {
+        errorCompleteObserver(observer, 'Sidecar audio or sidecar audio router not found');
+      }
+    });
+  }
+
+  setSidecarAudioEffectsParams(
+    sidecarAudioTrackId: string,
+    param: OmpAudioEffectParam,
+    filter?: {
+      routingPath?: Partial<OmpAudioRoutingPath>;
+    } & OmpAudioEffectFilter
+  ): Observable<void> {
+    return passiveObservable((observer) => {
+      let sidecarAudio = this._sidecarAudios.get(sidecarAudioTrackId);
+      if (sidecarAudio && sidecarAudio.audioRouter) {
+        sidecarAudio.audioRouter.setAudioEffectsParams(param, filter);
+        nextCompleteObserver(observer);
+      } else {
+        errorCompleteObserver(observer, 'Sidecar audio or sidecar audio router not found');
+      }
+    });
   }
 
   createSidecarAudioPeakProcessor(sidecarAudioTrackId: string, audioMeterStandard?: AudioMeterStandard): Observable<Observable<AudioPeakProcessorMessageEvent>> {
@@ -2548,7 +3101,7 @@ export class VideoController implements VideoControllerApi {
     }
   }
 
-  protected _deactivateSidecarAudioTracks(ids: string[], emitEvent = true) {
+  protected _deactivateSidecarAudioTracks(ids: string[]) {
     let sidecarAudios = this.getSidecarAudios().filter((p) => !!ids.find((id) => id === p.audioTrack.id));
 
     console.debug(`Deactivate sidecar audio tracks`, sidecarAudios);
@@ -2615,6 +3168,30 @@ export class VideoController implements VideoControllerApi {
             errorCompleteObserver(observer, error);
           },
         });
+      }
+    });
+  }
+
+  toggleSidecarAudioRouterSolo(sidecarAudioTrackId: string, routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+    return passiveObservable((observer) => {
+      let sidecarAudio = this._sidecarAudios.get(sidecarAudioTrackId);
+      if (sidecarAudio && sidecarAudio.audioRouter) {
+        sidecarAudio.audioRouter.toggleSolo(routingPath);
+        nextCompleteObserver(observer);
+      } else {
+        errorCompleteObserver(observer, 'Sidecar audio or sidecar audio router not found');
+      }
+    });
+  }
+
+  toggleSidecarAudioRouterMute(sidecarAudioTrackId: string, routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+    return passiveObservable((observer) => {
+      let sidecarAudio = this._sidecarAudios.get(sidecarAudioTrackId);
+      if (sidecarAudio && sidecarAudio.audioRouter) {
+        sidecarAudio.audioRouter.toggleMute(routingPath);
+        nextCompleteObserver(observer);
+      } else {
+        errorCompleteObserver(observer, 'Sidecar audio or sidecar audio router not found');
       }
     });
   }

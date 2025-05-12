@@ -158,7 +158,7 @@ export class FrameRateUtil {
    * Resolves frame rate from number or fraction string. If frame rate rounded to 2 digits corresponds to one of pre-defined frame rates a pre-defined frame rate with higher precision is used
    * @param requestedFrameRate
    */
-  static resolveFrameRate(requestedFrameRate: number | string | any): number {
+  static resolveFrameRate(requestedFrameRate: number | string | any): number | undefined {
     const errorMessage = `Frame rate must be number or fraction string`;
 
     let resolveFrameRateFromNumber: (requestedFrameRateNumber: number) => number = (requestedFrameRateNumber: number) => {
@@ -172,7 +172,7 @@ export class FrameRateUtil {
     };
 
     if (isNullOrUndefined(requestedFrameRate)) {
-      throw new Error(errorMessage);
+      return undefined;
     } else if (typeof requestedFrameRate === 'number') {
       return resolveFrameRateFromNumber(requestedFrameRate);
     } else if (typeof requestedFrameRate === 'string') {

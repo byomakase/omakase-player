@@ -16,7 +16,7 @@
 
 import {z} from 'zod';
 import {TimecodeUtil} from './util/timecode-util';
-import {Video} from './video';
+import {Video, VideoController} from './video';
 
 export class Validators {
   public static id(): (value: string) => string {
@@ -64,6 +64,12 @@ export class Validators {
   public static audioChannelsNumber(): (value: number) => number {
     return (value: number) => {
       return z.coerce.number().min(1).max(32).parse(value);
+    };
+  }
+
+  public static volume(): (value: number) => number {
+    return (value: number) => {
+      return z.coerce.number().min(0).max(VideoController.videoVolumeDefault).default(VideoController.videoVolumeDefault).parse(value);
     };
   }
 }

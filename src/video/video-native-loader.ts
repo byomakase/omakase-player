@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {first, forkJoin, fromEvent, Observable} from 'rxjs';
+import {first, forkJoin, fromEvent, Observable, Subject, take, takeUntil} from 'rxjs';
 import {Video, VideoLoadOptions} from './model';
 import {BaseVideoLoader} from './video-loader';
-import {nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
+import {errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {HTMLVideoElementEventKeys} from './video-controller';
 import {z} from 'zod';
 import {VideoControllerApi} from './video-controller-api';
@@ -32,16 +32,21 @@ export class VideoNativeLoader extends BaseVideoLoader {
     console.debug('video load with native');
   }
 
-  override loadVideo(sourceUrl: string, frameRate: number, options?: VideoLoadOptions | undefined): Observable<Video> {
+  override loadVideo(sourceUrl: string, options?: VideoLoadOptions | undefined): Observable<Video> {
+    nextCompleteSubject(this._loadVideoBreaker$);
+    this._loadVideoBreaker$ = new Subject<void>();
+
     return passiveObservable<Video>((observer) => {
       this._videoController.getHTMLVideoElement().src = '';
       this._videoController.getHTMLVideoElement().load();
 
       let videoLoadedData$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEventKeys.LOADEDDATA).pipe(first());
       let videoLoadedMetadata$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEventKeys.LOADEDMETEDATA).pipe(first());
+      let videoLoadError$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEventKeys.ERROR).pipe(take(1));
 
       forkJoin([videoLoadedData$, videoLoadedMetadata$])
-        .pipe(first())
+        .pipe(takeUntil(this._destroyed$))
+        .pipe(take(1))
         .subscribe((result) => {
           let duration: number;
           if (options && options.duration !== void 0) {
@@ -55,7 +60,14 @@ export class VideoNativeLoader extends BaseVideoLoader {
 
           let isAudioOnly = FileUtil.isAudioFile(sourceUrl);
 
+          const frameRate = FrameRateUtil.resolveFrameRate(options?.frameRate);
+
+          if (!frameRate) {
+            throw new Error('Frame rate must be provided');
+          }
+
           let video: Video = {
+            protocol: 'native',
             sourceUrl: sourceUrl,
             frameRate: frameRate,
             dropFrame: dropFrame,
@@ -67,7 +79,14 @@ export class VideoNativeLoader extends BaseVideoLoader {
           };
 
           nextCompleteObserver(observer, video);
+        })
+        .add(() => {
+          nextCompleteSubject(this._loadVideoBreaker$);
         });
+
+      videoLoadError$.pipe(takeUntil(this._destroyed$), takeUntil(this._loadVideoBreaker$)).subscribe((error) => {
+        errorCompleteObserver(observer, error);
+      });
 
       this._videoController.getHTMLVideoElement().src = sourceUrl;
       this._videoController.getHTMLVideoElement().load();

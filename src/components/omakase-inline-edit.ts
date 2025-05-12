@@ -117,6 +117,14 @@ export class OmakaseInlineEdit extends HTMLElement {
     this._select.addEventListener('click', this.stopPropagation.bind(this));
     this._select.value = this._text;
     this._container.appendChild(this._select);
+    let emptyOption: HTMLOptionElement;
+    if (!options.includes(this._text)) {
+      emptyOption = document.createElement('option');
+      emptyOption.value = '';
+      emptyOption.selected = true;
+      emptyOption.disabled = true;
+      this._select.appendChild(emptyOption);
+    }
     for (const optionText of options) {
       const optionElement = document.createElement('option');
       optionElement.value = optionText;
@@ -126,6 +134,9 @@ export class OmakaseInlineEdit extends HTMLElement {
     }
     this._select.onchange = () => {
       this.onEdit$.next(this._select!.value);
+      if (emptyOption) {
+        this._select!.removeChild(emptyOption);
+      }
     };
   }
 

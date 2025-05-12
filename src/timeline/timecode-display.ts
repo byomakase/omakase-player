@@ -41,7 +41,7 @@ export interface TimecodeDisplayConfig extends ComponentConfig<TimecodeDisplaySt
 
 const configDefault: TimecodeDisplayConfig = {
   style: {
-    ...Constants.POSITION_TOP_LEFT,
+    ...Constants.positionTopLeft,
     width: 150,
     height: 20,
 
@@ -85,7 +85,7 @@ export class TimecodeDisplay extends BaseKonvaComponent<TimecodeDisplayConfig, T
     });
 
     this._text = new Konva.Text({
-      ...Constants.POSITION_TOP_LEFT,
+      ...Constants.positionTopLeft,
       width: this._group.width(),
       // height: this._group.height(),
       text: ``,

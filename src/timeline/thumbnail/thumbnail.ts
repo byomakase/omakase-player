@@ -22,7 +22,7 @@ import {Constants} from '../../constants';
 import {Subject} from 'rxjs';
 import {completeUnsubscribeSubjects} from '../../util/rxjs-util';
 import {nullifier} from '../../util/destroy-util';
-import {KonvaFactory} from '../../factory/konva-factory';
+import {KonvaFactory} from '../../konva/konva-factory';
 
 export interface ThumbnailStyle {
   x: number;
@@ -41,8 +41,8 @@ export interface ThumbnailConfig extends ComponentConfig<ThumbnailStyle> {
 const configDefault: ThumbnailConfig = {
   listening: false,
   style: {
-    ...Constants.POSITION_TOP_LEFT,
-    ...Constants.DIMENSION_ZERO,
+    ...Constants.positionTopLeft,
+    ...Constants.dimensionZero,
     stroke: 'rgba(255,73,145)',
     strokeWidth: 5,
     visible: false,

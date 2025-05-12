@@ -20,10 +20,9 @@ import {nextCompleteSubject} from '../util/rxjs-util';
 import {RouterVisualizationComponent} from './router-visualization-component';
 import {RouterVisualizationDomController} from './router-visualization-dom-controller';
 import {nullifier} from '../util/destroy-util';
-import {AudioController} from '../audio/audio-controller';
 import {RouterVisualizationApi} from '../api/router-visualization-api';
-import {AudioInputOutputNode} from '../video';
 import {AudioApi} from '../api';
+import {OmpAudioRoutingConnection} from '../video';
 
 export type RouterVisualizationSize = 'small' | 'medium' | 'large';
 
@@ -32,6 +31,7 @@ export interface RouterVisualizationTrackUpdate {
   inputNumber?: number;
   inputLabels?: string[];
 }
+
 export interface RouterVisualizationTrack extends RouterVisualizationTrackUpdate {
   maxInputNumber: number;
 }
@@ -47,7 +47,7 @@ export interface RouterVisualizationConfig {
   outputLabels?: string[];
   mainTrack?: RouterVisualizationTrack;
   sidecarTracks?: RouterVisualizationSidecarTrack[];
-  defaultMatrix?: AudioInputOutputNode[][];
+  defaultMatrix?: OmpAudioRoutingConnection[][];
 }
 
 export const defaultRouterVisualizationLabels = ['L', 'R', 'C', 'LFE', 'Ls', 'Rs'];
@@ -64,7 +64,7 @@ export class RouterVisualization implements Destroyable, RouterVisualizationApi 
   private _audio: AudioApi;
   private readonly _destroyed$ = new Subject<void>();
 
-  constructor(config: RouterVisualizationConfig, audio: AudioController) {
+  constructor(config: RouterVisualizationConfig, audio: AudioApi) {
     this._config = {
       ...configDefault,
       ...config,
@@ -72,7 +72,6 @@ export class RouterVisualization implements Destroyable, RouterVisualizationApi 
     this._audio = audio;
     this._routerVisualizationDomController = new RouterVisualizationDomController(this);
     this._routerVisualizationComponent = this._routerVisualizationDomController.routerVisualizationComponent;
-    this._routerVisualizationComponent.defaultMatrix = this._config.defaultMatrix;
     this._routerVisualizationComponent.audio = audio;
     if (this._config.outputNumber || this._config.outputLabels) {
       this._routerVisualizationComponent.outputs = this._config.outputLabels
@@ -80,10 +79,16 @@ export class RouterVisualization implements Destroyable, RouterVisualizationApi 
         : defaultRouterVisualizationLabels.slice(0, this._config.outputNumber);
     }
     if (this._config.mainTrack) {
-      this._routerVisualizationComponent.mainTrack = this._config.mainTrack;
+      this._routerVisualizationComponent.mainTrack = {
+        track: this._config.mainTrack,
+        defaultMatrix: this._config.defaultMatrix,
+      };
     }
     if (this._config.sidecarTracks) {
-      this._routerVisualizationComponent.sidecarTracks = this._config.sidecarTracks;
+      this._routerVisualizationComponent.sidecarTracks = {
+        tracks: this._config.sidecarTracks,
+        defaultMatrix: this._config.defaultMatrix,
+      };
     }
     this._routerVisualizationComponent.size = this._config.size;
   }
@@ -95,11 +100,13 @@ export class RouterVisualization implements Destroyable, RouterVisualizationApi 
   updateMainTrack(track: RouterVisualizationTrackUpdate) {
     let channelCount = this._audio.getActiveAudioTrack()?.channelCount;
 
-    if (this._routerVisualizationComponent.mainTrack) {
+    if (this._routerVisualizationComponent.mainTrack?.track) {
       this._routerVisualizationComponent.mainTrack = {
-        ...this._routerVisualizationComponent.mainTrack,
-        ...track,
-        inputNumber: channelCount,
+        track: {
+          ...this._routerVisualizationComponent.mainTrack.track,
+          ...track,
+          inputNumber: channelCount,
+        },
       };
     } else {
       throw Error('Main track is not defined');

@@ -27,7 +27,7 @@ export interface VideoLoader extends Destroyable {
   onAudioSwitched$: Observable<AudioSwitchedEvent>;
   onSubtitlesLoaded$: BehaviorSubject<SubtitlesLoadedEvent | undefined>;
 
-  loadVideo(sourceUrl: string, frameRate: number, options?: VideoLoadOptions): Observable<Video>;
+  loadVideo(sourceUrl: string, options?: VideoLoadOptions): Observable<Video>;
 
   setActiveAudioTrack(ompAudioTrackId: string): Observable<void>;
 
@@ -45,13 +45,15 @@ export abstract class BaseVideoLoader implements VideoLoader {
 
   protected _videoController: VideoControllerApi;
 
+  protected _loadVideoBreaker$ = new Subject<void>();
+
   protected readonly _destroyed$ = new Subject<void>();
 
   protected constructor(videoController: VideoControllerApi) {
     this._videoController = videoController;
   }
 
-  abstract loadVideo(sourceUrl: string, frameRate: number, options?: VideoLoadOptions): Observable<Video>;
+  abstract loadVideo(sourceUrl: string, options?: VideoLoadOptions): Observable<Video>;
 
   abstract updateActiveNamedEventStreams(eventNames: OmpNamedEventEventName[]): void;
 
@@ -65,6 +67,7 @@ export abstract class BaseVideoLoader implements VideoLoader {
 
   destroy(): void {
     completeUnsubscribeSubjects(this.onNamedEvent$, this.onAudioLoaded$, this.onAudioSwitched$, this.onSubtitlesLoaded$);
+    nextCompleteSubject(this._loadVideoBreaker$);
     nextCompleteSubject(this._destroyed$);
   }
 }

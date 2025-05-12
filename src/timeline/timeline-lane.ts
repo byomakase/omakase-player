@@ -30,7 +30,7 @@ import {destroyer, nullifier} from '../util/destroy-util';
 import {TextLabel, TimelineNode} from './timeline-component';
 import {KonvaComponentFlexContentNode} from '../layout/konva-component-flex';
 import {TimelineLaneApi} from '../api';
-import {KonvaFactory} from '../factory/konva-factory';
+import {KonvaFactory} from '../konva/konva-factory';
 import {SelectRequired, WithOptionalPartial, WithRequired} from '../types';
 import {isNullOrUndefined} from '../util/object-util';
 import {DownsampleConfig} from '../api/vtt-aware-api';

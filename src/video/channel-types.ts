@@ -78,6 +78,7 @@ export type MessageChannelActionsMap = OmpBroadcastChannelActionsMap<{
   'VideoControllerApi.onBuffering$': ExtractPropertyTypes<VideoControllerApi, 'onBuffering$'>;
   'VideoControllerApi.onEnded$': ExtractPropertyTypes<VideoControllerApi, 'onEnded$'>;
   'VideoControllerApi.onAudioSwitched$': ExtractPropertyTypes<VideoControllerApi, 'onAudioSwitched$'>;
+  'VideoControllerApi.onAudioOutputVolumeChange$': ExtractPropertyTypes<VideoControllerApi, 'onAudioOutputVolumeChange$'>;
   'VideoControllerApi.onVideoWindowPlaybackStateChange$': ExtractPropertyTypes<VideoControllerApi, 'onVideoWindowPlaybackStateChange$'>;
   'VideoControllerApi.onVideoError$': ExtractPropertyTypes<VideoControllerApi, 'onVideoError$'>;
   'VideoControllerApi.onVolumeChange$': ExtractPropertyTypes<VideoControllerApi, 'onVolumeChange$'>;
@@ -96,12 +97,15 @@ export type MessageChannelActionsMap = OmpBroadcastChannelActionsMap<{
   // audio router
   'VideoControllerApi.onMainAudioChange$': ExtractPropertyTypes<VideoControllerApi, 'onMainAudioChange$'>;
   'VideoControllerApi.onMainAudioPeakProcessorMessage$': ExtractPropertyTypes<VideoControllerApi, 'onMainAudioPeakProcessorMessage$'>;
+  'VideoControllerApi.onMainAudioInputSoloMute$': ExtractPropertyTypes<VideoControllerApi, 'onMainAudioInputSoloMute$'>;
 
   // sidecar audio
   'VideoControllerApi.onSidecarAudioCreate$': ExtractPropertyTypes<VideoControllerApi, 'onSidecarAudioCreate$'>;
   'VideoControllerApi.onSidecarAudioRemove$': ExtractPropertyTypes<VideoControllerApi, 'onSidecarAudioRemove$'>;
   'VideoControllerApi.onSidecarAudioChange$': ExtractPropertyTypes<VideoControllerApi, 'onSidecarAudioChange$'>;
+  'VideoControllerApi.onSidecarAudioVolumeChange$': ExtractPropertyTypes<VideoControllerApi, 'onSidecarAudioVolumeChange$'>;
   'VideoControllerApi.onSidecarAudioPeakProcessorMessage$': ExtractPropertyTypes<VideoControllerApi, 'onSidecarAudioPeakProcessorMessage$'>;
+  'VideoControllerApi.onSidecarAudioInputSoloMute$': ExtractPropertyTypes<VideoControllerApi, 'onSidecarAudioInputSoloMute$'>;
 
   'VideoControllerApi.onThumbnailVttUrlChanged$': ExtractPropertyTypes<VideoControllerApi, 'onThumbnailVttUrlChanged$'>;
   'VideoControllerApi.onActiveNamedEventStreamsChange$': ExtractPropertyTypes<VideoControllerApi, 'onActiveNamedEventStreamsChange$'>;
@@ -144,22 +148,51 @@ export type MessageChannelActionsMap = OmpBroadcastChannelActionsMap<{
 
   'VideoControllerApi.createMainAudioRouter': ExtractMethodTypes<VideoControllerApi, 'createMainAudioRouter'>;
 
+  'VideoControllerApi.setAudioOutputVolume': ExtractMethodTypes<VideoControllerApi, 'setAudioOutputVolume'>;
+  'VideoControllerApi.setAudioOutputMuted': ExtractMethodTypes<VideoControllerApi, 'setAudioOutputMuted'>;
+  'VideoControllerApi.toggleAudioOutputMuteUnmute': ExtractMethodTypes<VideoControllerApi, 'toggleAudioOutputMuteUnmute'>;
+  'VideoControllerApi.muteAudioOutput': ExtractMethodTypes<VideoControllerApi, 'muteAudioOutput'>;
+  'VideoControllerApi.unmuteAudioOutput': ExtractMethodTypes<VideoControllerApi, 'unmuteAudioOutput'>;
+
   // 'VideoControllerApi.createMainAudioPeakProcessor': ExtractMethodTypes<VideoControllerApi, 'createMainAudioPeakProcessor'>;
   'VideoControllerApi.createMainAudioPeakProcessor': {
     requestType: ExtractParameterTypes<VideoControllerApi, 'createMainAudioPeakProcessor'>;
     responseType: FlattenObservableToVoid<ExtractReturnType<VideoControllerApi, 'createMainAudioPeakProcessor'>>;
   };
 
-  'VideoControllerApi.routeMainAudioRouterNodes': ExtractMethodTypes<VideoControllerApi, 'routeMainAudioRouterNodes'>;
+  // main audio router connections
+  'VideoControllerApi.updateMainAudioRouterConnections': ExtractMethodTypes<VideoControllerApi, 'updateMainAudioRouterConnections'>;
+  'VideoControllerApi.toggleMainAudioRouterSolo': ExtractMethodTypes<VideoControllerApi, 'toggleMainAudioRouterSolo'>;
+  'VideoControllerApi.toggleMainAudioRouterMute': ExtractMethodTypes<VideoControllerApi, 'toggleMainAudioRouterMute'>;
+  'VideoControllerApi.setMainAudioRouterInitialRoutingConnections': ExtractMethodTypes<VideoControllerApi, 'setMainAudioRouterInitialRoutingConnections'>;
+
+  // main audio effects graphs
+  'VideoControllerApi.setMainAudioEffectsGraphs': ExtractMethodTypes<VideoControllerApi, 'setMainAudioEffectsGraphs'>;
+  'VideoControllerApi.removeMainAudioEffectsGraphs': ExtractMethodTypes<VideoControllerApi, 'removeMainAudioEffectsGraphs'>;
+  'VideoControllerApi.setMainAudioEffectsParams': ExtractMethodTypes<VideoControllerApi, 'setMainAudioEffectsParams'>;
 
   'VideoControllerApi.createSidecarAudioTrack': ExtractMethodTypes<VideoControllerApi, 'createSidecarAudioTrack'>;
   'VideoControllerApi.createSidecarAudioTracks': ExtractMethodTypes<VideoControllerApi, 'createSidecarAudioTracks'>;
   'VideoControllerApi.removeSidecarAudioTracks': ExtractMethodTypes<VideoControllerApi, 'removeSidecarAudioTracks'>;
   'VideoControllerApi.activateSidecarAudioTracks': ExtractMethodTypes<VideoControllerApi, 'activateSidecarAudioTracks'>;
   'VideoControllerApi.deactivateSidecarAudioTracks': ExtractMethodTypes<VideoControllerApi, 'deactivateSidecarAudioTracks'>;
+  'VideoControllerApi.setSidecarVolume': ExtractMethodTypes<VideoControllerApi, 'setSidecarVolume'>;
+  'VideoControllerApi.setSidecarMuted': ExtractMethodTypes<VideoControllerApi, 'setSidecarMuted'>;
+  'VideoControllerApi.muteSidecar': ExtractMethodTypes<VideoControllerApi, 'muteSidecar'>;
+  'VideoControllerApi.unmuteSidecar': ExtractMethodTypes<VideoControllerApi, 'unmuteSidecar'>;
   'VideoControllerApi.removeAllSidecarAudioTracks': ExtractMethodTypes<VideoControllerApi, 'removeAllSidecarAudioTracks'>;
   'VideoControllerApi.createSidecarAudioRouter': ExtractMethodTypes<VideoControllerApi, 'createSidecarAudioRouter'>;
-  'VideoControllerApi.routeSidecarAudioRouterNodes': ExtractMethodTypes<VideoControllerApi, 'routeSidecarAudioRouterNodes'>;
+  'VideoControllerApi.setSidecarAudioRouterInitialRoutingConnections': ExtractMethodTypes<VideoControllerApi, 'setSidecarAudioRouterInitialRoutingConnections'>;
+
+  // sidecar audio router connections
+  'VideoControllerApi.updateSidecarAudioRouterConnections': ExtractMethodTypes<VideoControllerApi, 'updateSidecarAudioRouterConnections'>;
+  'VideoControllerApi.toggleSidecarAudioRouterSolo': ExtractMethodTypes<VideoControllerApi, 'toggleSidecarAudioRouterSolo'>;
+  'VideoControllerApi.toggleSidecarAudioRouterMute': ExtractMethodTypes<VideoControllerApi, 'toggleSidecarAudioRouterMute'>;
+
+  // sidecar audio effects graphs
+  'VideoControllerApi.setSidecarAudioEffectsGraph': ExtractMethodTypes<VideoControllerApi, 'setSidecarAudioEffectsGraph'>;
+  'VideoControllerApi.removeSidecarAudioEffectsGraphs': ExtractMethodTypes<VideoControllerApi, 'removeSidecarAudioEffectsGraphs'>;
+  'VideoControllerApi.setSidecarAudioEffectsParams': ExtractMethodTypes<VideoControllerApi, 'setSidecarAudioEffectsParams'>;
 
   // 'VideoControllerApi.createSidecarAudioPeakProcessor': ExtractMethodTypes<VideoControllerApi, 'createSidecarAudioPeakProcessor'>;
   'VideoControllerApi.createSidecarAudioPeakProcessor': {

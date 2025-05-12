@@ -34,18 +34,16 @@ export interface OmakasePlayerApi extends Api {
   /**
    * Loads new video
    * @param videoSourceUrl Video manifest URL
-   * @param frameRate Video frame rate
    */
-  loadVideo(videoSourceUrl: string, frameRate: number | string): Observable<Video>;
+  loadVideo(videoSourceUrl: string): Observable<Video>;
 
   /**
    * Loads new video
    *
    * @param videoSourceUrl Video manifest URL
-   * @param frameRate Video frame rate
    * @param options
    */
-  loadVideo(videoSourceUrl: string, frameRate: number | string, options?: VideoLoadOptions): Observable<Video>;
+  loadVideo(videoSourceUrl: string, options?: VideoLoadOptions): Observable<Video>;
 
   /**
    * Creates Timeline

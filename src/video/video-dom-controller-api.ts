@@ -46,7 +46,7 @@ export interface VideoDomControllerApi extends Destroyable {
 
   appendHTMLTrackElement(omakaseTextTrack: OmakaseTextTrack): Observable<HTMLTrackElement | undefined>;
 
-  getTextTrackList(): TextTrackList | undefined;
+  getTextTrackList(): TextTrackList;
 
   getTextTrackById(id: string): TextTrack | undefined;
 

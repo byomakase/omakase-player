@@ -22,13 +22,16 @@ import {
   AudioSwitchedEvent,
   HelpMenuGroup,
   MainAudioChangeEvent,
+  MainAudioInputSoloMuteEvent,
   OmpAudioTrack,
   OmpNamedEvent,
   OmpNamedEventEventName,
   SidecarAudioChangeEvent,
   SidecarAudioCreateEvent,
+  SidecarAudioInputSoloMuteEvent,
   SidecarAudioPeakProcessorMessageEvent,
   SidecarAudioRemoveEvent,
+  SidecarAudioVolumeChangeEvent,
   SubtitlesCreateEvent,
   SubtitlesEvent,
   SubtitlesLoadedEvent,
@@ -47,17 +50,31 @@ import {
   VideoSeekedEvent,
   VideoSeekingEvent,
   VideoTimeChangeEvent,
-  VideoVolumeEvent,
   VideoWindowPlaybackStateChangeEvent,
+  VolumeChangeEvent,
 } from '../types';
-import {AudioMeterStandard, PlaybackState, Video, VideoLoadOptions} from './index';
+import {
+  AudioMeterStandard,
+  BufferedTimespan,
+  OmpAudioRouterState,
+  OmpAudioRoutingConnection,
+  OmpAudioRoutingPath,
+  OmpMainAudioState,
+  OmpSidecarAudioState,
+  PlaybackState,
+  Video,
+  VideoLoadOptions,
+  VideoSafeZone,
+  VideoWindowPlaybackState,
+} from './index';
 import {nextCompleteSubject} from '../util/rxjs-util';
 import {VideoControllerConfig} from './video-controller';
 import Hls from 'hls.js';
 import {destroyer} from '../util/destroy-util';
-import {AudioInputOutputNode, BufferedTimespan, OmpAudioRouterState, OmpMainAudioState, OmpSidecarAudioState, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
 import {OmpAudioRouter} from './audio-router';
 import {SidecarAudioApi} from '../api/sidecar-audio-api';
+import {OmpAudioEffectFilter, OmpAudioEffectParam, OmpAudioEffectsGraphDef} from '../audio';
+import {OmpMainAudioInputSoloMuteState, OmpSidecarAudioInputSoloMuteState, VideoLoadOptionsInternal} from './model';
 
 /**
  * Used for switching between {@link VideoControllerApi} instances
@@ -68,6 +85,8 @@ export class SwitchableVideoController implements VideoControllerApi {
 
   public readonly onAudioLoaded$: BehaviorSubject<AudioLoadedEvent | undefined> = new BehaviorSubject<AudioLoadedEvent | undefined>(void 0);
   public readonly onAudioSwitched$: Subject<AudioSwitchedEvent> = new Subject<AudioSwitchedEvent>();
+
+  public readonly onAudioOutputVolumeChange$: Subject<VolumeChangeEvent> = new Subject<VolumeChangeEvent>();
 
   public readonly onSubtitlesLoaded$: BehaviorSubject<SubtitlesLoadedEvent | undefined> = new BehaviorSubject<SubtitlesLoadedEvent | undefined>(void 0);
   public readonly onSubtitlesCreate$: Subject<SubtitlesCreateEvent> = new Subject<SubtitlesCreateEvent>();
@@ -83,7 +102,7 @@ export class SwitchableVideoController implements VideoControllerApi {
   public readonly onBuffering$: Subject<VideoBufferingEvent> = new Subject<VideoBufferingEvent>();
   public readonly onEnded$: Subject<VideoEndedEvent> = new Subject<VideoEndedEvent>();
   public readonly onVideoError$: Subject<VideoErrorEvent> = new Subject<VideoErrorEvent>();
-  public readonly onVolumeChange$: Subject<VideoVolumeEvent> = new Subject<VideoVolumeEvent>();
+  public readonly onVolumeChange$: Subject<VolumeChangeEvent> = new Subject<VolumeChangeEvent>();
   public readonly onFullscreenChange$: Subject<VideoFullscreenChangeEvent> = new Subject<VideoFullscreenChangeEvent>();
   public readonly onVideoSafeZoneChange$: Subject<VideoSafeZoneChangeEvent> = new Subject<VideoSafeZoneChangeEvent>();
   public readonly onPlaybackRateChange$: Subject<VideoPlaybackRateEvent> = new Subject<VideoPlaybackRateEvent>();
@@ -97,12 +116,15 @@ export class SwitchableVideoController implements VideoControllerApi {
   // audio routing events
   public readonly onMainAudioChange$: BehaviorSubject<MainAudioChangeEvent | undefined> = new BehaviorSubject<MainAudioChangeEvent | undefined>(void 0);
   public readonly onMainAudioPeakProcessorMessage$: Subject<AudioPeakProcessorMessageEvent> = new Subject<AudioPeakProcessorMessageEvent>();
+  public readonly onMainAudioInputSoloMute$: BehaviorSubject<MainAudioInputSoloMuteEvent | undefined> = new BehaviorSubject<MainAudioInputSoloMuteEvent | undefined>(void 0);
 
   // sidecar audio
   public readonly onSidecarAudioCreate$: Subject<SidecarAudioCreateEvent> = new Subject<SidecarAudioCreateEvent>();
   public readonly onSidecarAudioRemove$: Subject<SidecarAudioRemoveEvent> = new Subject<SidecarAudioRemoveEvent>();
   public readonly onSidecarAudioChange$: Subject<SidecarAudioChangeEvent> = new Subject<SidecarAudioChangeEvent>();
+  public readonly onSidecarAudioVolumeChange$: Subject<SidecarAudioVolumeChangeEvent> = new Subject<SidecarAudioVolumeChangeEvent>();
   public readonly onSidecarAudioPeakProcessorMessage$: Subject<SidecarAudioPeakProcessorMessageEvent> = new Subject<SidecarAudioPeakProcessorMessageEvent>();
+  public readonly onSidecarAudioInputSoloMute$: Subject<SidecarAudioInputSoloMuteEvent> = new Subject<SidecarAudioInputSoloMuteEvent>();
 
   // VideoHlsLoader specific
   public readonly onActiveNamedEventStreamsChange$: Subject<OmpNamedEventEventName[]> = new Subject<OmpNamedEventEventName[]>();
@@ -200,6 +222,12 @@ export class SwitchableVideoController implements VideoControllerApi {
       },
     });
 
+    videoController.onAudioOutputVolumeChange$.pipe(takeUntil(this._eventBreaker$)).subscribe({
+      next: (value) => {
+        this.onAudioOutputVolumeChange$.next(value);
+      },
+    });
+
     // audio router
 
     videoController.onMainAudioChange$.pipe(takeUntil(this._eventBreaker$)).subscribe({
@@ -211,6 +239,12 @@ export class SwitchableVideoController implements VideoControllerApi {
     videoController.onMainAudioPeakProcessorMessage$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onMainAudioPeakProcessorMessage$.next(value);
+      },
+    });
+
+    videoController.onMainAudioInputSoloMute$.pipe(takeUntil(this._eventBreaker$)).subscribe({
+      next: (value) => {
+        this.onMainAudioInputSoloMute$.next(value);
       },
     });
 
@@ -234,9 +268,21 @@ export class SwitchableVideoController implements VideoControllerApi {
       },
     });
 
+    videoController.onSidecarAudioVolumeChange$.pipe(takeUntil(this._eventBreaker$)).subscribe({
+      next: (value) => {
+        this.onSidecarAudioVolumeChange$.next(value);
+      },
+    });
+
     videoController.onSidecarAudioPeakProcessorMessage$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onSidecarAudioPeakProcessorMessage$.next(value);
+      },
+    });
+
+    videoController.onSidecarAudioInputSoloMute$.pipe(takeUntil(this._eventBreaker$)).subscribe({
+      next: (value) => {
+        this.onSidecarAudioInputSoloMute$.next(value);
       },
     });
 
@@ -406,6 +452,38 @@ export class SwitchableVideoController implements VideoControllerApi {
     return this._videoController.getAudioContext();
   }
 
+  getAudioOutputNode(): AudioNode {
+    return this._videoController.getAudioOutputNode();
+  }
+
+  getAudioOutputVolume(): number {
+    return this._videoController.getAudioOutputVolume();
+  }
+
+  isAudioOutputMuted(): boolean {
+    return this._videoController.isAudioOutputMuted();
+  }
+
+  setAudioOutputMuted(muted: boolean): Observable<void> {
+    return this._videoController.setAudioOutputMuted(muted);
+  }
+
+  toggleAudioOutputMuteUnmute(): Observable<void> {
+    return this._videoController.toggleAudioOutputMuteUnmute();
+  }
+
+  muteAudioOutput(): Observable<void> {
+    return this._videoController.muteAudioOutput();
+  }
+
+  unmuteAudioOutput(): Observable<void> {
+    return this._videoController.unmuteAudioOutput();
+  }
+
+  setAudioOutputVolume(volume: number): Observable<void> {
+    return this._videoController.setAudioOutputVolume(volume);
+  }
+
   getMainAudioRouter(): OmpAudioRouter | undefined {
     return this._videoController.getMainAudioRouter();
   }
@@ -462,12 +540,12 @@ export class SwitchableVideoController implements VideoControllerApi {
     return this._videoController.isVideoLoaded();
   }
 
-  loadVideoInternal(sourceUrl: string, frameRate: number | string, options: VideoLoadOptions | undefined, optionsInternal: VideoLoadOptionsInternal): Observable<Video> {
-    return this._videoController.loadVideoInternal(sourceUrl, frameRate, options, optionsInternal);
+  loadVideoInternal(sourceUrl: string, options: VideoLoadOptions | undefined, optionsInternal: VideoLoadOptionsInternal): Observable<Video> {
+    return this._videoController.loadVideoInternal(sourceUrl, options, optionsInternal);
   }
 
-  loadVideo(sourceUrl: string, frameRate: number | string, options?: VideoLoadOptions): Observable<Video> {
-    return this._videoController.loadVideo(sourceUrl, frameRate, options);
+  loadVideo(sourceUrl: string, options?: VideoLoadOptions): Observable<Video> {
+    return this._videoController.loadVideo(sourceUrl, options);
   }
 
   reloadVideo(): Observable<Video> {
@@ -635,16 +713,45 @@ export class SwitchableVideoController implements VideoControllerApi {
     return this._videoController.createMainAudioPeakProcessor(audioMeterStandard).pipe(map((p) => this.onMainAudioPeakProcessorMessage$));
   }
 
-  getMainAudioSourceNode(): AudioNode {
-    return this._videoController.getMainAudioSourceNode();
+  getMainAudioNode(): AudioNode {
+    return this._videoController.getMainAudioNode();
   }
 
   getMainAudioState(): OmpMainAudioState | undefined {
     return this._videoController.getMainAudioState();
   }
 
-  routeMainAudioRouterNodes(newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void> {
-    return this._videoController.routeMainAudioRouterNodes(newAudioInputOutputNodes);
+  getMainAudioInputSoloMuteState(): OmpMainAudioInputSoloMuteState | undefined {
+    return this._videoController.getMainAudioInputSoloMuteState();
+  }
+
+  getMainAudioRouterInitialRoutingConnections(): OmpAudioRoutingConnection[] | undefined {
+    return this._videoController.getMainAudioRouterInitialRoutingConnections();
+  }
+
+  setMainAudioRouterInitialRoutingConnections(connections: OmpAudioRoutingConnection[]): Observable<void> {
+    return this._videoController.setMainAudioRouterInitialRoutingConnections(connections);
+  }
+
+  updateMainAudioRouterConnections(connections: OmpAudioRoutingConnection[]): Observable<void> {
+    return this._videoController.updateMainAudioRouterConnections(connections);
+  }
+
+  setMainAudioEffectsGraphs(effectsGraphDef: OmpAudioEffectsGraphDef, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
+    return this._videoController.setMainAudioEffectsGraphs(effectsGraphDef, routingPath);
+  }
+
+  removeMainAudioEffectsGraphs(routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
+    return this._videoController.removeMainAudioEffectsGraphs(routingPath);
+  }
+
+  setMainAudioEffectsParams(
+    param: OmpAudioEffectParam,
+    filter?: {
+      routingPath?: Partial<OmpAudioRoutingPath>;
+    } & OmpAudioEffectFilter
+  ): Observable<void> {
+    return this._videoController.setMainAudioEffectsParams(param, filter);
   }
 
   getSidecarAudios(): SidecarAudioApi[] {
@@ -655,8 +762,28 @@ export class SwitchableVideoController implements VideoControllerApi {
     return this._videoController.getSidecarAudio(id);
   }
 
+  getSidecarAudioState(id: string): OmpSidecarAudioState | undefined {
+    return this._videoController.getSidecarAudioState(id);
+  }
+
   getSidecarAudioStates(): OmpSidecarAudioState[] {
     return this._videoController.getSidecarAudioStates();
+  }
+
+  getSidecarAudioInputSoloMuteState(id: string): OmpSidecarAudioInputSoloMuteState | undefined {
+    return this._videoController.getSidecarAudioInputSoloMuteState(id);
+  }
+
+  getSidecarAudioInputSoloMuteStates(): OmpSidecarAudioInputSoloMuteState[] {
+    return this._videoController.getSidecarAudioInputSoloMuteStates();
+  }
+
+  getSidecarAudioRouterInitialRoutingConnections(id: string): OmpAudioRoutingConnection[] | undefined {
+    return this._videoController.getSidecarAudioRouterInitialRoutingConnections(id);
+  }
+
+  setSidecarAudioRouterInitialRoutingConnections(id: string, connections: OmpAudioRoutingConnection[]): Observable<void> {
+    return this._videoController.setSidecarAudioRouterInitialRoutingConnections(id, connections);
   }
 
   createSidecarAudioTrack(track: Partial<OmpAudioTrack>): Observable<OmpAudioTrack> {
@@ -667,12 +794,28 @@ export class SwitchableVideoController implements VideoControllerApi {
     return this._videoController.createSidecarAudioTracks(tracks);
   }
 
-  activateSidecarAudioTracks(ids: string[], deactivateOthers: boolean | undefined): Observable<void> {
+  activateSidecarAudioTracks(ids: string[] | undefined, deactivateOthers: boolean | undefined): Observable<void> {
     return this._videoController.activateSidecarAudioTracks(ids, deactivateOthers);
   }
 
-  deactivateSidecarAudioTracks(ids: string[]): Observable<void> {
+  deactivateSidecarAudioTracks(ids: string[] | undefined): Observable<void> {
     return this._videoController.deactivateSidecarAudioTracks(ids);
+  }
+
+  setSidecarVolume(volume: number, ids: string[] | undefined): Observable<void> {
+    return this._videoController.setSidecarVolume(volume, ids);
+  }
+
+  setSidecarMuted(muted: boolean, ids: string[] | undefined): Observable<void> {
+    return this._videoController.setSidecarMuted(muted, ids);
+  }
+
+  muteSidecar(ids: string[] | undefined): Observable<void> {
+    return this._videoController.muteSidecar(ids);
+  }
+
+  unmuteSidecar(ids: string[] | undefined): Observable<void> {
+    return this._videoController.unmuteSidecar(ids);
   }
 
   getActiveSidecarAudioTracks(): OmpAudioTrack[] {
@@ -695,8 +838,26 @@ export class SwitchableVideoController implements VideoControllerApi {
     return this._videoController.createSidecarAudioRouter(sidecarAudioTrackId, inputsNumber, outputsNumber);
   }
 
-  routeSidecarAudioRouterNodes(sidecarAudioTrackId: string, newAudioInputOutputNodes: AudioInputOutputNode[]): Observable<void> {
-    return this._videoController.routeSidecarAudioRouterNodes(sidecarAudioTrackId, newAudioInputOutputNodes);
+  updateSidecarAudioRouterConnections(sidecarAudioTrackId: string, connections: OmpAudioRoutingConnection[]): Observable<void> {
+    return this._videoController.updateSidecarAudioRouterConnections(sidecarAudioTrackId, connections);
+  }
+
+  setSidecarAudioEffectsGraph(sidecarAudioTrackId: string, effectsGraphDef: OmpAudioEffectsGraphDef, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
+    return this._videoController.setSidecarAudioEffectsGraph(sidecarAudioTrackId, effectsGraphDef, routingPath);
+  }
+
+  removeSidecarAudioEffectsGraphs(sidecarAudioTrackId: string, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
+    return this._videoController.removeSidecarAudioEffectsGraphs(sidecarAudioTrackId, routingPath);
+  }
+
+  setSidecarAudioEffectsParams(
+    sidecarAudioTrackId: string,
+    param: OmpAudioEffectParam,
+    filter?: {
+      routingPath?: Partial<OmpAudioRoutingPath>;
+    } & OmpAudioEffectFilter
+  ): Observable<void> {
+    return this._videoController.setSidecarAudioEffectsParams(sidecarAudioTrackId, param, filter);
   }
 
   createSidecarAudioPeakProcessor(sidecarAudioTrackId: string, audioMeterStandard?: AudioMeterStandard): Observable<Observable<AudioPeakProcessorMessageEvent>> {
@@ -752,5 +913,21 @@ export class SwitchableVideoController implements VideoControllerApi {
 
   loadBlackVideo(): Observable<Video> {
     return this._videoController.loadBlackVideo();
+  }
+
+  toggleMainAudioRouterSolo(routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+    return this._videoController.toggleMainAudioRouterSolo(routingPath);
+  }
+
+  toggleMainAudioRouterMute(routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+    return this._videoController.toggleMainAudioRouterMute(routingPath);
+  }
+
+  toggleSidecarAudioRouterSolo(sidecarAudioTrackId: string, routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+    return this._videoController.toggleSidecarAudioRouterSolo(sidecarAudioTrackId, routingPath);
+  }
+
+  toggleSidecarAudioRouterMute(sidecarAudioTrackId: string, routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+    return this._videoController.toggleSidecarAudioRouterMute(sidecarAudioTrackId, routingPath);
   }
 }

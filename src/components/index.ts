@@ -5,9 +5,19 @@ import {OmakaseTimecodeEdit} from './omakase-timecode-edit';
 import {OmakaseDropdown} from './omakase-dropdown';
 import {OmakaseDropdownToggle} from './omakase-dropdown-toggle';
 import {OmakaseDropdownOption} from './omakase-dropdown-option';
+import {OmakaseVolumeRange} from './omakase-volume-range';
+import {OmakaseMuteButton} from './omakase-mute-button';
 
 if (!globalThis.customElements.get('omakase-time-range')) {
   globalThis.customElements.define('omakase-time-range', OmakaseTimeRange);
+}
+
+if (!globalThis.customElements.get('omakase-volume-range')) {
+  globalThis.customElements.define('omakase-volume-range', OmakaseVolumeRange);
+}
+
+if (!globalThis.customElements.get('omakase-mute-button')) {
+  globalThis.customElements.define('omakase-mute-button', OmakaseMuteButton);
 }
 
 if (!globalThis.customElements.get('omakase-time-display')) {

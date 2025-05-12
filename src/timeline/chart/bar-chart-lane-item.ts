@@ -22,7 +22,7 @@ import Decimal from 'decimal.js';
 import {Constants} from '../../constants';
 import {nullifier} from '../../util/destroy-util';
 import {Subject} from 'rxjs';
-import {KonvaFactory} from '../../factory/konva-factory';
+import {KonvaFactory} from '../../konva/konva-factory';
 
 export interface BarChartLaneItemStyle {
   height: number;
@@ -51,7 +51,7 @@ const configDefault: Omit<BarChartLaneItemConfig, 'cue' | 'value' | 'valueScale'
     height: 20,
     opacity: 1,
     visible: true,
-    fillLinearGradientColorStops: Constants.FILL_LINEAR_GRADIENT_AUDIO_PEAK,
+    fillLinearGradientColorStops: Constants.fillLinearGradientAudioPeak,
     paddingX: 2,
     cornerRadius: 0,
   },

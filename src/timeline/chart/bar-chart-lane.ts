@@ -25,7 +25,7 @@ import {Timeline} from '../timeline';
 import {destroyer} from '../../util/destroy-util';
 import {AxiosRequestConfig} from 'axios';
 import {BarChartVttFile} from '../../vtt';
-import {KonvaFactory} from '../../factory/konva-factory';
+import {KonvaFactory} from '../../konva/konva-factory';
 import {isNullOrUndefined} from '../../util/object-util';
 import {VideoControllerApi} from '../../video';
 import {BarChartLaneApi} from '../../api';
@@ -64,7 +64,7 @@ const configDefault: BarChartLaneConfig = {
     paddingBottom: 0,
 
     interpolationWidth: 10,
-    itemFillLinearGradientColorStops: Constants.FILL_LINEAR_GRADIENT_AUDIO_PEAK,
+    itemFillLinearGradientColorStops: Constants.fillLinearGradientAudioPeak,
     itemPadding: 2,
     itemCornerRadius: 2,
   },
@@ -153,17 +153,9 @@ export class BarChartLane extends VttTimelineLane<BarChartLaneConfig, BarChartLa
     }
   }
 
-  protected override startLoadingAnimation(): void {
-    this._loadingGroup = new Konva.Group({
-      width: this._timecodedGroup!.width(),
-      height: this._timecodedGroup!.height(),
-    });
-
-    this._timecodedGroup!.add(this._loadingGroup);
+  protected override createLoadingGroupObjects(): Array<Konva.Shape | Konva.Group> {
     const rects: Konva.Rect[] = [];
-
-    const maxHeight = 0.75 * this._loadingGroup.height();
-
+    const maxHeight = 0.75 * this._loadingGroup!.height();
     const range = this._timeline!.getVisiblePositionRange();
     for (let x = range.start; x <= range.end; x += 8) {
       const heightFactor = 0.2;
@@ -177,10 +169,14 @@ export class BarChartLane extends VttTimelineLane<BarChartLaneConfig, BarChartLa
       this._loadingGroup!.add(rect);
       rects.push(rect);
     }
+    return rects;
+  }
 
-    this._loadingAnimation = new Konva.Animation((frame) => {
+  protected override createLoadingAnimation(): Konva.Animation {
+    return new Konva.Animation((frame) => {
       const frameTime = Math.round((frame?.time ?? 0) / 50);
-      rects.forEach((rect, index) => {
+      const maxHeight = 0.75 * this._loadingGroup!.height();
+      this._loadingGroup!.getChildren().forEach((rect, index) => {
         const frameNumber = frameTime % 95;
         const frameOffset = (index % 6) * 6;
         const heightFactor = 0.2 + (0.8 - 0.8 * Math.min(Math.abs(frameNumber - frameOffset - 15) / 15, Math.abs(frameNumber - frameOffset - 51) / 15, 1));
@@ -190,7 +186,6 @@ export class BarChartLane extends VttTimelineLane<BarChartLaneConfig, BarChartLa
         });
       });
     });
-    this._loadingAnimation.start();
   }
 
   private createEntities() {

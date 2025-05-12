@@ -48,7 +48,7 @@ let omakasePlayer = new omakase.OmakasePlayer({
 Once player is initialized we can load hls video stream by providing stream URL and stream frame rate:
 
 ```javascript
-omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8', 25).subscribe({ // 25 - frame rate
+omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8').subscribe({
   next: (video) => {
     console.log(`Video loaded. Duration: ${video.duration}, totalFrames: ${video.totalFrames}`)
   }
@@ -180,7 +180,7 @@ We can now load a video, detach it to independent browser window and play it!:
 ```javascript
 // local-omakase-player.js
 
-omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8', 25).subscribe({
+omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8').subscribe({
   next: (video) => {
     console.log(`Video loaded`)
     
@@ -1117,3 +1117,22 @@ Production artefacts that need to be published to NPM are created in `/dist` fol
 ## Known limitations
 
 - Safari browser doesn't support Main audio routing and Main audio VU Meter for HLS streams. This constraint can be bypassed by loading the Main audio as a Sidecar track using `exportMainAudioTrackToSidecar` method.
+
+## Breaking changes
+
+- As of version 0.16.1-SNAPSHOT.1745311857, frame rate was made optional and moved to video loading options. This changes the ``videoLoad`` function signature.
+
+Old (pre version 0.16.1-SNAPSHOT.1745311857):
+
+```typescript
+omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8', 25) // 25 - frame rate
+```
+
+New (version 0.16.1-SNAPSHOT.1745311857 and onwards):
+
+```typescript
+omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8', {
+  frameRate: 25
+})
+```
+

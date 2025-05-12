@@ -19,7 +19,7 @@ import {ColorUtil} from './color-util';
 import {KonvaFlexGroup, KonvaFlexItem} from '../layout/konva-flex';
 import {FlexNode} from '../layout/flex-node';
 import {BaseFlexGroup} from '../layout/flex-group';
-import {KonvaFactory} from '../factory/konva-factory';
+import {KonvaFactory} from '../konva/konva-factory';
 
 export class FlexUtil {
   static debugKonvaFlexGroup(text: string, fill?: string, width: number = 100, height: number = 100, opacity: number = 0.5): KonvaFlexGroup {

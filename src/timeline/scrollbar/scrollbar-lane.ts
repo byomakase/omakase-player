@@ -19,7 +19,7 @@ import {KonvaFlexGroup, KonvaFlexItem} from '../../layout/konva-flex';
 import {Timeline} from '../timeline';
 import {Scrollbar} from './scrollbar';
 import {filter, takeUntil} from 'rxjs';
-import {KonvaFactory} from '../../factory/konva-factory';
+import {KonvaFactory} from '../../konva/konva-factory';
 import Konva from 'konva';
 import {FlexSpacingBuilder} from '../../layout/flex-node';
 import {KonvaComponentFlexContentNode} from '../../layout/konva-component-flex';

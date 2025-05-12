@@ -24,7 +24,7 @@ import {ClickEvent, MouseEnterEvent, MouseLeaveEvent, MouseMoveEvent, MouseOutEv
 import {completeUnsubscribeSubjects} from '../../util/rxjs-util';
 import {Timeline} from '../timeline';
 import {destroyer, nullifier} from '../../util/destroy-util';
-import {KonvaFactory} from '../../factory/konva-factory';
+import {KonvaFactory} from '../../konva/konva-factory';
 import {VideoControllerApi} from '../../video';
 import {ScrubberLaneApi} from '../../api';
 import {konvaUnlistener} from '../../util/konva-util';
@@ -51,7 +51,7 @@ const configDefault: ScrubberLaneConfig = {
     tickDivisionMinWidth: 18,
     tickFill: '#0d0f05',
     tickHeight: 12,
-    divisionTickHeight: 12 * Constants.GOLDEN_RATIO,
+    divisionTickHeight: 12 * Constants.goldenRatio,
     timecodeShowFirst: true,
     timecodeFontSize: 11,
     timecodeFill: '#0d0f05',

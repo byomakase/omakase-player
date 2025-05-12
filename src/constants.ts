@@ -17,21 +17,21 @@
 import {Dimension, Position} from './common';
 
 export class Constants {
-  public static OMP_HANDSHAKE_BROADCAST_CHANNEL_ID = 'OMP_HANDSHAKE_BROADCAST_CHANNEL_ID';
+  public static ompHandshakeBroadcastChannelId = 'ompHandshakeBroadcastChannelId';
 
-  public static POSITION_TOP_LEFT: Position = {
+  public static positionTopLeft: Position = {
     x: 0,
     y: 0,
   };
 
-  public static DIMENSION_ZERO: Dimension = {
+  public static dimensionZero: Dimension = {
     width: 0,
     height: 0,
   };
 
-  public static GOLDEN_RATIO = 1.61;
+  public static goldenRatio = 1.61;
 
-  public static TWO_PI_RADIANS = Math.PI * 2;
+  public static twoPiRadians = Math.PI * 2;
 
-  public static FILL_LINEAR_GRADIENT_AUDIO_PEAK = [0, '#F58428', 0.33, '#FCD151', 0.5, '#FFF263', 0.59, '#DEE666', 0.78, '#A2D06C', 0.93, '#7DC370', 1, '#6FBE72'];
+  public static fillLinearGradientAudioPeak = [0, '#F58428', 0.33, '#FCD151', 0.5, '#FFF263', 0.59, '#DEE666', 0.78, '#A2D06C', 0.93, '#7DC370', 1, '#6FBE72'];
 }

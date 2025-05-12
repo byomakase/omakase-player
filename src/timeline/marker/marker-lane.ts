@@ -31,7 +31,7 @@ import {MARKER_STYLE_DEFAULT, MarkerStyle} from './marker-types';
 import {VideoControllerApi} from '../../video';
 import {VttAdapter, VttAdapterConfig} from '../../common/vtt-adapter';
 import {VttTimelineLane, VttTimelineLaneConfig} from '../vtt-timeline-lane';
-import {KonvaFactory} from '../../factory/konva-factory';
+import {KonvaFactory} from '../../konva/konva-factory';
 import {ConfigWithOptionalStyle} from '../../layout';
 
 export interface MarkerLaneConfig extends VttTimelineLaneConfig<MarkerLaneStyle>, VttAdapterConfig<MarkerVttFile> {
