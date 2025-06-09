@@ -1,10 +1,10 @@
 {
     "name": "@byomakase/omakase-player",
-    "version": "0.17.0",
+    "version": "0.18.0",
     "description": "## Omakase Player - Open source JavaScript framework for building frame accurate video experiences",
     "author": "ByOmakase",
     "homepage": "https://player.byomakase.org",
-    "copyright": "Copyright 2024 ByOmakase, LLC <https://byomakase.org/>",
+    "copyright": "Copyright 2025 ByOmakase, LLC <https://byomakase.org/>",
     "license": "Apache-2.0",
     "keywords": [
         "hls",

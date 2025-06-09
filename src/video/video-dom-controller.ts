@@ -15,7 +15,7 @@
  */
 
 import {Fullscreen} from '../dom/fullscreen';
-import {filter, fromEvent, Observable, race, Subject, take, takeUntil} from 'rxjs';
+import {filter, fromEvent, merge, Observable, race, Subject, take, takeUntil} from 'rxjs';
 import {OmakaseTextTrack, VideoFullscreenChangeEvent, VideoHelpMenuChangeEvent, VideoSafeZoneChangeEvent} from '../types';
 import {errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {z} from 'zod';
@@ -43,6 +43,9 @@ import {OmakaseDropdown} from '../components/omakase-dropdown';
 import {SvgUtil} from '../util/svg-util';
 import {OmakaseVolumeRange} from '../components/omakase-volume-range';
 import {OmakaseMuteButton} from '../components/omakase-mute-button';
+import {OmakaseDropdownList, OmakaseDropdownListItem} from '../components/omakase-dropdown-list';
+import {OmakaseDropdownToggle} from '../components/omakase-dropdown-toggle';
+import {BrowserProvider} from '../common/browser-provider';
 
 const domClasses = {
   player: 'omakase-player',
@@ -78,6 +81,8 @@ const domClasses = {
   alerts: 'omakase-player-alerts',
   detachedBackground: 'omakase-detached-background',
   backgroundImage: 'omakase-background-image',
+  audioTextMenu: 'omakase-audio-text-menu',
+  audioTextToggle: 'omakase-audio-text-toggle',
 
   mediaChromeButton: 'media-chrome-button',
   mediaChromePlay: 'media-chrome-play',
@@ -96,11 +101,15 @@ const domClasses = {
   mediaChromeAudioHigh: 'media-chrome-audio-high',
   mediaChromeBitcDisabled: 'media-chrome-bitc-disabled',
   mediaChromeBitcEnabled: 'media-chrome-bitc-enabled',
+  mediaChromeSettings: 'media-chrome-settings',
+  mediaChromeAudioText: 'media-chrome-audio-text',
   mediaChromeBitcTooltip: 'media-chrome-bitc-tooltip',
   mediaChromeCurrentTimecode: 'media-chrome-current-timecode',
   mediaChromePreviewTimecode: 'media-chrome-preview-timecode',
   mediaChromePreviewThumbnail: 'media-chrome-preview-thumbnail',
   mediaChromePreviewWrapper: 'media-chrome-preview-wrapper',
+  mediaChromeTextOn: 'media-chrome-text-on',
+  mediaChromeTextOff: 'media-chrome-text-off',
 };
 
 export type MediaChromeVisibility = 'disabled' | 'enabled' | 'fullscreen-only';
@@ -109,20 +118,30 @@ export interface VideoDomControllerConfig {
   playerHTMLElementId: string;
   crossorigin: 'anonymous' | 'use-credentials';
   detachedPlayer: boolean;
-  mediaChrome: MediaChromeVisibility;
+  disablePictureInPicture: boolean;
+  mediaChromeVisibility: MediaChromeVisibility;
   mediaChromeHTMLElementId?: string;
   thumbnailVttUrl?: string;
   thumbnailFn?: (time: number) => string | undefined;
   playerClickHandler?: () => void;
   playbackRateOptions?: number[];
   watermark?: string;
+  trackMenuFloating: boolean;
+  trackMenuPlacement: 'top' | 'bottom';
+  trackMenuRightOffset: string;
+  trackMenuMultiselect: boolean;
 }
 
 export const VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT: VideoDomControllerConfig = {
   playerHTMLElementId: 'omakase-player',
   crossorigin: 'anonymous',
   detachedPlayer: false,
-  mediaChrome: 'disabled',
+  disablePictureInPicture: false,
+  mediaChromeVisibility: 'disabled',
+  trackMenuFloating: false,
+  trackMenuPlacement: 'bottom',
+  trackMenuRightOffset: '20px',
+  trackMenuMultiselect: false,
 };
 
 export class VideoDomController implements VideoDomControllerApi {
@@ -162,6 +181,8 @@ export class VideoDomController implements VideoDomControllerApi {
   protected _divHelp!: HTMLElement;
   protected _divHelpMenu!: HTMLElement;
 
+  protected _audioTextToggle?: OmakaseDropdownToggle;
+
   protected _divSectionBottomRight!: HTMLElement;
   protected _divButtonAttach!: HTMLElement;
   protected _divButtonFullscreen!: HTMLElement;
@@ -188,8 +209,15 @@ export class VideoDomController implements VideoDomControllerApi {
   protected _currentTimecode?: OmakaseTimeDisplay;
   protected _previewTimecode?: OmakaseTimeDisplay;
   protected _previewThumbnail?: OmakasePreviewThumbnail;
-  protected _speedDropdown?: OmakaseDropdown;
   protected _muteButton?: OmakaseMuteButton;
+  protected _textButton?: MediaChromeButton;
+  protected _speedDropdown?: OmakaseDropdown;
+  protected _audioDropdown?: OmakaseDropdown;
+  protected _speedDropdownList?: OmakaseDropdownList;
+  protected _audioDropdownList?: OmakaseDropdownList;
+  protected _textDropdownList?: OmakaseDropdownList;
+  protected _sidecarDropdownList?: OmakaseDropdownList;
+  protected _audioDropdownToggle?: OmakaseDropdownToggle;
 
   protected _bitcEnabled = false;
 
@@ -244,15 +272,25 @@ export class VideoDomController implements VideoDomControllerApi {
   private createDom() {
     this._divPlayer.classList.add(`${domClasses.player}`);
 
-    this._divPlayer.innerHTML = `<div class="${domClasses.playerWrapper} media-chrome-${this._config.mediaChrome}">
+    this._divPlayer.innerHTML = `<div class="${domClasses.playerWrapper} media-chrome-${this._config.mediaChromeVisibility}">
           <media-controller gesturesdisabled>
               <video slot="media" class="${domClasses.video}" playsinline=""></video>
+              ${this._config.trackMenuPlacement === 'top' ? `<div slot="top-chrome"><div class="${domClasses.audioTextMenu}">${this.getAudioTextDropdown()}</div></div>` : ''}
               <div slot="centered-chrome" class="${domClasses.videoControls}" noautohide>
                   <div class="${domClasses.safeZoneWrapper}"></div>
                   <div class="${domClasses.watermarkWrapper}">
                     <div class="${domClasses.watermark}"></div>
                   </div>
                   <div class="${domClasses.help} d-none">
+                      ${
+                        this._config.trackMenuPlacement === 'top'
+                          ? `<omakase-dropdown-toggle id="audio-dropdown-toggle" dropdown="audio-dropdown" class="${domClasses.audioTextToggle} d-none">
+                              <media-chrome-button class="${domClasses.mediaChromeButton} omakase-player-audio-text">
+                                <span class="${domClasses.mediaChromeAudioText}"></span>
+                              </media-chrome-button>
+                            </omakase-dropdown-toggle>`
+                          : ''
+                      }
                       <div class="omakase-help-dropdown">
                         <button class="omakase-help-button d-none"></button>
                         <div class="${domClasses.helpMenu} d-none">
@@ -291,7 +329,11 @@ export class VideoDomController implements VideoDomControllerApi {
       </div>`;
 
     this._videoElement = this.getPlayerElement<HTMLVideoElement>(domClasses.video);
+    this._videoElement.controls = false;
     this._videoElement.crossOrigin = this._config.crossorigin;
+    if (this._config.disablePictureInPicture) {
+      this._videoElement.disablePictureInPicture = true;
+    }
 
     this._audioUtilElement = this.getPlayerElement<HTMLAudioElement>(domClasses.audioUtil);
 
@@ -305,6 +347,8 @@ export class VideoDomController implements VideoDomControllerApi {
     this._divButtonOverlayAttach = this.getPlayerElement<HTMLElement>(domClasses.buttonOverlayAttach);
     this._divHelp = this.getPlayerElement<HTMLElement>(domClasses.help);
     this._divHelpMenu = this.getPlayerElement<HTMLElement>(domClasses.helpMenu);
+
+    this._audioTextToggle = this.getPlayerElement<OmakaseDropdownToggle>(domClasses.audioTextToggle);
 
     this._divSectionBottomRight = this.getPlayerElement<HTMLElement>(domClasses.sectionBottomRight);
     this._divButtonAttach = this.getPlayerElement<HTMLElement>(domClasses.buttonAttach);
@@ -330,11 +374,18 @@ export class VideoDomController implements VideoDomControllerApi {
     this._timeRangeControl = this._divPlayer.getElementsByTagName('omakase-time-range')[0] as OmakaseTimeRange;
     this._volumeRangeControl = this._divPlayer.getElementsByTagName('omakase-volume-range')[0] as OmakaseVolumeRange;
     this._muteButton = this._divPlayer.getElementsByTagName('omakase-mute-button')[0] as OmakaseMuteButton;
+    this._textButton = this.getPlayerElement<MediaChromeButton>(domClasses.mediaChromeTextOn);
     this._divTimecode = this.getPlayerElement<HTMLElement>(domClasses.timecodeContainer);
     this._currentTimecode = this.getPlayerElement<OmakaseTimeDisplay>(domClasses.mediaChromeCurrentTimecode);
     this._previewTimecode = this.getPlayerElement<OmakaseTimeDisplay>(domClasses.mediaChromePreviewTimecode);
     this._previewThumbnail = this.getPlayerElement<OmakasePreviewThumbnail>(domClasses.mediaChromePreviewThumbnail);
     this._speedDropdown = DomUtil.getElementById('speed-dropdown');
+    this._audioDropdown = DomUtil.getElementById('audio-dropdown');
+    this._audioDropdownToggle = DomUtil.getElementById('audio-dropdown-toggle');
+    this._speedDropdownList = DomUtil.getElementById('speed-dropdown-list');
+    this._audioDropdownList = DomUtil.getElementById('audio-dropdown-list');
+    this._textDropdownList = DomUtil.getElementById('text-dropdown-list');
+    this._sidecarDropdownList = DomUtil.getElementById('sidecar-dropdown-list');
 
     if (this._config.watermark) {
       if (SvgUtil.isValidSVG(this._config.watermark)) {
@@ -363,9 +414,12 @@ export class VideoDomController implements VideoDomControllerApi {
               <omakase-time-display class="${domClasses.mediaChromePreviewTimecode}"></omakase-time-display>
             </div>
           </omakase-time-range>
-          <omakase-dropdown id="speed-dropdown" title="SPEED" width="76">
-              ${this.getPlaybackRateOptions()}
+          <omakase-dropdown id="speed-dropdown" align="center">
+              <omakase-dropdown-list id="speed-dropdown-list" title="SPEED" width="76">
+                  ${this.getPlaybackRateOptions()}
+              </omakase-dropdown-list>
           </omakase-dropdown>
+          ${this._config.trackMenuPlacement === 'bottom' ? this.getAudioTextDropdown() : ''}
       </media-control-bar>
       <media-control-bar style="display:none" class="lower-control-bar">
           <div class="start-container">
@@ -378,6 +432,9 @@ export class VideoDomController implements VideoDomControllerApi {
                   </omakase-mute-button>
                   <omakase-volume-range></omakase-volume-range>
               </div>
+              <media-chrome-button class="${domClasses.mediaChromeButton} omakase-player-text-toggle">
+                <span class="${domClasses.mediaChromeTextOn} disabled"></span>
+              </media-chrome-button>
               <omakase-dropdown-toggle dropdown="speed-dropdown"></omakase-dropdown-toggle>
           </div>
           <div class="center-container">
@@ -403,6 +460,15 @@ export class VideoDomController implements VideoDomControllerApi {
               </media-chrome-button>
           </div>
           <div class="end-container">
+              ${
+                this._config.trackMenuPlacement === 'bottom'
+                  ? `<omakase-dropdown-toggle id="audio-dropdown-toggle" dropdown="audio-dropdown">
+                      <media-chrome-button class="${domClasses.mediaChromeButton} omakase-player-audio-text">
+                        <span class="${domClasses.mediaChromeAudioText}"></span>
+                      </media-chrome-button>
+                    </omakase-dropdown-toggle>`
+                  : ''
+              }
               <media-chrome-button class="${domClasses.mediaChromeButton} omakase-player-bitc">
                 <span class="${domClasses.mediaChromeBitcDisabled}"></span>
                 <media-tooltip class="${domClasses.mediaChromeBitcTooltip}">Show timecode</media-tooltip>
@@ -428,6 +494,24 @@ export class VideoDomController implements VideoDomControllerApi {
         else return `<omakase-dropdown-option value="${rate}">${rate}x</omakase-dropdown-option>`;
       })
       .join('\n');
+  }
+
+  private getAudioTextDropdown() {
+    return `<omakase-dropdown ${this._config.trackMenuFloating ? 'floating="true"' : ''} id="audio-dropdown" style="display:none;${this._config.trackMenuPlacement === 'top' ? 'right:' + this._config.trackMenuRightOffset : ''}">
+                <omakase-dropdown-list id="audio-dropdown-list" class="align-left" title="AUDIO" width="125" type="radio"></omakase-dropdown-list>
+                <omakase-dropdown-list id="sidecar-dropdown-list" multiselect="true" class="d-none align-left" title="SIDECAR AUDIO" width="125" type="checkbox"></omakase-dropdown-list>
+                <omakase-dropdown-list id="text-dropdown-list" class="d-none align-left" title="TEXT" width="125" type="radio"></omakase-dropdown-list>
+            </omakase-dropdown>`;
+  }
+
+  private alignAudioTextDropdown(alignment: 'left' | 'right') {
+    if (alignment === 'right') {
+      this._audioDropdown!.style.removeProperty('left');
+      this._audioDropdown!.style.right = this._config.trackMenuRightOffset;
+    } else {
+      this._audioDropdown!.style.removeProperty('right');
+      this._audioDropdown!.style.left = this._audioDropdownToggle!.offsetLeft + 'px';
+    }
   }
 
   private getPlayerElement<T>(className: string): T {
@@ -508,7 +592,7 @@ export class VideoDomController implements VideoDomControllerApi {
                 errorCompleteObserver(observer, error);
               });
           } else {
-            Fullscreen.requestFullscreen(this._config.mediaChrome === 'disabled' ? this._videoElement : this._mediaControllerElement)
+            Fullscreen.requestFullscreen(this._config.mediaChromeVisibility === 'disabled' ? this._videoElement : this._mediaControllerElement)
               .then(() => {
                 nextCompleteObserver(observer);
               })
@@ -654,14 +738,16 @@ export class VideoDomController implements VideoDomControllerApi {
     });
   }
 
+  isPiPSupported(): boolean {
+    return !BrowserProvider.instance().isFirefox && !this._videoElement.disablePictureInPicture;
+  }
+
   attachVideoController(videoController: VideoControllerApi) {
     // clean previous subscribers and listeners
     nextCompleteSubject(this._videoEventBreaker$);
     this._videoEventBreaker$ = new Subject<void>();
 
     this._videoController = videoController;
-
-    this._videoElement.controls = false;
 
     let allOverlayButtons = [
       this._divButtonOverlayPlay,
@@ -729,15 +815,24 @@ export class VideoDomController implements VideoDomControllerApi {
             clearShowTemporaryOnMouseMoveTimeoutId();
             if (this._config.playerClickHandler) {
               this.hideElements(this._divButtonOverlayPause, this._divButtonOverlayPlay).showElements(this._divButtonHelp);
+              if (this._audioTextToggle) {
+                this.showElements(this._audioTextToggle);
+              }
             } else {
               let playControlToShow = this._videoController.isPlaying() ? this._divButtonOverlayPause : this._divButtonOverlayPlay;
               this.hideElements(this._divButtonOverlayPause, this._divButtonOverlayPlay).showElements(playControlToShow, this._divButtonHelp);
+              if (this._audioTextToggle) {
+                this.showElements(this._audioTextToggle);
+              }
 
               this._showTemporaryOnMouseMoveTimeoutId = setTimeout(() => {
                 this.hideElements(playControlToShow).hideElements(this._divSectionBottomRight);
 
                 if (!this.isShown(this._divHelpMenu)) {
                   this.hideElements(this._divButtonHelp, this._divHelpMenu);
+                  if (this._audioTextToggle) {
+                    this.hideElements(this._audioTextToggle);
+                  }
                 }
               }, 1000);
             }
@@ -754,6 +849,9 @@ export class VideoDomController implements VideoDomControllerApi {
       .subscribe({
         next: (event) => {
           this.hideElements(this._divButtonOverlayPlay, this._divButtonOverlayPause).hideElements(this._divButtonHelp, this._divHelpMenu).hideElements(this._divSectionBottomRight);
+          if (this._audioTextToggle) {
+            this.hideElements(this._audioTextToggle);
+          }
         },
       });
 
@@ -885,8 +983,37 @@ export class VideoDomController implements VideoDomControllerApi {
       this._muteButton.videoController = this._videoController;
     }
 
-    if (this._speedDropdown) {
-      this._speedDropdown.selectedOption$.pipe(takeUntil(this._videoEventBreaker$)).subscribe({
+    if (this._textButton) {
+      fromEvent<MouseEvent>(this._textButton, 'click')
+        .pipe(takeUntil(this._videoEventBreaker$))
+        .subscribe({
+          next: () => {
+            const activeSubtitlesTrack = this._videoController.getActiveSubtitlesTrack();
+            if (activeSubtitlesTrack) {
+              if (activeSubtitlesTrack.hidden) {
+                this._videoController.showSubtitlesTrack(activeSubtitlesTrack.id);
+              } else {
+                this._videoController.hideSubtitlesTrack(activeSubtitlesTrack.id);
+              }
+            }
+          },
+        });
+      this._videoController.onSubtitlesShow$.pipe(takeUntil(this._videoEventBreaker$)).subscribe({
+        next: () => {
+          this._textButton!.classList.remove('disabled', domClasses.mediaChromeTextOff);
+          this._textButton!.classList.add(domClasses.mediaChromeTextOn);
+        },
+      });
+      this._videoController.onSubtitlesHide$.pipe(takeUntil(this._videoEventBreaker$)).subscribe({
+        next: () => {
+          this._textButton!.classList.remove(domClasses.mediaChromeTextOn);
+          this._textButton!.classList.add(domClasses.mediaChromeTextOff);
+        },
+      });
+    }
+
+    if (this._speedDropdownList) {
+      this._speedDropdownList.selectedOption$.pipe(takeUntil(this._videoEventBreaker$)).subscribe({
         next: (speedOption) => {
           if (speedOption && parseFloat(speedOption.value) !== this._videoController.getPlaybackRate()) {
             this._videoController.setPlaybackRate(parseFloat(speedOption.value));
@@ -895,13 +1022,183 @@ export class VideoDomController implements VideoDomControllerApi {
       });
       this._videoController.onPlaybackRateChange$.pipe(takeUntil(this._videoEventBreaker$)).subscribe({
         next: (event) => {
-          if (event.playbackRate !== this._speedDropdown?.selectedOption$.getValue()?.value) {
-            this._speedDropdown?.selectedOption$.next({
+          if (event.playbackRate !== this._speedDropdownList?.selectedOption$.getValue()?.value) {
+            this._speedDropdownList?.selectedOption$.next({
               value: event.playbackRate.toString(),
               label: `${event.playbackRate}x`,
             });
           }
         },
+      });
+    }
+
+    if (this._audioDropdownList) {
+      this._videoController.onAudioLoaded$.pipe(takeUntil(this._videoEventBreaker$)).subscribe(() => {
+        this._audioDropdownList!.setOptions(
+          this._videoController.getAudioTracks().map((track) => ({
+            value: track.id,
+            label: track.label ?? '',
+          }))
+        );
+      });
+      this._audioDropdownList.selectedOption$.pipe(takeUntil(this._videoEventBreaker$)).subscribe({
+        next: (audioOption) => {
+          if (!audioOption) {
+            return;
+          }
+          if (this._config.trackMenuMultiselect) {
+            this._videoController.setActiveAudioTrack(audioOption.value);
+          } else if (
+            this._videoController
+              .getAudioTracks()
+              .map((track) => track.id)
+              .includes(audioOption.value)
+          ) {
+            this._videoController.deactivateSidecarAudioTracks(
+              this._videoController
+                .getSidecarAudioTracks()
+                .filter((track) => track.active)
+                .map((track) => track.id)
+            );
+            this._videoController.unmute();
+            this._videoController.setActiveAudioTrack(audioOption.value).subscribe(() => {
+              this._audioDropdownList!.setOptions(this.getUnifiedAudioOptions());
+            });
+          } else {
+            this._videoController.mute();
+            this._videoController.activateSidecarAudioTracks([audioOption.value], true);
+          }
+        },
+      });
+      this._videoController.onAudioSwitched$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
+        if (event.activeAudioTrack.id !== this._audioDropdownList!.selectedOption$.getValue()?.value) {
+          this._audioDropdownList?.selectedOption$.next({
+            value: event.activeAudioTrack.id,
+            label: event.activeAudioTrack.label ?? '',
+          });
+        }
+      });
+      if (!this._config.trackMenuMultiselect) {
+        this._videoController.onSidecarAudioCreate$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
+          if (event.createdSidecarAudioState.audioTrack.active) {
+            // deactivate other tracks
+            this._videoController.mute();
+            this._videoController.deactivateSidecarAudioTracks(
+              this._videoController
+                .getSidecarAudioTracks()
+                .filter((track) => track.active && track.id !== event.createdSidecarAudioState.audioTrack.id)
+                .map((track) => track.id)
+            );
+          }
+          this._audioDropdownList!.setOptions(this.getUnifiedAudioOptions());
+        });
+        this._videoController.onSidecarAudioRemove$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
+          if (event.removedSidecarAudio.audioTrack.active) {
+            // enable main audio
+            this._videoController.unmute();
+          }
+          this._audioDropdownList!.setOptions(this.getUnifiedAudioOptions());
+        });
+        this._videoController.onSidecarAudioChange$.pipe(takeUntil(this._videoEventBreaker$)).subscribe(() => {
+          this._audioDropdownList!.updateOptions(this.getUnifiedAudioOptions());
+        });
+      }
+    }
+
+    if (this._sidecarDropdownList && this._config.trackMenuMultiselect) {
+      merge(this._videoController.onSidecarAudioCreate$, this._videoController.onSidecarAudioRemove$)
+        .pipe(takeUntil(this._videoEventBreaker$))
+        .subscribe((event) => {
+          if (event.sidecarAudioStates.length) {
+            this.showElements(this._sidecarDropdownList!);
+            this.alignAudioTextDropdown('right');
+            this._audioDropdownList?.setAttribute('type', 'checkbox');
+            this._textDropdownList?.setAttribute('type', 'checkbox');
+            this._audioDropdownList?.setTitle('MAIN AUDIO');
+            this._sidecarDropdownList!.setOptions(
+              event.sidecarAudioStates.map((state) => ({
+                value: state.audioTrack.id,
+                label: state.audioTrack.label,
+                active: state.audioTrack.active,
+              }))
+            );
+          } else {
+            this.hideElements(this._sidecarDropdownList!);
+            if (this._config.trackMenuPlacement === 'bottom' && this._textDropdownList && !this.isShown(this._textDropdownList)) {
+              this.alignAudioTextDropdown('left');
+            }
+            this._audioDropdownList?.setAttribute('type', 'radio');
+            this._textDropdownList?.setAttribute('type', 'radio');
+            this._audioDropdownList?.setTitle('AUDIO');
+            this._sidecarDropdownList!.setOptions([]);
+          }
+        });
+      this._videoController.onSidecarAudioChange$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
+        this._sidecarDropdownList!.updateOptions(
+          event.sidecarAudioStates.map((state) => ({
+            value: state.audioTrack.id,
+            label: state.audioTrack.label,
+            active: state.audioTrack.active,
+          }))
+        );
+      });
+      this._sidecarDropdownList.selectedOption$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((sidecarOption) => {
+        if (sidecarOption) {
+          const sidecarAudio = this._videoController.getSidecarAudio(sidecarOption.value);
+          if (sidecarAudio) {
+            if (sidecarAudio.isActive) {
+              sidecarAudio.deactivate();
+            } else {
+              sidecarAudio.activate();
+            }
+          }
+        }
+      });
+    }
+
+    if (this._textDropdownList) {
+      merge(this._videoController.onSubtitlesLoaded$, this._videoController.onSubtitlesCreate$, this._videoController.onSubtitlesRemove$)
+        .pipe(takeUntil(this._videoEventBreaker$))
+        .subscribe({
+          next: (event) => {
+            const textOptions = this._videoController.getSubtitlesTracks().map((track) => ({
+              value: track.id,
+              label: track.label,
+            }));
+            this._textDropdownList!.setOptions(textOptions);
+            if (textOptions.length) {
+              // this.showElements(this._textDropdownList!);
+              this.alignAudioTextDropdown('right');
+            } else {
+              this.hideElements(this._textDropdownList!);
+              if (this._config.trackMenuPlacement === 'bottom' && this._sidecarDropdownList && !this.isShown(this._sidecarDropdownList)) {
+                this.alignAudioTextDropdown('left');
+              }
+            }
+            if (this._textButton && (!this._videoController.getSubtitlesTracks().length || !this._videoController.getActiveSubtitlesTrack())) {
+              this._textButton.classList.add('disabled');
+            }
+          },
+        });
+      this._textDropdownList.selectedOption$.pipe(takeUntil(this._videoEventBreaker$)).subscribe({
+        next: (textOption) => {
+          if (textOption) {
+            if (textOption.value !== this._videoController.getActiveSubtitlesTrack()?.id) {
+              this._videoController.showSubtitlesTrack(textOption.value);
+            }
+          }
+        },
+      });
+      this._videoController.onSubtitlesShow$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
+        if (event.currentTrack?.id !== this._textDropdownList!.selectedOption$.getValue()?.value) {
+          this._textDropdownList?.selectedOption$.next({
+            value: event.currentTrack!.id,
+            label: event.currentTrack!.label,
+          });
+        }
+      });
+      this._videoController.onSubtitlesHide$.pipe(takeUntil(this._videoEventBreaker$)).subscribe(() => {
+        this._textDropdownList?.selectedOption$.next(undefined);
       });
     }
 
@@ -1167,5 +1464,20 @@ export class VideoDomController implements VideoDomControllerApi {
     } else {
       return false;
     }
+  }
+
+  private getUnifiedAudioOptions(): OmakaseDropdownListItem[] {
+    return [
+      ...this._videoController.getAudioTracks().map((track) => ({
+        value: track.id,
+        label: track.label ?? '',
+        active: track.active && !this._videoController.isMuted(),
+      })),
+      ...this._videoController.getSidecarAudioTracks().map((track) => ({
+        value: track.id,
+        label: track.label ?? '',
+        active: track.active,
+      })),
+    ];
   }
 }

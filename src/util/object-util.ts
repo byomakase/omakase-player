@@ -33,3 +33,12 @@ export function callFunctionByName<T extends object>(obj: T, fnName: keyof T, ..
   }
   throw new Error(`Function '${String(fnName)}' does not exist or is not callable.`);
 }
+
+export function removeEmptyValues<T extends Record<string, any>>(obj: T): T {
+  Object.keys(obj).forEach((key) => {
+    if (obj[key] === void 0) {
+      delete obj[key];
+    }
+  });
+  return obj;
+}

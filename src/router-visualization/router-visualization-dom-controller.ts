@@ -38,7 +38,9 @@ export class RouterVisualizationDomController implements Destroyable {
   }
 
   destroy() {
-    this._divRouterVisualization.removeChild(this.routerVisualizationComponent);
+    const routerVisualizationComponent = this.routerVisualizationComponent;
+    routerVisualizationComponent.destroy();
+    this._divRouterVisualization.removeChild(routerVisualizationComponent);
   }
 
   private createDom() {

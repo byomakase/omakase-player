@@ -15,12 +15,11 @@
  */
 
 import {Api} from './api';
-import {OmpAudioRouterState} from '../video';
+import {OmpAudioRouterState, OmpAudioRoutingConnection, OmpAudioRoutingPath} from '../video';
 import {Observable} from 'rxjs';
 import {OmpAudioRouterChangeEvent, OmpAudioRouterInputSoloMuteEvent} from '../types';
 import {OmpAudioEffect, OmpAudioEffectFilter, OmpAudioEffectParam, OmpAudioEffectsGraph, OmpAudioEffectsGraphDef} from '../audio';
-import {OmpAudioRoutingConnection, OmpAudioRoutingPath} from '../video';
-import {OmpAudioRouterInputSoloMuteState} from '../video/model';
+import {OmpAudioRouterInputSoloMuteState, OmpAudioRoutingInputType} from '../video/model';
 
 /**
  * Audio router
@@ -118,13 +117,13 @@ export interface AudioRouterApi extends Api {
    * Solo or unsolo (depending on current input state) given audio router input
    * @param routingPath
    */
-  toggleSolo(routingPath: Omit<OmpAudioRoutingPath, 'output'>): void;
+  toggleSolo(routingPath: OmpAudioRoutingInputType): void;
 
   /**
    * Mute or unmute (depending on current input state) given audio router input
    * @param routingPath
    */
-  toggleMute(routingPath: Omit<OmpAudioRoutingPath, 'output'>): void;
+  toggleMute(routingPath: OmpAudioRoutingInputType): void;
 
   /**
    * Reset all audio router inputs states

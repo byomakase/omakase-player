@@ -54,7 +54,7 @@ export class FlexUtil {
 
   static echoFlexNodeLayout(flexNode: FlexNode<any>, level: number = 1) {
     if (flexNode) {
-      console.log(`${Array(level).join('\t')} ${flexNode.name}`, flexNode.getLayout());
+      console.debug(`${Array(level).join('\t')} ${flexNode.name}`, flexNode.getLayout());
       if (flexNode instanceof BaseFlexGroup) {
         flexNode.getChildren().forEach((child) => {
           FlexUtil.echoFlexNodeLayout(child, level + 1);

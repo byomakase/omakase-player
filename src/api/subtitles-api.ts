@@ -16,7 +16,7 @@
 
 import {Api} from './api';
 import {Observable} from 'rxjs';
-import {SubtitlesCreateEvent, SubtitlesEvent, SubtitlesLoadedEvent, SubtitlesVttTrack} from '../types';
+import {SubtitlesCreateEvent, SubtitlesEvent, SubtitlesLoadedEvent, SubtitlesVttTrack, SubtitlesVttTrackCreateType} from '../types';
 
 export interface SubtitlesApi extends Api {
   /**
@@ -55,7 +55,7 @@ export interface SubtitlesApi extends Api {
    * Creates new Subtitles VTT track
    * @param track
    */
-  createVttTrack(track: Pick<SubtitlesVttTrack, 'id' | 'src' | 'default' | 'label' | 'language'>): Observable<SubtitlesVttTrack | undefined>;
+  createVttTrack(track: SubtitlesVttTrackCreateType): Observable<SubtitlesVttTrack>;
 
   /**
    * @returns all VTT tracks

@@ -24,6 +24,7 @@ import {
   MainAudioChangeEvent,
   MainAudioInputSoloMuteEvent,
   OmpAudioTrack,
+  OmpAudioTrackCreateType,
   OmpNamedEvent,
   OmpNamedEventEventName,
   OmpVideoWindowPlaybackError,
@@ -64,22 +65,10 @@ import Decimal from 'decimal.js';
 import {TypedOmpBroadcastChannel} from '../common/omp-broadcast-channel';
 import {MessageChannelActionsMap} from './channel-types';
 import {fromPromise} from 'rxjs/internal/observable/innerFrom';
-import {
-  BufferedTimespan,
-  OmpAudioRouterState,
-  OmpMainAudioInputSoloMuteState,
-  OmpMainAudioState,
-  OmpSidecarAudioInputSoloMuteState,
-  OmpSidecarAudioState,
-  VideoLoadOptionsInternal,
-  VideoSafeZone,
-  VideoWindowPlaybackState,
-} from './model';
+import {BufferedTimespan, OmpAudioRouterState, OmpAudioRoutingInputType, OmpMainAudioInputSoloMuteState, OmpMainAudioState, OmpSidecarAudioInputSoloMuteState, OmpSidecarAudioState, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
 import {OmpAudioRouter} from './audio-router';
 import {SidecarAudioApi} from '../api/sidecar-audio-api';
 import {OmpAudioEffectFilter, OmpAudioEffectParam, OmpAudioEffectsGraphDef} from '../audio';
-import {util} from 'zod';
-import Omit = util.Omit;
 
 export class RemoteVideoController implements VideoControllerApi {
   private readonly _messageChannel: TypedOmpBroadcastChannel<MessageChannelActionsMap>;
@@ -724,7 +713,7 @@ export class RemoteVideoController implements VideoControllerApi {
     }
   }
 
-  createSubtitlesVttTrack(subtitlesVttTrack: SubtitlesVttTrack): Observable<SubtitlesVttTrack | undefined> {
+  createSubtitlesVttTrack(subtitlesVttTrack: SubtitlesVttTrack): Observable<SubtitlesVttTrack> {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.createSubtitlesVttTrack', [subtitlesVttTrack])));
   }
 
@@ -817,11 +806,11 @@ export class RemoteVideoController implements VideoControllerApi {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.setMainAudioEffectsParams', [param, filter])));
   }
 
-  toggleMainAudioRouterSolo(routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+  toggleMainAudioRouterSolo(routingPath: OmpAudioRoutingInputType): Observable<void> {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.toggleMainAudioRouterSolo', [routingPath])));
   }
 
-  toggleMainAudioRouterMute(routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+  toggleMainAudioRouterMute(routingPath: OmpAudioRoutingInputType): Observable<void> {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.toggleMainAudioRouterMute', [routingPath])));
   }
 
@@ -861,11 +850,11 @@ export class RemoteVideoController implements VideoControllerApi {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.setSidecarAudioRouterInitialRoutingConnections', [id, connections])));
   }
 
-  createSidecarAudioTrack(track: Partial<OmpAudioTrack>): Observable<OmpAudioTrack> {
+  createSidecarAudioTrack(track: OmpAudioTrackCreateType): Observable<OmpAudioTrack> {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.createSidecarAudioTrack', [track], {timeout: 60000 * 5})));
   }
 
-  createSidecarAudioTracks(tracks: Partial<OmpAudioTrack>[]): Observable<OmpAudioTrack[]> {
+  createSidecarAudioTracks(tracks: OmpAudioTrackCreateType[]): Observable<OmpAudioTrack[]> {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.createSidecarAudioTracks', [tracks], {timeout: 60000 * 5})));
   }
 
@@ -948,11 +937,11 @@ export class RemoteVideoController implements VideoControllerApi {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.exportMainAudioTracksToSidecar', [mainAudioTrackIds])));
   }
 
-  toggleSidecarAudioRouterSolo(sidecarAudioTrackId: string, routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+  toggleSidecarAudioRouterSolo(sidecarAudioTrackId: string, routingPath: OmpAudioRoutingInputType): Observable<void> {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.toggleSidecarAudioRouterSolo', [sidecarAudioTrackId, routingPath])));
   }
 
-  toggleSidecarAudioRouterMute(sidecarAudioTrackId: string, routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+  toggleSidecarAudioRouterMute(sidecarAudioTrackId: string, routingPath: OmpAudioRoutingInputType): Observable<void> {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.toggleSidecarAudioRouterMute', [sidecarAudioTrackId, routingPath])));
   }
 

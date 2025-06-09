@@ -22,10 +22,17 @@ import {HTMLVideoElementEventKeys} from './video-controller';
 import {z} from 'zod';
 import {VideoControllerApi} from './video-controller-api';
 import {FrameRateUtil} from '../util/frame-rate-util';
-import {OmpNamedEventEventName} from '../types';
+import {OmpAudioTrack, OmpAudioTrackCreateType, OmpNamedEventEventName} from '../types';
 import {FileUtil} from '../util/file-util';
+import {CryptoUtil} from '../util/crypto-util';
+import {AudioUtil} from '../util/audio-util';
+import {AuthConfig} from '../auth/auth-config';
+import {BlobUtil} from '../util/blob-util';
 
 export class VideoNativeLoader extends BaseVideoLoader {
+  protected _audioTracks: Map<string, OmpAudioTrack> = new Map<string, OmpAudioTrack>();
+  protected _activeAudioTrack: OmpAudioTrack | undefined;
+
   constructor(videoController: VideoControllerApi) {
     super(videoController);
 
@@ -97,11 +104,57 @@ export class VideoNativeLoader extends BaseVideoLoader {
         currentTrack: void 0,
       });
 
+      let audioTrack: OmpAudioTrack = {
+        id: `${CryptoUtil.uuid()}`,
+        src: sourceUrl,
+        embedded: true,
+        active: true,
+        channelCount: void 0,
+        language: 'default',
+        label: 'default',
+      };
+      this._audioTracks.set(audioTrack.id, audioTrack);
+      this._activeAudioTrack = audioTrack;
+
       // assuming interleaved audio
       this.onAudioLoaded$.next({
-        audioTracks: [],
-        activeAudioTrack: void 0,
+        audioTracks: [...this._audioTracks.values()],
+        activeAudioTrack: this._activeAudioTrack,
       });
+    });
+  }
+
+  override setActiveAudioTrack(ompAudioTrackId: string): Observable<void> {
+    return new Observable((observer) => {
+      if (!this._audioTracks.has(ompAudioTrackId)) {
+        throw new Error('Audio track not found');
+      }
+      console.debug('Audio track active by default');
+      nextCompleteObserver(observer);
+    });
+  }
+
+  override exportAudioTrack(ompAudioTrackId: string): Observable<OmpAudioTrackCreateType> {
+    return new Observable((observer) => {
+      if (!this._audioTracks.has(ompAudioTrackId)) {
+        throw new Error('Audio track not found');
+      } else {
+        let audioTrack = this._audioTracks.get(ompAudioTrackId)!;
+
+        AudioUtil.fetchAudioFile(audioTrack.src, AuthConfig.authentication).subscribe({
+          next: (audioArrayBuffer) => {
+            let audioTrack: OmpAudioTrackCreateType = {
+              src: BlobUtil.createBlobURL([audioArrayBuffer]),
+              language: 'default',
+              label: 'default',
+            };
+            nextCompleteObserver(observer, audioTrack);
+          },
+          error: (error) => {
+            errorCompleteObserver(observer, error);
+          },
+        });
+      }
     });
   }
 

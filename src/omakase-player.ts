@@ -41,6 +41,49 @@ import {VIDEO_CONTROLLER_CONFIG_DEFAULT} from './video/video-controller';
 import {OmpHlsConfig} from './video/video-hls-loader';
 import {RouterVisualization, RouterVisualizationConfig} from './router-visualization/router-visualization';
 import {RouterVisualizationApi} from './api/router-visualization-api';
+import {removeEmptyValues} from './util/object-util';
+
+export interface MediaChromeConfig {
+  /**
+   *  Media chrome controls visibility (enabled, disabled or fullscreen only)
+   */
+  visibility: MediaChromeVisibility;
+
+  /**
+   *  VTT url for the thumbnails (used for preview in media chrome time range)
+   */
+  thumbnailVttUrl?: string;
+
+  /**
+   *  Function to get thumbnail url from time (used for preview in media chrome time range)
+   */
+  thumbnailFn?: (time: number) => string | undefined;
+
+  /**
+   *  Custom options for playback speed rate
+   */
+  playbackRateOptions?: number[];
+
+  /**
+   *  Watermark text or svg
+   */
+  watermark?: string;
+
+  /**
+   *  Placement of the audio menu (top - next to help button, bottom - on the toolbar)
+   */
+  trackMenuPlacement?: 'top' | 'bottom';
+
+  /**
+   *  If true, keep audio menu open until closed, otherwise close on select
+   */
+  trackMenuFloating?: boolean;
+
+  /**
+   *  If true, show sidecar audios as separate groups
+   */
+  trackMenuMultiselect?: boolean;
+}
 
 export interface OmakasePlayerConfig {
   playerHTMLElementId?: string;
@@ -60,6 +103,11 @@ export interface OmakasePlayerConfig {
   detachedPlayer?: boolean;
 
   /**
+   * Is PIP (picture-in-picture) disabled
+   */
+  disablePictureInPicture?: boolean;
+
+  /**
    *  Function that will return URL where detached player resides. Property is set on non-detached (local) player side.
    */
   detachedPlayerUrlFn?: (video: Video, videoLoadOptions?: VideoLoadOptions) => string;
@@ -70,42 +118,22 @@ export interface OmakasePlayerConfig {
   authentication?: AuthenticationData;
 
   /**
-   *  Show player with or without media chrome controls
-   */
-  mediaChrome?: MediaChromeVisibility;
-
-  /**
-   *  VTT url for the thumbnails (used for preview in media chrome time range)
-   */
-  thumbnailVttUrl?: string;
-
-  /**
-   *  Function to get thumbnail url from time (used for preview in media chrome time range)
-   */
-  thumbnailFn?: (time: number) => string | undefined;
-
-  /**
    *  Custom video player click handler
    */
   playerClickHandler?: () => void;
 
   /**
-   *  Custom options for playback speed rate
+   * Media chrome configuration
    */
-  playbackRateOptions?: number[];
-
-  /**
-   *  Watermark text or svg
-   */
-  watermark?: string;
+  mediaChrome?: MediaChromeConfig;
 }
 
 const configDefault: OmakasePlayerConfig = {
   playerHTMLElementId: VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT.playerHTMLElementId,
   crossorigin: VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT.crossorigin,
   hlsConfig: VIDEO_CONTROLLER_CONFIG_DEFAULT.hlsConfig,
-  detachedPlayer: false,
-  mediaChrome: 'fullscreen-only',
+  detachedPlayer: VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT.detachedPlayer,
+  disablePictureInPicture: VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT.disablePictureInPicture,
 };
 
 export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
@@ -130,8 +158,10 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
       ...(config ? config : {}),
     };
 
-    if (this._config.detachedPlayer && !config?.mediaChrome) {
-      this._config.mediaChrome = 'enabled';
+    if (!config?.mediaChrome) {
+      this._config.mediaChrome = {
+        visibility: this._config.detachedPlayer ? 'enabled' : 'fullscreen-only',
+      };
     }
 
     OmakasePlayer.instance = this;
@@ -144,18 +174,24 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
 
     this._alertsController = new AlertsController();
 
-    this._videoDomController = new VideoDomController({
-      playerHTMLElementId: this._config.playerHTMLElementId,
-      crossorigin: this._config.crossorigin,
-      detachedPlayer: this._config.detachedPlayer,
-      mediaChrome: this._config.mediaChrome,
-      mediaChromeHTMLElementId: this._config.mediaChromeHTMLElementId,
-      thumbnailVttUrl: this._config.thumbnailVttUrl,
-      thumbnailFn: this._config.thumbnailFn,
-      playerClickHandler: this._config.playerClickHandler,
-      playbackRateOptions: this._config.playbackRateOptions,
-      watermark: this._config.watermark,
-    });
+    this._videoDomController = new VideoDomController(
+      removeEmptyValues({
+        playerHTMLElementId: this._config.playerHTMLElementId,
+        crossorigin: this._config.crossorigin,
+        detachedPlayer: this._config.detachedPlayer,
+        disablePictureInPicture: this._config.disablePictureInPicture,
+        mediaChromeVisibility: this._config.mediaChrome?.visibility,
+        mediaChromeHTMLElementId: this._config.mediaChromeHTMLElementId,
+        thumbnailVttUrl: this._config.mediaChrome?.thumbnailVttUrl,
+        thumbnailFn: this._config.mediaChrome?.thumbnailFn,
+        playerClickHandler: this._config.playerClickHandler,
+        playbackRateOptions: this._config.mediaChrome?.playbackRateOptions,
+        watermark: this._config.mediaChrome?.watermark,
+        trackMenuFloating: this._config.mediaChrome?.trackMenuFloating,
+        trackMenuPlacement: this._config.mediaChrome?.trackMenuPlacement,
+        trackMenuMultiselect: this._config.mediaChrome?.trackMenuMultiselect,
+      })
+    );
 
     let createLocalVideoController = () => {
       return new VideoController(
@@ -172,7 +208,7 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
       this._videoController = new DetachableVideoController(
         {
           detachedPlayerUrlFn: this._config.detachedPlayerUrlFn,
-          thumbnailVttUrl: this._config.thumbnailVttUrl,
+          thumbnailVttUrl: this._config.mediaChrome?.thumbnailVttUrl,
         },
         createLocalVideoController()
       );
@@ -237,7 +273,7 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
   }
 
   initializeRouterVisualization(config: RouterVisualizationConfig): RouterVisualizationApi {
-    return new RouterVisualization(config, this._audioController);
+    return new RouterVisualization(config, this._videoController);
   }
 
   get timeline(): TimelineApi | undefined {

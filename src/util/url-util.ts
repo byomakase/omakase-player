@@ -26,4 +26,14 @@ export class UrlUtil {
   static formatBase64Url(mime: string, base64: string): string {
     return `data:${mime};base64,${base64}`;
   }
+
+  static getFilenameFromUrl(url: string): string {
+    try {
+      const pathname = new URL(url).pathname;
+      const filename = pathname.substring(pathname.lastIndexOf('/') + 1);
+      return filename;
+    } catch (error) {
+      return url;
+    }
+  }
 }

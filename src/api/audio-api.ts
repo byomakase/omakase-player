@@ -23,6 +23,7 @@ import {
   MainAudioChangeEvent,
   MainAudioInputSoloMuteEvent,
   OmpAudioTrack,
+  OmpAudioTrackCreateType,
   SidecarAudioChangeEvent,
   SidecarAudioCreateEvent,
   SidecarAudioInputSoloMuteEvent,
@@ -35,7 +36,7 @@ import {AudioMeterStandard, OmpAudioRouterState, OmpAudioRoutingConnection, OmpA
 import {OmpAudioRouter} from '../video/audio-router';
 import {SidecarAudioApi} from './sidecar-audio-api';
 import {OmpAudioEffectFilter, OmpAudioEffectParam, OmpAudioEffectsGraphDef} from '../audio';
-import {OmpMainAudioInputSoloMuteState, OmpSidecarAudioInputSoloMuteState} from '../video/model';
+import {OmpAudioRoutingInputType, OmpMainAudioInputSoloMuteState, OmpSidecarAudioInputSoloMuteState} from '../video/model';
 
 export interface AudioApi extends Api {
   /**
@@ -236,14 +237,14 @@ export interface AudioApi extends Api {
    *
    * @param routingPath
    */
-  toggleMainAudioRouterSolo(routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void>;
+  toggleMainAudioRouterSolo(routingPath: OmpAudioRoutingInputType): Observable<void>;
 
   /**
    * Mute or unmute (depending on current input state) given main audio router input
    *
    * @param routingPath
    */
-  toggleMainAudioRouterMute(routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void>;
+  toggleMainAudioRouterMute(routingPath: OmpAudioRoutingInputType): Observable<void>;
 
   // sidecar audio
 
@@ -325,13 +326,13 @@ export interface AudioApi extends Api {
    * Creates new Sidecar audio track
    * @param track
    */
-  createSidecarAudioTrack(track: Partial<OmpAudioTrack>): Observable<OmpAudioTrack>;
+  createSidecarAudioTrack(track: OmpAudioTrackCreateType): Observable<OmpAudioTrack>;
 
   /**
    * Creates multiple Sidecar audio tracks
    * @param tracks
    */
-  createSidecarAudioTracks(tracks: Partial<OmpAudioTrack>[]): Observable<OmpAudioTrack[]>;
+  createSidecarAudioTracks(tracks: OmpAudioTrackCreateType[]): Observable<OmpAudioTrack[]>;
 
   /**
    * Removes Sidecar audio tracks
@@ -474,12 +475,12 @@ export interface AudioApi extends Api {
    * @param sidecarAudioTrackId
    * @param routingPath
    */
-  toggleSidecarAudioRouterSolo(sidecarAudioTrackId: string, routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void>;
+  toggleSidecarAudioRouterSolo(sidecarAudioTrackId: string, routingPath: OmpAudioRoutingInputType): Observable<void>;
 
   /**
    * Mute or unmute (depending on current input state) given sidecar audio router input
    * @param sidecarAudioTrackId
    * @param routingPath
    */
-  toggleSidecarAudioRouterMute(sidecarAudioTrackId: string, routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void>;
+  toggleSidecarAudioRouterMute(sidecarAudioTrackId: string, routingPath: OmpAudioRoutingInputType): Observable<void>;
 }

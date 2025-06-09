@@ -83,12 +83,16 @@ export interface SubtitlesVttTrack extends OmakaseTextTrack {
   contentDigest?: string;
 }
 
+export type SubtitlesVttTrackCreateType = Partial<SubtitlesVttTrack> & Pick<SubtitlesVttTrack, 'id' | 'src' | 'default' | 'label' | 'language'>
+
 export interface OmpAudioTrack {
   id: string;
   src: string;
   embedded: boolean;
-  label?: string;
+  label: string;
   language?: string;
   active: boolean;
   channelCount?: number
 }
+
+export type OmpAudioTrackCreateType = Partial<OmpAudioTrack> & Pick<OmpAudioTrack, 'src' | 'label'>

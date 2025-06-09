@@ -17,7 +17,7 @@
 import {OmpAudioGraphDef, OmpAudioNodeConnectionDef, OmpAudioNodeDef} from './model';
 import {OmpAudioNodeParamType, OmpAudioNodeType} from '../video';
 import {BaseOmpAudioNode, OmpAudioGraph, OmpAudioNode, OmpAudioNodeParam, OmpAudioNodeUtil, OmpAudioNodeValueParam} from './omp-web-audio';
-import {OmpAudioRoutingPath} from '../video/model';
+import {OmpAudioRoutingPath} from '../video';
 import {OmpError} from '../types';
 import {isNonNullable} from '../util/function-util';
 

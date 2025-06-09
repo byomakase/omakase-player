@@ -15,7 +15,7 @@
  */
 
 import {VideoControllerApi} from './video-controller-api';
-import {concat, filter, forkJoin, map, Observable, of, Subject, take, takeUntil, timeout, timer} from 'rxjs';
+import {BehaviorSubject, concat, filter, forkJoin, map, Observable, of, Subject, take, takeUntil, tap, timeout, timer} from 'rxjs';
 import {errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {destroyer} from '../util/destroy-util';
 import {TypedOmpBroadcastChannel} from '../common/omp-broadcast-channel';
@@ -557,218 +557,327 @@ export class DetachableVideoController extends SwitchableVideoController {
     let beforeVideoLoads$: Observable<void>[] = [];
     let afterVideoLoads$: Observable<void>[] = [];
 
-    let addBeforeVideoLoad = (o$: Observable<any>) => {
+    let beforeVideoLoad = (o$: Observable<any>) => {
       beforeVideoLoads$.push(o$);
     };
 
-    let addAfterVideoLoad = (o$: Observable<any>) => {
+    let afterVideoLoad = (o$: Observable<any>) => {
       afterVideoLoads$.push(o$);
     };
 
-    addBeforeVideoLoad(
+    let totalObservables = 0;
+    let completedObservables = 0;
+    let describedObservable = (desc: string, observable$: Observable<any>) => {
+      ++totalObservables;
+      return observable$.pipe(
+        tap(() => {
+          ++completedObservables;
+          console.debug(`{${desc}} -> COMPLETED | ${completedObservables}/${totalObservables}`);
+        })
+      );
+    };
+
+    beforeVideoLoad(
+      describedObservable(
+        `Update Active Named Event Streams`,
+        new Observable((observer) => {
+          this.updateActiveNamedEventStreams(state.activeNamedEventStreams).subscribe({
+            next: () => {
+              nextCompleteObserver(observer);
+            },
+          });
+        })
+      )
+    );
+
+    let loadVideo$ = describedObservable(
+      `Video load`,
       new Observable((observer) => {
-        this.updateActiveNamedEventStreams(state.activeNamedEventStreams).subscribe({
-          next: () => {
-            nextCompleteObserver(observer);
-          },
-        });
+        if (JSON.stringify(this.getVideo()) !== JSON.stringify(state.video) || JSON.stringify(this.getVideoLoadOptions()) !== JSON.stringify(state.videoLoadOptions)) {
+          let optionsInternal: VideoLoadOptionsInternal = {
+            videoWindowPlaybackState: this.getVideoWindowPlaybackState(),
+          };
+
+          console.debug(`Video and / or VideoLoadOptions differ, we have to load video`);
+
+          this.loadVideoInternal(
+            state.video.sourceUrl,
+            {
+              frameRate: state.video.frameRate,
+              ...state.videoLoadOptions,
+            },
+            optionsInternal
+          ).subscribe({
+            next: () => {
+              console.debug(`Video load completed`);
+
+              nextCompleteObserver(observer);
+            },
+            error: (err) => {
+              console.error(err);
+
+              errorCompleteObserver(observer, err);
+            },
+          });
+        } else {
+          nextCompleteObserver(observer);
+        }
       })
     );
 
-    let loadVideo$ = new Observable((observer) => {
-      if (JSON.stringify(this.getVideo()) !== JSON.stringify(state.video) || JSON.stringify(this.getVideoLoadOptions()) !== JSON.stringify(state.videoLoadOptions)) {
-        let optionsInternal: VideoLoadOptionsInternal = {
-          videoWindowPlaybackState: this.getVideoWindowPlaybackState(),
-        };
+    afterVideoLoad(
+      describedObservable(
+        `Playback Rate`,
+        new Observable((observer) => {
+          this.seekToTime(state.currentTime).subscribe({
+            next: () => {
+              this.setPlaybackRate(state.playbackRate).subscribe({
+                next: () => {
+                  if (state.isPlaying) {
+                    // if (this.getVideoWindowPlaybackState() === 'detached' && BrowserProvider.instance().isSafari) {
+                    //   // Safari just throws to many errors, we will not even try to auto-play in detached mode
+                    // }
 
-        this.loadVideoInternal(
-          state.video.sourceUrl,
-          {
-            frameRate: state.video.frameRate,
-            ...state.videoLoadOptions,
-          },
-          optionsInternal
-        ).subscribe({
-          next: () => {
-            nextCompleteObserver(observer);
-          },
-          error: (err) => {
-            errorCompleteObserver(observer, err);
-          },
-        });
-      } else {
-        nextCompleteObserver(observer);
-      }
-    });
+                    this.play().subscribe({
+                      next: () => {
+                        nextCompleteObserver(observer);
+                      },
+                      error: (err) => {
+                        console.debug(`play() failed, user action will be required`, err);
+                        nextCompleteObserver(observer);
+                      },
+                    });
+                  } else {
+                    nextCompleteObserver(observer);
+                  }
+                },
+              });
+            },
+          });
+        })
+      )
+    );
 
-    addAfterVideoLoad(
-      new Observable((observer) => {
-        this.seekToTime(state.currentTime).subscribe({
-          next: () => {
-            this.setPlaybackRate(state.playbackRate).subscribe({
-              next: () => {
-                if (state.isPlaying) {
-                  // if (this.getVideoWindowPlaybackState() === 'detached' && BrowserProvider.instance().isSafari) {
-                  //   // Safari just throws to many errors, we will not even try to auto-play in detached mode
-                  // }
+    afterVideoLoad(
+      describedObservable(
+        `Subtitles`,
+        new Observable((observer) => {
+          this.onSubtitlesLoaded$
+            .pipe(
+              filter((p) => !!p),
+              take(1)
+            )
+            .subscribe({
+              next: (event) => {
+                if (state.activeSubtitlesTrack && state.activeSubtitlesTrack.embedded) {
+                  // as id's are auto-generated, we have to match loaded embedded subtitles by content-digest
+                  let newSubtitlesActiveTrack = this.getSubtitlesTracks().find((p) => p.contentDigest === state.activeSubtitlesTrack!.contentDigest);
 
-                  this.play().subscribe({
-                    next: () => {
-                      nextCompleteObserver(observer);
-                    },
-                    error: (err) => {
-                      console.debug(`play() failed, user action will be required`, err);
-                      nextCompleteObserver(observer);
-                    },
+                  if (newSubtitlesActiveTrack) {
+                    console.debug(
+                      `Switching subtitlesCurrentTrack from id:${state.activeSubtitlesTrack.id} to id: ${newSubtitlesActiveTrack.id}, contentDigest: ${newSubtitlesActiveTrack.contentDigest}`
+                    );
+                    state.activeSubtitlesTrack = {
+                      ...newSubtitlesActiveTrack,
+                      hidden: state.activeSubtitlesTrack.hidden,
+                    };
+                  }
+                }
+
+                let subtitlesCreation$ = new Observable<void>((observer) => {
+                  let subtitlesForCreation = state.subtitlesTracks.filter((subtitlesTrack) => {
+                    let existsOnActiveController = this.getSubtitlesTracks().find((p) => {
+                      return subtitlesTrack.embedded ? p.contentDigest === subtitlesTrack.contentDigest : p.id === subtitlesTrack.id;
+                    });
+
+                    if (existsOnActiveController) {
+                      console.debug(
+                        `Subtitle transfer skipped for: ${subtitlesTrack.id}, loaded subtitle with same ${subtitlesTrack.embedded ? 'digest' : 'id'}: ${subtitlesTrack.embedded ? subtitlesTrack.contentDigest : subtitlesTrack.id}`
+                      );
+                      return false;
+                    } else {
+                      console.debug(`Subtitle marked for creation:`, subtitlesTrack.id);
+                      return true;
+                    }
                   });
-                } else {
-                  nextCompleteObserver(observer);
-                }
-              },
-            });
-          },
-        });
-      })
-    );
 
-    addAfterVideoLoad(
-      new Observable((observer) => {
-        this.onSubtitlesLoaded$
-          .pipe(
-            filter((p) => !!p),
-            take(1)
-          )
-          .subscribe({
-            next: (event) => {
-              if (state.activeSubtitlesTrack && state.activeSubtitlesTrack.embedded) {
-                // as id's are auto-generated, we have to match loaded embedded subtitles by content-digest
-                let newSubtitlesActiveTrack = this.getSubtitlesTracks().find((p) => p.contentDigest === state.activeSubtitlesTrack!.contentDigest);
+                  if (subtitlesForCreation.length > 0) {
+                    forkJoin(subtitlesForCreation.map((p) => this.createSubtitlesVttTrack(p))).subscribe({
+                      next: () => {
+                        console.debug(
+                          `Created subtitles:`,
+                          subtitlesForCreation.map((p) => p.id)
+                        );
 
-                if (newSubtitlesActiveTrack) {
-                  console.debug(
-                    `Switching subtitlesCurrentTrack from id:${state.activeSubtitlesTrack.id} to id: ${newSubtitlesActiveTrack.id}, contentDigest: ${newSubtitlesActiveTrack.contentDigest}`
-                  );
-                  state.activeSubtitlesTrack = {
-                    ...newSubtitlesActiveTrack,
-                    hidden: state.activeSubtitlesTrack.hidden,
-                  };
-                }
-              }
-
-              // check if we have to create subtitles
-              state.subtitlesTracks.forEach((subtitlesTrack) => {
-                let existsOnActiveController = this.getSubtitlesTracks().find((p) => {
-                  return subtitlesTrack.embedded ? p.contentDigest === subtitlesTrack.contentDigest : p.id === subtitlesTrack.id;
+                        nextCompleteObserver(observer);
+                      },
+                      error: (err) => {
+                        errorCompleteObserver(observer, err);
+                      },
+                    });
+                  } else {
+                    nextCompleteObserver(observer);
+                  }
                 });
 
-                if (existsOnActiveController) {
-                  console.debug(
-                    `Subtitle transfer skipped for: ${subtitlesTrack.id}, loaded subtitle with same ${subtitlesTrack.embedded ? 'digest' : 'id'}: ${subtitlesTrack.embedded ? subtitlesTrack.contentDigest : subtitlesTrack.id}`
-                  );
-                } else {
-                  console.debug(`Creating subtitle:`, subtitlesTrack.id);
-                  this.createSubtitlesVttTrack(subtitlesTrack);
-                }
-              });
+                let subtitlesRemoval$ = new Observable<void>((observer) => {
+                  let subtitlesForRemoval = this.getSubtitlesTracks().filter((subtitlesTrack) => {
+                    if (!state.subtitlesTracks.find((p) => (subtitlesTrack.embedded ? p.contentDigest === subtitlesTrack.contentDigest : p.id === subtitlesTrack.id))) {
+                      console.debug(`Marking for subtitle removal:`, JSON.stringify(subtitlesTrack));
+                      return true;
+                    } else {
+                      return false;
+                    }
+                  });
 
-              // check if we have to remove subtitles
-              this.getSubtitlesTracks().forEach((subtitlesTrack) => {
-                if (!state.subtitlesTracks.find((p) => (subtitlesTrack.embedded ? p.contentDigest === subtitlesTrack.contentDigest : p.id === subtitlesTrack.id))) {
-                  console.debug(`Removing subtitle:`, JSON.stringify(subtitlesTrack));
-                  this.removeSubtitlesTrack(subtitlesTrack.id);
-                }
-              });
+                  if (subtitlesForRemoval.length > 0) {
+                    forkJoin(subtitlesForRemoval.map((p) => this.removeSubtitlesTrack(p.id))).subscribe({
+                      next: () => {
+                        console.debug(
+                          `Removed subtitles:`,
+                          subtitlesForRemoval.map((p) => p.id)
+                        );
+                        nextCompleteObserver(observer);
+                      },
+                      error: (err) => {
+                        errorCompleteObserver(observer, err);
+                      },
+                    });
+                  } else {
+                    nextCompleteObserver(observer);
+                  }
+                });
 
-              if (state.activeSubtitlesTrack) {
-                console.debug(`Showing subtitle:`, state.activeSubtitlesTrack);
-                this.showSubtitlesTrack(state.activeSubtitlesTrack.id).subscribe({
+                // check if we have to create subtitles
+                // state.subtitlesTracks.forEach((subtitlesTrack) => {
+                //   let existsOnActiveController = this.getSubtitlesTracks().find((p) => {
+                //     return subtitlesTrack.embedded ? p.contentDigest === subtitlesTrack.contentDigest : p.id === subtitlesTrack.id;
+                //   });
+                //
+                //   if (existsOnActiveController) {
+                //     console.debug(
+                //       `Subtitle transfer skipped for: ${subtitlesTrack.id}, loaded subtitle with same ${subtitlesTrack.embedded ? 'digest' : 'id'}: ${subtitlesTrack.embedded ? subtitlesTrack.contentDigest : subtitlesTrack.id}`
+                //     );
+                //   } else {
+                //     console.debug(`Creating subtitle:`, subtitlesTrack.id);
+                //     this.createSubtitlesVttTrack(subtitlesTrack);
+                //   }
+                // });
+
+                // check if we have to remove subtitles
+                // this.getSubtitlesTracks().forEach((subtitlesTrack) => {
+                //   if (!state.subtitlesTracks.find((p) => (subtitlesTrack.embedded ? p.contentDigest === subtitlesTrack.contentDigest : p.id === subtitlesTrack.id))) {
+                //     console.debug(`Removing subtitle:`, JSON.stringify(subtitlesTrack));
+                //     this.removeSubtitlesTrack(subtitlesTrack.id);
+                //   }
+                // });
+
+                forkJoin([subtitlesCreation$, subtitlesRemoval$]).subscribe({
                   next: () => {
-                    if (state.activeSubtitlesTrack!.hidden) {
-                      console.debug(`Hiding subtitle:`, state.activeSubtitlesTrack);
-                      this.hideSubtitlesTrack(state.activeSubtitlesTrack!.id);
+                    if (state.activeSubtitlesTrack) {
+                      console.debug(`Showing subtitle:`, state.activeSubtitlesTrack);
+                      this.showSubtitlesTrack(state.activeSubtitlesTrack.id).subscribe({
+                        next: () => {
+                          if (state.activeSubtitlesTrack!.hidden) {
+                            console.debug(`Hiding subtitle:`, state.activeSubtitlesTrack);
+                            this.hideSubtitlesTrack(state.activeSubtitlesTrack!.id);
+                          }
+                          nextCompleteObserver(observer);
+                        },
+                      });
+                    } else {
+                      nextCompleteObserver(observer);
                     }
                   },
                 });
-              }
+              },
+              error: (error) => {
+                console.error(error);
+                nextCompleteObserver(observer);
+              },
+            });
+        })
+      )
+    );
 
+    let audioTrackActivation$ = describedObservable(
+      `Audio track activation`,
+      new Observable((observer) => {
+        console.debug('Audio track activation.', state.activeAudioTrack);
+
+        let finalizeAudioLoad = () => {
+          console.debug('Trying to restore from state.activeAudioTrack', state.activeAudioTrack);
+          if (state.activeAudioTrack) {
+            // waiting a bit
+            const timerMs = 500;
+            console.debug(`Waiting ${timerMs}ms before setting active audio track:`, state.activeAudioTrack!);
+            timer(timerMs).subscribe(() => {
+              this.setActiveAudioTrack(state.activeAudioTrack!.id).subscribe({
+                next: (event) => {
+                  nextCompleteObserver(observer);
+                },
+                error: (error) => {
+                  console.debug(`Problems setting active audio track:`, state.activeAudioTrack);
+                  nextCompleteObserver(observer);
+                },
+              });
+            });
+          } else {
+            nextCompleteObserver(observer);
+          }
+        };
+
+        let onAudioSwitchedBreaker$ = new Subject<void>();
+        let lastActiveAudioTrack$: BehaviorSubject<OmpAudioTrack | undefined> = new BehaviorSubject<OmpAudioTrack | undefined>(this.getActiveAudioTrack());
+        this.onAudioSwitched$.pipe(take(1), takeUntil(onAudioSwitchedBreaker$)).subscribe({
+          next: (event) => {
+            lastActiveAudioTrack$.next(event.activeAudioTrack);
+          },
+        });
+
+        this.onAudioLoaded$
+          .pipe(filter((p) => !!p))
+          .pipe(take(1), timeout(20000))
+          .subscribe({
+            next: (audioLoadedEvent) => {
+              if (audioLoadedEvent!.activeAudioTrack) {
+                console.debug(`activeAudioTrack provided with AudioLoadedEvent.`);
+                nextCompleteSubject(onAudioSwitchedBreaker$);
+                finalizeAudioLoad();
+              } else {
+                lastActiveAudioTrack$
+                  .pipe(filter((p) => !!p))
+                  .pipe(take(1))
+                  .pipe(takeUntil(this._destroyed$))
+                  .pipe(timeout(20000))
+                  .subscribe({
+                    next: (track) => {
+                      console.debug(`lastActiveAudioTrack$ caught.`, track);
+                      console.debug(`We can proceed with audio track activation.`);
+                      nextCompleteSubject(onAudioSwitchedBreaker$);
+                      finalizeAudioLoad();
+                    },
+                    error: (error) => {
+                      console.debug(`onAudioSwitchedWithLast$ timeouted, could be that audio track is already loaded.`);
+                      nextCompleteSubject(onAudioSwitchedBreaker$);
+                      finalizeAudioLoad();
+                    },
+                  });
+              }
+            },
+            error: (error) => {
+              console.debug('Problems detecting AudioLoadedEvent, gracefully exiting.. ');
+              // ignore
               nextCompleteObserver(observer);
             },
           });
       })
     );
 
-    addAfterVideoLoad(
+    let routerConnectionsConsolidation$ = describedObservable(
+      `Router connections`,
       new Observable((observer) => {
-        this.onAudioLoaded$.pipe(take(1), timeout(60000)).subscribe({
-          next: (event) => {
-            if (state.activeAudioTrack) {
-              this.setActiveAudioTrack(state.activeAudioTrack.id);
-            }
-          },
-          error: (error) => {
-            console.debug(error);
-            // ignore
-          },
-        });
-        nextCompleteObserver(observer);
-      })
-    );
-
-    addAfterVideoLoad(
-      new Observable((observer) => {
-        forkJoin([this.clearSafeZones(), ...state.videoSafeZones.map((p) => this.addSafeZone(p))]).subscribe({
-          next: () => {
-            nextCompleteObserver(observer);
-          },
-        });
-      })
-    );
-
-    addAfterVideoLoad(
-      new Observable((observer) => {
-        forkJoin([this.clearHelpMenuGroups(), ...state.helpMenuGroups.map((p) => this.appendHelpMenuGroup(p))]).subscribe({
-          next: () => {
-            nextCompleteObserver(observer);
-          },
-        });
-      })
-    );
-
-    addAfterVideoLoad(
-      new Observable((observer) => {
-        this.setVolume(state.volume).subscribe({
-          next: () => {
-            if (state.muted) {
-              this.mute().subscribe({
-                next: () => {
-                  nextCompleteObserver(observer);
-                },
-              });
-            } else {
-              this.unmute().subscribe({
-                next: () => {
-                  nextCompleteObserver(observer);
-                },
-              });
-            }
-          },
-        });
-      })
-    );
-
-    addAfterVideoLoad(
-      new Observable((observer) => {
-        this.setAudioOutputVolume(state.audioOutputVolume).subscribe({
-          next: () => {
-            this.setAudioOutputMuted(state.audioOutputMuted);
-            nextCompleteObserver(observer);
-          },
-        });
-      })
-    );
-
-    addAfterVideoLoad(
-      new Observable((observer) => {
+        console.debug('Router connections consolidation.');
         if (state.mainAudioChangeEvent) {
           let mainAudioState = state.mainAudioChangeEvent.mainAudioState;
 
@@ -787,7 +896,6 @@ export class DetachableVideoController extends SwitchableVideoController {
                     this.setMainAudioEffectsGraphs(routingRoute.audioEffectsGraph, routingRoute.path);
                   }
                 });
-
                 if (state.mainAudioInputSoloMuteEvent?.mainAudioInputSoloMuteState.audioRouterInputSoloMuteState?.soloed) {
                   let mainAudioInputSoloMuteState = state.mainAudioInputSoloMuteEvent.mainAudioInputSoloMuteState;
                   this.updateMainAudioRouterConnections([
@@ -798,7 +906,6 @@ export class DetachableVideoController extends SwitchableVideoController {
                 } else {
                   this.updateMainAudioRouterConnections(mainAudioState.audioRouterState.routingRoutes.map((p) => p.connection));
                 }
-
                 this.setMainAudioRouterInitialRoutingConnections(mainAudioState.audioRouterState.initialRoutingConnections);
               }
               nextCompleteObserver(observer);
@@ -810,87 +917,182 @@ export class DetachableVideoController extends SwitchableVideoController {
       })
     );
 
-    addAfterVideoLoad(
-      new Observable((observer) => {
-        // could be optimized
-        this.removeAllSidecarAudioTracks().subscribe({
-          next: () => {
-            if (state.sidecarAudioStates && state.sidecarAudioStates.length > 0) {
-              let os$ = state.sidecarAudioStates.map((sidecarAudioState) => {
-                return new Observable((sidecarAudioObserver) => {
-                  this.createSidecarAudioTrack(sidecarAudioState.audioTrack).subscribe({
-                    next: () => {
-                      let o1$ = sidecarAudioState.audioRouterState
-                        ? this.createSidecarAudioRouter(sidecarAudioState.audioTrack.id, sidecarAudioState.audioRouterState.inputsNumber, sidecarAudioState.audioRouterState.outputsNumber)
-                        : of(true);
-                      let o2$ = sidecarAudioState.audioPeakProcessorState
-                        ? this.createSidecarAudioPeakProcessor(sidecarAudioState.audioTrack.id, sidecarAudioState.audioPeakProcessorState.audioMeterStandard)
-                        : of(true);
-                      forkJoin([o1$, o2$]).subscribe({
-                        next: () => {
-                          // we will not wait for this to finish, just execute
-                          if (sidecarAudioState.audioRouterState) {
-                            // remove all existing graphs
-                            this.removeSidecarAudioEffectsGraphs(sidecarAudioState.audioTrack.id);
+    // in case audio track activation is required - we have to activate it first, then consolidate router connections
+    // in case audio track activation is not required - we only have to consolidate router connections
 
-                            sidecarAudioState.audioRouterState.routingRoutes.forEach((routingRoute) => {
-                              if (routingRoute.audioEffectsGraph) {
-                                this.setSidecarAudioEffectsGraph(sidecarAudioState.audioTrack.id, routingRoute.audioEffectsGraph, routingRoute.path);
-                              }
-                            });
-
-                            let sidecarAudioSoloedInputState = state.sidecarAudioInputSoloMuteStates.find((inputState) => inputState.audioTrack.id === sidecarAudioState.audioTrack.id);
-                            if (sidecarAudioSoloedInputState?.audioRouterInputSoloMuteState?.soloed) {
-                              this.updateSidecarAudioRouterConnections(sidecarAudioSoloedInputState.audioTrack.id, [
-                                ...sidecarAudioSoloedInputState.audioRouterInputSoloMuteState.inputSoloedConnections,
-                                ...sidecarAudioSoloedInputState.audioRouterInputSoloMuteState.unsoloConnections,
-                              ]);
-                              this.toggleSidecarAudioRouterSolo(sidecarAudioSoloedInputState.audioTrack.id, {input: sidecarAudioSoloedInputState.audioRouterInputSoloMuteState.inputNumber});
-                            } else {
-                              this.updateSidecarAudioRouterConnections(
-                                sidecarAudioState.audioTrack.id,
-                                sidecarAudioState.audioRouterState.routingRoutes.map((p) => p.connection)
-                              );
-                            }
-
-                            this.setSidecarAudioRouterInitialRoutingConnections(sidecarAudioState.audioTrack.id, sidecarAudioState.audioRouterState.initialRoutingConnections);
-                            this.setSidecarVolume(sidecarAudioState.volume, [sidecarAudioState.audioTrack.id]);
-                            this.setSidecarMuted(sidecarAudioState.muted, [sidecarAudioState.audioTrack.id]);
-                          }
-
-                          nextCompleteObserver(sidecarAudioObserver);
-                        },
-                      });
-                    },
-                  });
-                });
-              });
-
-              forkJoin(os$).subscribe({
-                next: () => {
-                  nextCompleteObserver(observer);
-                },
-              });
-            } else {
+    if (state.activeAudioTrack) {
+      afterVideoLoad(
+        new Observable((observer) => {
+          concat(audioTrackActivation$, routerConnectionsConsolidation$).subscribe({
+            complete: () => {
               nextCompleteObserver(observer);
-            }
-          },
-        });
-      })
-    );
+            },
+            error: (error) => {
+              console.error(error);
+            },
+          });
+        })
+      );
+    } else {
+      afterVideoLoad(routerConnectionsConsolidation$);
+    }
 
-    addAfterVideoLoad(
-      new Observable((observer) => {
-        if (state.thumbnailVttUrl) {
-          this.loadThumbnailVttUrl(state.thumbnailVttUrl).subscribe({
+    afterVideoLoad(
+      describedObservable(
+        `Safe Zones`,
+        new Observable((observer) => {
+          forkJoin([this.clearSafeZones(), ...state.videoSafeZones.map((p) => this.addSafeZone(p))]).subscribe({
             next: () => {
               nextCompleteObserver(observer);
             },
           });
-        } else {
-          nextCompleteObserver(observer);
-        }
-      })
+        })
+      )
+    );
+
+    afterVideoLoad(
+      describedObservable(
+        `Help Menu Groups`,
+        new Observable((observer) => {
+          forkJoin([this.clearHelpMenuGroups(), ...state.helpMenuGroups.map((p) => this.appendHelpMenuGroup(p))]).subscribe({
+            next: () => {
+              nextCompleteObserver(observer);
+            },
+          });
+        })
+      )
+    );
+
+    afterVideoLoad(
+      describedObservable(
+        `Volume`,
+        new Observable((observer) => {
+          this.setVolume(state.volume).subscribe({
+            next: () => {
+              if (state.muted) {
+                this.mute().subscribe({
+                  next: () => {
+                    nextCompleteObserver(observer);
+                  },
+                });
+              } else {
+                this.unmute().subscribe({
+                  next: () => {
+                    nextCompleteObserver(observer);
+                  },
+                });
+              }
+            },
+          });
+        })
+      )
+    );
+
+    afterVideoLoad(
+      describedObservable(
+        `Audio Output Volume`,
+        new Observable((observer) => {
+          this.setAudioOutputVolume(state.audioOutputVolume).subscribe({
+            next: () => {
+              this.setAudioOutputMuted(state.audioOutputMuted);
+              nextCompleteObserver(observer);
+            },
+          });
+        })
+      )
+    );
+
+    afterVideoLoad(
+      describedObservable(
+        `Sidecar audio tracks`,
+        new Observable((observer) => {
+          // could be optimized
+          this.removeAllSidecarAudioTracks().subscribe({
+            next: () => {
+              if (state.sidecarAudioStates && state.sidecarAudioStates.length > 0) {
+                let os$ = state.sidecarAudioStates.map((sidecarAudioState) => {
+                  return new Observable((sidecarAudioObserver) => {
+                    this.createSidecarAudioTrack(sidecarAudioState.audioTrack).subscribe({
+                      next: () => {
+                        let o1$ = sidecarAudioState.audioRouterState
+                          ? this.createSidecarAudioRouter(sidecarAudioState.audioTrack.id, sidecarAudioState.audioRouterState.inputsNumber, sidecarAudioState.audioRouterState.outputsNumber)
+                          : of(true);
+                        let o2$ = sidecarAudioState.audioPeakProcessorState
+                          ? this.createSidecarAudioPeakProcessor(sidecarAudioState.audioTrack.id, sidecarAudioState.audioPeakProcessorState.audioMeterStandard)
+                          : of(true);
+                        forkJoin([o1$, o2$]).subscribe({
+                          next: () => {
+                            // we will not wait for this to finish, just execute
+                            if (sidecarAudioState.audioRouterState) {
+                              // remove all existing graphs
+                              this.removeSidecarAudioEffectsGraphs(sidecarAudioState.audioTrack.id);
+
+                              sidecarAudioState.audioRouterState.routingRoutes.forEach((routingRoute) => {
+                                if (routingRoute.audioEffectsGraph) {
+                                  this.setSidecarAudioEffectsGraph(sidecarAudioState.audioTrack.id, routingRoute.audioEffectsGraph, routingRoute.path);
+                                }
+                              });
+
+                              let sidecarAudioSoloedInputState = state.sidecarAudioInputSoloMuteStates.find((inputState) => inputState.audioTrack.id === sidecarAudioState.audioTrack.id);
+                              if (sidecarAudioSoloedInputState?.audioRouterInputSoloMuteState?.soloed) {
+                                this.updateSidecarAudioRouterConnections(sidecarAudioSoloedInputState.audioTrack.id, [
+                                  ...sidecarAudioSoloedInputState.audioRouterInputSoloMuteState.inputSoloedConnections,
+                                  ...sidecarAudioSoloedInputState.audioRouterInputSoloMuteState.unsoloConnections,
+                                ]);
+                                this.toggleSidecarAudioRouterSolo(sidecarAudioSoloedInputState.audioTrack.id, {input: sidecarAudioSoloedInputState.audioRouterInputSoloMuteState.inputNumber});
+                              } else {
+                                this.updateSidecarAudioRouterConnections(
+                                  sidecarAudioState.audioTrack.id,
+                                  sidecarAudioState.audioRouterState.routingRoutes.map((p) => p.connection)
+                                );
+                              }
+
+                              this.setSidecarAudioRouterInitialRoutingConnections(sidecarAudioState.audioTrack.id, sidecarAudioState.audioRouterState.initialRoutingConnections);
+                              this.setSidecarVolume(sidecarAudioState.volume, [sidecarAudioState.audioTrack.id]);
+                              this.setSidecarMuted(sidecarAudioState.muted, [sidecarAudioState.audioTrack.id]);
+                            }
+
+                            nextCompleteObserver(sidecarAudioObserver);
+                          },
+                        });
+                      },
+                      error: (error) => {
+                        console.error(error);
+                        nextCompleteObserver(sidecarAudioObserver);
+                      },
+                    });
+                  });
+                });
+
+                forkJoin(os$).subscribe({
+                  next: () => {
+                    nextCompleteObserver(observer);
+                  },
+                });
+              } else {
+                nextCompleteObserver(observer);
+              }
+            },
+          });
+        })
+      )
+    );
+
+    afterVideoLoad(
+      describedObservable(
+        `Thumbnail VTT Url`,
+        new Observable((observer) => {
+          if (state.thumbnailVttUrl) {
+            this.loadThumbnailVttUrl(state.thumbnailVttUrl).subscribe({
+              next: () => {
+                nextCompleteObserver(observer);
+              },
+            });
+          } else {
+            nextCompleteObserver(observer);
+          }
+        }).pipe(tap(() => {}))
+      )
     );
 
     return new Observable((observer) => {

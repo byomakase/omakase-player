@@ -22,6 +22,7 @@ import {
   MainAudioChangeEvent,
   MainAudioInputSoloMuteEvent,
   OmpAudioTrack,
+  OmpAudioTrackCreateType,
   OmpError,
   OmpNamedEvent,
   OmpNamedEventEventName,
@@ -57,7 +58,7 @@ import {
 import {BehaviorSubject, concatMap, delay, filter, forkJoin, from, fromEvent, interval, map, mergeMap, Observable, of, Subject, switchMap, take, takeUntil, tap, timeout, toArray} from 'rxjs';
 import {FrameRateUtil} from '../util/frame-rate-util';
 import {completeSubject, completeSubjects, completeUnsubscribeSubjects, errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
-import {util, z} from 'zod';
+import {z} from 'zod';
 import {TimecodeUtil} from '../util/timecode-util';
 import Hls from 'hls.js';
 import {Validators} from '../validators';
@@ -69,6 +70,7 @@ import {
   BufferedTimespan,
   OmpAudioRouterState,
   OmpAudioRoutingConnection,
+  OmpAudioRoutingInputType,
   OmpAudioRoutingPath,
   OmpMainAudioInputSoloMuteState,
   OmpMainAudioState,
@@ -77,7 +79,7 @@ import {
   PlaybackState,
   Video,
   VideoLoadOptions,
-  VideoLoadOptionsInternal,
+  VideoLoadOptionsInternal, VideoProtocol,
   VideoSafeZone,
   VideoWindowPlaybackState,
 } from './model';
@@ -401,6 +403,11 @@ export class VideoController implements VideoControllerApi {
    * @protected
    */
   protected _lastProvidedMainVolumeHlsLoaderSafari?: number;
+  /**
+   * Mute tracking for Safari
+   * @protected
+   */
+  protected _lastProvidedMainMutedHlsLoaderSafari?: boolean;
 
   protected _thumbnailVttUrl?: string;
   protected _helpMenuGroups: HelpMenuGroup[] = [];
@@ -468,7 +475,9 @@ export class VideoController implements VideoControllerApi {
       if (this.isVideoHlsLoaderInSafari()) {
         let newMainVolume = this.getVolume() * audioOutputVolumeEvent.volume;
         this._setVolume(newMainVolume);
-        this.setMuted(audioOutputVolumeEvent.muted);
+
+        let newMainMuted = this._lastProvidedMainMutedHlsLoaderSafari ? true : audioOutputVolumeEvent.muted;
+        this._setMuted(newMainMuted);
       }
     });
 
@@ -550,7 +559,7 @@ export class VideoController implements VideoControllerApi {
           isDetaching: optionsInternal && optionsInternal.videoWindowPlaybackState === 'detaching',
         });
 
-        let videoLoader = this.resolveAndAttachVideoLoader(sourceUrl, options);
+        let videoLoader = this.resolveAndAttachVideoLoader(sourceUrl, options?.protocol);
 
         videoLoader
           .loadVideo(sourceUrl, options)
@@ -650,13 +659,13 @@ export class VideoController implements VideoControllerApi {
     });
   }
 
-  protected resolveAndAttachVideoLoader(sourceUrl: string, options: VideoLoadOptions | undefined): VideoLoader {
+  protected resolveAndAttachVideoLoader(sourceUrl: string, videoProtocol: VideoProtocol | undefined): VideoLoader {
     if (this._videoLoader) {
       this._videoLoader.destroy();
     }
 
-    if (options && options.protocol) {
-      switch (options.protocol) {
+    if (videoProtocol) {
+      switch (videoProtocol) {
         case 'hls':
           this._videoLoader = new VideoHlsLoader(this);
           break;
@@ -664,7 +673,7 @@ export class VideoController implements VideoControllerApi {
           this._videoLoader = new VideoNativeLoader(this);
           break;
         default:
-          throw new OmpError(`Unrecognized video protocol passed in VideoLoadOptions`);
+          throw new OmpError(`Unrecognized video protocol`);
       }
     } else {
       let normalizedUrl = sourceUrl.toLowerCase();
@@ -1709,6 +1718,10 @@ export class VideoController implements VideoControllerApi {
     return this.videoElement.volume;
   }
 
+  protected getVideoElementMuted(): boolean {
+    return this.videoElement.muted;
+  }
+
   protected _setVolume(volume: number): Observable<void> {
     return passiveObservable((observer) => {
       let newVolume: number;
@@ -1727,7 +1740,18 @@ export class VideoController implements VideoControllerApi {
           });
           this.videoElement.volume = newVolume;
         } else {
-          nextCompleteObserver(observer);
+          if (this.isVideoHlsLoaderInSafari()) {
+            this.onVolumeChange$.pipe(take(1), timeout(60000), takeUntil(this._destroyed$)).subscribe({
+              next: () => {
+                nextCompleteObserver(observer);
+              },
+            });
+
+            // if isVideoHlsLoaderInSafari() getVolume() doesn't depend on videoElement, so we have to trigger onVolumeChange because  _lastProvidedMainVolumeHlsLoaderSafari maybe changed
+            this.dispatchOnVolumeChange();
+          } else {
+            nextCompleteObserver(observer);
+          }
         }
       } catch (e) {
         // nop
@@ -1922,27 +1946,45 @@ export class VideoController implements VideoControllerApi {
   }
 
   mute(): Observable<void> {
+    let muted = true;
     return passiveObservable((observer) => {
-      this.setMuted(true);
+      if (this.isVideoHlsLoaderInSafari()) {
+        this._lastProvidedMainMutedHlsLoaderSafari = muted;
+      }
+      this._setMuted(muted);
       nextCompleteObserver(observer);
     });
   }
 
   unmute(): Observable<void> {
+    let muted = false;
     return passiveObservable((observer) => {
-      this.setMuted(false);
+      if (this.isVideoHlsLoaderInSafari()) {
+        this._lastProvidedMainMutedHlsLoaderSafari = muted;
+        muted = this._audioOutputMuted ? true : muted;
+      }
+      this._setMuted(muted);
       nextCompleteObserver(observer);
     });
   }
 
-  protected setMuted(muted: boolean): void {
+  protected _setMuted(muted: boolean): void {
     if (this.videoElement.muted !== muted) {
       this.videoElement.muted = muted;
+    }
+
+    if (this.isVideoHlsLoaderInSafari()) {
+      // if isVideoHlsLoaderInSafari() isMuted() doesn't depend on videoElement, so we have to trigger onVolumeChange because  _lastProvidedMainMutedHlsLoaderSafari maybe changed
+      this.dispatchOnVolumeChange();
     }
   }
 
   isMuted(): boolean {
-    return !!this.videoElement && this.videoElement.muted;
+    if (this.isVideoHlsLoaderInSafari()) {
+      return this._lastProvidedMainMutedHlsLoaderSafari !== void 0 ? this._lastProvidedMainMutedHlsLoaderSafari : VideoController.videoMutedDefault;
+    } else {
+      return this.getVideoElementMuted();
+    }
   }
 
   toggleMuteUnmute(): Observable<void> {
@@ -1973,6 +2015,7 @@ export class VideoController implements VideoControllerApi {
   }
 
   protected setAudioTracks(audioTracks: OmpAudioTrack[]): Observable<void> {
+    console.debug(`Requested audio tracks load:`, audioTracks)
     return passiveObservable((observer) => {
       this._audioTracks = new Map<string, OmpAudioTrack>(audioTracks.map((audioTrack) => [audioTrack.id, audioTrack]));
       this.onAudioLoaded$.next({
@@ -1992,22 +2035,38 @@ export class VideoController implements VideoControllerApi {
   }
 
   setActiveAudioTrack(id: string): Observable<void> {
+    console.debug(`Set active audio track requested for id:`, id)
+
     return passiveObservable((observer) => {
       let activeTrack = this.getActiveAudioTrack();
       let newActiveTrack = this.getAudioTracks().find((p) => p.id === id);
-      if (this.isVideoLoaded() && newActiveTrack && newActiveTrack.id !== activeTrack?.id) {
-        this._videoLoader!.setActiveAudioTrack(id).subscribe({
-          next: (event) => {
-            this.updateActiveAudioTrack(id);
-            if (this._mainAudioRouter) {
-              this._mainAudioRouter.updateConnections(this._mainAudioRouter.getInitialRoutingConnections());
-            }
+
+      console.debug(`Trying to set active audio track to:`, newActiveTrack)
+
+      if (this.isVideoLoaded()) {
+        if (newActiveTrack) {
+          if (newActiveTrack.id !== activeTrack?.id) {
+            this._videoLoader!.setActiveAudioTrack(id).subscribe({
+              next: (event) => {
+                this.updateActiveAudioTrack(id);
+                if (this._mainAudioRouter) {
+                  this._mainAudioRouter.resetInputsSoloMuteState();
+                  this._mainAudioRouter.updateConnections(this._mainAudioRouter.getInitialRoutingConnections());
+                }
+                nextCompleteObserver(observer);
+              },
+              error: (err) => {
+                errorCompleteObserver(observer, err);
+              },
+            });
+          } else {
+            console.debug(`Track already active, set skipped.`, newActiveTrack)
             nextCompleteObserver(observer);
-          },
-          error: (err) => {
-            errorCompleteObserver(observer, err);
-          },
-        });
+          }
+        } else {
+          console.debug(`Track not found:`, newActiveTrack)
+          nextCompleteObserver(observer);
+        }
       } else {
         nextCompleteObserver(observer);
       }
@@ -2015,18 +2074,30 @@ export class VideoController implements VideoControllerApi {
   }
 
   protected updateActiveAudioTrack(id: string) {
+    console.debug(`Update active audio track requested for id:`, id)
+
     let activeTrack = this.getActiveAudioTrack();
     let newActiveTrack = this.getAudioTracks().find((p) => p.id === id);
-    // let's say we cannot unset active audio track
-    if (newActiveTrack && newActiveTrack.id !== activeTrack?.id) {
-      this._audioTracks.forEach((p) => (p.active = false));
-      newActiveTrack.active = true;
-      newActiveTrack = this.getActiveAudioTrack(); // ensure all is ok
-      if (newActiveTrack) {
-        this.onAudioSwitched$.next({
-          activeAudioTrack: newActiveTrack,
-        });
+
+    console.debug(`Trying to update active audio track to:`, newActiveTrack)
+
+    if (newActiveTrack) {
+      // let's say we cannot unset active audio track
+      if (newActiveTrack.id !== activeTrack?.id) {
+        this._audioTracks.forEach((p) => (p.active = false));
+        newActiveTrack.active = true;
+        newActiveTrack = this.getActiveAudioTrack(); // ensure all is ok
+        if (newActiveTrack) {
+          console.debug(`Active track updated to :`, newActiveTrack)
+          this.onAudioSwitched$.next({
+            activeAudioTrack: newActiveTrack,
+          });
+        }
+      } else {
+        console.debug(`Track already active, update skipped, event dispatch canceled:`, newActiveTrack)
       }
+    } else {
+      console.debug(`Track not found:`, newActiveTrack)
     }
   }
 
@@ -2109,7 +2180,7 @@ export class VideoController implements VideoControllerApi {
   }
 
   isPiPSupported(): boolean {
-    return !BrowserProvider.instance().isFirefox;
+    return this._videoDomController.isPiPSupported();
   }
 
   enablePiP(): Observable<void> {
@@ -2146,18 +2217,16 @@ export class VideoController implements VideoControllerApi {
     return passiveObservable((observer) => {
       this._removeAllSubtitlesTracks(false);
       if (subtitlesVttTracks && subtitlesVttTracks.length > 0) {
-        forkJoin(subtitlesVttTracks.map((p) => this.createSubtitlesVttTrack(p)))
-          .pipe(map((p) => p.filter((p) => !!p) as SubtitlesVttTrack[]))
-          .subscribe({
-            next: (subtitlesVttTracks) => {
-              this._subtitlesTracks = new Map<string, SubtitlesVttTrack>(subtitlesVttTracks.map((subtitlesVttTrack) => [subtitlesVttTrack.id, subtitlesVttTrack]));
-              this.onSubtitlesLoaded$.next(this.createSubtitlesEvent());
-              nextCompleteObserver(observer);
-            },
-            error: (err) => {
-              errorCompleteObserver(observer, err);
-            },
-          });
+        forkJoin(subtitlesVttTracks.map((p) => this.createSubtitlesVttTrack(p))).subscribe({
+          next: (subtitlesVttTracks) => {
+            this._subtitlesTracks = new Map<string, SubtitlesVttTrack>(subtitlesVttTracks.map((subtitlesVttTrack) => [subtitlesVttTrack.id, subtitlesVttTrack]));
+            this.onSubtitlesLoaded$.next(this.createSubtitlesEvent());
+            nextCompleteObserver(observer);
+          },
+          error: (err) => {
+            errorCompleteObserver(observer, err);
+          },
+        });
       } else {
         this.onSubtitlesLoaded$.next(this.createSubtitlesEvent());
         nextCompleteObserver(observer);
@@ -2165,7 +2234,7 @@ export class VideoController implements VideoControllerApi {
     });
   }
 
-  createSubtitlesVttTrack(subtitlesVttTrack: SubtitlesVttTrack): Observable<SubtitlesVttTrack | undefined> {
+  createSubtitlesVttTrack(subtitlesVttTrack: SubtitlesVttTrack): Observable<SubtitlesVttTrack> {
     return passiveObservable((observer) => {
       if (this.isVideoLoaded()) {
         this._createSubtitlesVttTrack(subtitlesVttTrack).subscribe({
@@ -2179,8 +2248,9 @@ export class VideoController implements VideoControllerApi {
           },
         });
       } else {
-        console.debug('Failed to create subtitles track, video not loaded', subtitlesVttTrack);
-        nextCompleteObserver(observer);
+        let message = 'Failed to create subtitles track, video not loaded';
+        console.debug(message, subtitlesVttTrack);
+        errorCompleteObserver(observer, message);
       }
     });
   }
@@ -2307,7 +2377,7 @@ export class VideoController implements VideoControllerApi {
 
   protected createAudioContext(contextOptions?: AudioContextOptions): AudioContext {
     if (!this._audioContext) {
-      console.debug('Creating AudioContext');
+      // console.debug('Creating AudioContext');
       this._audioContext = new AudioContext(contextOptions);
 
       this._audioOutputNode = this._audioContext.createGain();
@@ -2618,7 +2688,7 @@ export class VideoController implements VideoControllerApi {
     });
   }
 
-  toggleMainAudioRouterSolo(routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+  toggleMainAudioRouterSolo(routingPath: OmpAudioRoutingInputType): Observable<void> {
     return passiveObservable((observer) => {
       if (this._mainAudioRouter) {
         this._mainAudioRouter.toggleSolo(routingPath);
@@ -2630,7 +2700,7 @@ export class VideoController implements VideoControllerApi {
     });
   }
 
-  toggleMainAudioRouterMute(routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+  toggleMainAudioRouterMute(routingPath: OmpAudioRoutingInputType): Observable<void> {
     return passiveObservable((observer) => {
       if (this._mainAudioRouter) {
         this._mainAudioRouter.toggleMute(routingPath);
@@ -2765,7 +2835,7 @@ export class VideoController implements VideoControllerApi {
     });
   }
 
-  createSidecarAudioTrack(track: Partial<OmpAudioTrack>): Observable<OmpAudioTrack> {
+  createSidecarAudioTrack(track: OmpAudioTrackCreateType): Observable<OmpAudioTrack> {
     return passiveObservable((observer) => {
       this._createSidecarAudioTrack(track).subscribe({
         next: (result) => {
@@ -2779,7 +2849,7 @@ export class VideoController implements VideoControllerApi {
     });
   }
 
-  createSidecarAudioTracks(tracks: Partial<OmpAudioTrack>[]): Observable<OmpAudioTrack[]> {
+  createSidecarAudioTracks(tracks: OmpAudioTrackCreateType[]): Observable<OmpAudioTrack[]> {
     return passiveObservable((observer) => {
       let observables = tracks.map((p) => this._createSidecarAudioTrack(p));
       from(observables)
@@ -2799,26 +2869,26 @@ export class VideoController implements VideoControllerApi {
     });
   }
 
-  protected _createSidecarAudioTrack(track: Partial<OmpAudioTrack>): Observable<OmpAudioTrack> {
+  protected _createSidecarAudioTrack(track: OmpAudioTrackCreateType): Observable<OmpAudioTrack> {
     return new Observable((observer) => {
-      if (StringUtil.isEmpty(track.src)) {
-        errorCompleteObserver(observer, 'track.src not provided');
+      if (StringUtil.isEmpty(track.src) || StringUtil.isEmpty(track.label)) {
+        errorCompleteObserver(observer, 'track.src and track.label must be provided');
       } else {
         console.debug('Creating sidecar audio track', track);
 
         from(
-          httpGet<ArrayBuffer>(track.src!, {
-            ...AuthConfig.createAxiosRequestConfig(track.src!, AuthConfig.authentication),
+          httpGet<ArrayBuffer>(track.src, {
+            ...AuthConfig.createAxiosRequestConfig(track.src, AuthConfig.authentication),
             responseType: 'arraybuffer',
           })
         )
           .pipe(mergeMap((response) => from(this._audioContext!.decodeAudioData(response.data as ArrayBuffer))))
           .subscribe({
             next: (buffer) => {
-              let sidecarAudioTrack = {
+              let sidecarAudioTrack: OmpAudioTrack = {
                 id: StringUtil.isEmpty(track.id) ? CryptoUtil.uuid() : track.id!,
                 label: track.label,
-                src: track.src!,
+                src: track.src,
                 language: track.language,
                 embedded: false,
                 active: !!track.active,
@@ -3103,10 +3173,8 @@ export class VideoController implements VideoControllerApi {
 
   protected _deactivateSidecarAudioTracks(ids: string[]) {
     let sidecarAudios = this.getSidecarAudios().filter((p) => !!ids.find((id) => id === p.audioTrack.id));
-
-    console.debug(`Deactivate sidecar audio tracks`, sidecarAudios);
-
     if (sidecarAudios.length > 0) {
+      console.debug(`Deactivate sidecar audio tracks`, sidecarAudios);
       sidecarAudios.forEach((p) => p.deactivate());
     }
   }
@@ -3172,7 +3240,7 @@ export class VideoController implements VideoControllerApi {
     });
   }
 
-  toggleSidecarAudioRouterSolo(sidecarAudioTrackId: string, routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+  toggleSidecarAudioRouterSolo(sidecarAudioTrackId: string, routingPath: OmpAudioRoutingInputType): Observable<void> {
     return passiveObservable((observer) => {
       let sidecarAudio = this._sidecarAudios.get(sidecarAudioTrackId);
       if (sidecarAudio && sidecarAudio.audioRouter) {
@@ -3184,7 +3252,7 @@ export class VideoController implements VideoControllerApi {
     });
   }
 
-  toggleSidecarAudioRouterMute(sidecarAudioTrackId: string, routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+  toggleSidecarAudioRouterMute(sidecarAudioTrackId: string, routingPath: OmpAudioRoutingInputType): Observable<void> {
     return passiveObservable((observer) => {
       let sidecarAudio = this._sidecarAudios.get(sidecarAudioTrackId);
       if (sidecarAudio && sidecarAudio.audioRouter) {

@@ -17,7 +17,7 @@
 import {Video, VideoLoadOptions} from './model';
 import {BehaviorSubject, Observable, Subject} from 'rxjs';
 import {VideoControllerApi} from './video-controller-api';
-import {AudioLoadedEvent, AudioSwitchedEvent, Destroyable, OmpAudioTrack, OmpNamedEvent, OmpNamedEventEventName, SubtitlesLoadedEvent} from '../types';
+import {AudioLoadedEvent, AudioSwitchedEvent, Destroyable, OmpAudioTrackCreateType, OmpNamedEvent, OmpNamedEventEventName, SubtitlesLoadedEvent} from '../types';
 import {completeUnsubscribeSubjects, nextCompleteSubject} from '../util/rxjs-util';
 
 export interface VideoLoader extends Destroyable {
@@ -31,7 +31,7 @@ export interface VideoLoader extends Destroyable {
 
   setActiveAudioTrack(ompAudioTrackId: string): Observable<void>;
 
-  exportAudioTrack(ompAudioTrackId: string): Observable<Partial<OmpAudioTrack>>;
+  exportAudioTrack(ompAudioTrackId: string): Observable<OmpAudioTrackCreateType>;
 
   updateActiveNamedEventStreams(eventNames: OmpNamedEventEventName[]): void;
 }
@@ -61,7 +61,7 @@ export abstract class BaseVideoLoader implements VideoLoader {
     throw new Error('Not supported');
   }
 
-  exportAudioTrack(ompAudioTrackId: string): Observable<Partial<OmpAudioTrack>> {
+  exportAudioTrack(ompAudioTrackId: string): Observable<OmpAudioTrackCreateType> {
     throw new Error('Not supported');
   }
 

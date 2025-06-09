@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Destroyable, SubtitlesCreateEvent, SubtitlesEvent, SubtitlesLoadedEvent, SubtitlesVttTrack} from '../types';
+import {Destroyable, SubtitlesCreateEvent, SubtitlesEvent, SubtitlesLoadedEvent, SubtitlesVttTrack, SubtitlesVttTrackCreateType} from '../types';
 import {BehaviorSubject, Observable, Subject} from 'rxjs';
 import {SubtitlesApi} from '../api';
 import {nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
@@ -44,7 +44,7 @@ export class SubtitlesController implements SubtitlesApi, Destroyable {
     this.onHide$ = this._videoController.onSubtitlesHide$;
   }
 
-  createVttTrack(track: Pick<SubtitlesVttTrack, 'id' | 'src' | 'default' | 'label' | 'language'>): Observable<SubtitlesVttTrack | undefined> {
+  createVttTrack(track: SubtitlesVttTrackCreateType): Observable<SubtitlesVttTrack> {
     return this._videoController.createSubtitlesVttTrack({
       ...track,
       id: isNullOrUndefined(track.id) ? CryptoUtil.uuid() : track.id,

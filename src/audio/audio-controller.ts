@@ -22,23 +22,22 @@ import {
   AudioSwitchedEvent,
   Destroyable,
   MainAudioChangeEvent,
+  MainAudioInputSoloMuteEvent,
   OmpAudioTrack,
+  OmpAudioTrackCreateType,
   SidecarAudioChangeEvent,
   SidecarAudioCreateEvent,
+  SidecarAudioInputSoloMuteEvent,
   SidecarAudioPeakProcessorMessageEvent,
   SidecarAudioRemoveEvent,
-  VolumeChangeEvent,
   SidecarAudioVolumeChangeEvent,
-  MainAudioInputSoloMuteEvent,
-  SidecarAudioInputSoloMuteEvent,
+  VolumeChangeEvent,
 } from '../types';
-import {AudioMeterStandard, OmpAudioRouterState, OmpMainAudioState, VideoControllerApi, OmpAudioRoutingConnection, OmpAudioRoutingPath, OmpSidecarAudioState} from '../video';
+import {AudioMeterStandard, OmpAudioRouterState, OmpAudioRoutingConnection, OmpAudioRoutingPath, OmpMainAudioState, OmpSidecarAudioState, VideoControllerApi} from '../video';
 import {OmpAudioRouter} from '../video/audio-router';
 import {SidecarAudioApi} from '../api/sidecar-audio-api';
 import {OmpAudioEffectFilter, OmpAudioEffectParam, OmpAudioEffectsGraphDef} from './audio-effects';
-import {util} from 'zod';
-import Omit = util.Omit;
-import {OmpMainAudioInputSoloMuteState, OmpSidecarAudioInputSoloMuteState} from '../video/model';
+import {OmpAudioRoutingInputType, OmpMainAudioInputSoloMuteState, OmpSidecarAudioInputSoloMuteState} from '../video/model';
 
 export class AudioController implements AudioApi, Destroyable {
   public readonly onAudioLoaded$: BehaviorSubject<AudioLoadedEvent | undefined> = new BehaviorSubject<AudioLoadedEvent | undefined>(void 0);
@@ -97,11 +96,11 @@ export class AudioController implements AudioApi, Destroyable {
     return this._videoController.getAudioContext();
   }
 
-  toggleMainAudioRouterSolo(routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+  toggleMainAudioRouterSolo(routingPath: OmpAudioRoutingInputType): Observable<void> {
     return this._videoController.toggleMainAudioRouterSolo(routingPath);
   }
 
-  toggleMainAudioRouterMute(routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+  toggleMainAudioRouterMute(routingPath: OmpAudioRoutingInputType): Observable<void> {
     return this._videoController.toggleMainAudioRouterMute(routingPath);
   }
 
@@ -215,11 +214,11 @@ export class AudioController implements AudioApi, Destroyable {
     return this._videoController.setSidecarAudioRouterInitialRoutingConnections(id, connections);
   }
 
-  createSidecarAudioTrack(track: Partial<OmpAudioTrack>): Observable<OmpAudioTrack> {
+  createSidecarAudioTrack(track: OmpAudioTrackCreateType): Observable<OmpAudioTrack> {
     return this._videoController.createSidecarAudioTrack(track);
   }
 
-  createSidecarAudioTracks(tracks: Partial<OmpAudioTrack>[]): Observable<OmpAudioTrack[]> {
+  createSidecarAudioTracks(tracks: OmpAudioTrackCreateType[]): Observable<OmpAudioTrack[]> {
     return this._videoController.createSidecarAudioTracks(tracks);
   }
 
@@ -295,11 +294,11 @@ export class AudioController implements AudioApi, Destroyable {
     return this._videoController.exportMainAudioTracksToSidecar(mainAudioTrackIds);
   }
 
-  toggleSidecarAudioRouterSolo(sidecarAudioTrackId: string, routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+  toggleSidecarAudioRouterSolo(sidecarAudioTrackId: string, routingPath: OmpAudioRoutingInputType): Observable<void> {
     return this._videoController.toggleSidecarAudioRouterSolo(sidecarAudioTrackId, routingPath);
   }
 
-  toggleSidecarAudioRouterMute(sidecarAudioTrackId: string, routingPath: Omit<OmpAudioRoutingPath, 'output'>): Observable<void> {
+  toggleSidecarAudioRouterMute(sidecarAudioTrackId: string, routingPath: OmpAudioRoutingInputType): Observable<void> {
     return this._videoController.toggleSidecarAudioRouterMute(sidecarAudioTrackId, routingPath);
   }
 

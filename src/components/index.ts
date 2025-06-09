@@ -7,6 +7,7 @@ import {OmakaseDropdownToggle} from './omakase-dropdown-toggle';
 import {OmakaseDropdownOption} from './omakase-dropdown-option';
 import {OmakaseVolumeRange} from './omakase-volume-range';
 import {OmakaseMuteButton} from './omakase-mute-button';
+import {OmakaseDropdownList} from './omakase-dropdown-list';
 
 if (!globalThis.customElements.get('omakase-time-range')) {
   globalThis.customElements.define('omakase-time-range', OmakaseTimeRange);
@@ -34,6 +35,10 @@ if (!globalThis.customElements.get('omakase-timecode-edit')) {
 
 if (!globalThis.customElements.get('omakase-dropdown')) {
   globalThis.customElements.define('omakase-dropdown', OmakaseDropdown);
+}
+
+if (!globalThis.customElements.get('omakase-dropdown-list')) {
+  globalThis.customElements.define('omakase-dropdown-list', OmakaseDropdownList);
 }
 
 if (!globalThis.customElements.get('omakase-dropdown-toggle')) {

@@ -1,78 +1,63 @@
-import {BehaviorSubject, Subject} from 'rxjs';
-
-export interface OmakaseDropdownOption {
-  value: any;
-  label: string;
-}
+import {OmakaseDropdownToggle} from './omakase-dropdown-toggle';
+import {OmakaseDropdownList} from './omakase-dropdown-list';
 
 export class OmakaseDropdown extends HTMLElement {
-  private _title?: HTMLDivElement;
-  private _dropdown?: HTMLDivElement;
-  private _selectedOption$ = new BehaviorSubject<OmakaseDropdownOption | undefined>(undefined);
+  private _toggle?: OmakaseDropdownToggle;
 
   constructor() {
     super();
   }
 
-  set width(width: number) {
-    this.style.width = width + 'px';
-  }
-
   get width(): number {
-    return parseFloat(this.getAttribute('width') ?? '100');
+    const lists = this.querySelectorAll('omakase-dropdown-list') as NodeListOf<OmakaseDropdownList>;
+    let width = 0;
+    lists.forEach((list) => {
+      width += list.width;
+    });
+    return width;
   }
 
-  get selectedOption$() {
-    return this._selectedOption$;
+  get toggle(): OmakaseDropdownToggle | undefined {
+    return this._toggle;
+  }
+
+  set toggle(toggle: OmakaseDropdownToggle | undefined) {
+    this._toggle = toggle;
   }
 
   connectedCallback() {
-    this.style.display = 'none';
-    this.style.width = this.width + 'px';
+    const lists = this.querySelectorAll('omakase-dropdown-list') as NodeListOf<OmakaseDropdownList>;
 
-    this.selectedOption$.subscribe((newValue) => {
-      this.querySelectorAll('omakase-dropdown-option').forEach((option) => {
-        if (option.getAttribute('value') === newValue?.value) {
-          option.classList.add('active');
-        } else {
-          option.classList.remove('active');
+    if (this.getAttribute('floating')) {
+      const closeButton = document.createElement('span');
+      closeButton.classList.add('omakase-dropdown-close');
+      closeButton.onclick = () => {
+        this.closeDropdown();
+      };
+      lists[lists.length - 1].appendChild(closeButton);
+    } else {
+      setTimeout(() => {
+        lists.forEach((list) => {
+          list.selectedOption$.subscribe((option) => {
+            this.closeDropdown();
+            if (this._toggle?.span) {
+              this._toggle.span.innerText = option?.label ?? '';
+            }
+          });
+        });
+      });
+      document.addEventListener('click', (event) => {
+        if (!this.contains(event.target as Node)) {
+          this.closeDropdown();
         }
       });
-    });
-    document.addEventListener('click', (event) => {
-      if (!this.contains(event.target as Node)) {
-        this.style.display = 'none';
-      }
-    });
-
-    if (this.getAttribute('title')) {
-      this._title = document.createElement('div');
-      this._title.classList.add('omakase-dropdown-title');
-      this._title.innerText = this.getAttribute('title')!;
-      this.appendChild(this._title);
     }
+  }
 
-    this._dropdown = document.createElement('div');
-    this._dropdown.classList.add('omakase-dropdown-container');
-    this.appendChild(this._dropdown);
-
-    const options = this.querySelectorAll('omakase-dropdown-option');
-    options.forEach((option) => {
-      const clone = option.cloneNode(true) as HTMLElement;
-      clone.addEventListener('click', () => {
-        this._selectedOption$.next({
-          value: option.getAttribute('value'),
-          label: option.innerHTML,
-        });
-      });
-      this.removeChild(option);
-      this._dropdown!.appendChild(clone);
-      if (option.hasAttribute('selected')) {
-        this._selectedOption$.next({
-          value: option.getAttribute('value'),
-          label: option.innerHTML,
-        });
-      }
-    });
+  private closeDropdown() {
+    this.style.display = 'none';
+    if (this._toggle) {
+      this._toggle.classList.remove('active');
+    }
   }
 }

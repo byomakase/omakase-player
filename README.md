@@ -55,11 +55,13 @@ omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8').subscribe({
 })
 ```
 
-Media chrome controls visibility can be toggled with the `mediaChrome` property. Possible values are `enabled` (always enabled), `disabled` (always disabled) and `fullscreen-only` (enabled in fullscreen, disabled otherwise). Default value is `fullscreen-only` in regular mode and `enabled` in detached mode.
+Media chrome controls can be configured with the `mediaChrome` property. Possible values for visibility are `enabled` (always enabled), `disabled` (always disabled) and `fullscreen-only` (enabled in fullscreen, disabled otherwise). Default value is `fullscreen-only` in regular mode and `enabled` in detached mode.
 
 ```javascript
 let omakasePlayer = new omakase.OmakasePlayer({
-  mediaChrome: 'enabled'
+  mediaChrome: {
+    visibility: 'enabled'
+  }
 });
 ```
 
@@ -466,6 +468,12 @@ Usage example:
   })
 
 ```
+
+## Styling
+
+Omakase Player elements (including media chrome elements) can be styled with CSS/SCSS. The CSS structure is shown below.
+
+![Omakase Player CSS structure](./styling-diagram.svg)
 
 ## Timeline
 

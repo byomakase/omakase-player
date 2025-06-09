@@ -243,6 +243,10 @@ export interface OmpAudioRoutingPath {
   output: number;
 }
 
+export type OmpAudioRoutingInputType = Pick<OmpAudioRoutingPath, 'input'>
+
+export type OmpAudioRoutingOutputType = Pick<OmpAudioRoutingPath, 'output'>
+
 /**
  * Describes {@ OmpAudioRoutingPoint} connection status - connected or disconnected
  */

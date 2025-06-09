@@ -111,7 +111,7 @@ export class AudioUtil {
     );
   }
 
-  private static fetchAudioFile(url: string, authentication?: AuthenticationData): Observable<ArrayBuffer> {
+  static fetchAudioFile(url: string, authentication?: AuthenticationData): Observable<ArrayBuffer> {
     return from(
       httpGet<ArrayBuffer>(url, {
         ...AuthConfig.createAxiosRequestConfig(url, authentication),

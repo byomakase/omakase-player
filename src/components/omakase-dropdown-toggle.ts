@@ -19,30 +19,39 @@ export class OmakaseDropdownToggle extends HTMLElement {
   attributeChangedCallback(name: string, _oldValue: any, newValue: any) {
     if (name === 'dropdown') {
       this._dropdown = document.getElementById(newValue) as OmakaseDropdown;
-      if (!this._dropdown) {
-        return;
+      if (this._dropdown) {
+        this._dropdown!.toggle = this;
       }
-      setTimeout(() => {
-        this._span!.innerText = this._dropdown!.selectedOption$.getValue()?.label ?? '';
-        this._dropdown!.selectedOption$.subscribe((value) => {
-          this._span!.innerText = value?.label || '';
-          this._dropdown!.style.display = 'none';
-        });
-      });
     }
   }
 
   connectedCallback() {
-    this._span = document.createElement('span');
-    this._span.classList.add('omakase-dropdown-toggle');
-    this._span.onclick = () => {
+    let innerElement: any;
+    if (this.children[0]) {
+      innerElement = this.children[0] as HTMLElement;
+    } else {
+      this._span = document.createElement('span');
+      this._span.classList.add('omakase-dropdown-toggle');
+      this.appendChild(this._span);
+      innerElement = this._span;
+    }
+    innerElement.onclick = () => {
       if (this._dropdown?.style.display === 'none') {
-        this._dropdown!.style.left = this._span!.offsetLeft + this._span!.offsetWidth / 2 - this._dropdown!.width / 2 + 'px';
+        if (!this._dropdown!.style.right) {
+          if (this._dropdown!.getAttribute('align') === 'center') {
+            this._dropdown!.style.left = this.offsetLeft + innerElement.offsetWidth / 2 - this._dropdown!.width / 2 + 'px';
+          } else {
+            this._dropdown!.style.left = this.offsetLeft + 'px';
+          }
+        }
         setTimeout(() => {
-          this._dropdown!.style.display = 'block';
+          this._dropdown!.style.display = 'flex';
+          this.classList.add('active');
         });
+      } else {
+        this._dropdown!.style.display = 'none';
+        this.classList.remove('active');
       }
     };
-    this.appendChild(this._span);
   }
 }

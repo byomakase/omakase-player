@@ -53,4 +53,6 @@ export interface VideoDomControllerApi extends Destroyable {
   removeTextTrackById(id: string): boolean;
 
   loadThumbnailVtt(thumbnailVttUrl: string): void;
+
+  isPiPSupported(): boolean;
 }

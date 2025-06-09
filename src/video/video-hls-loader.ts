@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {first, forkJoin, from, fromEvent, map, Observable, Subject, takeUntil} from 'rxjs';
+import {catchError, filter, first, forkJoin, from, fromEvent, map, Observable, Subject, take, takeUntil, timeout, timer} from 'rxjs';
 import {Video, VideoLoadOptions} from './model';
 import {BaseVideoLoader} from './video-loader';
-import Hls, {AudioTrackSwitchingData, ErrorData, Events as HlsEvents, FragLoadedData, FragLoadingData, HlsConfig, ManifestParsedData, MediaAttachedData, MediaKeySessionContext, MediaPlaylist} from 'hls.js';
+import Hls, {AudioTracksUpdatedData, AudioTrackSwitchingData, ErrorData, Events as HlsEvents, FragLoadedData, FragLoadingData, HlsConfig, ManifestParsedData, MediaAttachedData, MediaKeySessionContext, MediaPlaylist} from 'hls.js';
 import {errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {AuthConfig} from '../auth/auth-config';
 import {BasicAuthenticationData, BearerAuthenticationData, CustomAuthenticationData} from '../authentication/model';
@@ -25,7 +25,7 @@ import {isNullOrUndefined} from '../util/object-util';
 import {HTMLVideoElementEventKeys} from './video-controller';
 import {z} from 'zod';
 import {FrameRateUtil} from '../util/frame-rate-util';
-import {OmpAudioTrack, OmpError, OmpHlsNamedEvent, OmpNamedEventEventName, SubtitlesVttTrack} from '../types';
+import {OmpAudioTrack, OmpAudioTrackCreateType, OmpError, OmpHlsNamedEvent, OmpNamedEventEventName, SubtitlesVttTrack} from '../types';
 import {VttUtil} from '../vtt/vtt-util';
 import {StringUtil} from '../util/string-util';
 import {CryptoUtil} from '../util/crypto-util';
@@ -80,6 +80,9 @@ export class VideoHlsLoader extends BaseVideoLoader {
   protected _hls: Hls | undefined;
   protected _hlsEventListenersMap: Map<OmpNamedEventEventName, OmpHlsEventListener> = new Map<OmpNamedEventEventName, OmpHlsEventListener>();
 
+  protected _onHlsAudioTracksUpdated$: Subject<AudioTracksUpdatedData> = new Subject<AudioTracksUpdatedData>();
+  protected _onHlsAudioTrackSwitched$: Subject<AudioTrackSwitchingData> = new Subject<AudioTrackSwitchingData>();
+
   protected _videoEventBreaker$ = new Subject<void>();
 
   constructor(videoController: VideoControllerApi) {
@@ -99,9 +102,9 @@ export class VideoHlsLoader extends BaseVideoLoader {
     this._videoEventBreaker$ = new Subject<void>();
 
     return passiveObservable<Video>((observer) => {
-
       this.destroyHls();
 
+      let that = this;
       let hlsConfig = this._videoController.getConfig().hlsConfig;
 
       this._hls = new Hls({
@@ -121,24 +124,99 @@ export class VideoHlsLoader extends BaseVideoLoader {
         },
       });
 
-      let onAudioTracksUpdated = () => {
-        let audioTracks = this._hls!.audioTracks.map((mediaPlaylist) => this.createOmpAudioTrack(mediaPlaylist));
-
-        let activeHlsAudioTrack = this._hls!.audioTracks[this._hls!.audioTrack];
-        let activeAudioTrack = activeHlsAudioTrack ? audioTracks.find((p) => p.id === `${activeHlsAudioTrack.id}`) : void 0;
-
-        this.onAudioLoaded$.next({
-          audioTracks: audioTracks,
-          activeAudioTrack: activeAudioTrack,
-        });
+      let getHlsActiveAudioTrack: () => MediaPlaylist | undefined = () => {
+        return this._hls!.audioTracks[this._hls!.audioTrack];
       };
 
-      let onAudioTrackSwitched = () => {
-        let hlsAudioTrack = this._hls!.audioTracks[this._hls!.audioTrack];
-        if (hlsAudioTrack) {
-          this.onAudioSwitched$.next({
-            activeAudioTrack: this.createOmpAudioTrack(hlsAudioTrack),
+      let getOmpAudioTracks: () => OmpAudioTrack[] = () => {
+        return this._hls!.audioTracks.map((mediaPlaylist) => this.mapToOmpAudioTrack(mediaPlaylist));
+      }
+
+      let handleHlsAudioTracksUpdated = () => {
+        let ompAudioTracks = getOmpAudioTracks();
+        let hlsActiveAudioTrack = getHlsActiveAudioTrack();
+        let ompActiveAudioTrack = hlsActiveAudioTrack ? ompAudioTracks.find((p) => p.id === `${hlsActiveAudioTrack!.id}`) : void 0;
+
+        // if there are tracks for preload, onAudioLoaded$ will be dispatched in orchestration with onAudioSwitched$
+        if (!hlsAudioTrackForPreload) {
+          this.onAudioLoaded$.next({
+            audioTracks: ompAudioTracks,
+            activeAudioTrack: ompActiveAudioTrack,
           });
+        }
+      };
+
+      let hlsAudioTrackRevertToDefaultActive = false;
+      let handleHlsAudioTrackSwitched = () => {
+        let hlsActiveAudioTrack = getHlsActiveAudioTrack();
+
+        if (hlsActiveAudioTrack) {
+          if (!hlsAudioTrackRevertToDefaultActive) {
+            if (hlsAudioTrackForPreload && defaultAudioTrack && hlsAudioTrackForPreload.id === hlsActiveAudioTrack.id) {
+              // wait until <video> element recognizes change
+              timer(300).subscribe(() => {
+                console.debug(`Preloaded track: ${hlsAudioTrackForPreload!.id}, reverting to default track: ${defaultAudioTrack!.id}`);
+                hlsAudioTrackRevertToDefaultActive = true;
+                hlsAudioTrackForPreload = void 0;
+
+
+                // preload track
+                this.setActiveHlsAudioTrack(defaultAudioTrack!.id)
+                  .pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$))
+                  .subscribe(() => {
+                    let hlsActiveAudioTrack = getHlsActiveAudioTrack();
+
+                    if (hlsActiveAudioTrack && (hlsActiveAudioTrack.id === defaultAudioTrack!.id)) {
+                      hlsAudioTrackRevertToDefaultActive = false;
+
+                      // emit previously skipped onAudioLoaded$ event
+                      handleHlsAudioTracksUpdated();
+                      // emit onAudioSwitched$
+
+                      this.onAudioSwitched$.next({
+                        activeAudioTrack: this.mapToOmpAudioTrack(hlsActiveAudioTrack),
+                      });
+
+                      console.debug(`Reverted to default track: ${defaultAudioTrack!.id}`);
+                    } else {
+                      console.error(`Could not revert to default track: ${defaultAudioTrack!.id}`);
+
+                      throw new OmpError(`Could not revert to default track`)
+                    }
+
+                    //
+                    //
+                    // console.debug(`Track: ${hlsAudioTrackForPreload?.id} preloaded, waiting a bit..`);
+                    // hlsAudioTrackForPreload = void 0;
+                    //
+                    // // wait until <video> element recognizes change
+                    // timer(300).subscribe(() => {
+                    //   console.debug(`Reverting to default track: ${hlsActiveAudioTrack.id}`);
+                    //
+                    //   this.setActiveHlsAudioTrack(hlsActiveAudioTrack.id)
+                    //     .pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$))
+                    //     .subscribe(() => {
+                    //       console.debug(`Reverted to default track: ${hlsActiveAudioTrack.id}`);
+                    //       hlsAudioTrackRevertToDefaultActive = false;
+                    //
+                    //       // emit previously skipped onAudioLoaded$ event
+                    //       handleHlsAudioTracksUpdated();
+                    //       // emit onAudioSwitched$
+                    //
+                    //       this.onAudioSwitched$.next({
+                    //         activeAudioTrack: this.mapToOmpAudioTrack(hlsActiveAudioTrack),
+                    //       });
+                    //     });
+                    // });
+                  });
+
+              });
+            } else {
+              this.onAudioSwitched$.next({
+                activeAudioTrack: this.mapToOmpAudioTrack(hlsActiveAudioTrack),
+              });
+            }
+          }
         }
       };
 
@@ -148,14 +226,26 @@ export class VideoHlsLoader extends BaseVideoLoader {
         isDrm = true;
       });
 
+      this._onHlsAudioTracksUpdated$.pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$)).subscribe({
+        next: (event) => {
+          handleHlsAudioTracksUpdated();
+        },
+      });
+
+      this._onHlsAudioTrackSwitched$.pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$)).subscribe({
+        next: (event) => {
+          handleHlsAudioTrackSwitched();
+        },
+      });
+
       this._hls!.on(HlsEvents.AUDIO_TRACKS_UPDATED, function (event, data) {
         // console.debug(event, data);
-        onAudioTracksUpdated();
+        that._onHlsAudioTracksUpdated$.next(data);
       });
 
       this._hls!.on(HlsEvents.AUDIO_TRACK_SWITCHED, function (event, data) {
         // console.debug(event, data);
-        onAudioTrackSwitched();
+        that._onHlsAudioTrackSwitched$.next(data);
       });
 
       this.overrideHlsMethods();
@@ -200,11 +290,42 @@ export class VideoHlsLoader extends BaseVideoLoader {
       });
 
       let audioOnly = false;
+      let defaultAudioTrack: MediaPlaylist | undefined;
+      let hlsAudioTrackForPreload: MediaPlaylist | undefined;
+
       let hlsManifestParsed$ = new Observable<boolean>((observer) => {
         this._hls!.once(HlsEvents.MANIFEST_PARSED, (event, data) => {
-          // set audio track with 6 channels as default, if it exists
-          let defaultAudioTrack = this._hls!.allAudioTracks.find((track) => track.channels === '6');
-          this._hls!.setAudioOption(defaultAudioTrack);
+          // console.debug(event, data);
+
+          defaultAudioTrack = this._hls!.allAudioTracks.find((p) => p.default);
+
+          // audio tracks with channels set
+          let audioTracksWithChannels = this._hls!.allAudioTracks.filter((audioTrack) => !!audioTrack.channels).map((audioTrack) => ({
+            audioTrack: audioTrack,
+            numOfChannels: parseInt(audioTrack.channels!),
+          }));
+
+          if (audioTracksWithChannels.length > 0) {
+            let maxChannels = Math.max(...audioTracksWithChannels.map((p) => p.numOfChannels));
+
+            // all audio tracks have same number of channels and number of channels is equal to maxChannels
+            let isAllAudioTracksChannelsEqualToMaxChannels = audioTracksWithChannels.filter((p) => p.numOfChannels === maxChannels).length === this._hls!.allAudioTracks.length;
+
+            let defaultAudioTrackWithChannels = audioTracksWithChannels.find((p) => p.audioTrack.id === defaultAudioTrack?.id);
+            let isDefaultAudioTrackWithMaxChannels = defaultAudioTrackWithChannels && defaultAudioTrackWithChannels.numOfChannels === maxChannels;
+
+            let preloadAudioTrackCandidate = audioTracksWithChannels.find((p) => p.numOfChannels === maxChannels)?.audioTrack;
+
+            if (preloadAudioTrackCandidate && defaultAudioTrack?.id !== preloadAudioTrackCandidate.id && !isAllAudioTracksChannelsEqualToMaxChannels && !isDefaultAudioTrackWithMaxChannels) {
+              // set only if candidate is found, and it's not default track
+              hlsAudioTrackForPreload = preloadAudioTrackCandidate;
+            }
+          }
+
+          if (hlsAudioTrackForPreload) {
+            console.debug(`Track marked for preload, setting as default audio option`, hlsAudioTrackForPreload);
+            this._hls!.setAudioOption(hlsAudioTrackForPreload);
+          }
 
           let firstLevelIndex = data.firstLevel;
           let firstLevel = data.levels[firstLevelIndex];
@@ -231,14 +352,15 @@ export class VideoHlsLoader extends BaseVideoLoader {
         });
       });
 
-      let frameRateResolved$ = new Observable<number | undefined>((observer) => {
+      let frameRate$ = new Observable<number | undefined>((observer) => {
         this._hls!.once(HlsEvents.MANIFEST_PARSED, function (event, data) {
           if (options?.frameRate) {
             nextCompleteObserver(observer, FrameRateUtil.resolveFrameRate(options.frameRate));
           } else {
             let firstLevelIndex = data.firstLevel;
             let firstLevel = data.levels[firstLevelIndex];
-            nextCompleteObserver(observer, FrameRateUtil.resolveFrameRate(firstLevel.frameRate));
+            let requestedFrameRate = firstLevel.videoCodec ? firstLevel.frameRate : FrameRateUtil.AUDIO_FRAME_RATE;
+            nextCompleteObserver(observer, FrameRateUtil.resolveFrameRate(requestedFrameRate));
           }
         });
       });
@@ -246,9 +368,9 @@ export class VideoHlsLoader extends BaseVideoLoader {
       let videoLoadedData$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEventKeys.LOADEDDATA).pipe(first());
       let videoLoadedMetadata$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEventKeys.LOADEDMETEDATA).pipe(first());
 
-      forkJoin([hlsMediaAttached$, hlsManifestParsed$, hlsFragParsingInitSegment$, videoLoadedData$, videoLoadedMetadata$, frameRateResolved$])
+      forkJoin([hlsMediaAttached$, hlsManifestParsed$, hlsFragParsingInitSegment$, videoLoadedData$, videoLoadedMetadata$, frameRate$])
         .pipe(first())
-        .subscribe((result) => {
+        .subscribe(([mediaAttached, manifestParsed, fragParsingInitSegment, videoLoadedData, videoLoadedMetadata, frameRate]) => {
           let duration: number;
           if (options && options.duration) {
             duration = z.coerce.number().parse(options.duration);
@@ -259,12 +381,11 @@ export class VideoHlsLoader extends BaseVideoLoader {
 
           let dropFrame = options && options.dropFrame !== void 0 ? options.dropFrame : false;
 
-          const frameRate = result[5];
           if (!frameRate) {
             throw new Error('Frame rate could not be determined');
           }
 
-          let initSegmentTimeOffset = hasInitSegment ? FrameRateUtil.frameNumberToTime(2, frameRate) : void 0; // TODO resolve time offset dynamically
+          let initSegmentTimeOffset = (hasInitSegment && !isDrm) ? FrameRateUtil.frameNumberToTime(2, frameRate) : void 0; // TODO resolve time offset dynamically
 
           let video: Video = {
             protocol: 'hls',
@@ -282,7 +403,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
           // audio
           if (!this._hls!.audioTracks || this._hls!.audioTracks.length < 1) {
             // produce onAudioLoaded$ event manually, because there are no audio tracks and AUDIO_TRACKS_UPDATED will never fire
-            onAudioTracksUpdated();
+            handleHlsAudioTracksUpdated();
           }
 
           // subtitles
@@ -290,6 +411,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
           if (!hlsConfig.subtitleDisplay) {
             this._hls!.subtitleTrack = -1;
           }
+
           if (!!hlsConfig.fetchManifestSubtitleTracks && this._hls!.allSubtitleTracks && this._hls!.allSubtitleTracks.length > 0) {
             let os$ = this._hls!.allSubtitleTracks.map((subtitleTrack) => {
               return M3u8Util.fetchVttSegmentedConcat(subtitleTrack.url, AuthConfig.authentication).pipe(
@@ -298,6 +420,10 @@ export class VideoHlsLoader extends BaseVideoLoader {
                     mediaPlaylist: subtitleTrack,
                     webvttText: webvttText,
                   };
+                }),
+                catchError((error) => {
+                  console.error(error);
+                  throw error;
                 })
               );
             });
@@ -314,9 +440,14 @@ export class VideoHlsLoader extends BaseVideoLoader {
                             ...mediaPlaylistWebvtt,
                             webvttTextDigest: contentDigest,
                           };
+                        }),
+                        catchError((error) => {
+                          console.error(error);
+                          throw error;
                         })
                       )
                   );
+
                   forkJoin(os$).subscribe({
                     next: (mediaPlaylistWebvtts) => {
                       let embeddedSubtitlesTracks: SubtitlesVttTrack[] = mediaPlaylistWebvtts.map((result) => ({
@@ -345,6 +476,13 @@ export class VideoHlsLoader extends BaseVideoLoader {
                   });
                 }
               },
+              error: (error) => {
+                console.error(error);
+                this.onSubtitlesLoaded$.next({
+                  tracks: [],
+                  currentTrack: void 0,
+                });
+              },
             });
           } else {
             this.onSubtitlesLoaded$.next({
@@ -366,7 +504,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
     });
   }
 
-  protected createOmpAudioTrack(mediaPlaylist: MediaPlaylist): OmpAudioTrack {
+  protected mapToOmpAudioTrack(mediaPlaylist: MediaPlaylist): OmpAudioTrack {
     return {
       id: `${mediaPlaylist.id}`,
       label: mediaPlaylist.name,
@@ -394,14 +532,27 @@ export class VideoHlsLoader extends BaseVideoLoader {
   // }
 
   override setActiveAudioTrack(ompAudioTrackId: string): Observable<void> {
+    let hlsAudioTrackId = parseInt(ompAudioTrackId);
+    return this.setActiveHlsAudioTrack(hlsAudioTrackId);
+  }
+
+  protected setActiveHlsAudioTrack(hlsAudioTrackId: number): Observable<void> {
+    console.debug(`Trying to set active HLS audio track: ${hlsAudioTrackId}`);
     return new Observable((observer) => {
-      let hlsAudioTrackId = parseInt(ompAudioTrackId);
       if (this._hls!.audioTrack !== hlsAudioTrackId) {
-        // proceed with change
-        this._hls!.once(HlsEvents.AUDIO_TRACK_SWITCHED, (event: string, data: AudioTrackSwitchingData) => {
-          // console.debug(event, data);
-          nextCompleteObserver(observer);
-        });
+        this._onHlsAudioTrackSwitched$
+          .pipe(filter((p) => p.id === hlsAudioTrackId)) // ensure that event is for track with track.id === hlsAudioTrackId
+          .pipe(take(1), timeout(20000))
+          .subscribe({
+            next: (event) => {
+              nextCompleteObserver(observer);
+            },
+            error: (error) => {
+              console.debug(`Never caught ${HlsEvents.AUDIO_TRACK_SWITCHED} for audio track: ${hlsAudioTrackId}`);
+              console.debug(error);
+              nextCompleteObserver(observer);
+            },
+          });
         this._hls!.audioTrack = hlsAudioTrackId; // this triggers AUDIO_TRACK_SWITCHED
       } else {
         nextCompleteObserver(observer);
@@ -409,10 +560,10 @@ export class VideoHlsLoader extends BaseVideoLoader {
     });
   }
 
-  override exportAudioTrack(ompAudioTrackId: string): Observable<Partial<OmpAudioTrack>> {
+  override exportAudioTrack(ompAudioTrackId: string): Observable<OmpAudioTrackCreateType> {
     let hlsAudioTrackId = parseInt(ompAudioTrackId);
 
-    return new Observable<Partial<OmpAudioTrack>>((observer) => {
+    return new Observable<OmpAudioTrackCreateType>((observer) => {
       if (this._hls && this._hls.audioTracks.length > 0 && this._hls.audioTracks.find((p) => p.id === hlsAudioTrackId)) {
         let hlsMediaPlaylist = this._hls.audioTracks.find((p) => p.id === hlsAudioTrackId)!;
         let hlsMediaPlaylistRootUrl = hlsMediaPlaylist.url.substring(0, hlsMediaPlaylist.url.lastIndexOf('/'));
@@ -450,7 +601,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
                   })
                 ).subscribe({
                   next: (response) => {
-                    let audioTrack: Partial<OmpAudioTrack> = {
+                    let audioTrack: OmpAudioTrackCreateType = {
                       src: BlobUtil.createBlobURL([response.data]),
                       label: hlsMediaPlaylist.name,
                       language: hlsMediaPlaylist.lang,
@@ -470,7 +621,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
 
                 AudioUtil.fetchAndMergeAudioFiles(fragmentsAbsUrls, AuthConfig.authentication).subscribe({
                   next: (audioArrayBuffer) => {
-                    let audioTrack: Partial<OmpAudioTrack> = {
+                    let audioTrack: OmpAudioTrackCreateType = {
                       src: BlobUtil.createBlobURL([audioArrayBuffer]),
                       label: hlsMediaPlaylist.name,
                       language: hlsMediaPlaylist.lang,

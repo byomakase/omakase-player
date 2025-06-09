@@ -16,7 +16,7 @@
 
 import {Destroyable, OmpAudioRouterChangeEvent, OmpAudioRouterInputSoloMuteEvent} from '../types';
 import {Subject} from 'rxjs';
-import {OmpAudioRouterInputSoloMuteState, OmpAudioRouterState, OmpAudioRoutingConnection, OmpAudioRoutingPath, OmpAudioRoutingRoute} from './model';
+import {OmpAudioRouterInputSoloMuteState, OmpAudioRouterState, OmpAudioRoutingConnection, OmpAudioRoutingInputType, OmpAudioRoutingPath, OmpAudioRoutingRoute} from './model';
 import {Validators} from '../validators';
 import {AudioUtil} from '../util/audio-util';
 import {completeUnsubscribeSubjects, nextCompleteSubject} from '../util/rxjs-util';
@@ -44,12 +44,12 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
   protected _connectionsByInputOutput: Map<number, Map<number, OmpAudioRoutingConnection>>;
   protected _effectsGraphsByInputOutput: Map<number, Map<number, OmpAudioEffectsGraph | undefined>>;
 
-  protected _lastInputSoloMuteState: OmpAudioRouterInputSoloMuteState;
+  protected _lastChangedSoloMuteStateInput: number | undefined;
   /**
    * Mapped input states, stores solo and mute flag/connections for each input
    * @protected
    */
-  protected _allInputsSoloMuteState: Map<number, OmpAudioRouterInputSoloMuteState>;
+  protected _soloMuteStatesByInput: Map<number, OmpAudioRouterInputSoloMuteState>;
 
   protected _destroyed$ = new Subject<void>();
 
@@ -86,7 +86,7 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
     this._connectionsByInputOutput = new Map<number, Map<number, OmpAudioRoutingConnection>>();
     this._effectsGraphsByInputOutput = new Map<number, Map<number, OmpAudioEffectsGraph>>();
 
-    this._allInputsSoloMuteState = new Map<number, OmpAudioRouterInputSoloMuteState>();
+    this._soloMuteStatesByInput = new Map<number, OmpAudioRouterInputSoloMuteState>();
 
     for (let inputNumber = 0; inputNumber < this._inputsNumber; inputNumber++) {
       let connectionsByOutput: Map<number, OmpAudioRoutingConnection> = new Map<number, OmpAudioRoutingConnection>();
@@ -107,15 +107,6 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
     }
 
     this.resetInputsSoloMuteState();
-
-    this._lastInputSoloMuteState = {
-      inputNumber: 5,
-      inputSoloedConnections: [],
-      inputMutedConnections: [],
-      unsoloConnections: [],
-      soloed: false,
-      muted: false,
-    };
 
     this.updateConnections(this.getInitialRoutingConnections());
 
@@ -212,15 +203,19 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
   }
 
   getAudioRouterInputSoloMuteState(): OmpAudioRouterInputSoloMuteState {
-    return this._lastInputSoloMuteState;
+    if (this._lastChangedSoloMuteStateInput === void 0) {
+      throw new Error('Solo/mute is undefined')
+    }
+
+    return this._soloMuteStatesByInput.get(this._lastChangedSoloMuteStateInput)!;
   }
 
-  toggleSolo(routingPath: Omit<OmpAudioRoutingPath, 'output'>) {
+  toggleSolo(routingPath: OmpAudioRoutingInputType) {
     if (routingPath.input < 0 || routingPath.input >= this._inputsNumber) {
       throw new Error('Invalid routing path');
     }
 
-    const inputState = this._allInputsSoloMuteState.get(routingPath.input);
+    const inputState = this._soloMuteStatesByInput.get(routingPath.input);
     if (inputState && inputState.soloed) {
       this._unsolo(routingPath.input);
     } else {
@@ -230,23 +225,23 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
     this.emitChange();
   }
 
-  toggleMute(routingPath: Omit<OmpAudioRoutingPath, 'output'>) {
+  toggleMute(routingPath: OmpAudioRoutingInputType) {
     if (routingPath.input < 0 || routingPath.input >= this._inputsNumber) {
       throw new Error('Invalid routing path');
     }
 
-    const inputSoloedState = [...this._allInputsSoloMuteState.values()].find((inputState) => inputState.soloed);
+    const inputSoloedState = [...this._soloMuteStatesByInput.values()].find((inputState) => inputState.soloed);
     if (inputSoloedState) {
       this._unsolo(inputSoloedState.inputNumber);
 
-      const inputState = this._allInputsSoloMuteState.get(routingPath.input);
+      const inputState = this._soloMuteStatesByInput.get(routingPath.input);
       if (inputState && !inputState.muted) {
         this._mute(routingPath.input);
       }
 
       this.emitChange();
     } else {
-      const inputState = this._allInputsSoloMuteState.get(routingPath.input);
+      const inputState = this._soloMuteStatesByInput.get(routingPath.input);
       if (inputState && inputState.muted) {
         this._unmute(routingPath.input);
       } else {
@@ -291,15 +286,23 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
 
   resetInputsSoloMuteState(): void {
     [...Array(this._inputsNumber).keys()].forEach((inputNumber) => {
-      this.setInputSoloMuteState(inputNumber, {
-        inputNumber,
-        soloed: false,
-        muted: false,
-        inputSoloedConnections: [],
-        inputMutedConnections: [],
-        unsoloConnections: [],
-      });
+      this.resetInputSoloMuteState(inputNumber)
     });
+  }
+
+  protected resetInputSoloMuteState(inputNumber: number): void {
+    this.setInputSoloMuteState(inputNumber, this.createInitialSoloMuteState(inputNumber));
+  }
+
+  protected createInitialSoloMuteState(inputNumber: number): OmpAudioRouterInputSoloMuteState {
+    return {
+      inputNumber,
+      inputSoloedConnections: [],
+      inputMutedConnections: [],
+      unsoloConnections: [],
+      soloed: false,
+      muted: false,
+    }
   }
 
   setInitialRoutingConnections(connections: OmpAudioRoutingConnection[]): void {
@@ -307,6 +310,7 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
       console.error("Initial routing connections length doesn't match router's inputs and outputs number");
     } else {
       this._initialRoutingConnections = connections;
+      this.emitChange();
     }
   }
 
@@ -391,7 +395,7 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
   }
 
   protected _solo(inputNumber: number) {
-    const inputSoloedState = [...this._allInputsSoloMuteState.values()].find((inputState) => inputState.soloed);
+    const inputSoloedState = [...this._soloMuteStatesByInput.values()].find((inputState) => inputState.soloed);
     if (inputSoloedState) {
       this._unsolo(inputSoloedState.inputNumber, false);
     }
@@ -399,7 +403,7 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
     let routingConnections = this.getRoutingConnections();
     let inputSoloedConnections = routingConnections[inputNumber];
     if (!inputSoloedConnections.filter((connection) => connection.connected).length) {
-      const inputState = this._allInputsSoloMuteState.get(inputNumber);
+      const inputState = this._soloMuteStatesByInput.get(inputNumber);
       if (inputState && inputState.inputMutedConnections?.length) {
         inputSoloedConnections = inputState.inputMutedConnections;
       } else {
@@ -427,7 +431,7 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
       }
     });
 
-    this._allInputsSoloMuteState.forEach((inputState) => {
+    this._soloMuteStatesByInput.forEach((inputState) => {
       if (inputState.muted) {
         if (inputState.inputNumber === inputNumber) {
           inputState.inputMutedConnections = [];
@@ -436,7 +440,7 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
           inputState.muted = false;
         }
 
-        this._lastInputSoloMuteState = inputState;
+        this._lastChangedSoloMuteStateInput = inputState.inputNumber;
         this.emitInputSoloMute();
       }
     });
@@ -444,7 +448,7 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
     this.setInputSoloMuteState(inputNumber, {
       inputNumber,
       inputSoloedConnections,
-      inputMutedConnections: this._allInputsSoloMuteState.get(inputNumber)?.inputMutedConnections ?? [],
+      inputMutedConnections: this._soloMuteStatesByInput.get(inputNumber)?.inputMutedConnections ?? [],
       unsoloConnections: routingConnections.filter((_, index) => index !== inputNumber).flatMap((p) => [...p.values()]),
       soloed: true,
       muted: false,
@@ -452,7 +456,7 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
   }
 
   protected _unsolo(inputNumber: number, checkMute = true) {
-    const inputState = this._allInputsSoloMuteState.get(inputNumber)!;
+    const inputState = this._soloMuteStatesByInput.get(inputNumber)!;
     if (inputState.unsoloConnections.length) {
       inputState.unsoloConnections.forEach((connection) => {
         this._updateConnection(connection, false);
@@ -475,18 +479,11 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
       });
     }
 
-    this.setInputSoloMuteState(inputNumber, {
-      inputNumber,
-      inputSoloedConnections: [],
-      inputMutedConnections: [],
-      unsoloConnections: [],
-      soloed: false,
-      muted: false,
-    });
+    this.resetInputSoloMuteState(inputNumber)
   }
 
   protected _mute(inputNumber: number) {
-    const inputState = this._allInputsSoloMuteState.get(inputNumber);
+    const inputState = this._soloMuteStatesByInput.get(inputNumber);
     const routingConnections = this.getRoutingConnections();
     let inputMutedConnections: OmpAudioRoutingConnection[];
     if (inputState && inputState.inputMutedConnections.length) {
@@ -509,17 +506,14 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
     });
 
     this.setInputSoloMuteState(inputNumber, {
-      inputNumber,
-      inputSoloedConnections: [],
+      ...this.createInitialSoloMuteState(inputNumber),
       inputMutedConnections,
-      unsoloConnections: [],
-      soloed: false,
-      muted: true,
+      muted: true
     });
   }
 
   protected _unmute(inputNumber: number) {
-    const inputState = this._allInputsSoloMuteState.get(inputNumber);
+    const inputState = this._soloMuteStatesByInput.get(inputNumber);
     if (inputState && inputState.inputMutedConnections.length) {
       inputState.inputMutedConnections.forEach((connection) => {
         this._updateConnection(connection, false);
@@ -537,33 +531,18 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
       }
     }
 
-    this.setInputSoloMuteState(inputNumber, {
-      inputNumber,
-      inputSoloedConnections: [],
-      inputMutedConnections: [],
-      unsoloConnections: [],
-      soloed: false,
-      muted: false,
-    });
+    this.resetInputSoloMuteState(inputNumber)
   }
 
   protected _updateInputsSoloMuteState() {
     const routingConnections = this.getRoutingConnections();
-    let inputSoloedState = [...this._allInputsSoloMuteState.values()].find((inputState) => inputState.soloed);
+    let inputSoloedState = [...this._soloMuteStatesByInput.values()].find((inputState) => inputState.soloed);
 
     if (inputSoloedState) {
       for (let inputNumber = 0; inputNumber < routingConnections.length; inputNumber++) {
         const filteredConnections = routingConnections[inputNumber].filter((connection) => connection.connected);
         if ((inputSoloedState.inputNumber === inputNumber && !filteredConnections.length) || (inputSoloedState.inputNumber !== inputNumber && filteredConnections.length)) {
-          this.setInputSoloMuteState(inputSoloedState.inputNumber, {
-            inputNumber: inputSoloedState.inputNumber,
-            inputSoloedConnections: [],
-            inputMutedConnections: [],
-            unsoloConnections: [],
-            soloed: false,
-            muted: false,
-          });
-
+          this.resetInputSoloMuteState(inputSoloedState.inputNumber)
           inputSoloedState = void 0;
           break;
         }
@@ -572,32 +551,22 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
 
     routingConnections.forEach((connections, inputNumber) => {
       const filteredConnections = connections.filter((connection) => connection.connected);
-      const inputState = this._allInputsSoloMuteState.get(inputNumber);
+      const inputState = this._soloMuteStatesByInput.get(inputNumber);
       if (!filteredConnections.length && inputState && !inputState.muted && !inputSoloedState) {
         this.setInputSoloMuteState(inputState.inputNumber, {
-          inputNumber: inputState.inputNumber,
-          inputSoloedConnections: [],
+          ...this.createInitialSoloMuteState(inputState.inputNumber),
           inputMutedConnections: inputState.inputMutedConnections,
-          unsoloConnections: [],
-          soloed: false,
           muted: true,
         });
       } else if (filteredConnections.length && inputState && inputState.muted) {
-        this.setInputSoloMuteState(inputState.inputNumber, {
-          inputNumber: inputState.inputNumber,
-          inputSoloedConnections: [],
-          inputMutedConnections: [],
-          unsoloConnections: [],
-          soloed: false,
-          muted: false,
-        });
+        this.resetInputSoloMuteState(inputState.inputNumber)
       }
     });
   }
 
   private setInputSoloMuteState(inputNumber: number, state: OmpAudioRouterInputSoloMuteState) {
-    this._lastInputSoloMuteState = state;
-    this._allInputsSoloMuteState.set(inputNumber, state);
+    this._lastChangedSoloMuteStateInput = inputNumber;
+    this._soloMuteStatesByInput.set(inputNumber, state);
     this.emitInputSoloMute();
   }
 
@@ -713,6 +682,9 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
 
       this._connectionsByInputOutput.clear();
       this._effectsGraphsByInputOutput.clear();
+
+      this._lastChangedSoloMuteStateInput = void 0;
+      this._soloMuteStatesByInput.clear();
 
       [...this._effectsGraphsByInputOutput.values()].forEach((byOutput) => [...byOutput.values()].forEach((effect) => effect?.destroy()));
     } catch (e) {

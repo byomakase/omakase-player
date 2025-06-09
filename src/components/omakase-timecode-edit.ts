@@ -114,7 +114,7 @@ export class OmakaseTimecodeEdit extends HTMLElement {
     try {
       return TimecodeUtil.parseTimecodeToFrame(this.timecode, new Decimal(this.frameRate), this._ffom);
     } catch (e) {
-      console.log(e);
+      console.debug(e);
       return undefined;
     }
   }

@@ -166,7 +166,9 @@ export class TimelineDomController implements Destroyable {
   }
 
   private timecodeDblClickHandler() {
-    this.openTimecodeEdit();
+    if (!this._timecodeEdit) {
+      this.openTimecodeEdit();
+    }
   }
 
   private timecodeBlurHandler() {
