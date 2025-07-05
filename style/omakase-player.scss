@@ -39,6 +39,7 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
     display: block;
     position: relative;
     width: 700px;
+    aspect-ratio: 16/9;
 
     .omakase-video {
       display: block;
@@ -422,10 +423,136 @@ media-controller {
 
   * {
     box-shadow: none;
+    user-select: none;
   }
 
   omakase-time-range {
     width: 100%;
+  }
+
+  omakase-marker-track {
+    --marker-track-border-size-default: 1px;
+    --marker-track-border-color-default: #525252;
+
+    display: flex;
+    width: 100%;
+    height: var(--time-range-height, var(--time-range-height-default));
+
+    border-bottom: var(--marker-track-border-size, var(--marker-track-border-size-default)) solid var(--marker-track-border-color, var(--marker-track-border-color-default));
+
+    &:first-child {
+      border-top: var(--marker-track-border-top-size, var(--marker-track-border-size, var(--marker-track-border-size-default))) solid
+        var(--marker-track-border-top-color, var(--marker-track-border-color, var(--marker-track-border-color-default)));
+    }
+
+    &:last-child {
+      border-bottom: var(--marker-track-border-bottom-size, var(--marker-track-border-size, var(--marker-track-border-size-default))) solid
+        var(--marker-track-border-bottom-color, var(--marker-track-border-color, var(--marker-track-border-color-default)));
+    }
+
+    .omakase-marker-track-container {
+      margin: 0 10px;
+      width: 100%;
+      position: relative;
+    }
+
+    .omakase-moment-marker {
+      position: absolute;
+      top: 0;
+      cursor: pointer;
+
+      .omakase-moment-marker-circle {
+        position: absolute;
+        border-radius: 100%;
+      }
+
+      .omakase-moment-marker-line {
+        position: absolute;
+        width: 1px;
+        left: -0.5px;
+        top: 0;
+        opacity: 0.5;
+      }
+
+      .omakase-moment-marker-selected-area {
+        position: absolute;
+        width: 5px;
+        left: -2.5px;
+        top: 0;
+        opacity: 0;
+      }
+
+      &.active-marker {
+        .omakase-moment-marker-line {
+          position: absolute;
+          width: 2px;
+          left: -1px;
+        }
+        .omakase-moment-marker-selected-area {
+          opacity: 0.4;
+        }
+      }
+
+      &.focused-marker {
+        z-index: 1;
+      }
+    }
+
+    .omakase-period-marker {
+      position: absolute;
+      top: 0;
+
+      .omakase-period-marker-rectangle {
+        position: absolute;
+        cursor: pointer;
+        width: 100%;
+        left: 0;
+        opacity: 0.7;
+      }
+
+      &.readonly-marker {
+        .omakase-period-marker-start-line,
+        .omakase-period-marker-end-line {
+          pointer-events: none;
+        }
+      }
+
+      .omakase-period-marker-start-line,
+      .omakase-period-marker-end-line {
+        position: absolute;
+        background-clip: content-box;
+        cursor: ew-resize;
+        width: 1px;
+        padding: 0 3px;
+        top: 0;
+        opacity: 0.5;
+      }
+
+      .omakase-period-marker-start-line {
+        left: -3.5px;
+      }
+
+      .omakase-period-marker-end-line {
+        right: -3.5px;
+      }
+
+      .omakase-period-marker-selected-area {
+        position: absolute;
+        pointer-events: none;
+        width: 100%;
+        opacity: 0;
+      }
+
+      &.active-marker {
+        .omakase-period-marker-selected-area {
+          opacity: 0.4;
+        }
+      }
+
+      &.focused-marker {
+        z-index: 1;
+      }
+    }
   }
 
   .omakase-overlay-buttons {
@@ -631,7 +758,6 @@ media-controller {
   }
 
   .upper-control-bar {
-    padding: 0 var(--padding-size, var(--padding-size-default));
     position: relative;
 
     omakase-time-range {
@@ -1248,6 +1374,13 @@ omakase-audio-router {
         }
         &:last-child {
           padding-right: 10px;
+        }
+
+        &.router-visualization-label {
+          max-width: 200px;
+          text-overflow: ellipsis;
+          overflow: hidden;
+          white-space: nowrap;
         }
       }
 

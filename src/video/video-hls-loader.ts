@@ -17,12 +17,10 @@
 import {catchError, filter, first, forkJoin, from, fromEvent, map, Observable, Subject, take, takeUntil, timeout, timer} from 'rxjs';
 import {Video, VideoLoadOptions} from './model';
 import {BaseVideoLoader} from './video-loader';
-import Hls, {AudioTracksUpdatedData, AudioTrackSwitchingData, ErrorData, Events as HlsEvents, FragLoadedData, FragLoadingData, HlsConfig, ManifestParsedData, MediaAttachedData, MediaKeySessionContext, MediaPlaylist} from 'hls.js';
+import Hls, {AudioTracksUpdatedData, AudioTrackSwitchingData, ErrorData, ErrorDetails, Events as HlsEvents, FragLoadedData, FragLoadingData, HlsConfig, ManifestParsedData, MediaAttachedData, MediaKeySessionContext, MediaPlaylist} from 'hls.js';
 import {errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {AuthConfig} from '../auth/auth-config';
-import {BasicAuthenticationData, BearerAuthenticationData, CustomAuthenticationData} from '../authentication/model';
 import {isNullOrUndefined} from '../util/object-util';
-import {HTMLVideoElementEventKeys} from './video-controller';
 import {z} from 'zod';
 import {FrameRateUtil} from '../util/frame-rate-util';
 import {OmpAudioTrack, OmpAudioTrackCreateType, OmpError, OmpHlsNamedEvent, OmpNamedEventEventName, SubtitlesVttTrack} from '../types';
@@ -33,10 +31,11 @@ import {VideoControllerApi} from './video-controller-api';
 import {M3u8Util} from '../m3u8/m3u8-util';
 import {UrlUtil} from '../util/url-util';
 import {AudioGroup} from '../m3u8/m3u8.model';
-import {httpGet} from '../http';
+import {formatAuthenticationHeaders, httpGet} from '../http';
 import {BlobUtil} from '../util/blob-util';
 import {AudioUtil} from '../util/audio-util';
 import {M3u8File} from '../m3u8/m3u8-file';
+import {HTMLVideoElementEvents} from '../dom/html-element';
 
 export type HlsLicenseXhrSetupFn = (xhr: XMLHttpRequest, url: string, keyContext: MediaKeySessionContext, licenseChallenge: Uint8Array) => void | Uint8Array | Promise<Uint8Array | void>;
 
@@ -130,7 +129,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
 
       let getOmpAudioTracks: () => OmpAudioTrack[] = () => {
         return this._hls!.audioTracks.map((mediaPlaylist) => this.mapToOmpAudioTrack(mediaPlaylist));
-      }
+      };
 
       let handleHlsAudioTracksUpdated = () => {
         let ompAudioTracks = getOmpAudioTracks();
@@ -159,14 +158,13 @@ export class VideoHlsLoader extends BaseVideoLoader {
                 hlsAudioTrackRevertToDefaultActive = true;
                 hlsAudioTrackForPreload = void 0;
 
-
                 // preload track
                 this.setActiveHlsAudioTrack(defaultAudioTrack!.id)
                   .pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$))
                   .subscribe(() => {
                     let hlsActiveAudioTrack = getHlsActiveAudioTrack();
 
-                    if (hlsActiveAudioTrack && (hlsActiveAudioTrack.id === defaultAudioTrack!.id)) {
+                    if (hlsActiveAudioTrack && hlsActiveAudioTrack.id === defaultAudioTrack!.id) {
                       hlsAudioTrackRevertToDefaultActive = false;
 
                       // emit previously skipped onAudioLoaded$ event
@@ -181,7 +179,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
                     } else {
                       console.error(`Could not revert to default track: ${defaultAudioTrack!.id}`);
 
-                      throw new OmpError(`Could not revert to default track`)
+                      throw new OmpError(`Could not revert to default track`);
                     }
 
                     //
@@ -209,7 +207,6 @@ export class VideoHlsLoader extends BaseVideoLoader {
                     //     });
                     // });
                   });
-
               });
             } else {
               this.onAudioSwitched$.next({
@@ -252,32 +249,29 @@ export class VideoHlsLoader extends BaseVideoLoader {
 
       if (AuthConfig.authentication) {
         this._hls.config.xhrSetup = (xhr: XMLHttpRequest, url: string) => {
-          if (AuthConfig.authentication!.type === 'basic') {
-            const token = btoa(`${(AuthConfig.authentication as BasicAuthenticationData)!.username}:${(AuthConfig.authentication as BasicAuthenticationData)!.password}`);
-            xhr.setRequestHeader('Authorization', `Basic ${token}`);
-          } else if (AuthConfig.authentication!.type === 'bearer') {
-            xhr.setRequestHeader('Authorization', `Bearer ${(AuthConfig.authentication as BearerAuthenticationData)!.token}`);
-          } else {
-            const authenticationData = (AuthConfig.authentication as CustomAuthenticationData)!.headers(url);
-            for (const header in authenticationData.headers) {
-              xhr.setRequestHeader(header, authenticationData.headers[header]);
-            }
+          const headers = formatAuthenticationHeaders(url)!;
+          for (const header in headers) {
+            xhr.setRequestHeader(header, headers[header]);
           }
         };
       }
 
       this._hls.on(HlsEvents.ERROR, function (event, data) {
-        let errorType = data.type;
-        let errorDetails = data.details;
-        let errorFatal = data.fatal;
+        let message = `Hls error occurred; details: ${data.details}, fatal: ${data.fatal}, message: ${data.error?.message}`
 
-        /**
-         * Temporarily excluding audioTrackLoadError from error handler.
-         * This error propagation is causing that HLS streams, with audio group defined but without audio tracks,
-         * are not to be playable by OmakasePlayer
-         */
-        if (!errorDetails.includes('audioTrackLoadError')) {
-          errorCompleteObserver(observer, `Error loading video. Hls error details: ${errorDetails}`);
+        if (data.fatal) {
+          /**
+           * Temporarily excluding audioTrackLoadError from error handler.
+           * This error propagation is causing that HLS streams, with audio group defined but without audio tracks,
+           * are not to be playable by OmakasePlayer
+           */
+          if (!data.details.includes(ErrorDetails.AUDIO_TRACK_LOAD_ERROR)) {
+            console.debug(`Hls fatal error "${data.details}" ignored intentionally.`)
+          } else {
+            errorCompleteObserver(observer, `Error loading video. ${message}`);
+          }
+        } else {
+          console.debug(message)
         }
       });
 
@@ -365,8 +359,8 @@ export class VideoHlsLoader extends BaseVideoLoader {
         });
       });
 
-      let videoLoadedData$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEventKeys.LOADEDDATA).pipe(first());
-      let videoLoadedMetadata$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEventKeys.LOADEDMETEDATA).pipe(first());
+      let videoLoadedData$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEvents.LOADEDDATA).pipe(first());
+      let videoLoadedMetadata$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEvents.LOADEDMETEDATA).pipe(first());
 
       forkJoin([hlsMediaAttached$, hlsManifestParsed$, hlsFragParsingInitSegment$, videoLoadedData$, videoLoadedMetadata$, frameRate$])
         .pipe(first())
@@ -379,13 +373,13 @@ export class VideoHlsLoader extends BaseVideoLoader {
             duration = this._videoController.getHTMLVideoElement().duration;
           }
 
-          let dropFrame = options && options.dropFrame !== void 0 ? options.dropFrame : false;
-
           if (!frameRate) {
             throw new Error('Frame rate could not be determined');
           }
 
-          let initSegmentTimeOffset = (hasInitSegment && !isDrm) ? FrameRateUtil.frameNumberToTime(2, frameRate) : void 0; // TODO resolve time offset dynamically
+          let dropFrame = options && options.dropFrame !== void 0 ? options.dropFrame : FrameRateUtil.resolveDropFrameFromFramerate(frameRate);
+
+          let initSegmentTimeOffset = hasInitSegment && !isDrm ? FrameRateUtil.frameNumberToTime(2, frameRate) : void 0; // TODO resolve time offset dynamically
 
           let video: Video = {
             protocol: 'hls',

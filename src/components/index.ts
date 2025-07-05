@@ -8,6 +8,8 @@ import {OmakaseDropdownOption} from './omakase-dropdown-option';
 import {OmakaseVolumeRange} from './omakase-volume-range';
 import {OmakaseMuteButton} from './omakase-mute-button';
 import {OmakaseDropdownList} from './omakase-dropdown-list';
+import {OmakaseMarkerTrack} from './omakase-marker-track';
+import {OmakaseMarkerBar} from './omakase-marker-bar';
 
 if (!globalThis.customElements.get('omakase-time-range')) {
   globalThis.customElements.define('omakase-time-range', OmakaseTimeRange);
@@ -49,4 +51,12 @@ if (!globalThis.customElements.get('omakase-dropdown-option')) {
   globalThis.customElements.define('omakase-dropdown-option', OmakaseDropdownOption);
 }
 
-export {OmakaseTimeRange, OmakaseTimeDisplay, OmakasePreviewThumbnail, OmakaseTimecodeEdit};
+if (!globalThis.customElements.get('omakase-marker-track')) {
+  globalThis.customElements.define('omakase-marker-track', OmakaseMarkerTrack);
+}
+
+if (!globalThis.customElements.get('omakase-marker-bar')) {
+  globalThis.customElements.define('omakase-marker-bar', OmakaseMarkerBar);
+}
+
+export {OmakaseTimeRange, OmakaseTimeDisplay, OmakasePreviewThumbnail, OmakaseTimecodeEdit, OmakaseMarkerTrack, OmakaseMarkerBar};

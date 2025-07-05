@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-import {first, forkJoin, fromEvent, Observable, Subject, take, takeUntil} from 'rxjs';
+import {combineLatest, first, fromEvent, Observable, Subject, take, takeUntil} from 'rxjs';
 import {Video, VideoLoadOptions} from './model';
 import {BaseVideoLoader} from './video-loader';
 import {errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
-import {HTMLVideoElementEventKeys} from './video-controller';
 import {z} from 'zod';
 import {VideoControllerApi} from './video-controller-api';
 import {FrameRateUtil} from '../util/frame-rate-util';
@@ -28,14 +27,18 @@ import {CryptoUtil} from '../util/crypto-util';
 import {AudioUtil} from '../util/audio-util';
 import {AuthConfig} from '../auth/auth-config';
 import {BlobUtil} from '../util/blob-util';
+import {MediaInfoUtil} from '../mediainfo';
+import {AudioTrack, MediaInfoResult} from 'mediainfo.js';
+import {HTMLVideoElementEvents} from '../dom/html-element';
 
 export class VideoNativeLoader extends BaseVideoLoader {
+  private static audioLabelDefault = 'Default';
+
   protected _audioTracks: Map<string, OmpAudioTrack> = new Map<string, OmpAudioTrack>();
   protected _activeAudioTrack: OmpAudioTrack | undefined;
 
   constructor(videoController: VideoControllerApi) {
     super(videoController);
-
     console.debug('video load with native');
   }
 
@@ -47,14 +50,19 @@ export class VideoNativeLoader extends BaseVideoLoader {
       this._videoController.getHTMLVideoElement().src = '';
       this._videoController.getHTMLVideoElement().load();
 
-      let videoLoadedData$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEventKeys.LOADEDDATA).pipe(first());
-      let videoLoadedMetadata$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEventKeys.LOADEDMETEDATA).pipe(first());
-      let videoLoadError$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEventKeys.ERROR).pipe(take(1));
+      let videoLoadedData$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEvents.LOADEDDATA).pipe(first());
+      let videoLoadedMetadata$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEvents.LOADEDMETEDATA).pipe(first());
+      let videoLoadError$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEvents.ERROR).pipe(take(1));
+      let mediaInfo$ = new Subject<MediaInfoResult>();
 
-      forkJoin([videoLoadedData$, videoLoadedMetadata$])
-        .pipe(takeUntil(this._destroyed$))
-        .pipe(take(1))
-        .subscribe((result) => {
+      let videoLoad$ = combineLatest([videoLoadedData$, videoLoadedMetadata$, mediaInfo$]).pipe(takeUntil(this._destroyed$)).pipe(take(1));
+
+      let audioLoad$ = combineLatest([videoLoad$, mediaInfo$]).pipe(takeUntil(this._destroyed$)).pipe(take(1));
+
+      let subtitlesLoad$ = combineLatest([videoLoad$]).pipe(takeUntil(this._destroyed$)).pipe(take(1));
+
+      videoLoad$
+        .subscribe(([videoLoadedData, videoLoadedMetadata, mediaInfoResult]) => {
           let duration: number;
           if (options && options.duration !== void 0) {
             duration = z.coerce.number().parse(options.duration);
@@ -63,15 +71,14 @@ export class VideoNativeLoader extends BaseVideoLoader {
             duration = this._videoController.getHTMLVideoElement().duration;
           }
 
-          let dropFrame = options && options.dropFrame !== void 0 ? options.dropFrame : false;
-
           let isAudioOnly = FileUtil.isAudioFile(sourceUrl);
 
-          const frameRate = FrameRateUtil.resolveFrameRate(options?.frameRate);
-
+          const frameRate = options?.frameRate ? FrameRateUtil.resolveFrameRate(options.frameRate) : FrameRateUtil.resolveFrameRate(MediaInfoUtil.findFrameRate(mediaInfoResult));
           if (!frameRate) {
-            throw new Error('Frame rate must be provided');
+            throw new Error('Frame rate could not be determined');
           }
+
+          let dropFrame = options && options.dropFrame !== void 0 ? options.dropFrame : FrameRateUtil.resolveDropFrameFromFramerate(frameRate);
 
           let video: Video = {
             protocol: 'native',
@@ -95,32 +102,46 @@ export class VideoNativeLoader extends BaseVideoLoader {
         errorCompleteObserver(observer, error);
       });
 
+      audioLoad$.subscribe(([videoLoadResult, mediaInfoResult]) => {
+        let channelCount = (mediaInfoResult.media?.track.find((p) => p['@type'] === 'Audio') as AudioTrack | undefined)?.Channels;
+
+        let audioTrack: OmpAudioTrack = {
+          id: `${CryptoUtil.uuid()}`,
+          src: sourceUrl,
+          embedded: true,
+          active: true,
+          language: VideoNativeLoader.audioLabelDefault,
+          label: VideoNativeLoader.audioLabelDefault,
+          channelCount: channelCount,
+        };
+
+        this._audioTracks.set(audioTrack.id, audioTrack);
+        this._activeAudioTrack = audioTrack;
+
+        // assuming interleaved audio
+        this.onAudioLoaded$.next({
+          audioTracks: [...this._audioTracks.values()],
+          activeAudioTrack: this._activeAudioTrack,
+        });
+      });
+
+      audioLoad$.subscribe(([videoLoadResult]) => {
+        // assuming no embedded subtitles
+        this.onSubtitlesLoaded$.next({
+          tracks: [],
+          currentTrack: void 0,
+        });
+      });
+
+      // fetch media info
+      MediaInfoUtil.analyze(sourceUrl).subscribe({
+        next: (mediaInfoResult) => {
+          nextCompleteSubject(mediaInfo$, mediaInfoResult);
+        },
+      });
+
       this._videoController.getHTMLVideoElement().src = sourceUrl;
       this._videoController.getHTMLVideoElement().load();
-
-      // assuming no embedded subtitles
-      this.onSubtitlesLoaded$.next({
-        tracks: [],
-        currentTrack: void 0,
-      });
-
-      let audioTrack: OmpAudioTrack = {
-        id: `${CryptoUtil.uuid()}`,
-        src: sourceUrl,
-        embedded: true,
-        active: true,
-        channelCount: void 0,
-        language: 'default',
-        label: 'default',
-      };
-      this._audioTracks.set(audioTrack.id, audioTrack);
-      this._activeAudioTrack = audioTrack;
-
-      // assuming interleaved audio
-      this.onAudioLoaded$.next({
-        audioTracks: [...this._audioTracks.values()],
-        activeAudioTrack: this._activeAudioTrack,
-      });
     });
   }
 
@@ -145,8 +166,8 @@ export class VideoNativeLoader extends BaseVideoLoader {
           next: (audioArrayBuffer) => {
             let audioTrack: OmpAudioTrackCreateType = {
               src: BlobUtil.createBlobURL([audioArrayBuffer]),
-              language: 'default',
-              label: 'default',
+              language: VideoNativeLoader.audioLabelDefault,
+              label: VideoNativeLoader.audioLabelDefault,
             };
             nextCompleteObserver(observer, audioTrack);
           },

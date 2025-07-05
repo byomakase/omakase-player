@@ -65,6 +65,8 @@ let omakasePlayer = new omakase.OmakasePlayer({
 });
 ```
 
+More information about Player Chroming customization is available in [Player Chroming](docs/player-chroming/README.md) manual.
+
 ## Video API
 
 Complete list of Video API methods is available in API Reference Docs

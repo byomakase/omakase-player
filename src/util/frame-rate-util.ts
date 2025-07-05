@@ -43,11 +43,27 @@ const initFrameRates: {fraction: string; dropFramesOnMinute?: number}[] = [
   },
 ];
 
+const initDropFrames: {frameRateFraction: string; dropFrameEnabled: boolean}[] = [
+  {
+    frameRateFraction: '24000/1001',
+    dropFrameEnabled: false,
+  },
+  {
+    frameRateFraction: '30000/1001',
+    dropFrameEnabled: true,
+  },
+  {
+    frameRateFraction: '60000/1001',
+    dropFrameEnabled: false,
+  },
+];
+
 export class FrameRateUtil {
   static AUDIO_FRAME_RATE = 100;
 
   private static frameRateModels: FrameRateModel[];
   private static frameRateModelByValue: Map<number, FrameRateModel> = new Map<number, FrameRateModel>();
+  private static dropFrameByFramerate: Map<number, boolean> = new Map<number, boolean>();
 
   static {
     this.frameRateModels = initFrameRates.map((fractionFrameRate) => {
@@ -61,6 +77,10 @@ export class FrameRateUtil {
 
     this.frameRateModels.forEach((frameRateModel) => {
       this.frameRateModelByValue.set(frameRateModel.value, frameRateModel);
+    });
+
+    initDropFrames.forEach((dropFrame) => {
+      this.dropFrameByFramerate.set(this.resolveFrameRateValueFromFraction(dropFrame.frameRateFraction), dropFrame.dropFrameEnabled);
     });
   }
 
@@ -189,5 +209,10 @@ export class FrameRateUtil {
 
   static isFrameRateFractional(frameRate: number): boolean {
     return Number.isInteger(frameRate);
+  }
+
+  static resolveDropFrameFromFramerate(frameRate: number): boolean {
+    let dropFrame = this.dropFrameByFramerate.get(frameRate);
+    return dropFrame ?? false;
   }
 }

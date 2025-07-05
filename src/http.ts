@@ -15,7 +15,30 @@
  */
 
 import axios, {AxiosRequestConfig, AxiosResponse} from 'axios';
+import {AuthConfig} from './auth/auth-config';
+import {BasicAuthenticationData, BearerAuthenticationData, CustomAuthenticationData} from './authentication/model';
 
 export function httpGet<T>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
   return axios.get<T>(url, config);
+}
+
+export function formatAuthenticationHeaders(url: string): {[p: string]: string} | undefined {
+  let headers: {[p: string]: string} | undefined = void 0;
+  if (AuthConfig.authentication) {
+    if (AuthConfig.authentication.type === 'basic') {
+      const token = btoa(`${(AuthConfig.authentication as BasicAuthenticationData).username}:${(AuthConfig.authentication as BasicAuthenticationData)!.password}`);
+      headers = {
+        Authorization: `Basic ${token}`,
+      };
+    } else if (AuthConfig.authentication.type === 'bearer') {
+      headers = {
+        Authorization: `Bearer ${(AuthConfig.authentication as BearerAuthenticationData).token}`,
+      };
+    } else {
+      const authenticationData = (AuthConfig.authentication as CustomAuthenticationData).headers(url);
+      headers = authenticationData.headers;
+    }
+  }
+
+  return headers;
 }

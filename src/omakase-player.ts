@@ -42,6 +42,8 @@ import {OmpHlsConfig} from './video/video-hls-loader';
 import {RouterVisualization, RouterVisualizationConfig} from './router-visualization/router-visualization';
 import {RouterVisualizationApi} from './api/router-visualization-api';
 import {removeEmptyValues} from './util/object-util';
+import {MarkerTrackApi} from './api/marker-track-api';
+import {MarkerTrackConfig} from './video/model';
 
 export interface MediaChromeConfig {
   /**
@@ -266,6 +268,25 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
         // timeout is here to make sure the marker list element is created in the dom
         setTimeout(() => {
           o$.next(markerList);
+          o$.complete();
+        });
+      }
+    });
+  }
+
+  createMarkerTrack(config: MarkerTrackConfig): Observable<MarkerTrackApi> {
+    return new Observable<MarkerTrackApi>((o$) => {
+      const markerTrack = this._videoDomController.createMarkerTrack(config);
+
+      if (config.vttUrl) {
+        markerTrack.onVttLoaded$.pipe(takeUntil(this._destroyed$)).subscribe(() => {
+          o$.next(markerTrack);
+          o$.complete();
+        });
+      } else {
+        // timeout is here to make sure the marker track element is created in the dom
+        setTimeout(() => {
+          o$.next(markerTrack);
           o$.complete();
         });
       }

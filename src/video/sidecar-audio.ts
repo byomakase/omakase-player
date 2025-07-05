@@ -63,7 +63,7 @@ export class OmpSidecarAudio implements SidecarAudioApi, Destroyable {
 
     this._audioInputIfNode = audioContext.createGain();
     this._audioInputIfNode.channelCountMode = 'max';
-    this._audioInputIfNode.channelCount = this._audioBuffer.numberOfChannels;
+    this._audioInputIfNode.channelCount = this.getChannelCount();
 
     this._audioInputIfNode.connect(audioOutputNode);
 
@@ -88,7 +88,7 @@ export class OmpSidecarAudio implements SidecarAudioApi, Destroyable {
       return this._audioRouter;
     } else {
       if (isNullOrUndefined(inputsNumber)) {
-        inputsNumber = this._audioBuffer.numberOfChannels;
+        inputsNumber = this.getChannelCount();
       }
 
       if (isNullOrUndefined(outputsNumber)) {
@@ -409,12 +409,16 @@ export class OmpSidecarAudio implements SidecarAudioApi, Destroyable {
     this.emitStateChange();
   }
 
+  protected getChannelCount(): number {
+    return this._audioTrack.channelCount ? this._audioTrack.channelCount : this._audioBuffer.numberOfChannels
+  }
+
   getSidecarAudioState(): OmpSidecarAudioState {
     return {
       audioTrack: this._audioTrack,
       audioRouterState: this.audioRouter?.getAudioRouterState(),
       audioPeakProcessorState: this.audioPeakProcessor?.getAudioPeakProcessorState(),
-      numberOfChannels: this._audioBuffer.numberOfChannels,
+      numberOfChannels: this.getChannelCount(),
       volume: this.getVolume(),
       muted: this.isMuted(),
     };

@@ -79,7 +79,7 @@ export class RouterVisualization implements Destroyable, RouterVisualizationApi 
     }
     if (this._config.mainTrack) {
       this._routerVisualizationComponent.mainTrack = {
-        track: this._config.mainTrack,
+        track: this.prepareTrack(this._config.mainTrack),
         defaultMatrix: this._config.defaultMatrix,
       };
     }
@@ -97,24 +97,19 @@ export class RouterVisualization implements Destroyable, RouterVisualizationApi 
   }
 
   updateMainTrack(track: RouterVisualizationTrackUpdate) {
-    let channelCount = this._videoController.getActiveAudioTrack()?.channelCount;
-
     if (this._routerVisualizationComponent.mainTrack?.track) {
       this._routerVisualizationComponent.mainTrack = {
-        track: channelCount
-          ? {
-              ...this._routerVisualizationComponent.mainTrack.track,
-              ...track,
-              inputNumber: channelCount,
-            }
-          : {
-              ...this._routerVisualizationComponent.mainTrack.track,
-              ...track,
-            },
+        track: this.prepareTrack({...this._routerVisualizationComponent.mainTrack.track, ...track}),
       };
     } else {
       throw Error('Main track is not defined');
     }
+  }
+
+  private prepareTrack(track: RouterVisualizationTrack): RouterVisualizationTrack {
+    let channelCount = this._videoController.getActiveAudioTrack()?.channelCount;
+
+    return channelCount ? {...track, inputNumber: channelCount} : track;
   }
 
   updateSize(size: RouterVisualizationSize): void {

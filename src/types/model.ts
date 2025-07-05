@@ -34,3 +34,25 @@ export interface HelpMenuItem {
   name: string;
   description: string;
 }
+
+export interface ComponentVisibility {
+  /**
+   * Is component visible
+   */
+  isVisible(): boolean;
+
+  /**
+   * Toggles component visibility
+   */
+  toggleVisibility(): void;
+
+  /**
+   * Hides component
+   */
+  hide(): void;
+
+  /**
+   * Shows component
+   */
+  show(): void;
+}

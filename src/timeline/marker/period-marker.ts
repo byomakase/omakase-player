@@ -359,9 +359,11 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
     if (this.editable) {
       this._timeObservation = value;
 
-      this.initStartMarkerHandle();
-      this.initEndMarkerHandle();
-      this.initSelectedAreaRect();
+      if (this._timeline) {
+        this.initStartMarkerHandle();
+        this.initEndMarkerHandle();
+        this.initSelectedAreaRect();
+      }
 
       this.onObservationChange();
     }

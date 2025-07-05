@@ -50,6 +50,7 @@ export class OmakaseDropdownList extends HTMLElement {
 
   setOptions(options: OmakaseDropdownListItem[]) {
     this._list!.innerHTML = '';
+    this.selectedOption$.next(undefined);
     options.forEach((option) => {
       const optionElement = document.createElement('omakase-dropdown-option') as OmakaseDropdownOption;
       optionElement.classList.add(`omakase-dropdown-option-${this.type}`);

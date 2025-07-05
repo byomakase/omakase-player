@@ -701,18 +701,12 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
       });
     });
 
-    let hideScrubber = () => {
-      this._scrubber.style = {
-        visible: false,
-      };
-    };
-
     this._konvaStage.on('mouseleave', (event) => {
-      hideScrubber();
+      this.hideScrubber();
     });
 
     this._timecodedContainer.on('mouseleave', (event) => {
-      hideScrubber();
+      this.hideScrubber();
     });
 
     this._scrubber.onMove$.pipe(takeUntil(this._destroyed$)).subscribe({
@@ -935,6 +929,12 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
 
     // here we seek to timecode because we don't want frames drift in case of drop frames
     this._videoController.seekToTimecode(timecode).subscribe();
+  }
+
+  private hideScrubber() {
+    this._scrubber.style = {
+      visible: false,
+    };
   }
 
   settleLayout(): void {
@@ -1883,11 +1883,20 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
 
     completeUnsubscribeSubjects(this.onScroll$, this.onZoom$, this.onStyleChange$);
 
-    konvaUnlistener(this._timecodedContainer, this._timecodedFloatingGroup, this._surfaceLayer_timecodedContainer, this._surfaceLayer_timecodedFloatingGroup);
+    konvaUnlistener(this._timecodedContainer, this._timecodedFloatingGroup, this._surfaceLayer_timecodedContainer, this._surfaceLayer_timecodedFloatingGroup, this._konvaStage);
 
     this.getTimelineLanes().forEach((p) => p.destroy());
 
-    destroyer(this._layoutFlexGroup, this._scrubber, this._playhead, ...this._timelineLanes, this._thumbnailHover, this._vttAdapter);
+    destroyer(
+      this._layoutFlexGroup,
+      this._scrubber,
+      this._playhead,
+      ...this._timelineLanes,
+      this._thumbnailHover,
+      this._surfaceLayer_timecodedContainer,
+      this._surfaceLayer_timecodedFloatingGroup,
+      this._vttAdapter
+    );
     destroyer(this._timelineDomController);
 
     nullifier(this._config, this._styleAdapter);

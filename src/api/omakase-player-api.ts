@@ -29,6 +29,8 @@ import {ConfigWithOptionalStyle} from '../layout';
 import {AuthenticationData} from '../authentication/model';
 import {RouterVisualizationConfig} from '../router-visualization/router-visualization';
 import {RouterVisualizationApi} from './router-visualization-api';
+import {MarkerTrackApi} from './marker-track-api';
+import {MarkerTrackConfig} from '../video/model';
 
 export interface OmakasePlayerApi extends Api {
   /**
@@ -56,6 +58,12 @@ export interface OmakasePlayerApi extends Api {
    * @param config Marker List configuration
    */
   createMarkerList(config: MarkerListConfig): Observable<MarkerListApi>;
+
+  /**
+   * Creates Marker Track
+   * @param config Marker Track configuration
+   */
+  createMarkerTrack(config: MarkerTrackConfig): Observable<MarkerTrackApi>;
 
   /**
    * Initializes Router Visualization component

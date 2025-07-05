@@ -23,12 +23,12 @@ import {VideoControllerApi} from './video-controller-api';
 import {StringUtil} from '../util/string-util';
 import {nullifier} from '../util/destroy-util';
 import {DomUtil} from '../util/dom-util';
-import {VideoSafeZone} from './model';
+import {MarkerTrackConfig, VideoSafeZone} from './model';
 import {isNullOrUndefined} from '../util/object-util';
 import {CryptoUtil} from '../util/crypto-util';
 import {VideoDomControllerApi} from './video-dom-controller-api';
 import {MediaChromeButton, MediaController, MediaTooltip} from 'media-chrome';
-import {OmakasePreviewThumbnail, OmakaseTimeDisplay, OmakaseTimeRange} from '../components';
+import {OmakaseMarkerBar, OmakasePreviewThumbnail, OmakaseTimeDisplay, OmakaseTimeRange} from '../components';
 import {VttLoadOptions} from '../api/vtt-aware-api';
 import {VttAdapter} from '../common/vtt-adapter';
 import {ThumbnailVttFile} from '../vtt';
@@ -37,7 +37,6 @@ import 'media-chrome';
 import '../components';
 // @ts-ignore
 import silentWavBase64 from '../../assets/silent.wav.base64.txt?raw';
-import {HTMLVideoElementEventKeys} from './video-controller';
 import {UrlUtil} from '../util/url-util';
 import {OmakaseDropdown} from '../components/omakase-dropdown';
 import {SvgUtil} from '../util/svg-util';
@@ -46,6 +45,7 @@ import {OmakaseMuteButton} from '../components/omakase-mute-button';
 import {OmakaseDropdownList, OmakaseDropdownListItem} from '../components/omakase-dropdown-list';
 import {OmakaseDropdownToggle} from '../components/omakase-dropdown-toggle';
 import {BrowserProvider} from '../common/browser-provider';
+import {HTMLElementEvents, HTMLVideoElementEvents} from '../dom/html-element';
 
 const domClasses = {
   player: 'omakase-player',
@@ -218,6 +218,7 @@ export class VideoDomController implements VideoDomControllerApi {
   protected _textDropdownList?: OmakaseDropdownList;
   protected _sidecarDropdownList?: OmakaseDropdownList;
   protected _audioDropdownToggle?: OmakaseDropdownToggle;
+  protected _markerBar?: OmakaseMarkerBar;
 
   protected _bitcEnabled = false;
 
@@ -374,6 +375,7 @@ export class VideoDomController implements VideoDomControllerApi {
     this._timeRangeControl = this._divPlayer.getElementsByTagName('omakase-time-range')[0] as OmakaseTimeRange;
     this._volumeRangeControl = this._divPlayer.getElementsByTagName('omakase-volume-range')[0] as OmakaseVolumeRange;
     this._muteButton = this._divPlayer.getElementsByTagName('omakase-mute-button')[0] as OmakaseMuteButton;
+    this._markerBar = this._divPlayer.getElementsByTagName('omakase-marker-bar')[0] as OmakaseMarkerBar;
     this._textButton = this.getPlayerElement<MediaChromeButton>(domClasses.mediaChromeTextOn);
     this._divTimecode = this.getPlayerElement<HTMLElement>(domClasses.timecodeContainer);
     this._currentTimecode = this.getPlayerElement<OmakaseTimeDisplay>(domClasses.mediaChromeCurrentTimecode);
@@ -408,6 +410,7 @@ export class VideoDomController implements VideoDomControllerApi {
           <omakase-time-display class="${domClasses.mediaChromeCurrentTimecode}"></omakase-time-display>
       </div>
       <media-control-bar style="display:none" class="upper-control-bar">
+          <omakase-marker-bar></omakase-marker-bar>
           <omakase-time-range>
             <div slot="preview" class="${domClasses.mediaChromePreviewWrapper}">
               <omakase-preview-thumbnail class="${domClasses.mediaChromePreviewThumbnail}"></omakase-preview-thumbnail>
@@ -719,6 +722,7 @@ export class VideoDomController implements VideoDomControllerApi {
     return passiveObservable((observer) => {
       this._divSafeZoneWrapper.style.aspectRatio = aspectRatio;
       this._divWatermarkWrapper.style.aspectRatio = aspectRatio;
+      this._divPlayerWrapper.style.aspectRatio = aspectRatio;
       nextCompleteObserver(observer);
     });
   }
@@ -780,8 +784,8 @@ export class VideoDomController implements VideoDomControllerApi {
 
     if (!videoController.isDetachable() && this._buttonDetach) {
       if (this._videoController.isPiPSupported()) {
-        this._videoController.getHTMLVideoElement().addEventListener(HTMLVideoElementEventKeys.ENTERPIP, this._enterPictureInPictureHandler);
-        this._videoController.getHTMLVideoElement().addEventListener(HTMLVideoElementEventKeys.LEAVEPIP, this._leavePictureInPictureHandler);
+        this._videoController.getHTMLVideoElement().addEventListener(HTMLVideoElementEvents.ENTERPIP, this._enterPictureInPictureHandler);
+        this._videoController.getHTMLVideoElement().addEventListener(HTMLVideoElementEvents.LEAVEPIP, this._leavePictureInPictureHandler);
       } else {
         this.hideElements(this._buttonDetach);
       }
@@ -1040,6 +1044,13 @@ export class VideoDomController implements VideoDomControllerApi {
             label: track.label ?? '',
           }))
         );
+        const activeAudioTrackId = this._videoController.getActiveAudioTrack();
+        if (activeAudioTrackId && activeAudioTrackId.id !== this._audioDropdownList!.selectedOption$.getValue()?.value) {
+          this._audioDropdownList?.selectedOption$.next({
+            value: activeAudioTrackId.id,
+            label: activeAudioTrackId.label ?? '',
+          });
+        }
       });
       this._audioDropdownList.selectedOption$.pipe(takeUntil(this._videoEventBreaker$)).subscribe({
         next: (audioOption) => {
@@ -1167,7 +1178,7 @@ export class VideoDomController implements VideoDomControllerApi {
             }));
             this._textDropdownList!.setOptions(textOptions);
             if (textOptions.length) {
-              // this.showElements(this._textDropdownList!);
+              this.showElements(this._textDropdownList!);
               this.alignAudioTextDropdown('right');
             } else {
               this.hideElements(this._textDropdownList!);
@@ -1222,6 +1233,9 @@ export class VideoDomController implements VideoDomControllerApi {
             .hideElements(this._divErrorMessage)
             .showElements(this._divButtonOverlayLoading)
             .showElements(this._divBackgroundImage);
+          if (this._markerBar) {
+            this._markerBar.clearMarkerTracks();
+          }
         },
       });
 
@@ -1380,11 +1394,11 @@ export class VideoDomController implements VideoDomControllerApi {
     }
 
     if (this._enterPictureInPictureHandler) {
-      this._videoController.getHTMLVideoElement().removeEventListener(HTMLVideoElementEventKeys.ENTERPIP, this._enterPictureInPictureHandler);
+      this._videoController.getHTMLVideoElement().removeEventListener(HTMLVideoElementEvents.ENTERPIP, this._enterPictureInPictureHandler);
     }
 
     if (this._leavePictureInPictureHandler) {
-      this._videoController.getHTMLVideoElement().removeEventListener(HTMLVideoElementEventKeys.LEAVEPIP, this._leavePictureInPictureHandler);
+      this._videoController.getHTMLVideoElement().removeEventListener(HTMLVideoElementEvents.LEAVEPIP, this._leavePictureInPictureHandler);
     }
 
     nullifier(this._videoController, this._videoElement);
@@ -1402,34 +1416,40 @@ export class VideoDomController implements VideoDomControllerApi {
   }
 
   appendHTMLTrackElement(omakaseTextTrack: OmakaseTextTrack): Observable<HTMLTrackElement | undefined> {
-    return new Observable<HTMLTrackElement | undefined>((o$) => {
-      let track = VideoDomController.createHTMLTrackElement(omakaseTextTrack);
+    return new Observable<HTMLTrackElement | undefined>((observer) => {
+      let element = VideoDomController.createHTMLTrackElement(omakaseTextTrack);
 
-      fromEvent(track, 'load')
-        .pipe(take(1))
+      let loadBreaker$ = new Subject<void>();
+
+      fromEvent(element, HTMLElementEvents.ERROR)
+        .pipe(takeUntil(loadBreaker$), take(1))
         .subscribe({
           next: (event) => {
-            o$.next(track);
-            o$.complete();
+            errorCompleteObserver(observer, 'Error adding subtitle track')
+            nextCompleteSubject(loadBreaker$);
+          }
+        });
+
+      fromEvent(element, HTMLElementEvents.LOAD)
+        .pipe(takeUntil(loadBreaker$), take(1))
+        .subscribe({
+          next: (event) => {
+            nextCompleteObserver(observer, element);
+            nextCompleteSubject(loadBreaker$);
           },
           error: (error) => {
-            console.debug('Something went wrong adding subtitles tracks');
-
-            o$.next(void 0);
-            o$.complete();
+            errorCompleteObserver(observer, 'Error adding subtitle track')
+            nextCompleteSubject(loadBreaker$);
           },
         });
 
-      this._videoElement.appendChild(track);
+      this._videoElement.appendChild(element);
 
-      let textTrack = this.getTextTrackById(track.id);
+      let textTrack = this.getTextTrackById(element.id);
       if (textTrack) {
-        textTrack.mode = 'hidden'; // this line somehow triggers cues loading and thus we can catch 'load' event and complete the observable
+        textTrack.mode = 'hidden'; // this line somehow triggers cues loading and thus we can catch LOAD' event and complete the observable
       } else {
-        console.debug('Something went wrong adding subtitles tracks');
-
-        o$.next(void 0);
-        o$.complete();
+        errorCompleteObserver(observer, 'Something went wrong adding subtitles tracks')
       }
     });
   }
@@ -1479,5 +1499,15 @@ export class VideoDomController implements VideoDomControllerApi {
         active: track.active,
       })),
     ];
+  }
+
+  createMarkerTrack(config: MarkerTrackConfig) {
+    if (!this._markerBar) {
+      throw Error('Marker bar element not found');
+    }
+    return this._markerBar.createMarkerTrack({
+      ...config,
+      mediaDuration: this._videoController.getDuration(),
+    });
   }
 }

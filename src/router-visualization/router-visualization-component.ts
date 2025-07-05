@@ -1,7 +1,13 @@
 import {AudioApi} from '../api';
 import {OmpAudioRoutingConnection, OmpMainAudioState, OmpSidecarAudioState} from '../video/model';
 import {defaultRouterVisualizationLabels, RouterVisualizationSidecarTrack, RouterVisualizationSize, RouterVisualizationTrack} from './router-visualization';
-import {AudioSwitchedEvent, MainAudioChangeEvent, SidecarAudioChangeEvent, VideoWindowPlaybackStateChangeEvent} from '../types';
+import {
+  AudioLoadedEvent,
+  AudioSwitchedEvent,
+  MainAudioChangeEvent,
+  SidecarAudioChangeEvent,
+  VideoWindowPlaybackStateChangeEvent,
+} from '../types';
 import {filter, Observable, of, skip, Subject, takeUntil} from 'rxjs';
 import {nextCompleteSubject} from '../util/rxjs-util';
 import {VideoControllerApi} from '../video';
@@ -57,7 +63,9 @@ export class RouterVisualizationComponent extends HTMLElement {
     }
     this._mainTrack = this.prepareTrackForVisualization(config.track);
 
-    const o$: Observable<any> = !this._videoController!.getMainAudioState()?.audioRouterState ? this._videoController!.createMainAudioRouter(config.track.maxInputNumber, this._outputs!.length) : of(true);
+    const o$: Observable<any> = !this._videoController!.getMainAudioState()?.audioRouterState
+      ? this._videoController!.createMainAudioRouter(config.track.maxInputNumber, this._outputs!.length)
+      : of(true);
     o$.subscribe({
       next: () => {
         this.setAudioRouterDefaultMatrix(config.track!, config.defaultMatrix);
@@ -68,7 +76,14 @@ export class RouterVisualizationComponent extends HTMLElement {
   }
 
   set sidecarTracks(config: SidecarTracksConfig) {
-    this._sidecarTracks = config.tracks.map((track) => this.prepareTrackForVisualization(track));
+    this._sidecarTracks = config.tracks.map((track) => {
+      const sidecarAudioState = this._videoController!.getSidecarAudioState(track.trackId);
+
+      if (sidecarAudioState) {
+        return this.prepareTrackForVisualization({...track, inputNumber: sidecarAudioState.numberOfChannels});
+      }
+      return this.prepareTrackForVisualization(track);
+    });
 
     for (const track of config.tracks) {
       if (!this._videoController!.getSidecarAudioState(track.trackId)?.audioRouterState) {
@@ -102,7 +117,7 @@ export class RouterVisualizationComponent extends HTMLElement {
           },
         };
       }
-    }
+    };
 
     this._videoController.onVideoWindowPlaybackStateChange$
       .pipe(takeUntil(this._destroyed$))
@@ -110,16 +125,16 @@ export class RouterVisualizationComponent extends HTMLElement {
       .subscribe((event) => {
         updateMainTrack();
 
-        let mainAudioState = this._videoController?.getMainAudioState()
+        let mainAudioState = this._videoController?.getMainAudioState();
         if (mainAudioState) {
           this.updateTogglesFromState(mainAudioState);
         }
 
         let sidecarAudioStates = this._videoController?.getSidecarAudioStates();
         if (sidecarAudioStates) {
-          sidecarAudioStates.forEach(sidecarAudioState => {
-            this.updateTogglesFromState(sidecarAudioState)
-          })
+          sidecarAudioStates.forEach((sidecarAudioState) => {
+            this.updateTogglesFromState(sidecarAudioState);
+          });
         }
       });
 
@@ -127,25 +142,32 @@ export class RouterVisualizationComponent extends HTMLElement {
       .pipe(takeUntil(this._destroyed$))
       .pipe(createAttachedDetachedModeFilter<MainAudioChangeEvent | undefined>())
       .subscribe((event) => {
-      if (event) {
-        this.updateTogglesFromState(event.mainAudioState);
-      }
-    });
+        if (event) {
+          this.updateTogglesFromState(event.mainAudioState);
+        }
+      });
 
     this._videoController.onSidecarAudioChange$
       .pipe(takeUntil(this._destroyed$))
       .pipe(createAttachedDetachedModeFilter<SidecarAudioChangeEvent>())
       .subscribe((event) => {
-        event.sidecarAudioStates.forEach(sidecarAudioState => {
+        event.sidecarAudioStates.forEach((sidecarAudioState) => {
           this.updateTogglesFromState(sidecarAudioState);
-        })
-    });
+        });
+      });
 
     this._videoController.onAudioSwitched$
       .pipe(takeUntil(this._destroyed$))
       .pipe(createAttachedDetachedModeFilter<AudioSwitchedEvent>())
       .subscribe((event) => {
-        updateMainTrack()
+        updateMainTrack();
+      });
+
+    this._videoController.onAudioLoaded$
+      .pipe(takeUntil(this._destroyed$))
+      .pipe(createAttachedDetachedModeFilter<AudioLoadedEvent | undefined>())
+      .subscribe((event) => {
+        updateMainTrack();
       });
 
     if (!this._outputs) {
@@ -233,16 +255,19 @@ export class RouterVisualizationComponent extends HTMLElement {
     const tbody = document.getElementById(id) ?? document.createElement('tbody');
 
     const routingConnections =
-      trackId === 'main' ? this._videoController!.getMainAudioState()?.audioRouterState?.routingConnections : this._videoController!.getSidecarAudioState(trackId)?.audioRouterState?.routingConnections;
+      trackId === 'main'
+        ? this._videoController!.getMainAudioState()?.audioRouterState?.routingConnections
+        : this._videoController!.getSidecarAudioState(trackId)?.audioRouterState?.routingConnections;
 
     tbody.innerHTML = '';
     tbody.id = id;
     track.inputLabels!.forEach((input, inputNumber) => {
       const tr = document.createElement('tr');
       const td1 = document.createElement('td');
-      td1.classList.add('align-left');
+      td1.classList.add('align-left', 'router-visualization-label');
       if (inputNumber === 0) {
         td1.innerHTML = track.name ?? '';
+        td1.title = track.name ?? '';
       } else if (inputNumber === track.inputNumber! - 1) {
         const iconDeselect = document.createElement('span');
         iconDeselect.classList.add('omakase-router-icon', 'icon-deselect');

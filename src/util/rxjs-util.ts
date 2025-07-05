@@ -25,9 +25,9 @@ export function simplePassiveObservable<T = void>(value?: T): Observable<T> {
   return passiveObservable((observer) => nextCompleteObserver(observer, value as T));
 }
 
-export function nextCompleteObserver(observer: Observer<any>, value?: any) {
+export function nextCompleteObserver<T>(observer: Observer<T>, value?: T) {
   if (observer) {
-    observer.next(value);
+    observer.next(value as T);
     observer.complete();
   }
 }

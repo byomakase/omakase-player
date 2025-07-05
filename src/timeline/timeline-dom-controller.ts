@@ -61,13 +61,23 @@ export class TimelineDomController implements Destroyable {
 
     this.videoController = videoController;
 
-    this._timeline.onReady$.pipe(filter((p) => !!p)).subscribe((event) => {
-      this.settleDom();
-    });
+    this._timeline.onReady$
+      .pipe(
+        filter((p) => !!p),
+        takeUntil(this._destroyed$)
+      )
+      .subscribe(() => {
+        this.settleDom();
+      });
 
-    this._videoController.onVideoLoaded$.pipe(filter((p) => !!p)).subscribe((event) => {
-      this.settleDom();
-    });
+    this._videoController.onVideoLoaded$
+      .pipe(
+        filter((p) => !!p),
+        takeUntil(this._destroyed$)
+      )
+      .subscribe(() => {
+        this.settleDom();
+      });
 
     if (this._timeline.config.timecodeClickEdit) {
       this._divTimelineTimecode.addEventListener('dblclick', this.timecodeDblClickHandler.bind(this));

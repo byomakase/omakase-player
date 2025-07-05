@@ -16,8 +16,9 @@
 
 import {Observable} from 'rxjs';
 import {Destroyable, OmakaseTextTrack, VideoFullscreenChangeEvent, VideoSafeZoneChangeEvent} from '../types';
-import {VideoSafeZone} from './model';
+import {MarkerTrackConfig, VideoSafeZone} from './model';
 import {VideoControllerApi} from './video-controller-api';
+import {MarkerTrackApi} from '../api/marker-track-api';
 
 export interface VideoDomControllerApi extends Destroyable {
   attachVideoController(videoController: VideoControllerApi): void;
@@ -55,4 +56,6 @@ export interface VideoDomControllerApi extends Destroyable {
   loadThumbnailVtt(thumbnailVttUrl: string): void;
 
   isPiPSupported(): boolean;
+
+  createMarkerTrack(config: MarkerTrackConfig): MarkerTrackApi;
 }

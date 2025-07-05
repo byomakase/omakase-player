@@ -22,6 +22,7 @@ export const markerListDefaultTemplates = {
         line-height: 60px;
         overflow: hidden;
         text-overflow: ellipsis;
+        white-space: nowrap;
         -webkit-user-select: none;
         -ms-user-select: none;
         user-select: none;
@@ -32,13 +33,13 @@ export const markerListDefaultTemplates = {
       }`,
   row: `
         <div class="flex-row bordered">
-            <div class="flex-cell"><span slot="color" style="display:inline-block;height:60px;width:10px"></span></div>
-            <div class="flex-cell" style="width: 120px"><img slot="thumbnail" height="60"></div>
+            <div class="flex-cell"><span slot="color" style="display:inline-block;height:60px;min-width:10px"></span></div>
+            <div class="flex-cell" style="min-width: 120px"><img slot="thumbnail" height="60"></div>
             <div class="flex-cell" style="flex-grow:1" slot="name"></div>
-            <div class="flex-cell" style="width:120px" slot="start"></div>
-            <div class="flex-cell" style="width:120px" slot="end"></div>
-            <div class="flex-cell" style="width:120px" slot="duration"></div>
-            <div class="flex-cell" style="width:60px">
+            <div class="flex-cell" style="min-width:120px" slot="start"></div>
+            <div class="flex-cell" style="min-width:120px" slot="end"></div>
+            <div class="flex-cell" style="min-width:120px" slot="duration"></div>
+            <div class="flex-cell" style="min-width:60px">
                 <span slot="action-edit">✎</span>
                 <span slot="remove">🗑</span>
             </div>

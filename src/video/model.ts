@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
-import {OmpAudioTrack} from '../types';
+import {MarkerVttCue, OmpAudioTrack} from '../types';
 import {OmpAudioEffectsGraphDef} from '../audio';
+import {VttLoadOptions} from '../api/vtt-aware-api';
+import {MarkerApi} from '../api';
 
 export type VideoProtocol = 'hls' | 'native';
 
@@ -243,9 +245,9 @@ export interface OmpAudioRoutingPath {
   output: number;
 }
 
-export type OmpAudioRoutingInputType = Pick<OmpAudioRoutingPath, 'input'>
+export type OmpAudioRoutingInputType = Pick<OmpAudioRoutingPath, 'input'>;
 
-export type OmpAudioRoutingOutputType = Pick<OmpAudioRoutingPath, 'output'>
+export type OmpAudioRoutingOutputType = Pick<OmpAudioRoutingPath, 'output'>;
 
 /**
  * Describes {@ OmpAudioRoutingPoint} connection status - connected or disconnected
@@ -380,4 +382,13 @@ export interface OmpAudioNodeParamPropType {
 export interface OmpAudioNodeParamType {
   name: string;
   props: OmpAudioNodeParamPropType[];
+}
+
+export interface MarkerTrackConfig {
+  id?: string;
+  description?: string;
+  visible?: boolean;
+  vttUrl?: string;
+  vttLoadOptions?: VttLoadOptions;
+  vttMarkerCreateFn?: (marker: MarkerVttCue, index: number) => MarkerApi;
 }
