@@ -85,6 +85,11 @@ export interface MediaChromeConfig {
    *  If true, show sidecar audios as separate groups
    */
   trackMenuMultiselect?: boolean;
+
+  /**
+   *  Poster image url
+   */
+  posterUrl?: string;
 }
 
 export interface OmakasePlayerConfig {
@@ -192,6 +197,7 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
         trackMenuFloating: this._config.mediaChrome?.trackMenuFloating,
         trackMenuPlacement: this._config.mediaChrome?.trackMenuPlacement,
         trackMenuMultiselect: this._config.mediaChrome?.trackMenuMultiselect,
+        mediaChromePosterUrl: this._config.mediaChrome?.posterUrl,
       })
     );
 

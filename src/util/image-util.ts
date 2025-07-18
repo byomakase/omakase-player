@@ -20,6 +20,7 @@ import {map, Observable, of, switchMap} from 'rxjs';
 import {AuthenticationData} from '../authentication/model';
 import {AuthConfig} from '../auth/auth-config';
 import {BlobUtil} from './blob-util';
+import {OmakaseVttCueXTWH} from '../types';
 
 export class ImageUtil {
   static getProtectedImageUrl(url: string, authentication: AuthenticationData): Observable<string> {
@@ -58,6 +59,47 @@ export class ImageUtil {
     );
   }
 
+  private static _spriteCache = new Map();
+
+  static createKonvaImageFromSprite(url: string, xywh: OmakaseVttCueXTWH, authentication?: AuthenticationData): Observable<Konva.Image> {
+    const imageUrl$ = authentication ? this.getProtectedImageUrl(url, authentication) : of(url);
+    return imageUrl$.pipe(
+      switchMap((url) => {
+        if (this._spriteCache.has(url)) {
+          const img = new Konva.Image(this._spriteCache.get(url));
+
+          return of(this.cropSpriteImage(img, xywh));
+        }
+
+        return new Observable<Konva.Image>((o$) => {
+          Konva.Image.fromURL(
+            url,
+            (image: Konva.Image) => {
+              this._spriteCache.set(url, image.getAttrs());
+
+              const cropImage = this.cropSpriteImage(image, xywh);
+
+              o$.next(cropImage);
+              o$.complete();
+            },
+            (error: any) => {
+              o$.error(error);
+            }
+          );
+        });
+      })
+    );
+  }
+
+  static cropSpriteImage(image: Konva.Image, xywh: OmakaseVttCueXTWH): Konva.Image {
+    return image.crop({
+      x: xywh.x,
+      y: xywh.y,
+      width: xywh.w,
+      height: xywh.h,
+    });
+  }
+
   static createKonvaImageSizedByWidth(url: string, width: number, authentication?: AuthenticationData): Observable<Konva.Image> {
     return ImageUtil.createKonvaImage(url, authentication).pipe(
       map((image) => {
@@ -82,11 +124,43 @@ export class ImageUtil {
     );
   }
 
+  static createKonvaImageFromSpriteByHeight(imageUrl: string, xywh: OmakaseVttCueXTWH, height: number, authentication?: AuthenticationData): Observable<Konva.Image> {
+    return this.createKonvaImageFromSprite(imageUrl, xywh, authentication).pipe(
+      map((image) => {
+        image.setAttrs({
+          width: ImageUtil.calculateProportionalWidthForSprite(height, xywh),
+          height: height,
+        });
+        return image;
+      })
+    );
+  }
+
+  static createKonvaImageFromSpriteByWidth(imageUrl: string, xywh: OmakaseVttCueXTWH, width: number, authentication?: AuthenticationData): Observable<Konva.Image> {
+    return this.createKonvaImageFromSprite(imageUrl, xywh, authentication).pipe(
+      map((image) => {
+        image.setAttrs({
+          width: width,
+          height: ImageUtil.calculateProportionalHeightForSprite(width, xywh),
+        });
+        return image;
+      })
+    );
+  }
+
   public static calculateProportionalHeight(width: number, image: Konva.Image): number {
     return (width * image.getAttrs().image.naturalHeight) / image.getAttrs().image.naturalWidth;
   }
 
   public static calculateProportionalWidth(height: number, image: Konva.Image): number {
     return (height * image.getAttrs().image.naturalWidth) / image.getAttrs().image.naturalHeight;
+  }
+
+  public static calculateProportionalHeightForSprite(width: number, xywh: OmakaseVttCueXTWH): number {
+    return (width * xywh.h) / xywh.w;
+  }
+
+  public static calculateProportionalWidthForSprite(height: number, xywh: OmakaseVttCueXTWH): number {
+    return (height * xywh.w) / xywh.h;
   }
 }
