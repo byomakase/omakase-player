@@ -72,6 +72,12 @@ export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements Oma
           return this.mapCue(parsedCue, cueExtension, index);
         })
       ).forEach((cue) => {
+        if (cue.text.indexOf('#xywh=') >= 0) {
+          const [_, xywh] = cue.text.split('#xywh=');
+          const [x, y, w, h] = xywh.split(',').map(Number);
+          cue.xywh = {x, y, w, h};
+        }
+
         this._cues.push(cue);
         this._cuesStartTimesSorted.push(cue.startTime);
 

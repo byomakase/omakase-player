@@ -258,7 +258,15 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
 
     let createAndAdjustThumbnail = (x: number, visible: boolean, cue: ThumbnailVttCue) => {
       this._itemsMap.set(cue.startTime, void 0); // this indicates that thumbnail started to load
-      ImageUtil.createKonvaImageSizedByHeight(cue.url, this.style.thumbnailHeight, AuthConfig.authentication).subscribe({
+      let imageSub: Observable<Konva.Image>;
+
+      if (cue.xywh) {
+        imageSub = ImageUtil.createKonvaImageFromSpriteByHeight(cue.url, cue.xywh, this.style.thumbnailHeight, AuthConfig.authentication);
+      } else {
+        imageSub = ImageUtil.createKonvaImageSizedByHeight(cue.url, this.style.thumbnailHeight, AuthConfig.authentication);
+      }
+
+      imageSub.subscribe({
         next: (image) => {
           // use fresh visible status, maybe it has changed while waiting for response
           if (this._config.loadingAnimationEnabled) {
@@ -429,7 +437,16 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
       }
     } else {
       if (thumbnail.cue && thumbnail.image) {
-        ImageUtil.createKonvaImageSizedByWidth(thumbnail.cue.url, thumbnail.image.width() * this.style.thumbnailHoverScale, AuthConfig.authentication).subscribe({
+        let imageSub: Observable<Konva.Image>;
+        let targetWidth = thumbnail.image.width() * this.style.thumbnailHoverScale;
+
+        if (thumbnail.cue.xywh) {
+          imageSub = ImageUtil.createKonvaImageFromSpriteByWidth(thumbnail.cue.url, thumbnail.cue.xywh, targetWidth, AuthConfig.authentication);
+        } else {
+          imageSub = ImageUtil.createKonvaImageSizedByWidth(thumbnail.cue.url, targetWidth, AuthConfig.authentication);
+        }
+
+        imageSub.subscribe({
           next: (image) => {
             this._thumbnailHover!.setDimension(image.getSize());
             this._thumbnailHover!.setImage(image);
@@ -499,7 +516,17 @@ export class ThumbnailLane extends VttTimelineLane<ThumbnailLaneConfig, Thumbnai
         // try loading first thumbnail to define proportional dimensions
         let firstCue: ThumbnailVttCue = vttFile.cues[0];
         if (firstCue) {
-          ImageUtil.createKonvaImageSizedByHeight(firstCue.url, this.style.thumbnailHeight, AuthConfig.authentication).subscribe({
+          let imageSub: Observable<Konva.Image>;
+
+          if (firstCue.xywh) {
+            imageSub = ImageUtil.createKonvaImageFromSpriteByHeight(firstCue.url, firstCue.xywh, this.style.thumbnailHeight, AuthConfig.authentication);
+          } else {
+            imageSub = ImageUtil.createKonvaImageSizedByHeight(firstCue.url, this.style.thumbnailHeight, AuthConfig.authentication);
+          }
+          if (firstCue.xywh) {
+          }
+
+          imageSub.subscribe({
             next: (image) => {
               o$.next({
                 width: image.getSize().width,

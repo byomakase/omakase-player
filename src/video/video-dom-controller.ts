@@ -121,6 +121,7 @@ export interface VideoDomControllerConfig {
   disablePictureInPicture: boolean;
   mediaChromeVisibility: MediaChromeVisibility;
   mediaChromeHTMLElementId?: string;
+  mediaChromePosterUrl?: string;
   thumbnailVttUrl?: string;
   thumbnailFn?: (time: number) => string | undefined;
   playerClickHandler?: () => void;
@@ -753,6 +754,11 @@ export class VideoDomController implements VideoDomControllerApi {
 
     this._videoController = videoController;
 
+    const posterUrl = this._config.mediaChromePosterUrl;
+    if (posterUrl) {
+      this._divBackgroundImage.style.backgroundImage = `url(${posterUrl})`;
+    }
+
     let allOverlayButtons = [
       this._divButtonOverlayPlay,
       this._divButtonOverlayPause,
@@ -1246,9 +1252,8 @@ export class VideoDomController implements VideoDomControllerApi {
       )
       .subscribe({
         next: (videoLoaded) => {
-          this.hideElements(...allOverlayButtons)
-            .hideElements(this._divErrorMessage)
-            .hideElements(this._divBackgroundImage);
+          this.hideElements(...allOverlayButtons).hideElements(this._divErrorMessage);
+          // .hideElements(this._divBackgroundImage);
           if (!videoLoaded) {
             this.showElements(this._divButtonOverlayLoading).showElements(this._divBackgroundImage);
           }
@@ -1272,7 +1277,9 @@ export class VideoDomController implements VideoDomControllerApi {
               .hideElements(this._divErrorMessage)
               .showElements(this._divButtonOverlayLoading);
           } else if (state.playing) {
-            this.hideElements(...allOverlayButtons).hideElements(this._divErrorMessage);
+            this.hideElements(...allOverlayButtons)
+              .hideElements(this._divErrorMessage)
+              .hideElements(this._divBackgroundImage);
             if (state.seeking && state.waiting) {
               this.showElements(this._divButtonOverlayLoading);
             }
@@ -1344,6 +1351,8 @@ export class VideoDomController implements VideoDomControllerApi {
 
     this._videoController.onVideoWindowPlaybackStateChange$.pipe(takeUntil(this._videoEventBreaker$)).subscribe({
       next: (event) => {
+        event.videoWindowPlaybackState;
+
         if (this._videoController.getVideoWindowPlaybackState() === 'detached') {
           this.hideElements(...allOverlayButtons)
             .hideElements(this._divBackgroundImage)
@@ -1425,9 +1434,9 @@ export class VideoDomController implements VideoDomControllerApi {
         .pipe(takeUntil(loadBreaker$), take(1))
         .subscribe({
           next: (event) => {
-            errorCompleteObserver(observer, 'Error adding subtitle track')
+            errorCompleteObserver(observer, 'Error adding subtitle track');
             nextCompleteSubject(loadBreaker$);
-          }
+          },
         });
 
       fromEvent(element, HTMLElementEvents.LOAD)
@@ -1438,7 +1447,7 @@ export class VideoDomController implements VideoDomControllerApi {
             nextCompleteSubject(loadBreaker$);
           },
           error: (error) => {
-            errorCompleteObserver(observer, 'Error adding subtitle track')
+            errorCompleteObserver(observer, 'Error adding subtitle track');
             nextCompleteSubject(loadBreaker$);
           },
         });
@@ -1449,7 +1458,7 @@ export class VideoDomController implements VideoDomControllerApi {
       if (textTrack) {
         textTrack.mode = 'hidden'; // this line somehow triggers cues loading and thus we can catch LOAD' event and complete the observable
       } else {
-        errorCompleteObserver(observer, 'Something went wrong adding subtitles tracks')
+        errorCompleteObserver(observer, 'Something went wrong adding subtitles tracks');
       }
     });
   }

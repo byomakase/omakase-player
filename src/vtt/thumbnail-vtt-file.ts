@@ -63,7 +63,9 @@ export class ThumbnailVttFile extends DownsampledVttFile<ThumbnailVttCue> {
   }
 
   private resolveThumbnailUrl(vttCueParsed: VttCueParsed): string {
-    return this.isUrlAbsolute(vttCueParsed.text) ? vttCueParsed.text : this.createThumbnailUrlFromRelativeUrl(vttCueParsed.text);
+    const [baseURL] = vttCueParsed.text.split('#xywh=');
+
+    return this.isUrlAbsolute(baseURL) ? baseURL : this.createThumbnailUrlFromRelativeUrl(baseURL);
   }
 
   private createThumbnailUrlFromRelativeUrl(relativePath: string) {
