@@ -1,67 +1,68 @@
 {
-    "name": "@byomakase/omakase-player",
-    "version": "0.19.0",
-    "description": "## Omakase Player - Open source JavaScript framework for building frame accurate video experiences",
-    "author": "ByOmakase",
-    "homepage": "https://player.byomakase.org",
-    "copyright": "Copyright 2025 ByOmakase, LLC <https://byomakase.org/>",
-    "license": "Apache-2.0",
-    "keywords": [
-        "hls",
-        "frame",
-        "accurate",
-        "timeline",
-        "player",
-        "video",
-        "segmentation",
-        "markers"
-    ],
-    "main": "./dist/omakase-player.cjs.js",
-    "module": "./dist/omakase-player.es.js",
-    "types": "./dist/index.d.ts",
-    "style": "./dist/style.css",
-    "scripts": {
-        "dev": "vite --host",
-        "int": "tsc --noEmit && vite build --debug",
-        "prod": "tsc --noEmit && vite build --debug",
-        "check": "tsc --noEmit",
-        "format": "prettier . --write",
-        "dev:tsc": "rm -rf dist/lib && tsc --watch",
-        "build:workers": "vite build --config vite.workers.config.mjs",
-        "build:prod": "rm -rf dist && npm run build:workers && tsc --noEmit && vite build --debug"
-    },
-    "dependencies": {
-        "axios": "1.8.3",
-        "decimal.js": "10.4.3",
-        "eventemitter3": "5.0.0",
-        "hls.js": "1.6.5",
-        "konva": "8.3.14",
-        "m3u8-parser": "^7.2.0",
-        "media-chrome": "^4.2.1",
-        "mediainfo.js": "^0.3.5",
-        "node-webvtt": "1.9.4",
-        "rxjs": "7.8.2",
-        "yoga-layout": "2.0.1",
-        "zod": "3.23.8"
-    },
-    "devDependencies": {
-        "prettier": "^3.3.3",
-        "sass": "^1.59.2",
-        "typescript": "^4.9.5",
-        "vite": "5.4.9",
-        "vite-plugin-dts": "^2.0.2"
-    },
-    "publishConfig": {
-        "registry": "https://registry.npmjs.org"
-    },
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/byomakase/omakase-player.git"
-    },
-    "bugs": {
-        "url": "https://github.com/byomakase/omakase-player/issues"
-    },
-    "optionalDependencies": {
-        "@rollup/rollup-linux-x64-gnu": "^4.28.1"
-    }
+  "name": "@byomakase/omakase-player",
+  "version": "0.19.0",
+  "description": "## Omakase Player - Open source JavaScript framework for building frame accurate video experiences",
+  "author": "ByOmakase",
+  "homepage": "https://player.byomakase.org",
+  "copyright": "Copyright 2025 ByOmakase, LLC <https://byomakase.org/>",
+  "license": "Apache-2.0",
+  "keywords": [
+    "hls",
+    "frame",
+    "accurate",
+    "timeline",
+    "player",
+    "video",
+    "segmentation",
+    "markers"
+  ],
+  "main": "./dist/omakase-player.cjs.js",
+  "module": "./dist/omakase-player.es.js",
+  "types": "./dist/index.d.ts",
+  "style": "./dist/style.css",
+  "scripts": {
+    "dev": "vite --host",
+    "int": "tsc --noEmit && vite build --debug",
+    "prod": "tsc --noEmit && vite build --debug",
+    "check": "tsc --noEmit",
+    "format": "prettier . --write",
+    "dev:tsc": "rm -rf dist/lib && tsc --watch",
+    "build:workers": "vite build --config vite.workers.config.mjs",
+    "build:prod": "rm -rf dist && npm run build:workers && tsc --noEmit && vite build --debug",
+    "prepare": "npm run build:workers && tsc --noEmit && vite build --debug"
+  },
+  "dependencies": {
+    "axios": "1.8.3",
+    "decimal.js": "10.4.3",
+    "eventemitter3": "5.0.0",
+    "hls.js": "1.6.5",
+    "konva": "8.3.14",
+    "m3u8-parser": "^7.2.0",
+    "media-chrome": "^4.2.1",
+    "mediainfo.js": "^0.3.5",
+    "node-webvtt": "1.9.4",
+    "rxjs": "7.8.2",
+    "yoga-layout": "2.0.1",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "sass": "^1.59.2",
+    "typescript": "^4.9.5",
+    "vite": "5.4.9",
+    "vite-plugin-dts": "^2.0.2"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/byomakase/omakase-player.git"
+  },
+  "bugs": {
+    "url": "https://github.com/byomakase/omakase-player/issues"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "^4.28.1"
+  }
 }
