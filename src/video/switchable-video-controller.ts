@@ -54,7 +54,7 @@ import {
   VideoWindowPlaybackStateChangeEvent,
   VolumeChangeEvent,
 } from '../types';
-import {AudioMeterStandard, BufferedTimespan, OmpAudioRouterState, OmpAudioRoutingConnection, OmpAudioRoutingPath, OmpMainAudioState, OmpSidecarAudioState, PlaybackState, Video, VideoLoadOptions, VideoSafeZone, VideoWindowPlaybackState} from './index';
+import {AudioMeterStandard, BufferedTimespan, OmpAudioRouterState, OmpAudioRoutingConnection, OmpAudioRoutingPath, OmpMainAudioState, OmpSidecarAudioState, MediaElementPlaybackState, Video, VideoLoadOptions, VideoSafeZone, VideoWindowPlaybackState} from './index';
 import {nextCompleteSubject} from '../util/rxjs-util';
 import {VideoControllerConfig} from './video-controller';
 import Hls from 'hls.js';
@@ -97,7 +97,7 @@ export class SwitchableVideoController implements VideoControllerApi {
   public readonly onVideoWindowPlaybackStateChange$: Subject<VideoWindowPlaybackStateChangeEvent> = new Subject<VideoWindowPlaybackStateChangeEvent>();
 
   public readonly onHelpMenuChange$: Subject<VideoHelpMenuChangeEvent> = new Subject<VideoHelpMenuChangeEvent>();
-  public readonly onPlaybackState$: Subject<PlaybackState> = new Subject<PlaybackState>();
+  public readonly onPlaybackState$: Subject<MediaElementPlaybackState> = new Subject<MediaElementPlaybackState>();
 
   public readonly onThumbnailVttUrlChanged$: Subject<ThumnbailVttUrlChangedEvent> = new Subject<ThumnbailVttUrlChangedEvent>();
 
@@ -444,6 +444,10 @@ export class SwitchableVideoController implements VideoControllerApi {
     return this._videoController.getAudioOutputNode();
   }
 
+  getSidecarAudiosOutputNode(): AudioNode {
+    return this._videoController.getSidecarAudiosOutputNode();
+  }
+
   getAudioOutputVolume(): number {
     return this._videoController.getAudioOutputVolume();
   }
@@ -484,7 +488,7 @@ export class SwitchableVideoController implements VideoControllerApi {
     return this._videoController.getPlaybackRate();
   }
 
-  getPlaybackState(): PlaybackState | undefined {
+  getPlaybackState(): MediaElementPlaybackState | undefined {
     return this._videoController.getPlaybackState();
   }
 
@@ -610,6 +614,14 @@ export class SwitchableVideoController implements VideoControllerApi {
 
   setActiveAudioTrack(id: string): Observable<void> {
     return this._videoController.setActiveAudioTrack(id);
+  }
+
+  activateMainAudio(): Observable<void> {
+    return this._videoController.activateMainAudio();
+  }
+
+  deactivateMainAudio(): Observable<void> {
+    return this._videoController.deactivateMainAudio();
   }
 
   setPlaybackRate(playbackRate: number): Observable<void> {

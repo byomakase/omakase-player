@@ -73,6 +73,11 @@ export interface MarkerAwareApi extends Api {
   removeMarker(id: string): void;
 
   /**
+   * Removes all Markers
+   */
+  removeAllMarkers(): void;
+
+  /**
    * Updates Marker by ID
    * @param id Marker ID
    */

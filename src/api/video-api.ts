@@ -389,6 +389,16 @@ export interface VideoApi extends Api {
   setActiveAudioTrack(id: string): Observable<void>;
 
   /**
+   * Sets main audio active (unmuted)
+   */
+  activateMainAudio(): Observable<void>;
+
+  /**
+   * Sets main audio inactive (muted)
+   */
+  deactivateMainAudio(): Observable<void>;
+
+  /**
    * Appends new HelpMenuGroup to video context menu
    * @param helpMenuGroup
    */

@@ -44,6 +44,7 @@ import {VideoControllerConfig} from './video-controller';
 import {
   AudioMeterStandard,
   BufferedTimespan,
+  MediaElementPlaybackState,
   OmpAudioRouterState,
   OmpAudioRoutingConnection,
   OmpAudioRoutingInputType,
@@ -52,7 +53,6 @@ import {
   OmpMainAudioState,
   OmpSidecarAudioInputSoloMuteState,
   OmpSidecarAudioState,
-  PlaybackState,
   Video,
   VideoLoadOptions,
   VideoLoadOptionsInternal,
@@ -72,7 +72,7 @@ export interface VideoControllerApi extends VideoApi, Destroyable {
 
   onSubtitlesLoaded$: BehaviorSubject<SubtitlesLoadedEvent | undefined>;
 
-  onPlaybackState$: Observable<PlaybackState>;
+  onPlaybackState$: Observable<MediaElementPlaybackState>;
 
   onSubtitlesCreate$: Observable<SubtitlesCreateEvent>;
   onSubtitlesRemove$: Observable<SubtitlesEvent>;
@@ -88,7 +88,7 @@ export interface VideoControllerApi extends VideoApi, Destroyable {
 
   getConfig(): VideoControllerConfig;
 
-  getPlaybackState(): PlaybackState | undefined;
+  getPlaybackState(): MediaElementPlaybackState | undefined;
 
   getBufferedTimespans(): BufferedTimespan[];
 
@@ -114,6 +114,8 @@ export interface VideoControllerApi extends VideoApi, Destroyable {
   // audio output
 
   getAudioOutputNode(): AudioNode;
+
+  getSidecarAudiosOutputNode(): AudioNode;
 
   setAudioOutputVolume(volume: number): Observable<void>;
 
@@ -213,7 +215,7 @@ export interface VideoControllerApi extends VideoApi, Destroyable {
 
   getActiveSidecarAudioTracks(): OmpAudioTrack[];
 
-  activateSidecarAudioTracks(ids: string[] | undefined, deactivateOthers: boolean | undefined): Observable<void>;
+  activateSidecarAudioTracks(ids: string[] | undefined, deactivateOthers?: boolean | undefined): Observable<void>;
 
   deactivateSidecarAudioTracks(ids: string[] | undefined): Observable<void>;
 

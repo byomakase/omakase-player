@@ -38,7 +38,7 @@ export class BlobUtil {
   }
 
   static revokeAll(): void {
-    console.debug(`Revoking all blobs`)
+    console.debug(`Revoking all blobs`);
     this._blobs.forEach((url) => this.revokeObjectURL(url));
   }
 }

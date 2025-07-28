@@ -1,7 +1,5 @@
 import {VttAdapter} from '../common/vtt-adapter';
-import {MomentMarker, PeriodMarker} from '../timeline';
-import {MarkerVttCue} from '../types';
-import {ColorUtil} from '../util/color-util';
+import {MarkerUtil} from '../timeline/marker/marker-util';
 import {CryptoUtil} from '../util/crypto-util';
 import {destroyer} from '../util/destroy-util';
 import {isNullOrUndefined} from '../util/object-util';
@@ -26,12 +24,13 @@ export class OmakaseMarkerBar extends HTMLElement {
     }
     if (config.vttUrl) {
       this._markerVttAdapter.loadVtt(config.vttUrl, {...config.vttLoadOptions}).subscribe((vttFile) => {
-        const markers = vttFile?.cues.map((cue, index) => (config.vttMarkerCreateFn ? config.vttMarkerCreateFn(cue, index) : this.createDefaultMarker(cue)));
+        const markers = vttFile?.cues.map((cue, index) => (config.vttMarkerCreateFn ? config.vttMarkerCreateFn(cue, index) : MarkerUtil.createPeriodMarkerFromCue(cue)));
         if (markers) {
           for (const marker of markers) {
             markerTrack.addMarker(marker);
           }
         }
+        markerTrack.onMarkerInit$.next({markers: markerTrack.getMarkers()});
         markerTrack.onVttLoaded$.next(vttFile);
       });
     }
@@ -46,19 +45,5 @@ export class OmakaseMarkerBar extends HTMLElement {
   clearMarkerTracks() {
     destroyer(...this._markerTracks);
     this._markerTracks = [];
-  }
-
-  private createDefaultMarker(cue: MarkerVttCue): PeriodMarker | MomentMarker {
-    return new PeriodMarker({
-      timeObservation: {
-        start: cue.startTime,
-        end: cue.endTime,
-      },
-      style: {
-        color: ColorUtil.randomHexColor(),
-      },
-      editable: true,
-      text: cue.text,
-    });
   }
 }

@@ -281,7 +281,7 @@ export class PeriodMarker extends BaseMarker<PeriodObservation, PeriodMarkerConf
     });
 
     this._markerHandleRect = KonvaFactory.createRect({
-      listening: false,
+      listening: true,
       fill: this.style.color,
       opacity: this.style.markerHandleAreaOpacity,
     });

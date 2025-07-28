@@ -15,7 +15,7 @@
  */
 
 import {VideoControllerApi} from './video-controller-api';
-import {BehaviorSubject, concat, filter, forkJoin, map, Observable, of, Subject, take, takeUntil, tap, timeout, timer} from 'rxjs';
+import {BehaviorSubject, catchError, concat, filter, forkJoin, map, Observable, of, Subject, take, takeUntil, tap, timeout, timer} from 'rxjs';
 import {errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {destroyer} from '../util/destroy-util';
 import {TypedOmpBroadcastChannel} from '../common/omp-broadcast-channel';
@@ -629,31 +629,35 @@ export class DetachableVideoController extends SwitchableVideoController {
       describedObservable(
         `Playback Rate`,
         new Observable((observer) => {
-          this.seekToTime(state.currentTime).subscribe({
-            next: () => {
-              this.setPlaybackRate(state.playbackRate).subscribe({
-                next: () => {
-                  if (state.isPlaying) {
-                    // if (this.getVideoWindowPlaybackState() === 'detached' && BrowserProvider.instance().isSafari) {
-                    //   // Safari just throws to many errors, we will not even try to auto-play in detached mode
-                    // }
+          if (state.currentTime > 0) {
+            this.seekToTime(state.currentTime).subscribe({
+              next: () => {
+                this.setPlaybackRate(state.playbackRate).subscribe({
+                  next: () => {
+                    if (state.isPlaying) {
+                      // if (this.getVideoWindowPlaybackState() === 'detached' && BrowserProvider.instance().isSafari) {
+                      //   // Safari just throws to many errors, we will not even try to auto-play in detached mode
+                      // }
 
-                    this.play().subscribe({
-                      next: () => {
-                        nextCompleteObserver(observer);
-                      },
-                      error: (err) => {
-                        console.debug(`play() failed, user action will be required`, err);
-                        nextCompleteObserver(observer);
-                      },
-                    });
-                  } else {
-                    nextCompleteObserver(observer);
-                  }
-                },
-              });
-            },
-          });
+                      this.play().subscribe({
+                        next: () => {
+                          nextCompleteObserver(observer);
+                        },
+                        error: (err) => {
+                          console.debug(`play() failed, user action will be required`, err);
+                          nextCompleteObserver(observer);
+                        },
+                      });
+                    } else {
+                      nextCompleteObserver(observer);
+                    }
+                  },
+                });
+              },
+            });
+          } else {
+            nextCompleteObserver(observer);
+          }
         })
       )
     );
@@ -702,11 +706,32 @@ export class DetachableVideoController extends SwitchableVideoController {
                   });
 
                   if (subtitlesForCreation.length > 0) {
-                    forkJoin(subtitlesForCreation.map((p) => this.createSubtitlesVttTrack(p))).subscribe({
-                      next: () => {
+                    forkJoin(
+                      subtitlesForCreation.map((subtitlesVttTrack) =>
+                        this.createSubtitlesVttTrack(subtitlesVttTrack).pipe(
+                          map((p) => ({
+                            subtitlesVttTrack: subtitlesVttTrack,
+                            created: true,
+                          })),
+                          catchError((error) => {
+                            console.error(error);
+                            return of({
+                              subtitlesVttTrack: subtitlesVttTrack,
+                              created: false,
+                            });
+                          })
+                        )
+                      )
+                    ).subscribe({
+                      next: (result) => {
                         console.debug(
                           `Created subtitles:`,
-                          subtitlesForCreation.map((p) => p.id)
+                          result.filter((p) => p.created).map((p) => p.subtitlesVttTrack.id)
+                        );
+
+                        console.debug(
+                          `Subtitles failed to create:`,
+                          result.filter((p) => !p.created).map((p) => p.subtitlesVttTrack.id)
                         );
 
                         nextCompleteObserver(observer);
@@ -788,7 +813,7 @@ export class DetachableVideoController extends SwitchableVideoController {
                     } else {
                       nextCompleteObserver(observer);
                     }
-                  },
+                  }
                 });
               },
               error: (error) => {
@@ -814,7 +839,15 @@ export class DetachableVideoController extends SwitchableVideoController {
             timer(timerMs).subscribe(() => {
               this.setActiveAudioTrack(state.activeAudioTrack!.id).subscribe({
                 next: (event) => {
-                  nextCompleteObserver(observer);
+                  if (state.mainAudioChangeEvent && !state.mainAudioChangeEvent.mainAudioState.active) {
+                    this.deactivateMainAudio().subscribe({
+                      next: () => {
+                        nextCompleteObserver(observer);
+                      },
+                    });
+                  } else {
+                    nextCompleteObserver(observer);
+                  }
                 },
                 error: (error) => {
                   console.debug(`Problems setting active audio track:`, state.activeAudioTrack);
@@ -1013,7 +1046,7 @@ export class DetachableVideoController extends SwitchableVideoController {
                 let os$ = state.sidecarAudioStates.map((sidecarAudioState) => {
                   return new Observable((sidecarAudioObserver) => {
                     this.createSidecarAudioTrack(sidecarAudioState.audioTrack).subscribe({
-                      next: () => {
+                      next: (sidecarAudioTrack) => {
                         let o1$ = sidecarAudioState.audioRouterState
                           ? this.createSidecarAudioRouter(sidecarAudioState.audioTrack.id, sidecarAudioState.audioRouterState.inputsNumber, sidecarAudioState.audioRouterState.outputsNumber)
                           : of(true);

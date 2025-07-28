@@ -13,8 +13,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 import {AxiosRequestConfig} from 'axios';
-import {AuthenticationData, BasicAuthenticationData, BearerAuthenticationData, CustomAuthenticationData} from '../authentication/model';
+
+export interface BasicAuthenticationData {
+  type: 'basic';
+  username: string;
+  password: string;
+}
+
+export interface BearerAuthenticationData {
+  type: 'bearer';
+  token: string;
+}
+
+export interface CustomAuthenticationData {
+  type: 'custom';
+  headers: (url: string) => {headers: {[header: string]: string}};
+}
+
+export type AuthenticationData = BasicAuthenticationData | BearerAuthenticationData | CustomAuthenticationData;
 
 export class AuthConfig {
   static _authentication?: AuthenticationData;

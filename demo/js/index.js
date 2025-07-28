@@ -75,7 +75,7 @@ window.addEventListener('load', () => {
   }
 
   createOmakasePlayer();
-  loadOmakaseVideo(urls[urlSelector].video, urls[urlSelector].frameRate);
+  loadOmakaseVideo(urls[urlSelector].video);
   omakasePlayer.video.onVideoLoaded$.subscribe((event) => {
     if (event) {
       createOmakaseTimeline();
@@ -156,21 +156,26 @@ window.addEventListener('load', () => {
 function createOmakasePlayer() {
   omakasePlayer = new omakase.OmakasePlayer({
     playerHTMLElementId: 'omakase-player',
-    mediaChrome: 'disabled',
+    playerChroming: {
+      theme: 'DEFAULT',
+      themeConfig: {
+        controlBarVisibility: 'DISABLED'
+      }
+    },
     style: {
       fontFamily: 'Arial',
     },
   });
 }
 
-function loadOmakaseVideo(url, frameRate = 30) {
+function loadOmakaseVideo(url) {
   // Load video
   if (!url) {
     omakasePlayer.destroy();
 
     throw new Error('Video url is required!');
   } else {
-    omakasePlayer.loadVideo(url, {frameRate}).subscribe();
+    omakasePlayer.loadVideo(url).subscribe();
   }
 }
 

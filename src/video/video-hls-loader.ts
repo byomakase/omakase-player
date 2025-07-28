@@ -19,7 +19,6 @@ import {Video, VideoLoadOptions} from './model';
 import {BaseVideoLoader} from './video-loader';
 import Hls, {AudioTracksUpdatedData, AudioTrackSwitchingData, ErrorData, ErrorDetails, Events as HlsEvents, FragLoadedData, FragLoadingData, HlsConfig, ManifestParsedData, MediaAttachedData, MediaKeySessionContext, MediaPlaylist} from 'hls.js';
 import {errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
-import {AuthConfig} from '../auth/auth-config';
 import {isNullOrUndefined} from '../util/object-util';
 import {z} from 'zod';
 import {FrameRateUtil} from '../util/frame-rate-util';
@@ -35,7 +34,10 @@ import {formatAuthenticationHeaders, httpGet} from '../http';
 import {BlobUtil} from '../util/blob-util';
 import {AudioUtil} from '../util/audio-util';
 import {M3u8File} from '../m3u8/m3u8-file';
-import {HTMLVideoElementEvents} from '../dom/html-element';
+
+import {HTMLVideoElementEvents} from '../media-element/omp-media-element';
+import {AuthConfig} from '../common/authentication';
+import {MediaMetadataResolver} from '../tools/media-metadata-resolver';
 
 export type HlsLicenseXhrSetupFn = (xhr: XMLHttpRequest, url: string, keyContext: MediaKeySessionContext, licenseChallenge: Uint8Array) => void | Uint8Array | Promise<Uint8Array | void>;
 
@@ -76,6 +78,8 @@ export class VideoHlsLoader extends BaseVideoLoader {
     ['hlsFragLoaded', HlsEvents.FRAG_LOADED],
     ['hlsError', HlsEvents.ERROR],
   ]);
+
+  protected _hlsConfig: Partial<OmpHlsConfig>;
   protected _hls: Hls | undefined;
   protected _hlsEventListenersMap: Map<OmpNamedEventEventName, OmpHlsEventListener> = new Map<OmpNamedEventEventName, OmpHlsEventListener>();
 
@@ -86,8 +90,10 @@ export class VideoHlsLoader extends BaseVideoLoader {
 
   constructor(videoController: VideoControllerApi) {
     super(videoController);
+    this._hlsConfig = videoController.getConfig().hlsConfig;
+
     if (Hls.isSupported()) {
-      console.debug('video load with hls.js');
+      // console.debug('video load with hls.js');
     } else {
       console.error('hls is not supported through MediaSource extensions');
     }
@@ -104,15 +110,14 @@ export class VideoHlsLoader extends BaseVideoLoader {
       this.destroyHls();
 
       let that = this;
-      let hlsConfig = this._videoController.getConfig().hlsConfig;
 
       this._hls = new Hls({
-        ...hlsConfig,
-        licenseXhrSetup: hlsConfig.loadVideoLicenseXhrSetup
+        ...this._hlsConfig,
+        licenseXhrSetup: this._hlsConfig.loadVideoLicenseXhrSetup
           ? (xhr: XMLHttpRequest, url: string, keyContext: MediaKeySessionContext, licenseChallenge: Uint8Array) => {
-              return hlsConfig.loadVideoLicenseXhrSetup!(sourceUrl, options)(xhr, url, keyContext, licenseChallenge);
+              return this._hlsConfig.loadVideoLicenseXhrSetup!(sourceUrl, options)(xhr, url, keyContext, licenseChallenge);
             }
-          : hlsConfig.licenseXhrSetup,
+          : this._hlsConfig.licenseXhrSetup,
       });
 
       this.updateActiveNamedEventStreams(this._videoController.getActiveNamedEventStreams());
@@ -257,7 +262,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
       }
 
       this._hls.on(HlsEvents.ERROR, function (event, data) {
-        let message = `Hls error occurred; details: ${data.details}, fatal: ${data.fatal}, message: ${data.error?.message}`
+        let message = `Hls error occurred; details: ${data.details}, fatal: ${data.fatal}, message: ${data.error?.message}`;
 
         if (data.fatal) {
           /**
@@ -266,12 +271,12 @@ export class VideoHlsLoader extends BaseVideoLoader {
            * are not to be playable by OmakasePlayer
            */
           if (!data.details.includes(ErrorDetails.AUDIO_TRACK_LOAD_ERROR)) {
-            console.debug(`Hls fatal error "${data.details}" ignored intentionally.`)
+            console.debug(`Hls fatal error "${data.details}" ignored intentionally.`);
           } else {
             errorCompleteObserver(observer, `Error loading video. ${message}`);
           }
         } else {
-          console.debug(message)
+          console.debug(message);
         }
       });
 
@@ -337,6 +342,8 @@ export class VideoHlsLoader extends BaseVideoLoader {
       });
 
       let hasInitSegment = false;
+      let initSegmentTimeOffset: number | undefined = void 0;
+
       let hlsFragParsingInitSegment$ = new Observable<boolean>((observer) => {
         this._hls!.once(HlsEvents.FRAG_PARSING_INIT_SEGMENT, function (event, data) {
           if ((data as FragLoadedData).frag.sn === 'initSegment' && (data as FragLoadedData).frag.data) {
@@ -344,6 +351,37 @@ export class VideoHlsLoader extends BaseVideoLoader {
           }
           nextCompleteObserver(observer, true);
         });
+      });
+
+      let initSegmentResolution$ = new Observable<boolean>((observer) => {
+        forkJoin([hlsMediaAttached$, hlsManifestParsed$, hlsFragParsingInitSegment$])
+          .pipe(first())
+          .subscribe(([mediaAttached, manifestParsed, fragParsingInitSegment]) => {
+            if (hasInitSegment) {
+              let firstFragment = this._hls!.levels[0].details?.fragments[0];
+
+              if (firstFragment) {
+                MediaMetadataResolver.getMediaMetadata(firstFragment.url, ['firstVideoTrackInitSegmentTime']).subscribe({
+                  next: (mediaMetadata) => {
+                    initSegmentTimeOffset = mediaMetadata.firstVideoTrackInitSegmentTime;
+                    console.debug(`Init segment resolved to`, initSegmentTimeOffset);
+                  },
+                  error: (err) => {
+                    console.debug(err);
+                  },
+                  complete: () => {
+                    nextCompleteObserver(observer, true);
+                  },
+                });
+              } else {
+                console.debug(`First fragment not detected. How to resolve init segment time offset?`);
+                console.error('TODO');
+                nextCompleteObserver(observer, true);
+              }
+            } else {
+              nextCompleteObserver(observer, true);
+            }
+          });
       });
 
       let frameRate$ = new Observable<number | undefined>((observer) => {
@@ -362,9 +400,9 @@ export class VideoHlsLoader extends BaseVideoLoader {
       let videoLoadedData$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEvents.LOADEDDATA).pipe(first());
       let videoLoadedMetadata$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEvents.LOADEDMETEDATA).pipe(first());
 
-      forkJoin([hlsMediaAttached$, hlsManifestParsed$, hlsFragParsingInitSegment$, videoLoadedData$, videoLoadedMetadata$, frameRate$])
+      forkJoin([hlsMediaAttached$, hlsManifestParsed$, initSegmentResolution$, videoLoadedData$, videoLoadedMetadata$, frameRate$])
         .pipe(first())
-        .subscribe(([mediaAttached, manifestParsed, fragParsingInitSegment, videoLoadedData, videoLoadedMetadata, frameRate]) => {
+        .subscribe(([mediaAttached, manifestParsed, initSegmentResolution, videoLoadedData, videoLoadedMetadata, frameRate]) => {
           let duration: number;
           if (options && options.duration) {
             duration = z.coerce.number().parse(options.duration);
@@ -379,7 +417,10 @@ export class VideoHlsLoader extends BaseVideoLoader {
 
           let dropFrame = options && options.dropFrame !== void 0 ? options.dropFrame : FrameRateUtil.resolveDropFrameFromFramerate(frameRate);
 
-          let initSegmentTimeOffset = hasInitSegment && !isDrm ? FrameRateUtil.frameNumberToTime(2, frameRate) : void 0; // TODO resolve time offset dynamically
+          if (isDrm) {
+            console.debug(`Init segment time offset for DRM videos set to undefined`);
+            initSegmentTimeOffset = void 0; // TODO check
+          }
 
           let video: Video = {
             protocol: 'hls',
@@ -401,12 +442,12 @@ export class VideoHlsLoader extends BaseVideoLoader {
           }
 
           // subtitles
-          this._hls!.subtitleDisplay = !!hlsConfig.subtitleDisplay;
-          if (!hlsConfig.subtitleDisplay) {
+          this._hls!.subtitleDisplay = !!this._hlsConfig.subtitleDisplay;
+          if (!this._hlsConfig.subtitleDisplay) {
             this._hls!.subtitleTrack = -1;
           }
 
-          if (!!hlsConfig.fetchManifestSubtitleTracks && this._hls!.allSubtitleTracks && this._hls!.allSubtitleTracks.length > 0) {
+          if (!!this._hlsConfig.fetchManifestSubtitleTracks && this._hls!.allSubtitleTracks && this._hls!.allSubtitleTracks.length > 0) {
             let os$ = this._hls!.allSubtitleTracks.map((subtitleTrack) => {
               return M3u8Util.fetchVttSegmentedConcat(subtitleTrack.url, AuthConfig.authentication).pipe(
                 map((webvttText) => {

@@ -19,7 +19,7 @@ import {Video} from '../video';
 import {VideoUtil} from './video-util';
 import {isNullOrUndefined} from './object-util';
 import {StringUtil} from './string-util';
-import {FrameRateModel} from '../video/model';
+import {FrameRateModel} from '../video';
 
 const frameRatePrecision = 15; // frame rate precision
 
@@ -43,17 +43,17 @@ const initFrameRates: {fraction: string; dropFramesOnMinute?: number}[] = [
   },
 ];
 
-const initDropFrames: {frameRateFraction: string; dropFrameEnabled: boolean}[] = [
+const initDropFrames: {fraction: string; dropFrameEnabled: boolean}[] = [
   {
-    frameRateFraction: '24000/1001',
+    fraction: '24000/1001',
     dropFrameEnabled: false,
   },
   {
-    frameRateFraction: '30000/1001',
+    fraction: '30000/1001',
     dropFrameEnabled: true,
   },
   {
-    frameRateFraction: '60000/1001',
+    fraction: '60000/1001',
     dropFrameEnabled: false,
   },
 ];
@@ -80,7 +80,7 @@ export class FrameRateUtil {
     });
 
     initDropFrames.forEach((dropFrame) => {
-      this.dropFrameByFramerate.set(this.resolveFrameRateValueFromFraction(dropFrame.frameRateFraction), dropFrame.dropFrameEnabled);
+      this.dropFrameByFramerate.set(this.resolveFrameRateValueFromFraction(dropFrame.fraction), dropFrame.dropFrameEnabled);
     });
   }
 

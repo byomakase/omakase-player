@@ -219,6 +219,12 @@ export class MarkerList implements Destroyable, MarkerListApi {
     this.onMarkerDelete$.next({marker});
   }
 
+  removeAllMarkers(): void {
+    for (const marker of this.getMarkers()) {
+      this.removeMarker(marker.id);
+    }
+  }
+
   toggleMarker(id: string) {
     const markerItem = this.getMarkerItem(id);
     markerItem.source.toggleMarker(markerItem.id);

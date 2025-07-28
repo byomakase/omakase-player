@@ -1,3 +1,4 @@
+import {TimeRangeMarkerTrackApi} from './../api/time-range-marker-track-api';
 /*
  * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
@@ -14,11 +15,11 @@
  * limitations under the License.
  */
 
-import {Observable} from 'rxjs';
+import {BehaviorSubject, Observable} from 'rxjs';
 import {Destroyable, OmakaseTextTrack, VideoFullscreenChangeEvent, VideoSafeZoneChangeEvent} from '../types';
 import {MarkerTrackConfig, VideoSafeZone} from './model';
 import {VideoControllerApi} from './video-controller-api';
-import {MarkerTrackApi} from '../api/marker-track-api';
+import {MarkerTrackApi} from '../api';
 
 export interface VideoDomControllerApi extends Destroyable {
   attachVideoController(videoController: VideoControllerApi): void;
@@ -28,8 +29,6 @@ export interface VideoDomControllerApi extends Destroyable {
   onVideoSafeZoneChange$: Observable<VideoSafeZoneChangeEvent>;
 
   getVideoElement(): HTMLVideoElement;
-
-  getAudioUtilElement(): HTMLAudioElement;
 
   isFullscreen(): boolean;
 
@@ -43,7 +42,7 @@ export interface VideoDomControllerApi extends Destroyable {
 
   getSafeZones(): VideoSafeZone[];
 
-  setSafeZoneAspectRatio(aspectRatio: string): Observable<void>;
+  setSafeZoneAspectRatio(aspectRatio: string): void;
 
   appendHTMLTrackElement(omakaseTextTrack: OmakaseTextTrack): Observable<HTMLTrackElement | undefined>;
 
@@ -58,4 +57,8 @@ export interface VideoDomControllerApi extends Destroyable {
   isPiPSupported(): boolean;
 
   createMarkerTrack(config: MarkerTrackConfig): MarkerTrackApi;
+
+  getProgressMarkerTrack(): TimeRangeMarkerTrackApi | undefined;
+
+  setWatermark(watermark: string): void;
 }

@@ -19,6 +19,8 @@ import Decimal from 'decimal.js';
 import {MarkerSymbolType} from './marker-types';
 import {KonvaFactory} from '../../konva/konva-factory';
 import {ColorUtil} from '../../util/color-util';
+import {PeriodMarker} from './period-marker';
+import {MarkerVttCue} from '../../types';
 
 export class MarkerUtil {
   static createPeriodSymbol(style: {handleType: 'start' | 'end'; symbolType: MarkerSymbolType; symbolSize: number; color: string}): Konva.Shape {
@@ -106,5 +108,19 @@ export class MarkerUtil {
       default:
         throw Error('Unknown type');
     }
+  }
+
+  static createPeriodMarkerFromCue(cue: MarkerVttCue): PeriodMarker {
+    return new PeriodMarker({
+      timeObservation: {
+        start: cue.startTime,
+        end: cue.endTime,
+      },
+      style: {
+        color: ColorUtil.randomHexColor(),
+      },
+      editable: true,
+      text: cue.text,
+    });
   }
 }

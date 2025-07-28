@@ -15,8 +15,7 @@
  */
 
 import axios, {AxiosRequestConfig, AxiosResponse} from 'axios';
-import {AuthConfig} from './auth/auth-config';
-import {BasicAuthenticationData, BearerAuthenticationData, CustomAuthenticationData} from './authentication/model';
+import {AuthConfig, BasicAuthenticationData, BearerAuthenticationData, CustomAuthenticationData} from './common/authentication';
 
 export function httpGet<T>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
   return axios.get<T>(url, config);

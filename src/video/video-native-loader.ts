@@ -25,11 +25,13 @@ import {OmpAudioTrack, OmpAudioTrackCreateType, OmpNamedEventEventName} from '..
 import {FileUtil} from '../util/file-util';
 import {CryptoUtil} from '../util/crypto-util';
 import {AudioUtil} from '../util/audio-util';
-import {AuthConfig} from '../auth/auth-config';
 import {BlobUtil} from '../util/blob-util';
-import {MediaInfoUtil} from '../mediainfo';
-import {AudioTrack, MediaInfoResult} from 'mediainfo.js';
-import {HTMLVideoElementEvents} from '../dom/html-element';
+
+import {HTMLVideoElementEvents} from '../media-element/omp-media-element';
+import {AuthConfig} from '../common/authentication';
+import {MediaMetadata, MediaMetadataResolver} from '../tools/media-metadata-resolver';
+
+const audioChannelsDefault = 2;
 
 export class VideoNativeLoader extends BaseVideoLoader {
   private static audioLabelDefault = 'Default';
@@ -47,33 +49,73 @@ export class VideoNativeLoader extends BaseVideoLoader {
     this._loadVideoBreaker$ = new Subject<void>();
 
     return passiveObservable<Video>((observer) => {
-      this._videoController.getHTMLVideoElement().src = '';
-      this._videoController.getHTMLVideoElement().load();
+      let videoElement = this._videoController.getHTMLVideoElement();
 
-      let videoLoadedData$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEvents.LOADEDDATA).pipe(first());
-      let videoLoadedMetadata$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEvents.LOADEDMETEDATA).pipe(first());
-      let videoLoadError$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEvents.ERROR).pipe(take(1));
-      let mediaInfo$ = new Subject<MediaInfoResult>();
+      videoElement.src = '';
+      videoElement.load();
 
-      let videoLoad$ = combineLatest([videoLoadedData$, videoLoadedMetadata$, mediaInfo$]).pipe(takeUntil(this._destroyed$)).pipe(take(1));
+      let videoLoadedData$ = fromEvent(videoElement, HTMLVideoElementEvents.LOADEDDATA).pipe(first());
+      let videoLoadedMetadata$ = fromEvent(videoElement, HTMLVideoElementEvents.LOADEDMETEDATA).pipe(first());
+      let videoLoadError$ = fromEvent(videoElement, HTMLVideoElementEvents.ERROR).pipe(take(1));
 
-      let audioLoad$ = combineLatest([videoLoad$, mediaInfo$]).pipe(takeUntil(this._destroyed$)).pipe(take(1));
+      let mediaMetadata$ = new Subject<MediaMetadata>();
 
-      let subtitlesLoad$ = combineLatest([videoLoad$]).pipe(takeUntil(this._destroyed$)).pipe(take(1));
+      let videoLoad$ = new Subject<{
+        frameRate: number | undefined;
+        initSegmentTimeOffset: number | undefined;
+      }>();
+
+      let audioLoad$ = new Subject<{
+        channels: number;
+      }>();
+
+      combineLatest([videoLoadedData$, videoLoadedMetadata$, mediaMetadata$])
+        .pipe(takeUntil(this._destroyed$))
+        .pipe(take(1))
+        .subscribe({
+          next: ([videoLoadedData, videoLoadedMetadata, mediaMetadata]) => {
+            nextCompleteSubject(videoLoad$, {
+              frameRate: mediaMetadata.firstVideoTrackFrameRate,
+              initSegmentTimeOffset: mediaMetadata.firstVideoTrackInitSegmentTime
+            });
+          },
+        });
+
+      combineLatest([videoLoad$, mediaMetadata$])
+        .pipe(takeUntil(this._destroyed$))
+        .pipe(take(1))
+        .subscribe({
+          next: ([videoLoadResult, mediaMetadata]) => {
+            if (!mediaMetadata.firstAudioTrackChannelsNumber) {
+              console.debug(`Could not resolve channels, setting default.`, audioChannelsDefault);
+            }
+
+            nextCompleteSubject(audioLoad$, {
+              channels: mediaMetadata.firstAudioTrackChannelsNumber ? mediaMetadata.firstAudioTrackChannelsNumber : audioChannelsDefault,
+            });
+          },
+        });
+
+      MediaMetadataResolver.getMediaMetadata(sourceUrl, ['firstVideoTrackInitSegmentTime', 'firstVideoTrackFrameRate', 'firstAudioTrackChannelsNumber']).subscribe({
+        next: (mediaMetadata: MediaMetadata) => {
+          console.debug(`Media metadata`, mediaMetadata);
+          nextCompleteSubject(mediaMetadata$, mediaMetadata);
+        }
+      })
 
       videoLoad$
-        .subscribe(([videoLoadedData, videoLoadedMetadata, mediaInfoResult]) => {
+        .subscribe((videoLoadEvent) => {
           let duration: number;
           if (options && options.duration !== void 0) {
             duration = z.coerce.number().parse(options.duration);
-            duration = duration ? duration : this._videoController.getHTMLVideoElement().duration;
+            duration = duration ? duration : videoElement.duration;
           } else {
-            duration = this._videoController.getHTMLVideoElement().duration;
+            duration = videoElement.duration;
           }
 
           let isAudioOnly = FileUtil.isAudioFile(sourceUrl);
 
-          const frameRate = options?.frameRate ? FrameRateUtil.resolveFrameRate(options.frameRate) : FrameRateUtil.resolveFrameRate(MediaInfoUtil.findFrameRate(mediaInfoResult));
+          const frameRate = options?.frameRate ? FrameRateUtil.resolveFrameRate(options.frameRate) : videoLoadEvent.frameRate;
           if (!frameRate) {
             throw new Error('Frame rate could not be determined');
           }
@@ -90,6 +132,7 @@ export class VideoNativeLoader extends BaseVideoLoader {
             frameDuration: FrameRateUtil.frameDuration(frameRate),
             audioOnly: isAudioOnly,
             drm: false,
+            initSegmentTimeOffset: videoLoadEvent.initSegmentTimeOffset,
           };
 
           nextCompleteObserver(observer, video);
@@ -102,9 +145,7 @@ export class VideoNativeLoader extends BaseVideoLoader {
         errorCompleteObserver(observer, error);
       });
 
-      audioLoad$.subscribe(([videoLoadResult, mediaInfoResult]) => {
-        let channelCount = (mediaInfoResult.media?.track.find((p) => p['@type'] === 'Audio') as AudioTrack | undefined)?.Channels;
-
+      audioLoad$.subscribe((event) => {
         let audioTrack: OmpAudioTrack = {
           id: `${CryptoUtil.uuid()}`,
           src: sourceUrl,
@@ -112,7 +153,7 @@ export class VideoNativeLoader extends BaseVideoLoader {
           active: true,
           language: VideoNativeLoader.audioLabelDefault,
           label: VideoNativeLoader.audioLabelDefault,
-          channelCount: channelCount,
+          channelCount: event.channels,
         };
 
         this._audioTracks.set(audioTrack.id, audioTrack);
@@ -125,7 +166,7 @@ export class VideoNativeLoader extends BaseVideoLoader {
         });
       });
 
-      audioLoad$.subscribe(([videoLoadResult]) => {
+      audioLoad$.subscribe((event) => {
         // assuming no embedded subtitles
         this.onSubtitlesLoaded$.next({
           tracks: [],
@@ -133,15 +174,8 @@ export class VideoNativeLoader extends BaseVideoLoader {
         });
       });
 
-      // fetch media info
-      MediaInfoUtil.analyze(sourceUrl).subscribe({
-        next: (mediaInfoResult) => {
-          nextCompleteSubject(mediaInfo$, mediaInfoResult);
-        },
-      });
-
-      this._videoController.getHTMLVideoElement().src = sourceUrl;
-      this._videoController.getHTMLVideoElement().load();
+      videoElement.src = sourceUrl;
+      videoElement.load();
     });
   }
 

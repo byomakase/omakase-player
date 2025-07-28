@@ -38,9 +38,8 @@ export interface AudioRouterApi extends Api {
   /**
    * Updates routing connections
    * @param connections
-   * @param checkMuteSolo // TODO remove
    */
-  updateConnections(connections: OmpAudioRoutingConnection[], checkMuteSolo?: boolean): void;
+  updateConnections(connections: OmpAudioRoutingConnection[]): void;
 
   /**
    * Creates {@link OmpAudioEffectsGraph}'s from provided {@link effectsGraphDef}'s to routing paths provided with {@link routingPath}. </br>

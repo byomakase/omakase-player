@@ -16,7 +16,7 @@
 
 import {Timeline, TimelineConfig} from './timeline';
 import {forkJoin, Observable, Subject, takeUntil} from 'rxjs';
-import {AlertsApi, AudioApi, MarkerListApi, OmakasePlayerApi, SubtitlesApi, TimelineApi, VideoApi} from './api';
+import {AlertsApi, AudioApi, MarkerListApi, MarkerTrackApi, OmakasePlayerApi, RouterVisualizationApi, SubtitlesApi, TimelineApi, VideoApi} from './api';
 import {SubtitlesController} from './subtitles/subtitles-controller';
 import {Destroyable} from './types';
 import {AudioController} from './audio/audio-controller';
@@ -30,66 +30,22 @@ import {AlertsController} from './alerts/alerts-controller';
 import {BlobUtil} from './util/blob-util';
 import {DetachableVideoController} from './video/detachable-video-controller';
 import {VTT_DOWNSAMPLE_CONFIG_DEFAULT} from './timeline/timeline-lane';
-import {MediaChromeVisibility, VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT, VideoDomController} from './video/video-dom-controller';
+import {VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT, VideoDomController} from './video/video-dom-controller';
 import {VideoDomControllerApi} from './video/video-dom-controller-api';
 import {DetachedVideoController} from './video/detached-video-controller';
 import {ConfigWithOptionalStyle} from './layout';
 import {MarkerList, MarkerListConfig} from './marker-list/marker-list';
-import {AuthConfig} from './auth/auth-config';
-import {AuthenticationData} from './authentication/model';
-import {VIDEO_CONTROLLER_CONFIG_DEFAULT} from './video/video-controller';
+import {VIDEO_CONTROLLER_CONFIG_DEFAULT, VideoControllerConfig} from './video/video-controller';
 import {OmpHlsConfig} from './video/video-hls-loader';
 import {RouterVisualization, RouterVisualizationConfig} from './router-visualization/router-visualization';
-import {RouterVisualizationApi} from './api/router-visualization-api';
 import {removeEmptyValues} from './util/object-util';
-import {MarkerTrackApi} from './api/marker-track-api';
 import {MarkerTrackConfig} from './video/model';
-
-export interface MediaChromeConfig {
-  /**
-   *  Media chrome controls visibility (enabled, disabled or fullscreen only)
-   */
-  visibility: MediaChromeVisibility;
-
-  /**
-   *  VTT url for the thumbnails (used for preview in media chrome time range)
-   */
-  thumbnailVttUrl?: string;
-
-  /**
-   *  Function to get thumbnail url from time (used for preview in media chrome time range)
-   */
-  thumbnailFn?: (time: number) => string | undefined;
-
-  /**
-   *  Custom options for playback speed rate
-   */
-  playbackRateOptions?: number[];
-
-  /**
-   *  Watermark text or svg
-   */
-  watermark?: string;
-
-  /**
-   *  Placement of the audio menu (top - next to help button, bottom - on the toolbar)
-   */
-  trackMenuPlacement?: 'top' | 'bottom';
-
-  /**
-   *  If true, keep audio menu open until closed, otherwise close on select
-   */
-  trackMenuFloating?: boolean;
-
-  /**
-   *  If true, show sidecar audios as separate groups
-   */
-  trackMenuMultiselect?: boolean;
-}
+import {ChromelessChroming, CustomChroming, DEFAULT_PLAYER_CHROMING_CONFIG, DEFAULT_STAMP_PLAYER_CHROMING_CONFIG, DefaultChroming, PlayerChroming, StampChroming} from './player-chroming/model';
+import {TimeRangeMarkerTrackApi} from './api/time-range-marker-track-api';
+import {AuthConfig, AuthenticationData} from './common/authentication';
 
 export interface OmakasePlayerConfig {
   playerHTMLElementId?: string;
-  mediaChromeHTMLElementId?: string;
   crossorigin?: 'anonymous' | 'use-credentials';
 
   /**
@@ -124,10 +80,12 @@ export interface OmakasePlayerConfig {
    */
   playerClickHandler?: () => void;
 
+  audioPlayMode?: VideoControllerConfig['audioPlayMode'];
+
   /**
-   * Media chrome configuration
+   * Player chroming configuration
    */
-  mediaChrome?: MediaChromeConfig;
+  playerChroming?: DefaultChroming | CustomChroming | ChromelessChroming | StampChroming;
 }
 
 const configDefault: OmakasePlayerConfig = {
@@ -136,6 +94,7 @@ const configDefault: OmakasePlayerConfig = {
   hlsConfig: VIDEO_CONTROLLER_CONFIG_DEFAULT.hlsConfig,
   detachedPlayer: VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT.detachedPlayer,
   disablePictureInPicture: VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT.disablePictureInPicture,
+  audioPlayMode: VIDEO_CONTROLLER_CONFIG_DEFAULT.audioPlayMode,
 };
 
 export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
@@ -160,10 +119,24 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
       ...(config ? config : {}),
     };
 
-    if (!config?.mediaChrome) {
-      this._config.mediaChrome = {
-        visibility: this._config.detachedPlayer ? 'enabled' : 'fullscreen-only',
+    if (!config?.playerChroming) {
+      this._config.playerChroming = {
+        theme: 'DEFAULT',
       };
+    }
+
+    if (this._config.playerChroming?.theme === 'DEFAULT') {
+      this._config.playerChroming.themeConfig = {
+        ...DEFAULT_PLAYER_CHROMING_CONFIG,
+        controlBarVisibility: this._config.detachedPlayer ? 'ENABLED' : 'FULLSCREEN_ONLY',
+        ...(config?.playerChroming as DefaultChroming)?.themeConfig,
+      };
+    } else if (this._config.playerChroming?.theme === 'STAMP') {
+      this._config.playerChroming.themeConfig = {
+        ...DEFAULT_STAMP_PLAYER_CHROMING_CONFIG,
+        ...(config?.playerChroming as StampChroming)?.themeConfig,
+      };
+      this._config.playerChroming.watermarkVisibility = config?.playerChroming?.watermarkVisibility ?? 'AUTO_HIDE';
     }
 
     OmakasePlayer.instance = this;
@@ -182,16 +155,8 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
         crossorigin: this._config.crossorigin,
         detachedPlayer: this._config.detachedPlayer,
         disablePictureInPicture: this._config.disablePictureInPicture,
-        mediaChromeVisibility: this._config.mediaChrome?.visibility,
-        mediaChromeHTMLElementId: this._config.mediaChromeHTMLElementId,
-        thumbnailVttUrl: this._config.mediaChrome?.thumbnailVttUrl,
-        thumbnailFn: this._config.mediaChrome?.thumbnailFn,
+        playerChroming: this._config.playerChroming,
         playerClickHandler: this._config.playerClickHandler,
-        playbackRateOptions: this._config.mediaChrome?.playbackRateOptions,
-        watermark: this._config.mediaChrome?.watermark,
-        trackMenuFloating: this._config.mediaChrome?.trackMenuFloating,
-        trackMenuPlacement: this._config.mediaChrome?.trackMenuPlacement,
-        trackMenuMultiselect: this._config.mediaChrome?.trackMenuMultiselect,
       })
     );
 
@@ -199,6 +164,7 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
       return new VideoController(
         {
           hlsConfig: this._config.hlsConfig,
+          audioPlayMode: this._config.audioPlayMode,
         },
         this._videoDomController
       );
@@ -210,7 +176,7 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
       this._videoController = new DetachableVideoController(
         {
           detachedPlayerUrlFn: this._config.detachedPlayerUrlFn,
-          thumbnailVttUrl: this._config.mediaChrome?.thumbnailVttUrl,
+          thumbnailVttUrl: this._config.playerChroming?.thumbnailUrl,
         },
         createLocalVideoController()
       );
@@ -228,6 +194,10 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
 
   setThumbnailVttUrl(thumbnailVttUrl: string) {
     this._videoController.loadThumbnailVttUrl(thumbnailVttUrl);
+  }
+
+  setWatermark(watermark: string) {
+    this._videoDomController.setWatermark(watermark);
   }
 
   loadVideo(videoSourceUrl: string, options?: VideoLoadOptions): Observable<Video> {
@@ -256,38 +226,34 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
   }
 
   createMarkerList(config: MarkerListConfig): Observable<MarkerListApi> {
-    return new Observable<MarkerList>((o$) => {
+    return new Observable<MarkerList>((observer) => {
       const markerList = new MarkerList(config, this._videoController);
 
       if (config.vttUrl) {
         markerList.onVttLoaded$.pipe(takeUntil(this._destroyed$)).subscribe(() => {
-          o$.next(markerList);
-          o$.complete();
+          nextCompleteObserver(observer, markerList);
         });
       } else {
         // timeout is here to make sure the marker list element is created in the dom
         setTimeout(() => {
-          o$.next(markerList);
-          o$.complete();
+          nextCompleteObserver(observer, markerList);
         });
       }
     });
   }
 
   createMarkerTrack(config: MarkerTrackConfig): Observable<MarkerTrackApi> {
-    return new Observable<MarkerTrackApi>((o$) => {
+    return new Observable<MarkerTrackApi>((observer) => {
       const markerTrack = this._videoDomController.createMarkerTrack(config);
 
       if (config.vttUrl) {
         markerTrack.onVttLoaded$.pipe(takeUntil(this._destroyed$)).subscribe(() => {
-          o$.next(markerTrack);
-          o$.complete();
+          nextCompleteObserver(observer, markerTrack);
         });
       } else {
         // timeout is here to make sure the marker track element is created in the dom
         setTimeout(() => {
-          o$.next(markerTrack);
-          o$.complete();
+          nextCompleteObserver(observer, markerTrack);
         });
       }
     });
@@ -315,6 +281,10 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
 
   get alerts(): AlertsApi {
     return this._alertsController;
+  }
+
+  get progressMarkerTrack(): TimeRangeMarkerTrackApi | undefined {
+    return this._videoDomController.getProgressMarkerTrack();
   }
 
   destroy() {

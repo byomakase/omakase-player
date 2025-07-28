@@ -17,17 +17,17 @@
 import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle} from '../layout/konva-component';
 import Konva from 'konva';
 import {Constants} from '../constants';
-import {OnMeasurementsChange, Position} from '../common/measurement';
+import {OnMeasurementsChange, Position} from '../common';
 import {Timeline} from './timeline';
 import {BehaviorSubject, combineLatest, filter, merge, Subject, takeUntil} from 'rxjs';
-import {PlaybackState, VideoControllerApi} from '../video';
+import {MediaElementPlaybackState, VideoControllerApi} from '../video';
 import {KonvaFactory} from '../konva/konva-factory';
 import {WindowUtil} from '../util/window-util';
 import {KonvaUtil} from '../util/konva-util';
 import {nextCompleteSubject} from '../util/rxjs-util';
 import {isNullOrUndefined} from '../util/object-util';
 import {PlayheadMoveEvent} from '../types';
-import {BufferedTimespan} from '../video/model';
+import {BufferedTimespan} from '../video';
 
 export interface PlayheadState {
   dragging: boolean;
@@ -108,7 +108,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
 
   protected _timeline: Timeline;
   protected _videoController: VideoControllerApi;
-  protected _playbackState?: PlaybackState;
+  protected _playbackState?: MediaElementPlaybackState;
 
   protected _state: PlayheadState = {
     dragging: false,

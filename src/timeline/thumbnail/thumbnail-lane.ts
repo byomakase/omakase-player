@@ -32,8 +32,8 @@ import {ThumbnailLaneApi} from '../../api';
 import {ThumbnailVttFile} from '../../vtt';
 import {VttAdapter, VttAdapterConfig} from '../../common/vtt-adapter';
 import {VttTimelineLane, VttTimelineLaneConfig} from '../vtt-timeline-lane';
-import {AuthConfig} from '../../auth/auth-config';
 import {lightPlaceholder, darkPlaceholder} from './thumbnail-preview-svgs';
+import {AuthConfig} from '../../common/authentication';
 
 export interface ThumbnailLaneConfig extends VttTimelineLaneConfig<ThumbnailLaneStyle>, VttAdapterConfig<ThumbnailVttFile> {
   axiosConfig?: AxiosRequestConfig;

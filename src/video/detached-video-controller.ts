@@ -74,7 +74,7 @@ import {
   OmpMainAudioState,
   OmpSidecarAudioInputSoloMuteState,
   OmpSidecarAudioState,
-  PlaybackState,
+  MediaElementPlaybackState,
   Video,
   VideoLoadOptions,
   VideoLoadOptionsInternal,
@@ -851,6 +851,22 @@ export class DetachedVideoController implements VideoControllerApi {
         },
       });
 
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.activateMainAudio')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.activateMainAudio());
+        },
+      });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.deactivateMainAudio')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.deactivateMainAudio());
+        },
+      });
+
     // audio router
 
     this._messageChannel!.createRequestResponseStream('VideoControllerApi.createMainAudioRouter')
@@ -1220,7 +1236,7 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.onAudioSwitched$;
   }
 
-  get onPlaybackState$(): Observable<PlaybackState> {
+  get onPlaybackState$(): Observable<MediaElementPlaybackState> {
     return this._videoController.onPlaybackState$;
   }
 
@@ -1433,6 +1449,10 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.getAudioOutputNode();
   }
 
+  getSidecarAudiosOutputNode(): AudioNode {
+    return this._videoController.getSidecarAudiosOutputNode();
+  }
+
   getMainAudioRouter(): OmpAudioRouter | undefined {
     return this._videoController.getMainAudioRouter();
   }
@@ -1445,7 +1465,7 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.getPlaybackRate();
   }
 
-  getPlaybackState(): PlaybackState | undefined {
+  getPlaybackState(): MediaElementPlaybackState | undefined {
     return this._videoController.getPlaybackState();
   }
 
@@ -1571,6 +1591,14 @@ export class DetachedVideoController implements VideoControllerApi {
 
   setActiveAudioTrack(id: string): Observable<void> {
     return this._videoController.setActiveAudioTrack(id);
+  }
+
+  activateMainAudio(): Observable<void> {
+    return this._videoController.activateMainAudio();
+  }
+
+  deactivateMainAudio(): Observable<void> {
+    return this._videoController.deactivateMainAudio();
   }
 
   setPlaybackRate(playbackRate: number): Observable<void> {

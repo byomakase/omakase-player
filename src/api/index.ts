@@ -33,5 +33,7 @@ export * from './line-chart-lane-api';
 export * from './og-chart-lane-api';
 export * from './marker-list-api';
 export * from './marker-api';
+export * from './marker-track-api';
+export * from './marker-aware-api';
 
 export * from './router-visualization-api';

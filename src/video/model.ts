@@ -19,7 +19,7 @@ import {OmpAudioEffectsGraphDef} from '../audio';
 import {VttLoadOptions} from '../api/vtt-aware-api';
 import {MarkerApi} from '../api';
 
-export type VideoProtocol = 'hls' | 'native';
+export type VideoProtocol = 'hls' | 'native' | 'audio';
 
 export interface Video {
   sourceUrl: string;
@@ -73,7 +73,7 @@ export interface TimecodeObject {
   audioOnly: boolean;
 }
 
-export interface PlaybackState {
+export interface MediaElementPlaybackState {
   playing: boolean;
   pausing: boolean;
   paused: boolean;
@@ -81,6 +81,7 @@ export interface PlaybackState {
   seeking: boolean;
   buffering: boolean;
   ended: boolean;
+  waitingSyncedMedia: boolean;
 }
 
 export interface VideoLoadOptions {
@@ -105,9 +106,14 @@ export interface VideoLoadOptions {
   dropFrame?: boolean;
 
   /**
-   * Set to force video protocol loader, it will be set automatically otherwise
+   * Set to force video protocol loader, player will try to set it automatically otherwise
    */
   protocol?: VideoProtocol;
+
+  /**
+   * URL for an image to be shown until video is first played
+   */
+  poster?: string;
 
   /**
    * Arbitrary key-value data provided on video load. Can be used to storevalues such as DRM tokens.
@@ -169,6 +175,11 @@ export interface BufferedTimespan {
 
 export interface OmpAudioState {
   /**
+   * Is audio active or inactive
+   */
+  active: boolean;
+
+  /**
    * Audio router state
    */
   audioRouterState: OmpAudioRouterState | undefined;
@@ -192,6 +203,23 @@ export interface OmpAudioInputSoloMuteState {
 }
 
 /**
+ * OMP Media element state
+ */
+export interface OmpMediaElementState {
+  id: string;
+
+  /**
+   * Media source
+   */
+  src: string | undefined;
+
+  /**
+   * Is source loaded
+   */
+  loaded: boolean;
+}
+
+/**
  * Main audio state
  */
 export interface OmpMainAudioState extends OmpAudioState {}
@@ -202,6 +230,11 @@ export interface OmpMainAudioInputSoloMuteState extends OmpAudioInputSoloMuteSta
  * Sidecar audio state
  */
 export interface OmpSidecarAudioState extends OmpAudioState {
+  /**
+   * Is sidecar audio loaded
+   */
+  loaded: boolean;
+
   /**
    * Sidecar audio track
    */

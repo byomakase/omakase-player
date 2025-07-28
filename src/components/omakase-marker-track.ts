@@ -1,4 +1,4 @@
-import {BehaviorSubject, Subject} from 'rxjs';
+import {BehaviorSubject, Subject, takeUntil} from 'rxjs';
 import {completeUnsubscribeSubjects, nextCompleteSubject} from '../util/rxjs-util';
 import {MomentMarker, PeriodMarker} from '../timeline';
 import {MarkerTrackApi} from '../api/marker-track-api';
@@ -62,6 +62,9 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
   connectedCallback() {
     this._container = document.createElement('div');
     this._container.classList.add('omakase-marker-track-container');
+    this._container.onclick = (event) => {
+      event.stopPropagation();
+    };
     this._mouseupListener = this.clearDraggingMarker.bind(this);
     document.addEventListener('mouseup', this._mouseupListener);
     this._mousemoveListener = this.moveDraggingMarker.bind(this);
@@ -105,6 +108,12 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
       this._markers.splice(this._markers.indexOf(marker), 1);
       this._container!.querySelector(`#${markerElementPrefix}-${id}`)?.remove();
       this.onMarkerDelete$.next({marker});
+    }
+  }
+
+  removeAllMarkers(): void {
+    for (const marker of [...this._markers]) {
+      this.removeMarker(marker.id);
     }
   }
 
@@ -216,6 +225,10 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
     this._container!.appendChild(markerContainer);
     this._markers.push(marker);
     this.onMarkerCreate$.next({marker});
+    marker.onChange$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
+      this.updateMarkerPosition(marker);
+      this.onMarkerUpdate$.next({marker, oldValue: {...marker, timeObservation: event.oldTimeObservation} as MomentMarker});
+    });
     return marker;
   }
 
@@ -277,6 +290,10 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
     this._container!.appendChild(markerContainer);
     this._markers.push(marker);
     this.onMarkerCreate$.next({marker});
+    marker.onChange$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
+      this.updateMarkerPosition(marker);
+      this.onMarkerUpdate$.next({marker, oldValue: {...marker, timeObservation: event.oldTimeObservation} as PeriodMarker});
+    });
     return marker;
   }
 

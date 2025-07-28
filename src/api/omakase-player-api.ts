@@ -26,11 +26,12 @@ import {AlertsApi} from './alerts-api';
 import {MarkerListConfig} from '../marker-list/marker-list';
 import {MarkerListApi} from './marker-list-api';
 import {ConfigWithOptionalStyle} from '../layout';
-import {AuthenticationData} from '../authentication/model';
 import {RouterVisualizationConfig} from '../router-visualization/router-visualization';
 import {RouterVisualizationApi} from './router-visualization-api';
 import {MarkerTrackApi} from './marker-track-api';
 import {MarkerTrackConfig} from '../video/model';
+import {TimeRangeMarkerTrackApi} from './time-range-marker-track-api';
+import {AuthenticationData} from '../common/authentication';
 
 export interface OmakasePlayerApi extends Api {
   /**
@@ -78,10 +79,16 @@ export interface OmakasePlayerApi extends Api {
   setAuthentication(authentication: AuthenticationData): void;
 
   /**
-   * Set thumbnail vtt url for media chrome thumbnail preview
+   * Set thumbnail vtt url for player chroming thumbnail preview
    * @param thumbnailVttUrl Thumbnail Vtt Url
    */
   setThumbnailVttUrl(thumbnailVttUrl: string): void;
+
+  /**
+   * Set watermark text or svg for player chroming
+   * @param watermark Watermark text or svg
+   */
+  setWatermark(watermark: string): void;
 
   /**
    * @returns Timeline API
@@ -107,6 +114,11 @@ export interface OmakasePlayerApi extends Api {
    * @returns Alerts API
    */
   get alerts(): AlertsApi;
+
+  /**
+   * Get the progress bar marker track
+   */
+  get progressMarkerTrack(): TimeRangeMarkerTrackApi | undefined;
 
   /**
    * Destroys OmakasePlayer instance and frees up memory

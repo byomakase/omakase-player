@@ -3,7 +3,8 @@ import {nextCompleteSubject} from '../util/rxjs-util';
 import {OmakaseTimeRange} from './omakase-time-range';
 import {ThumbnailVttFile} from '../vtt';
 import {ImageUtil} from '../util/image-util';
-import {AuthConfig} from '../auth/auth-config';
+
+import {AuthConfig} from '../common/authentication';
 
 export class OmakasePreviewThumbnail extends HTMLElement {
   private _timeRange?: OmakaseTimeRange;
@@ -15,8 +16,9 @@ export class OmakasePreviewThumbnail extends HTMLElement {
     super();
   }
 
-  set vttFile(vttFile: ThumbnailVttFile) {
+  set vttFile(vttFile: ThumbnailVttFile | undefined) {
     this._vttFile = vttFile;
+    this.querySelector('img')!.src = '';
   }
 
   set thumbnailFn(thumbnailFn: ((time: number) => string | undefined) | undefined) {

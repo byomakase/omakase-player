@@ -31,6 +31,7 @@ import {
   SidecarAudioInputSoloMuteEvent,
   SidecarAudioPeakProcessorMessageEvent,
   SidecarAudioRemoveEvent,
+  SidecarAudioVideoCurrentTimeBufferingEvent,
   SidecarAudioVolumeChangeEvent,
   SubtitlesCreateEvent,
   SubtitlesEvent,
@@ -55,7 +56,7 @@ import {
   VideoWindowPlaybackStateChangeEvent,
   VolumeChangeEvent,
 } from '../types';
-import {BehaviorSubject, concatMap, delay, filter, forkJoin, from, fromEvent, interval, map, mergeMap, Observable, of, Subject, switchMap, take, takeUntil, tap, timeout, toArray} from 'rxjs';
+import {BehaviorSubject, concatMap, delay, filter, forkJoin, from, fromEvent, interval, map, Observable, of, Subject, switchMap, take, takeUntil, tap, timeout, toArray} from 'rxjs';
 import {FrameRateUtil} from '../util/frame-rate-util';
 import {completeSubject, completeSubjects, completeUnsubscribeSubjects, errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {z} from 'zod';
@@ -68,6 +69,7 @@ import {destroyer, nullifier} from '../util/destroy-util';
 import {
   AudioMeterStandard,
   BufferedTimespan,
+  MediaElementPlaybackState,
   OmpAudioRouterState,
   OmpAudioRoutingConnection,
   OmpAudioRoutingInputType,
@@ -76,7 +78,6 @@ import {
   OmpMainAudioState,
   OmpSidecarAudioInputSoloMuteState,
   OmpSidecarAudioState,
-  PlaybackState,
   Video,
   VideoLoadOptions,
   VideoLoadOptionsInternal,
@@ -89,33 +90,36 @@ import {StringUtil} from '../util/string-util';
 import {VideoDomControllerApi} from './video-dom-controller-api';
 import {VideoLoader} from './video-loader';
 import {OmpHlsConfig, VideoHlsLoader} from './video-hls-loader';
-import {VideoNativeLoader} from './video-native-loader';
 import {CryptoUtil} from '../util/crypto-util';
 import {OmpAudioRouter} from './audio-router';
 import {isNonNullable} from '../util/function-util';
-import {OmpSidecarAudio} from './sidecar-audio';
-import {SidecarAudioApi} from '../api/sidecar-audio-api';
 import {OmpAudioPeakProcessor} from './audio-peak-processor';
 import {BlobUtil} from '../util/blob-util';
 import {UrlUtil} from '../util/url-util';
-import {httpGet} from '../http';
-import {AuthConfig} from '../auth/auth-config';
 import {BrowserProvider} from '../common/browser-provider';
 import {FileUtil} from '../util/file-util';
 import {OmpAudioEffectFilter, OmpAudioEffectParam, OmpAudioEffectsGraphDef} from '../audio'; // @ts-ignore
 import synchronizationProcessor from '../worker/omp-synchronization-processor.js?raw'; // @ts-ignore
 import blackMp4Base64 from '../../assets/black.mp4.base64.txt?raw';
-import {MediaInfoUtil} from '../mediainfo';
-import {AudioTrack} from 'mediainfo.js';
-import {HTMLVideoElementEvents} from '../dom/html-element';
+import {MediaElementPlayback} from './media-element-playback';
+import {MediaElementUtil} from '../util/media-element-util';
+import {VideoLoaderFactory} from './video-loader-factory';
+import {HTMLVideoElementEvents, OmpAudioElement} from '../media-element/omp-media-element';
+
+// @ts-ignore
+import silentWavBase64 from '../../assets/silent.wav.base64.txt?raw';
+import {SidecarAudioApi} from '../api/sidecar-audio-api';
+import {SidecarAudioFactory} from './sidecar-audio-factory';
 
 export interface VideoControllerConfig {
   frameDurationSpillOverCorrection: number;
+  audioPlayMode: 'multiple' | 'single';
   hlsConfig: Partial<OmpHlsConfig>;
 }
 
 export const VIDEO_CONTROLLER_CONFIG_DEFAULT: VideoControllerConfig = {
   frameDurationSpillOverCorrection: 0.001,
+  audioPlayMode: 'single',
   hlsConfig: {
     ...Hls.DefaultConfig,
     fetchManifestSubtitleTracks: true,
@@ -137,130 +141,6 @@ interface SyncConditions {
   videoFrameCallbackData?: VideoFrameCallbackData;
   seekDirection?: SeekDirection;
   newTimecode?: string;
-}
-
-export class PlaybackStateMachine {
-  public readonly onChange$: Subject<PlaybackState>;
-
-  private _state: PlaybackState = {
-    playing: false,
-    paused: true,
-    pausing: false,
-    waiting: false,
-    seeking: false,
-    buffering: false,
-    ended: false,
-  };
-
-  constructor() {
-    this.onChange$ = new BehaviorSubject(this._state);
-  }
-
-  private updateState(partialState: Partial<PlaybackState>) {
-    let newState = {
-      ...this._state,
-      ...partialState,
-    };
-    let isEqual = this.compare(this._state, newState) === 0;
-    this._state = newState;
-    if (!isEqual) {
-      this.onChange$.next(this._state);
-    }
-  }
-
-  private compare(o1: PlaybackState, o2: PlaybackState): number {
-    return o1.playing === o2.playing &&
-      o1.paused === o2.paused &&
-      o1.pausing === o2.pausing &&
-      o1.waiting === o2.waiting &&
-      o1.seeking === o2.seeking &&
-      o1.buffering === o2.buffering &&
-      o1.ended === o2.ended
-      ? 0
-      : -1;
-  }
-
-  get state(): PlaybackState {
-    return this._state;
-  }
-
-  setPlaying() {
-    this.updateState({
-      playing: true,
-      paused: false,
-      pausing: false,
-      waiting: false,
-      seeking: false,
-      buffering: false,
-      ended: false,
-    });
-  }
-
-  setPaused() {
-    this.updateState({
-      playing: false,
-      paused: true,
-      pausing: false,
-      waiting: false,
-      seeking: false,
-      buffering: false,
-      ended: false,
-    });
-  }
-
-  get pausing(): boolean {
-    return this._state.pausing;
-  }
-
-  setPausing() {
-    this.updateState({
-      pausing: true,
-    });
-  }
-
-  setEnded() {
-    this.updateState({
-      playing: false,
-      paused: true,
-      pausing: false,
-      waiting: false,
-      seeking: false,
-      buffering: false,
-      ended: true,
-    });
-  }
-
-  get waiting(): boolean {
-    return this._state.waiting;
-  }
-
-  set waiting(value: boolean) {
-    this.updateState({
-      waiting: value,
-    });
-  }
-
-  get seeking(): boolean {
-    return this._state.seeking;
-  }
-
-  set seeking(value: boolean) {
-    this.updateState({
-      seeking: value,
-      pausing: false,
-      ended: false,
-    });
-  }
-
-  get buffering(): boolean {
-    return this._state.buffering;
-  }
-
-  set buffering(value: boolean) {
-    this.updateState({
-      buffering: value,
-    });
-  }
 }
 
 export class VideoController implements VideoControllerApi {
@@ -296,7 +176,7 @@ export class VideoController implements VideoControllerApi {
   public readonly onVideoWindowPlaybackStateChange$: Subject<VideoWindowPlaybackStateChangeEvent> = new Subject<VideoWindowPlaybackStateChangeEvent>();
 
   public readonly onHelpMenuChange$: Subject<VideoHelpMenuChangeEvent> = new Subject<VideoHelpMenuChangeEvent>();
-  public readonly onPlaybackState$: Subject<PlaybackState> = new Subject<PlaybackState>();
+  public readonly onPlaybackState$: Subject<MediaElementPlaybackState> = new Subject<MediaElementPlaybackState>();
   public readonly onPlaybackRateChange$: Subject<VideoPlaybackRateEvent> = new Subject<VideoPlaybackRateEvent>();
   public readonly onDurationChange$: Subject<VideoDurationEvent> = new Subject<VideoDurationEvent>();
 
@@ -314,6 +194,8 @@ export class VideoController implements VideoControllerApi {
   public readonly onSidecarAudioVolumeChange$: Subject<SidecarAudioVolumeChangeEvent> = new Subject<SidecarAudioVolumeChangeEvent>();
   public readonly onSidecarAudioPeakProcessorMessage$: Subject<SidecarAudioPeakProcessorMessageEvent> = new Subject<SidecarAudioPeakProcessorMessageEvent>();
   public readonly onSidecarAudioInputSoloMute$: Subject<SidecarAudioInputSoloMuteEvent> = new Subject<SidecarAudioInputSoloMuteEvent>();
+
+  public readonly onSidecarAudioVideoCurrentTimeBuffering$: Subject<SidecarAudioVideoCurrentTimeBufferingEvent> = new Subject<SidecarAudioVideoCurrentTimeBufferingEvent>();
 
   // audio output
   public readonly onAudioOutputVolumeChange$: Subject<VolumeChangeEvent> = new Subject<VolumeChangeEvent>();
@@ -333,7 +215,7 @@ export class VideoController implements VideoControllerApi {
   protected _videoLoader?: VideoLoader;
   protected _video?: Video;
   protected _videoLoadOptions?: VideoLoadOptions;
-  protected _playbackStateMachine?: PlaybackStateMachine;
+  protected _mediaElementPlayback?: MediaElementPlayback;
   protected _syncFrameNudgeTime: number = 0;
   protected _syncFineFrameTolerancePercent = 20;
   protected _syncLoopMaxIterations = 5;
@@ -370,7 +252,32 @@ export class VideoController implements VideoControllerApi {
   protected _mainAudioRouter?: OmpAudioRouter;
   protected _mainAudioPeakProcessor?: OmpAudioPeakProcessor;
 
-  protected _sidecarAudios: Map<string, OmpSidecarAudio> = new Map<string, OmpSidecarAudio>();
+  /**
+   * Tracks main audio active state depending on {@link VideoControllerConfig.audioPlayMode}. If value is false, main audio is muted
+   * @protected
+   */
+  protected _mainAudioActive = true;
+
+  protected _sidecarAudios: Map<string, SidecarAudioApi> = new Map<string, SidecarAudioApi>();
+
+  /**
+   * Audio node where all sidecar audios merge
+   * @protected
+   */
+  protected _sidecarAudiosOutputNode!: GainNode;
+
+  /**
+   * Contains sidecar audio id's for sidecar audios that are buffering video current time (and are not ready for playback)
+   * @protected
+   */
+  protected _sidecarAudiosVideoCurrentTimeBuffering: Set<string> = new Set<string>();
+
+  /**
+   * Stores last video playback state {@link _mediaElementPlayback} before {@link _mediaElementPlayback.waitingSyncedMedia} changes to true
+   * Used for restoring playback after {@link _mediaElementPlayback.waitingSyncedMedia} changes to false
+   * @protected
+   */
+  protected _waitingSyncedMediaLastPlaybackState: MediaElementPlaybackState | undefined = void 0;
 
   /**
    * Time synchronization worklet
@@ -441,7 +348,7 @@ export class VideoController implements VideoControllerApi {
 
     this._videoFrameCallback$.pipe(takeUntil(this._destroyed$)).subscribe((videoFrameCallbackData) => {
       if (videoFrameCallbackData) {
-        if (!this._playbackStateMachine!.seeking) {
+        if (!this._mediaElementPlayback!.seeking) {
           if (this.isPlaying()) {
             this.dispatchVideoTimeChange();
           } else if (this.isPaused()) {
@@ -503,6 +410,8 @@ export class VideoController implements VideoControllerApi {
         this.stopSynchronizationCallbacks();
 
         if (this.isVideoLoaded()) {
+          this._videoDomController.getVideoElement().poster = '';
+
           // remove while video is still loaded
           this._removeAllSubtitlesTracks(false);
 
@@ -516,6 +425,10 @@ export class VideoController implements VideoControllerApi {
           this._subtitlesTracks = new Map<string, SubtitlesVttTrack>();
           this._activeSubtitlesTrack = void 0;
           this.onSubtitlesLoaded$.next(void 0); // emit new value, BehaviourSubject
+        }
+
+        if (StringUtil.isNonEmpty(options?.poster)) {
+          this._videoDomController.getVideoElement().poster = options!.poster!;
         }
 
         sourceUrl = Validators.url()(sourceUrl);
@@ -566,7 +479,7 @@ export class VideoController implements VideoControllerApi {
 
               this._syncFrameNudgeTime = Decimal.mul(this._video.frameDuration, 0.1).toNumber();
 
-              this._playbackStateMachine = new PlaybackStateMachine();
+              this._mediaElementPlayback = new MediaElementPlayback();
 
               this.initEventHandlers();
               this.startTimeSynchronizationCallback();
@@ -607,22 +520,36 @@ export class VideoController implements VideoControllerApi {
         let audioContext = this.getAudioContext();
 
         new Observable<AudioWorkletNode>((audioWorkletNode$) => {
-          this._syncWorkletSource = audioContext.createMediaElementSource(this._videoDomController.getAudioUtilElement());
-          const workletName = 'omp-synchronization-processor';
-          try {
-            let audioWorkletNode = new AudioWorkletNode(this._syncWorkletSource.context, workletName, {
-              parameterData: {},
+          let ompAudioElement = new OmpAudioElement({loop: true});
+
+          ompAudioElement.onLoaded$
+            .pipe(
+              filter((p) => !!p),
+              take(1),
+            )
+            .pipe(takeUntil(this._destroyed$))
+            .subscribe({
+              next: (syncWorkletAudioElement) => {
+                this._syncWorkletSource = audioContext.createMediaElementSource(ompAudioElement.mediaElement);
+                const workletName = 'omp-synchronization-processor';
+                try {
+                  let audioWorkletNode = new AudioWorkletNode(this._syncWorkletSource.context, workletName, {
+                    parameterData: {},
+                  });
+                  nextCompleteObserver(audioWorkletNode$, audioWorkletNode);
+                } catch (e) {
+                  let objectURL = BlobUtil.createObjectURL(BlobUtil.createBlob([synchronizationProcessor], {type: 'application/javascript'}));
+                  this._syncWorkletSource.context.audioWorklet.addModule(objectURL).then(() => {
+                    let audioWorkletNode = new AudioWorkletNode(this._syncWorkletSource!.context, workletName, {
+                      parameterData: {},
+                    });
+                    nextCompleteObserver(audioWorkletNode$, audioWorkletNode);
+                  });
+                }
+              },
             });
-            nextCompleteObserver(audioWorkletNode$, audioWorkletNode);
-          } catch (e) {
-            let objectURL = BlobUtil.createObjectURL(BlobUtil.createBlob([synchronizationProcessor], {type: 'application/javascript'}));
-            this._syncWorkletSource.context.audioWorklet.addModule(objectURL).then(() => {
-              let audioWorkletNode = new AudioWorkletNode(this._syncWorkletSource!.context, workletName, {
-                parameterData: {},
-              });
-              nextCompleteObserver(audioWorkletNode$, audioWorkletNode);
-            });
-          }
+
+          ompAudioElement.loadSource(UrlUtil.formatBase64Url('audio/wav', silentWavBase64));
         }).subscribe((audioWorkletNode) => {
           this._syncWorklet = audioWorkletNode;
 
@@ -648,36 +575,13 @@ export class VideoController implements VideoControllerApi {
       this._videoLoader.destroy();
     }
 
-    if (videoProtocol) {
-      switch (videoProtocol) {
-        case 'hls':
-          this._videoLoader = new VideoHlsLoader(this);
-          break;
-        case 'native':
-          this._videoLoader = new VideoNativeLoader(this);
-          break;
-        default:
-          throw new OmpError(`Unrecognized video protocol`);
-      }
-    } else {
-      let normalizedUrl = sourceUrl.toLowerCase();
-      let url = new URL(normalizedUrl);
-      let pathname = url.pathname;
-
-      if (FileUtil.isM3u8File(pathname)) {
-        this._videoLoader = new VideoHlsLoader(this);
-      } else if (FileUtil.isVideoFile(pathname) || FileUtil.isAudioFile(pathname)) {
-        this._videoLoader = new VideoNativeLoader(this);
-      } else {
-        throw new OmpError(`Unrecognized video protocol`);
-      }
-    }
+    this._videoLoader = VideoLoaderFactory.createVideoLoader(this, sourceUrl, videoProtocol);
 
     // audio
     this._videoLoader.onAudioLoaded$
       .pipe(
         filter((p) => !!p),
-        takeUntil(this._videoEventBreaker$)
+        takeUntil(this._videoEventBreaker$),
       )
       .subscribe({
         next: (event) => {
@@ -698,7 +602,7 @@ export class VideoController implements VideoControllerApi {
     this._videoLoader.onSubtitlesLoaded$
       .pipe(
         filter((p) => !!p),
-        takeUntil(this._videoEventBreaker$)
+        takeUntil(this._videoEventBreaker$),
       )
       .subscribe({
         next: (event) => {
@@ -736,6 +640,25 @@ export class VideoController implements VideoControllerApi {
       currentTime: currentTime,
       currentTimecode: this.formatToTimecode(currentTime),
     };
+  }
+
+  protected createAudioElement(options?: {loop?: boolean}): Observable<HTMLAudioElement> {
+    let audioElement = new Audio();
+
+    // don't display any of the <audio> elements
+    // audioElement.style.display = 'none'; // TODO remove
+
+    // don't allow controls (not visible anyway)
+    // audioElement.controls = false;
+    audioElement.controls = true; // TODO remove
+
+    audioElement.id = CryptoUtil.uuid();
+
+    audioElement.loop = options ? !!options.loop : false;
+
+    return new Observable<HTMLAudioElement>((observer) => {
+      nextCompleteObserver(observer, audioElement);
+    });
   }
 
   protected initEventHandlers() {
@@ -785,7 +708,7 @@ export class VideoController implements VideoControllerApi {
     fromEvent(this.videoElement, HTMLVideoElementEvents.WAITING)
       .pipe(takeUntil(this._videoEventBreaker$))
       .subscribe((event) => {
-        this._playbackStateMachine!.waiting = true;
+        this._mediaElementPlayback!.waiting = true;
       });
 
     fromEvent(this.videoElement, HTMLVideoElementEvents.PROGRESS)
@@ -832,28 +755,28 @@ export class VideoController implements VideoControllerApi {
       this.onVideoSafeZoneChange$.next(event);
     });
 
-    this._playbackStateMachine!.onChange$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
+    this._mediaElementPlayback!.onChange$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
       this.onPlaybackState$.next(event);
     });
 
     this.onPlay$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
-      this._playbackStateMachine!.setPlaying();
+      this._mediaElementPlayback!.setPlaying();
       this._videoStalledCheckLastCurrentTime = void 0;
     });
 
     this.onPause$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
       this._videoStalledCheckLastCurrentTime = void 0;
-      this._playbackStateMachine!.setPaused();
+      this._mediaElementPlayback!.setPaused();
     });
 
     this.onSeeking$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
-      this._playbackStateMachine!.seeking = true;
+      this._mediaElementPlayback!.seeking = true;
       latestSeekStartTime = performance.now();
     });
 
     this.onSeeked$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
-      this._playbackStateMachine!.seeking = false;
-      this._playbackStateMachine!.waiting = false;
+      this._mediaElementPlayback!.seeking = false;
+      this._mediaElementPlayback!.waiting = false;
       latestSeekStartTime = void 0;
     });
 
@@ -862,8 +785,44 @@ export class VideoController implements VideoControllerApi {
     });
 
     this.onEnded$.pipe(takeUntil(this._videoEventBreaker$)).subscribe((event) => {
-      this._playbackStateMachine!.setEnded();
+      this._mediaElementPlayback!.setEnded();
       this._videoStalledCheckLastCurrentTime = void 0;
+    });
+
+    this.onVideoTimeChange$.pipe(takeUntil(this._videoEventBreaker$)).subscribe({
+      next: () => {
+        // pauses video if waitingSyncedMedia is set and video is playing
+        if (this._mediaElementPlayback && this._mediaElementPlayback.waitingSyncedMedia && this.isPlaying()) {
+          this._pause();
+        }
+      },
+    });
+
+    this.onSidecarAudioVideoCurrentTimeBuffering$.pipe(takeUntil(this._videoEventBreaker$)).subscribe({
+      next: (event) => {
+        if (event.buffering) {
+          this._sidecarAudiosVideoCurrentTimeBuffering.add(event.sidecarAudioState.audioTrack.id);
+        } else {
+          this._sidecarAudiosVideoCurrentTimeBuffering.delete(event.sidecarAudioState.audioTrack.id);
+        }
+
+        if (this._mediaElementPlayback) {
+          let setWaitingSyncedMedia = !this._mediaElementPlayback.waitingSyncedMedia && this._sidecarAudiosVideoCurrentTimeBuffering.size > 0;
+          let unsetWaitingSyncedMedia = this._mediaElementPlayback.waitingSyncedMedia && this._sidecarAudiosVideoCurrentTimeBuffering.size === 0;
+
+          if (setWaitingSyncedMedia) {
+            this._mediaElementPlayback.waitingSyncedMedia = true;
+            this._waitingSyncedMediaLastPlaybackState = this.getPlaybackState();
+          } else if (unsetWaitingSyncedMedia) {
+            this._mediaElementPlayback!.waitingSyncedMedia = false;
+            if (this._waitingSyncedMediaLastPlaybackState) {
+              if (this._waitingSyncedMediaLastPlaybackState.playing && !this.isPlaying()) {
+                this.play();
+              }
+            }
+          }
+        }
+      },
     });
 
     this._videoEventBreaker$.subscribe({
@@ -882,40 +841,28 @@ export class VideoController implements VideoControllerApi {
           return;
         }
 
-        if (this._playbackStateMachine && this._playbackStateMachine.state.playing) {
+        if (this._mediaElementPlayback && this._mediaElementPlayback.state.playing) {
           let timeOffset = ((this._videoStalledCheckIntervalMs * 0.8) / 1000) * this.getPlaybackRate(); // in seconds
           let comparisonTime = this._videoStalledCheckLastCurrentTime + timeOffset;
 
           let isWaiting = currentTime < comparisonTime;
-          this._playbackStateMachine.waiting = isWaiting;
+          this._mediaElementPlayback.waiting = isWaiting;
 
           this._videoStalledCheckLastCurrentTime = currentTime;
         }
 
-        if (this._playbackStateMachine && !this._playbackStateMachine.state.playing && !isNullOrUndefined(latestSeekStartTime)) {
+        if (this._mediaElementPlayback && !this._mediaElementPlayback.state.playing && !isNullOrUndefined(latestSeekStartTime)) {
           let isWaiting = !!latestSeekStartTime && performance.now() - latestSeekStartTime > this._videoPausedSeekBufferingThresholdMs;
           if (isWaiting) {
             // set waiting only if seek operation is taking too long, onSeeked event will eventually reset waiting state
-            this._playbackStateMachine.waiting = true;
+            this._mediaElementPlayback.waiting = true;
           }
         }
       });
   }
 
   getBufferedTimespans(): BufferedTimespan[] {
-    if (!this.isVideoLoaded()) {
-      return [];
-    }
-
-    let result: BufferedTimespan[] = [];
-    let timeRanges: TimeRanges = this.videoElement.buffered;
-    for (let i = 0; i < timeRanges.length; i++) {
-      result.push({
-        start: timeRanges.start(i),
-        end: timeRanges.end(i),
-      });
-    }
-    return result;
+    return MediaElementUtil.getBufferedTimespans(this.videoElement);
   }
 
   protected startTimeSynchronizationCallback() {
@@ -940,7 +887,7 @@ export class VideoController implements VideoControllerApi {
     // console.log('startSWSynchronization');
     this.onSyncTick$.pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$)).subscribe({
       next: (event) => {
-        if (!this._playbackStateMachine!.seeking) {
+        if (!this._mediaElementPlayback!.seeking) {
           if (this.isPlaying()) {
             this.dispatchVideoTimeChange();
           } else if (this.isPaused()) {
@@ -979,7 +926,7 @@ export class VideoController implements VideoControllerApi {
 
     this._videoFrameCallback$.pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$)).subscribe((videoFrameCallbackData) => {
       if (videoFrameCallbackData) {
-        if (!this._playbackStateMachine!.seeking) {
+        if (!this._mediaElementPlayback!.seeking) {
           if (this.isPlaying()) {
             this.dispatchVideoTimeChange();
           } else if (this.isPaused()) {
@@ -1131,14 +1078,14 @@ export class VideoController implements VideoControllerApi {
           if (syncLoopIterationsLeft-- <= 0) {
             console.debug(
               `%csyncFrames - TOO MANY SYNCs, EXITING.. : currentTime[${currentTime}], mediaTime[${mediaTime}], currentTimeFrame[${currentTimeFrame}], mediaTimeFrame[${mediaTimeFrame}]`,
-              'color: red'
+              'color: red',
             );
             completeSync();
             return;
           }
 
           console.debug(
-            `syncFrames - currentTime[${currentTime}|${this.formatToTimecode(currentTime)}], mediaTime[${mediaTime}|${mediaTime ? this.formatToTimecode(mediaTime) : void 0}], currentTimeFrame[${currentTimeFrame}], mediaTimeFrame[${mediaTimeFrame}], `
+            `syncFrames - currentTime[${currentTime}|${this.formatToTimecode(currentTime)}], mediaTime[${mediaTime}|${mediaTime ? this.formatToTimecode(mediaTime) : void 0}], currentTimeFrame[${currentTimeFrame}], mediaTimeFrame[${mediaTimeFrame}], `,
           );
 
           if (syncConditions.seekToFrame) {
@@ -1153,7 +1100,7 @@ export class VideoController implements VideoControllerApi {
               } else {
                 console.debug(
                   `%csyncFrames - CORRECTION SEEK TO FRAME; currentTimeFrame[${currentTimeFrame}] ${currentTimeFrame > mediaTimeFrame ? '>' : '<'} mediaTimeFrame[${mediaTimeFrame}]`,
-                  'color: red'
+                  'color: red',
                 );
 
                 let frameDiff = Math.abs(currentTimeFrame - mediaTimeFrame);
@@ -1167,7 +1114,7 @@ export class VideoController implements VideoControllerApi {
             } else {
               console.debug(
                 `%csyncFrames - CORRECTION SEEK TO FRAME; syncConditions.seekToFrame[${syncConditions.seekToFrame}] !== currentTimeFrame[${currentTimeFrame}] | seekToFrameTimeBaseline=${seekToFrameTimeBaseline}`,
-                'color: red'
+                'color: red',
               );
 
               let frameDiff = Math.abs(syncConditions.seekToFrame - currentTimeFrame);
@@ -1244,7 +1191,7 @@ export class VideoController implements VideoControllerApi {
     let timeBeforeSeek = this.getCurrentTime();
     return new Observable<boolean>((o$) => {
       // if we already have seek in progress, break previous seek operation
-      if (this._playbackStateMachine!.seeking) {
+      if (this._mediaElementPlayback!.seeking) {
         nextCompleteSubject(this._seekBreaker$);
         this._seekBreaker$ = new Subject<void>();
       }
@@ -1283,7 +1230,7 @@ export class VideoController implements VideoControllerApi {
                   previousTime: timeBeforeSeek,
                   previousTimecode: this.formatToTimecode(timeBeforeSeek),
                 });
-                this._playbackStateMachine!.seeking = false;
+                this._mediaElementPlayback!.seeking = false;
               };
 
               let finishSeek = () => {
@@ -1319,7 +1266,7 @@ export class VideoController implements VideoControllerApi {
     let timeBeforeSeek = this.getCurrentTime();
     return new Observable<boolean>((o$) => {
       // do we have seek already in progress
-      if (this._playbackStateMachine!.seeking) {
+      if (this._mediaElementPlayback!.seeking) {
         nextCompleteSubject(this._seekBreaker$);
         this._seekBreaker$ = new Subject<void>();
       }
@@ -1352,7 +1299,7 @@ export class VideoController implements VideoControllerApi {
               });
             }
 
-            this._playbackStateMachine!.seeking = false;
+            this._mediaElementPlayback!.seeking = false;
 
             nextCompleteObserver(o$, true);
 
@@ -1470,11 +1417,11 @@ export class VideoController implements VideoControllerApi {
             return this.seekTimeWithoutSync(videoDuration, true, true).pipe(
               tap(() => {
                 this.onEnded$.next({});
-              })
+              }),
             );
-          })
+          }),
         );
-      })
+      }),
     );
   }
 
@@ -1503,7 +1450,7 @@ export class VideoController implements VideoControllerApi {
         }).pipe(
           map((result) => {
             return result;
-          })
+          }),
         );
       }
     } else {
@@ -1527,8 +1474,8 @@ export class VideoController implements VideoControllerApi {
     }
   }
 
-  getPlaybackState(): PlaybackState | undefined {
-    return this._playbackStateMachine ? this._playbackStateMachine.state : void 0;
+  getPlaybackState(): MediaElementPlaybackState | undefined {
+    return this._mediaElementPlayback ? this._mediaElementPlayback.state : void 0;
   }
 
   getVideo(): Video | undefined {
@@ -1553,7 +1500,20 @@ export class VideoController implements VideoControllerApi {
     return FrameRateUtil.videoFrameNumberToVideoTime(frameNumber, this.getVideo()!);
   }
 
+  /**
+   * Enables preventing video from returning to stored playback state, if user manually initiated action after waitingSyncedMedia was set
+   * @protected
+   */
+  protected resetWaitingSyncedMediaLastPlaybackState() {
+    this._waitingSyncedMediaLastPlaybackState = void 0;
+  }
+
   play(): Observable<void> {
+    this.resetWaitingSyncedMediaLastPlaybackState();
+    return this._play();
+  }
+
+  protected _play(): Observable<void> {
     return passiveObservable((observer) => {
       if (this.isVideoLoaded() && !this.isPlaying()) {
         this._checkAndCancelPausing();
@@ -1574,6 +1534,11 @@ export class VideoController implements VideoControllerApi {
   }
 
   pause(): Observable<void> {
+    this.resetWaitingSyncedMediaLastPlaybackState();
+    return this._pause();
+  }
+
+  protected _pause(): Observable<void> {
     return passiveObservable((observer) => {
       if (this.isVideoLoaded() && this.isPlaying()) {
         let pauseApproximateTime = this.getCurrentTime();
@@ -1588,7 +1553,7 @@ export class VideoController implements VideoControllerApi {
           },
         });
 
-        this._playbackStateMachine!.setPausing();
+        this._mediaElementPlayback!.setPausing();
 
         this.onPause$
           .pipe(take(1))
@@ -1611,7 +1576,7 @@ export class VideoController implements VideoControllerApi {
   }
 
   private _checkAndCancelPausing() {
-    if (this._playbackStateMachine!.pausing) {
+    if (this._mediaElementPlayback!.pausing) {
       nextCompleteSubject(this._pausingBreaker$);
     }
   }
@@ -1784,7 +1749,7 @@ export class VideoController implements VideoControllerApi {
 
     frame = z.coerce.number().min(0).max(this.getTotalFrames()).parse(frame);
 
-    if (!this.isVideoLoaded() || (this._playbackStateMachine!.state.ended && frame >= this.getCurrentFrame())) {
+    if (!this.isVideoLoaded() || (this._mediaElementPlayback!.state.ended && frame >= this.getCurrentFrame())) {
       return of(false);
     }
 
@@ -1840,7 +1805,7 @@ export class VideoController implements VideoControllerApi {
 
     time = z.coerce.number().parse(time);
 
-    if (this._playbackStateMachine!.state.ended && time >= this.getMostAccurateDuration()) {
+    if (this._mediaElementPlayback!.state.ended && time >= this.getMostAccurateDuration()) {
       return of(false);
     }
 
@@ -1943,11 +1908,15 @@ export class VideoController implements VideoControllerApi {
   unmute(): Observable<void> {
     let muted = false;
     return passiveObservable((observer) => {
-      if (this.isVideoHlsLoaderInSafari()) {
-        this._lastProvidedMainMutedHlsLoaderSafari = muted;
-        muted = this._audioOutputMuted ? true : muted;
+      if (!this._mainAudioActive) {
+        console.warn(`Unmuting main audio is disabled. Main audio is not active. (audioPlayMode=${this._config.audioPlayMode}).`);
+      } else {
+        if (this.isVideoHlsLoaderInSafari()) {
+          this._lastProvidedMainMutedHlsLoaderSafari = muted;
+          muted = this._audioOutputMuted ? true : muted;
+        }
+        this._setMuted(muted);
       }
-      this._setMuted(muted);
       nextCompleteObserver(observer);
     });
   }
@@ -2029,6 +1998,11 @@ export class VideoController implements VideoControllerApi {
 
       if (this.isVideoLoaded()) {
         if (newActiveTrack) {
+          this.activateMainAudio();
+          if (this._config.audioPlayMode === 'single') {
+            this.deactivateSidecarAudioTracks();
+          }
+
           if (newActiveTrack.id !== activeTrack?.id) {
             this._videoLoader!.setActiveAudioTrack(id).subscribe({
               next: (event) => {
@@ -2055,6 +2029,29 @@ export class VideoController implements VideoControllerApi {
         nextCompleteObserver(observer);
       }
     });
+  }
+
+  activateMainAudio(): Observable<void> {
+    return passiveObservable((observer) => {
+      this._setMainAudioActive(true);
+      nextCompleteObserver(observer);
+    });
+  }
+
+  deactivateMainAudio(): Observable<void> {
+    return passiveObservable((observer) => {
+      this._setMainAudioActive(false);
+      nextCompleteObserver(observer);
+    });
+  }
+
+  protected _setMainAudioActive(active: boolean) {
+    if (this._mainAudioActive !== active) {
+      console.debug(`Setting Main audio active: ${active}`);
+      this._setMuted(!active);
+      this._mainAudioActive = active;
+      this._emitMainAudioChange();
+    }
   }
 
   protected updateActiveAudioTrack(id: string) {
@@ -2227,6 +2224,7 @@ export class VideoController implements VideoControllerApi {
             nextCompleteObserver(observer, value);
           },
           error: (error) => {
+            console.error(error);
             errorCompleteObserver(observer, error);
           },
         });
@@ -2332,6 +2330,8 @@ export class VideoController implements VideoControllerApi {
 
             this.onSubtitlesShow$.next(this.createSubtitlesEvent());
           }
+        } else {
+          console.debug(`Cannot show subtitle track: ${id}. Subtitle track not found.`);
         }
       }
       nextCompleteObserver(observer);
@@ -2372,6 +2372,10 @@ export class VideoController implements VideoControllerApi {
       this._audioOutputNode.channelCountMode = 'max';
       this._audioOutputNode.connect(this._audioContext.destination);
 
+      this._sidecarAudiosOutputNode = this._audioContext.createGain();
+      this._sidecarAudiosOutputNode.channelCountMode = 'max';
+      this._sidecarAudiosOutputNode.connect(this._audioOutputNode);
+
       this.onPlay$.pipe(takeUntil(this._audioContextResumeBreaker$), takeUntil(this._destroyed$)).subscribe({
         next: () => {
           if (this._audioContext?.state !== 'running') {
@@ -2410,6 +2414,10 @@ export class VideoController implements VideoControllerApi {
 
   getAudioOutputNode(): AudioNode {
     return this._audioOutputNode;
+  }
+
+  getSidecarAudiosOutputNode(): AudioNode {
+    return this._sidecarAudiosOutputNode;
   }
 
   getAudioOutputVolume(): number {
@@ -2475,6 +2483,7 @@ export class VideoController implements VideoControllerApi {
 
   getMainAudioState(): OmpMainAudioState | undefined {
     return {
+      active: this._mainAudioActive,
       audioRouterState: this._mainAudioRouter?.getAudioRouterState(),
       audioPeakProcessorState: this._mainAudioPeakProcessor?.getAudioPeakProcessorState(),
       numberOfChannels: this._mainAudioNode.channelCount,
@@ -2579,8 +2588,8 @@ export class VideoController implements VideoControllerApi {
     let mainAudioState = this.getMainAudioState();
     let event: MainAudioChangeEvent | undefined = mainAudioState
       ? {
-          mainAudioState: mainAudioState,
-        }
+        mainAudioState: mainAudioState,
+      }
       : void 0;
     this.onMainAudioChange$.next(event);
   }
@@ -2589,8 +2598,8 @@ export class VideoController implements VideoControllerApi {
     let mainAudioInputSoloMuteState = this.getMainAudioInputSoloMuteState();
     let event: MainAudioInputSoloMuteEvent | undefined = mainAudioInputSoloMuteState
       ? {
-          mainAudioInputSoloMuteState,
-        }
+        mainAudioInputSoloMuteState,
+      }
       : void 0;
     this.onMainAudioInputSoloMute$.next(event);
   }
@@ -2663,7 +2672,7 @@ export class VideoController implements VideoControllerApi {
     param: OmpAudioEffectParam,
     filter?: {
       routingPath?: Partial<OmpAudioRoutingPath>;
-    } & OmpAudioEffectFilter
+    } & OmpAudioEffectFilter,
   ): Observable<void> {
     return passiveObservable((observer) => {
       if (this._mainAudioRouter) {
@@ -2729,7 +2738,7 @@ export class VideoController implements VideoControllerApi {
             },
             (reason) => {
               console.debug('Problem while closing AudioContext', reason);
-            }
+            },
           );
         }
       } catch (e) {
@@ -2837,118 +2846,181 @@ export class VideoController implements VideoControllerApi {
     });
   }
 
+  protected _createSidecarAudioTrack(track: OmpAudioTrackCreateType): Observable<OmpAudioTrack> {
+    return this._createSidecarAudio(track).pipe(map((p) => p.audioTrack));
+  }
+
   createSidecarAudioTracks(tracks: OmpAudioTrackCreateType[]): Observable<OmpAudioTrack[]> {
-    return passiveObservable((observer) => {
-      let observables = tracks.map((p) => this._createSidecarAudioTrack(p));
-      from(observables)
-        .pipe(
-          concatMap((p) => p),
-          toArray()
-        )
-        .subscribe({
-          next: (result) => {
-            nextCompleteObserver(observer, result);
-          },
-          error: (err) => {
-            console.debug(err);
-            errorCompleteObserver(observer, 'Error creating sidecar audio tracks');
-          },
-        });
+    return passiveObservable<OmpAudioTrack[]>((observer) => {
+      this._createSidecarAudios(tracks).subscribe({
+        next: (sidecarAudios) => {
+          nextCompleteObserver(
+            observer,
+            sidecarAudios.map((p) => p.audioTrack),
+          );
+        },
+        error: (err) => {
+          errorCompleteObserver(observer, 'Error creating sidecar audio tracks');
+        },
+      });
     });
   }
 
-  protected _createSidecarAudioTrack(track: OmpAudioTrackCreateType): Observable<OmpAudioTrack> {
-    return new Observable((observer) => {
+  protected _createSidecarAudio(track: OmpAudioTrackCreateType): Observable<SidecarAudioApi> {
+    return new Observable<SidecarAudioApi>((observer) => {
       if (StringUtil.isEmpty(track.src) || StringUtil.isEmpty(track.label)) {
         errorCompleteObserver(observer, 'track.src and track.label must be provided');
+      } else if (track.id && this._sidecarAudios.has(track.id)) {
+        errorCompleteObserver(observer, `track.id already exists ${track.id}`);
       } else {
-        console.debug('Creating sidecar audio track', track);
+        console.debug('Creating sidecar audio', track);
 
-        let audioBuffer$ = from(
-          httpGet<ArrayBuffer>(track.src, {
-            ...AuthConfig.createAxiosRequestConfig(track.src, AuthConfig.authentication),
-            responseType: 'arraybuffer',
-          })
-        ).pipe(mergeMap((response) => from(this._audioContext!.decodeAudioData(response.data as ArrayBuffer))));
+        let sidecarAudioTrack: OmpAudioTrack = {
+          id: StringUtil.isEmpty(track.id) ? CryptoUtil.uuid() : track.id!,
+          label: track.label,
+          src: track.src,
+          language: track.language,
+          embedded: false,
+          active: !!track.active,
+          channelCount: track.channelCount,
+        };
 
-        let channelsResolution$ = MediaInfoUtil.analyze(track.src)
-          .pipe(take(1))
-          .pipe(
-            map((analysis) => {
-              let audioTrack = analysis.media?.track.find((p) => p['@type'] === 'Audio') as AudioTrack | undefined;
-              return audioTrack?.Channels;
-            })
-          );
+        let sidecarAudio = SidecarAudioFactory.createSidecarAudio(this, sidecarAudioTrack);
 
-        forkJoin([audioBuffer$, channelsResolution$]).subscribe({
-          next: ([audioBuffer, channelCount]) => {
-            let sidecarAudioTrack: OmpAudioTrack = {
-              id: StringUtil.isEmpty(track.id) ? CryptoUtil.uuid() : track.id!,
-              label: track.label,
-              src: track.src,
-              language: track.language,
-              embedded: false,
-              active: !!track.active,
-              channelCount: channelCount ? channelCount : track.channelCount,
-            };
+        sidecarAudio
+          .loadSource()
+          .pipe(timeout(60000))
+          .subscribe({
+            next: (event) => {
+              this._sidecarAudios.set(sidecarAudioTrack.id, sidecarAudio);
 
-            let sidecarAudio = new OmpSidecarAudio(this, sidecarAudioTrack, audioBuffer);
+              console.debug('Created sidecar audio', sidecarAudio.getSidecarAudioState());
 
-            this._sidecarAudios.set(sidecarAudioTrack.id, sidecarAudio);
-
-            console.debug('Created sidecar audio track', sidecarAudioTrack);
-
-            this.onSidecarAudioCreate$.next({
-              createdSidecarAudioState: sidecarAudio.getSidecarAudioState(),
-              sidecarAudioStates: this.getSidecarAudioStates(),
-            });
-
-            let removed$ = this.onSidecarAudioRemove$.pipe(filter((p) => p.removedSidecarAudio.audioTrack.id === sidecarAudio.audioTrack.id));
-
-            sidecarAudio.onStateChange$
-              .pipe(takeUntil(removed$)) // take until removed
-              .pipe(takeUntil(this._destroyed$))
-              .subscribe({
-                next: (sidecarAudioState) => {
-                  this.onSidecarAudioChange$.next({
-                    changedSidecarAudioState: sidecarAudioState,
-                    sidecarAudioStates: this.getSidecarAudioStates(),
-                  });
-                },
+              this.onSidecarAudioCreate$.next({
+                createdSidecarAudioState: sidecarAudio.getSidecarAudioState(),
+                sidecarAudioStates: this.getSidecarAudioStates(),
               });
 
-            sidecarAudio.onInputSoloMute$
-              .pipe(takeUntil(removed$))
-              .pipe(takeUntil(this._destroyed$))
-              .subscribe({
-                next: (sidecarAudioInputSoloMuteState) => {
-                  this.onSidecarAudioInputSoloMute$.next({
-                    changedSidecarAudioInputSoloMuteState: sidecarAudioInputSoloMuteState,
-                    sidecarAudioInputSoloMuteStates: this.getSidecarAudioInputSoloMuteStates(),
-                  });
-                },
-              });
+              let removed$ = this.onSidecarAudioRemove$.pipe(filter((p) => p.removedSidecarAudio.audioTrack.id === sidecarAudio.audioTrack.id));
 
-            sidecarAudio.onVolumeChange$
-              .pipe(takeUntil(removed$)) // take until removed
-              .pipe(takeUntil(this._destroyed$))
-              .subscribe({
-                next: (event) => {
-                  this.onSidecarAudioVolumeChange$.next({
-                    sidecarAudioState: sidecarAudio.getSidecarAudioState(),
-                    ...event,
-                  });
-                },
-              });
+              sidecarAudio.onVideoCurrentTimeBuffering$
+                .pipe(takeUntil(removed$)) // take until removed
+                .pipe(takeUntil(this._destroyed$))
+                .subscribe({
+                  next: (buffering) => {
+                    this.onSidecarAudioVideoCurrentTimeBuffering$.next({
+                      sidecarAudioState: sidecarAudio.getSidecarAudioState(),
+                      buffering: buffering,
+                    });
+                  },
+                });
 
-            nextCompleteObserver(observer, sidecarAudioTrack);
+              sidecarAudio.onStateChange$
+                .pipe(takeUntil(removed$)) // take until removed
+                .pipe(takeUntil(this._destroyed$))
+                .subscribe({
+                  next: (sidecarAudioState) => {
+                    this.onSidecarAudioChange$.next({
+                      changedSidecarAudioState: sidecarAudioState,
+                      sidecarAudioStates: this.getSidecarAudioStates(),
+                    });
+                  },
+                });
+
+              sidecarAudio.onInputSoloMute$
+                .pipe(takeUntil(removed$)) // take until removed
+                .pipe(takeUntil(this._destroyed$))
+                .subscribe({
+                  next: (sidecarAudioInputSoloMuteState) => {
+                    this.onSidecarAudioInputSoloMute$.next({
+                      changedSidecarAudioInputSoloMuteState: sidecarAudioInputSoloMuteState,
+                      sidecarAudioInputSoloMuteStates: this.getSidecarAudioInputSoloMuteStates(),
+                    });
+                  },
+                });
+
+              sidecarAudio.onVolumeChange$
+                .pipe(takeUntil(removed$)) // take until removed
+                .pipe(takeUntil(this._destroyed$))
+                .subscribe({
+                  next: (event) => {
+                    this.onSidecarAudioVolumeChange$.next({
+                      sidecarAudioState: sidecarAudio.getSidecarAudioState(),
+                      ...event,
+                    });
+                  },
+                });
+
+              if (this._config.audioPlayMode === 'single') {
+                let settleMainAndSidecarAudio = () => {
+                  if (sidecarAudio.getSidecarAudioState().active) {
+                    // deactivate main audio
+                    this.deactivateMainAudio();
+
+                    // deactivate other sidecar audios
+                    this.deactivateSidecarAudioTracks(
+                      this.getSidecarAudios()
+                        .filter((p) => p.audioTrack.id !== sidecarAudio.getSidecarAudioState().audioTrack.id)
+                        .map((p) => p.audioTrack.id),
+                    );
+                  }
+                };
+
+                removed$.pipe(take(1)).subscribe({
+                  next: (event) => {
+                    // when active sidecar audio is removed, we have to activate main audio
+                    if (event.removedSidecarAudio.active) {
+                      // activate main audio
+                      this.activateMainAudio();
+                    }
+                  },
+                });
+
+                sidecarAudio.onStateChange$
+                  .pipe(takeUntil(removed$)) // take until removed
+                  .pipe(takeUntil(this._destroyed$))
+                  .subscribe({
+                    next: (sidecarAudioState) => {
+                      settleMainAndSidecarAudio();
+                    },
+                  });
+
+                settleMainAndSidecarAudio();
+              }
+
+              nextCompleteObserver(observer, sidecarAudio);
+            },
+            error: (error) => {
+              console.error(error);
+              errorCompleteObserver(observer, `Error creating sidecar audio, track.src=${track.src}`);
+            },
+          });
+      }
+    });
+  }
+
+  protected _createSidecarAudios(tracks: OmpAudioTrackCreateType[]): Observable<SidecarAudioApi[]> {
+    return new Observable<SidecarAudioApi[]>((observer) => {
+      let observables = tracks.map((p) => this._createSidecarAudio(p));
+      // ensures creation in order
+      from(observables)
+        .pipe(
+          concatMap((p) => p),
+          toArray(),
+        )
+        .subscribe({
+          next: (sidecarAudios) => {
+            console.debug(
+              'Created sidecar audios:',
+              sidecarAudios.map((p) => p.getSidecarAudioState()),
+            );
+            nextCompleteObserver(observer, sidecarAudios);
           },
           error: (err) => {
-            console.error(err);
-            errorCompleteObserver(observer, 'Error creating sidecar audio track');
+            console.debug(err);
+            errorCompleteObserver(observer, 'Error creating sidecar audios');
           },
         });
-      }
     });
   }
 
@@ -2986,6 +3058,7 @@ export class VideoController implements VideoControllerApi {
     if (sidecarAudio) {
       let sidecarAudioState = sidecarAudio.getSidecarAudioState();
       sidecarAudio.destroy();
+
       this._sidecarAudios.delete(id);
       this.onSidecarAudioRemove$.next({
         removedSidecarAudio: sidecarAudioState,
@@ -3016,7 +3089,7 @@ export class VideoController implements VideoControllerApi {
     });
   }
 
-  deactivateSidecarAudioTracks(ids: string[] | undefined): Observable<void> {
+  deactivateSidecarAudioTracks(ids?: string[]): Observable<void> {
     return passiveObservable((observer) => {
       this._deactivateSidecarAudioTracks(ids === void 0 ? this.getSidecarAudioTracks().map((p) => p.id) : ids);
       nextCompleteObserver(observer);
@@ -3118,7 +3191,7 @@ export class VideoController implements VideoControllerApi {
     param: OmpAudioEffectParam,
     filter?: {
       routingPath?: Partial<OmpAudioRoutingPath>;
-    } & OmpAudioEffectFilter
+    } & OmpAudioEffectFilter,
   ): Observable<void> {
     return passiveObservable((observer) => {
       let sidecarAudio = this._sidecarAudios.get(sidecarAudioTrackId);
@@ -3182,7 +3255,7 @@ export class VideoController implements VideoControllerApi {
       from(observables)
         .pipe(
           concatMap((p) => p),
-          toArray()
+          toArray(),
         )
         .subscribe({
           next: (result) => {
@@ -3306,7 +3379,7 @@ export class VideoController implements VideoControllerApi {
       this.onSubtitlesHide$,
 
       this.onActiveNamedEventStreamsChange$,
-      this.onNamedEvent$
+      this.onNamedEvent$,
     );
 
     destroyer(this._videoLoader);
@@ -3315,12 +3388,12 @@ export class VideoController implements VideoControllerApi {
 
     nullifier(
       this._videoDomController,
-      this._playbackStateMachine,
+      this._mediaElementPlayback,
       this._helpMenuGroups,
       this._video,
 
       this._activeSubtitlesTrack,
-      this._subtitlesTracks
+      this._subtitlesTracks,
     );
   }
 }

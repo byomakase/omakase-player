@@ -17,9 +17,8 @@
 import Konva from 'konva';
 import axios from 'axios';
 import {map, Observable, of, switchMap} from 'rxjs';
-import {AuthenticationData} from '../authentication/model';
-import {AuthConfig} from '../auth/auth-config';
 import {BlobUtil} from './blob-util';
+import {AuthConfig, AuthenticationData} from '../common/authentication';
 
 export class ImageUtil {
   static getProtectedImageUrl(url: string, authentication: AuthenticationData): Observable<string> {

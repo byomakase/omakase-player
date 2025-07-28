@@ -41,7 +41,7 @@ import {TimelineApi, TimelineLaneApi} from '../api';
 import {z} from 'zod';
 import {AxiosRequestConfig} from 'axios';
 import {completeUnsubscribeSubjects, nextCompleteObserver, nextCompleteSubject, passiveObservable, simplePassiveObservable} from '../util/rxjs-util';
-import {PlaybackState, VideoControllerApi} from '../video';
+import {MediaElementPlaybackState, VideoControllerApi} from '../video';
 import {destroyer, nullifier} from '../util/destroy-util';
 import {KonvaFlexGroup} from '../layout/konva-flex';
 import {FlexNode, FlexSpacingBuilder} from '../layout/flex-node';
@@ -191,7 +191,7 @@ const configDefault: TimelineConfig = {
 
   style: {
     stageMinWidth: 700,
-    stageMinHeight: 500,
+    stageMinHeight: 100,
 
     textFontFamily: 'Arial',
     textFontStyle: 'normal',
@@ -272,7 +272,7 @@ const configDefault: TimelineConfig = {
 
 interface DragConditions {
   positionBeforeDrag: Position | undefined;
-  playbackState: PlaybackState | undefined;
+  playbackState: MediaElementPlaybackState | undefined;
   isPlayheadDrag: boolean;
 }
 
@@ -1617,7 +1617,7 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
   }
 
   getTimelineLanes(): TimelineLaneApi[] {
-    return [...this._timelineLanesMap.values()];
+    return this._timelineLanes;
   }
 
   getTimelineLane<T extends TimelineLaneApi>(id: string): T | undefined {

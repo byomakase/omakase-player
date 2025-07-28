@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-export {VideoController, PlaybackStateMachine} from './video-controller';
+export {VideoController} from './video-controller';
 export type {
   Video,
   VideoLoadOptions,
   VideoSafeZone,
   FrameRateModel,
-  PlaybackState,
+  MediaElementPlaybackState,
   AudioMeterStandard,
   OmpMainAudioState,
   OmpSidecarAudioState,
@@ -41,3 +41,4 @@ export type {
   OmpAudioRoutingRoute,
 } from './model';
 export type {VideoControllerApi} from './video-controller-api';
+export {MediaElementPlayback} from './media-element-playback';

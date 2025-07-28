@@ -39,9 +39,16 @@ export function errorCompleteObserver(observer: Observer<any>, error: any) {
   }
 }
 
-export function nextCompleteSubject(subject: Subject<any>, value?: any) {
+export function errorCompleteSubject(subject: Subject<any>, error: any) {
   if (subject) {
-    subject.next(value);
+    subject.error(error);
+    subject.complete();
+  }
+}
+
+export function nextCompleteSubject<T>(subject: Subject<T>, value?: T) {
+  if (subject) {
+    subject.next(value as T);
     subject.complete();
   } else {
     //console.debug('subject is undefined or null')

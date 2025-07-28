@@ -125,8 +125,6 @@ export class OmpAudioPeakProcessor implements AudioPeakProcessorApi, Destroyable
   };
 
   destroy(): void {
-    // TODO finish in detail
-
     try {
       if (this._sourceAudioNode) {
         this._sourceAudioNode.disconnect();
@@ -134,13 +132,13 @@ export class OmpAudioPeakProcessor implements AudioPeakProcessorApi, Destroyable
 
       if (this._audioWorkletNode) {
         this._audioWorkletNode.disconnect();
-        // this._audioPeakProcessorWorkletNode.port.postMessage('stop')  // TODO implement, this doesnt exist yet
+        // this._audioPeakProcessorWorkletNode.port.postMessage('stop')
         this._audioWorkletNode.port.onmessage = null;
         this._audioWorkletNode.port.close();
         this._audioWorkletNode = void 0;
       }
 
-      completeUnsubscribeSubjects(this.onMessage$);
+      completeUnsubscribeSubjects(this.onMessage$, this.onAudioWorkletLoaded$);
 
       nextCompleteSubject(this._destroyed$);
     } catch (e) {

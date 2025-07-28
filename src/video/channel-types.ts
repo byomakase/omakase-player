@@ -145,6 +145,8 @@ export type MessageChannelActionsMap = OmpBroadcastChannelActionsMap<{
   'VideoControllerApi.removeSubtitlesTrack': ExtractMethodTypes<VideoControllerApi, 'removeSubtitlesTrack'>;
   'VideoControllerApi.showSubtitlesTrack': ExtractMethodTypes<VideoControllerApi, 'showSubtitlesTrack'>;
   'VideoControllerApi.setActiveAudioTrack': ExtractMethodTypes<VideoControllerApi, 'setActiveAudioTrack'>;
+  'VideoControllerApi.activateMainAudio': ExtractMethodTypes<VideoControllerApi, 'activateMainAudio'>;
+  'VideoControllerApi.deactivateMainAudio': ExtractMethodTypes<VideoControllerApi, 'deactivateMainAudio'>;
 
   'VideoControllerApi.createMainAudioRouter': ExtractMethodTypes<VideoControllerApi, 'createMainAudioRouter'>;
 

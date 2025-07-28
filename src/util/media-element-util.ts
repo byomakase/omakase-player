@@ -14,28 +14,22 @@
  * limitations under the License.
  */
 
-export const HTMLElementEvents = {
-  ERROR: 'error',
-  LOAD: 'load',
-};
-export const HTMLMediaElementEvents = {
-  ...HTMLElementEvents,
-  DURATIONCHANGE: 'durationchange',
-  ENDED: 'ended',
-  LOADEDDATA: 'loadeddata',
-  LOADEDMETEDATA: 'loadedmetadata',
-  PAUSE: 'pause',
-  PLAYING: 'playing',
-  PROGRESS: 'progress',
-  RATECHANGE: 'ratechange',
-  SEEKED: 'seeked',
-  SEEKING: 'seeking',
-  TIMEUPDATE: 'timeupdate',
-  VOLUMECHANGE: 'volumechange',
-  WAITING: 'waiting',
-};
-export const HTMLVideoElementEvents = {
-  ...HTMLMediaElementEvents,
-  ENTERPIP: 'enterpictureinpicture',
-  LEAVEPIP: 'leavepictureinpicture',
-};
+import {BufferedTimespan} from '../video';
+
+export class MediaElementUtil {
+  public static getBufferedTimespans(element: HTMLMediaElement): BufferedTimespan[] {
+    if (!element) {
+      return [];
+    }
+
+    let result: BufferedTimespan[] = [];
+    let timeRanges: TimeRanges = element.buffered;
+    for (let i = 0; i < timeRanges.length; i++) {
+      result.push({
+        start: timeRanges.start(i),
+        end: timeRanges.end(i),
+      });
+    }
+    return result;
+  }
+}

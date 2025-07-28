@@ -26,6 +26,7 @@ import {
   OmpAudioRouterState,
   OmpMainAudioInputSoloMuteState,
   OmpMainAudioState,
+  OmpMediaElementState,
   OmpPeakProcessorDataMessage,
   OmpPeakProcessorDataPeaks,
   OmpSidecarAudioInputSoloMuteState,
@@ -259,7 +260,33 @@ export interface MainAudioInputSoloMuteEvent extends MainAudioEvent {
   mainAudioInputSoloMuteState: OmpMainAudioInputSoloMuteState;
 }
 
+export interface OmpMediaElementEvent {
+  mediaElementState: OmpMediaElementState;
+}
+
+export interface OmpMediaElementLoadingEvent extends OmpMediaElementEvent {}
+
+export interface OmpMediaElementLoadedEvent extends OmpMediaElementEvent {}
+
+export interface OmpMediaElementErrorEvent extends OmpMediaElementEvent {
+  error: any;
+}
+
 export interface SidecarAudioEvent extends AudioEvent {}
+
+export interface SidecarAudioLoadingEvent extends SidecarAudioEvent {
+  /**
+   * Sidecar audio track
+   */
+  audioTrack: OmpAudioTrack;
+}
+
+export interface SidecarAudioLoadedEvent extends SidecarAudioEvent {
+  /**
+   * Sidecar audio state
+   */
+  sidecarAudioState: OmpSidecarAudioState;
+}
 
 export interface SidecarAudioCreateEvent extends SidecarAudioEvent {
   /**
@@ -318,6 +345,18 @@ export interface SidecarAudioInputSoloMuteEvent extends SidecarAudioEvent {
    * All available Sidecar audio input states
    */
   sidecarAudioInputSoloMuteStates: OmpSidecarAudioInputSoloMuteState[];
+}
+
+export interface SidecarAudioVideoCurrentTimeBufferingEvent extends SidecarAudioEvent {
+  /**
+   * Sidecar audio state
+   */
+  sidecarAudioState: OmpSidecarAudioState;
+
+  /**
+   * Is buffering video current time
+   */
+  buffering: boolean;
 }
 
 // endregion
@@ -400,6 +439,10 @@ export interface ThumbnailEvent extends OmpEvent {
 export interface MarkerEvent extends OmpEvent {}
 
 export interface MarkerChangeEvent extends MarkerEvent {}
+
+export interface MarkerMouseEvent extends MarkerEvent {
+  marker: MarkerApi;
+}
 
 export interface MarkerFocusEvent extends MarkerEvent {
   marker: MarkerApi;

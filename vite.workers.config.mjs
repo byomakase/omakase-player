@@ -22,6 +22,7 @@ const outputNames = {
   omp_peak_sample_processor: 'omp-peak-sample-processor.js',
   omp_true_peak_processor: 'omp-true-peak-processor.js',
   omp_synchronization_processor: 'omp-synchronization-processor.js',
+  // omp_time_stretch_processor: 'omp-time-stretch-processor.js',
 };
 
 export default defineConfig({
@@ -36,6 +37,7 @@ export default defineConfig({
         omp_peak_sample_processor: resolve(__dirname, 'src/worker/omp-peak-sample-processor.ts'),
         omp_true_peak_processor: resolve(__dirname, 'src/worker/omp-true-peak-processor.ts'),
         omp_synchronization_processor: resolve(__dirname, 'src/worker/omp-synchronization-processor.ts'),
+        // omp_time_stretch_processor: resolve(__dirname, 'src/worker/omp-time-stretch-processor.ts'),
       },
       formats: ['es'], // Only output ES format
       name: 'OmpWorkers', // Global name if needed

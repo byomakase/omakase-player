@@ -20,7 +20,7 @@ export * from './layout';
 export * from './types';
 export * from './vtt';
 
-export * from './mediainfo';
+export * from './tools';
 
 // TODO consolidate in next major version
 export * from './timeline/marker';

@@ -532,5 +532,11 @@ window.addEventListener('load', () => {
     ],
   });
 
+  setTimeout(() => {
+
+    omakasePlayer.video.loadBlackVideo()
+
+  }, 3000)
+
   window.omakasePlayer = omakasePlayer; // for console debugging
 });

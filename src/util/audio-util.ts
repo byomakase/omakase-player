@@ -16,9 +16,8 @@
 
 import {catchError, from, map, mergeMap, Observable, of, toArray} from 'rxjs';
 import {httpGet} from '../http';
-import {AuthenticationData} from '../authentication/model';
-import {AuthConfig} from '../auth/auth-config';
 import {OmpAudioRoutingConnection} from '../video';
+import {AuthConfig, AuthenticationData} from '../common/authentication';
 
 export class AudioUtil {
   static resolveDefaultAudioRouting(inputsNumber: number, outputsNumber: number): OmpAudioRoutingConnection[] {

@@ -409,7 +409,6 @@ export interface AudioApi extends Api {
    *
    * @param sidecarAudioTrackId id Sidecar audio {@link OmpAudioTrack.id}
    * @param connections
-   * @param checkMuteSolo
    */
   updateSidecarAudioRouterConnections(sidecarAudioTrackId: string, connections: OmpAudioRoutingConnection[]): Observable<void>;
 

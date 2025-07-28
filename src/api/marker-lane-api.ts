@@ -56,11 +56,6 @@ export interface MarkerLaneApi extends MarkerAwareApi, VttAwareApi<MarkerVttCue,
   getMarker(id: string): Marker | undefined;
 
   /**
-   * Removes all Marker's
-   */
-  removeAllMarkers(): void;
-
-  /**
    * Focuses Marker by ID
    * @param id Marker ID
    */

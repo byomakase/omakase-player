@@ -15,17 +15,38 @@
  */
 
 import {Api} from './api';
-import {OmpAudioTrack, VolumeChangeEvent} from '../types';
+import {Destroyable, OmpAudioTrack, SidecarAudioLoadedEvent, SidecarAudioLoadingEvent, VolumeChangeEvent} from '../types';
 import {AudioRouterApi} from './audio-router-api';
 import {AudioPeakProcessorApi} from './audio-peak-processor-api';
-import {OmpSidecarAudioState} from '../video';
+import {AudioMeterStandard, OmpSidecarAudioState} from '../video';
 import {Observable} from 'rxjs';
 import {OmpSidecarAudioInputSoloMuteState} from '../video/model';
+import {OmpAudioPeakProcessor} from '../video/audio-peak-processor';
+import {OmpAudioRouter} from '../video/audio-router';
 
 /**
  * For Sidecar audio operations
  */
-export interface SidecarAudioApi extends Api {
+export interface SidecarAudioApi extends Api, Destroyable {
+  /**
+   * Fires when sidecar audio starts loading
+   * @readonly
+   */
+  onLoading$: Observable<SidecarAudioLoadingEvent>;
+
+  /**
+   * Fires @{link SidecarAudioLoadedEvent} when sidecar audio is loaded
+   * @readonly
+   */
+  onLoaded$: Observable<SidecarAudioLoadedEvent | undefined>;
+
+  /**
+   * Fires when sidecar audio starts or stops buffering current video time.
+   * Always emits the current value on subscription.
+   * @readonly
+   */
+  onVideoCurrentTimeBuffering$: Observable<boolean>;
+
   /**
    * Fires on state change
    * @readonly
@@ -43,6 +64,15 @@ export interface SidecarAudioApi extends Api {
    *  @readonly
    */
   onVolumeChange$: Observable<VolumeChangeEvent>;
+
+  /**
+   * Starts loading sidecar audio track
+   */
+  loadSource(): Observable<SidecarAudioLoadedEvent>;
+
+  createAudioRouter(inputsNumber?: number, outputsNumber?: number): OmpAudioRouter;
+
+  createAudioPeakProcessor(audioMeterStandard?: AudioMeterStandard): Observable<OmpAudioPeakProcessor>;
 
   /**
    * Sidecar audio track
@@ -120,9 +150,4 @@ export interface SidecarAudioApi extends Api {
    * @returns Sidecar audio input state
    */
   getSidecarAudioInputSoloMuteState(): OmpSidecarAudioInputSoloMuteState;
-
-  /**
-   * @internal
-   */
-  correctAudioDrift(): void;
 }

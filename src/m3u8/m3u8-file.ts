@@ -18,9 +18,8 @@ import {AxiosRequestConfig} from 'axios';
 import {from, map, Observable} from 'rxjs';
 import {httpGet} from '../http';
 import {OmpM3u8Parser} from './omp-m3u8-parser';
-import {AuthenticationData} from '../authentication/model';
-import {AuthConfig} from '../auth/auth-config';
 import {Manifest} from './m3u8.model';
+import {AuthConfig, AuthenticationData} from '../common/authentication';
 
 export abstract class BaseM3u8File {
   private _url: string;

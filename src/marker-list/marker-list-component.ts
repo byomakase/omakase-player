@@ -152,14 +152,16 @@ export class MarkerListComponent extends HTMLElement {
   }
 
   addMarker(markerItem: MarkerListItem) {
-    this._markers.push(markerItem);
-    if (this._markers.length === 1) {
-      this.renderList();
-    } else {
-      const template = this.getTemplate();
-      const container = this._listElement.querySelector<HTMLElement>(`.${classes.markerListBody}`);
-      this.addMarkerToDom(template, container!, markerItem);
-      this.reorderMarker(markerItem);
+    if (!this._markers.find((marker) => marker.id === markerItem.id)) {
+      this._markers.push(markerItem);
+      if (this._markers.length === 1) {
+        this.renderList();
+      } else {
+        const template = this.getTemplate();
+        const container = this._listElement.querySelector<HTMLElement>(`.${classes.markerListBody}`);
+        this.addMarkerToDom(template, container!, markerItem);
+        this.reorderMarker(markerItem);
+      }
     }
   }
 

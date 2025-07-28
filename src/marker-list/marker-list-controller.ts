@@ -58,6 +58,12 @@ export class MarkerListController implements MarkerAwareApi {
     this.onMarkerDelete$.next({marker});
   }
 
+  removeAllMarkers(): void {
+    for (const marker of this._markers) {
+      this.removeMarker(marker.id);
+    }
+  }
+
   updateMarker(id: string, data: Partial<MarkerApi>): void {
     const marker = this._markers.find((m) => m.id === id);
     if (!marker) {

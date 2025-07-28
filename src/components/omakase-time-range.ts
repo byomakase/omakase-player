@@ -1,5 +1,13 @@
 import {MediaTimeRange} from 'media-chrome';
-import {Subject} from 'rxjs';
+import {BehaviorSubject, Observable, Subject, takeUntil} from 'rxjs';
+import {MarkerApi} from '../api';
+import {MarkerInitEvent, MarkerCreateEvent, MarkerDeleteEvent, MarkerUpdateEvent, MarkerSelectedEvent, MarkerMouseEvent, MarkerVttCue} from '../types';
+import {completeUnsubscribeSubjects, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
+import {MomentMarker, PeriodMarker} from '../timeline';
+import {TimeRangeMarkerTrackApi, TimeRangeMarkerTrackVttLoadOptions} from '../api/time-range-marker-track-api';
+import {MarkerVttFile} from '../vtt';
+import {VttAdapter} from '../common/vtt-adapter';
+import {MarkerUtil} from '../timeline/marker/marker-util';
 
 const calcTimeFromRangeValue = (el: any, value: number = el.range.valueAsNumber): number => {
   const startTime = Number.isFinite(el.mediaSeekableStart) ? el.mediaSeekableStart : 0;
@@ -16,16 +24,113 @@ const closestComposedNode = <T extends Element = Element>(childNode: Element, se
   return closestComposedNode((childNode.getRootNode() as ShadowRoot).host, selector);
 };
 
-export class OmakaseTimeRange extends MediaTimeRange {
+const markerElementPrefix = 'omakase-marker';
+
+export class OmakaseTimeRange extends MediaTimeRange implements TimeRangeMarkerTrackApi {
   onSeek$: Subject<number> = new Subject();
   onMouseOver$: Subject<number> = new Subject();
+  onMarkerInit$: Subject<MarkerInitEvent> = new Subject();
+  onMarkerCreate$: Subject<MarkerCreateEvent> = new Subject();
+  onMarkerDelete$: Subject<MarkerDeleteEvent> = new Subject();
+  onMarkerUpdate$: Subject<MarkerUpdateEvent> = new Subject();
+  onMarkerSelected$: Subject<MarkerSelectedEvent> = new Subject();
+  onMarkerMouseEnter$: Subject<MarkerMouseEvent> = new Subject();
+  onMarkerMouseLeave$: Subject<MarkerMouseEvent> = new Subject();
+  onMarkerClick$: Subject<MarkerMouseEvent> = new Subject();
+  onVttLoaded$ = new BehaviorSubject<MarkerVttFile | undefined>(undefined);
 
   private _previewBox: HTMLElement;
   private _lastPreviewTime?: number;
+  private _markerTrack: HTMLDivElement;
+  private _markers: MarkerApi[] = [];
+  private _destroyed$ = new Subject<void>();
+  private _markerVttAdapter = new VttAdapter(MarkerVttFile);
 
   constructor() {
     super();
+    const style = document.createElement('style');
+    style.textContent = `
+      #appearance:has(+ #range:hover) {
+        height: var(--time-range-hover-height, var(--media-range-track-height, 4px));
+      }
+      #thumb {
+        z-index: 2;
+      }
+      #markers {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        z-index: 1;
+      }
+      .marker {
+        position: absolute;
+        height: 100%;
+        outline: var(--time-range-marker-border-size, 1px) solid var(--time-range-marker-border-color, black);
+        min-width: var(--time-range-marker-min-width, 5px);
+        opacity: var(--time-range-marker-opacity, 0.7)
+      }
+      .marker-halo {
+        position: absolute;
+        width: 100%;
+        height: var(--time-range-marker-halo-height, 1px);
+        bottom: calc(-2px - var(--time-range-marker-halo-height, 1px));
+        display: none;
+      }
+      .marker.focused {
+        height: calc(100% + var(--time-range-marker-focus-height, 3px));
+        top: calc(-1 * var(--time-range-marker-focus-height, 3px));
+        z-index: 1;
+      }
+      .marker.focused .marker-halo {
+        display: block;
+      }
+    `;
+
+    this.shadowRoot!.appendChild(style);
     this._previewBox = this.shadowRoot!.querySelector('[part~="preview-box"]')!;
+    const markerTrackContainer = this.shadowRoot!.querySelector('#appearance')!;
+    this._markerTrack = document.createElement('div');
+    this._markerTrack.id = 'markers';
+    markerTrackContainer.appendChild(this._markerTrack);
+    const rangeElement = this.shadowRoot!.querySelector('#range') as HTMLElement;
+    rangeElement.addEventListener('mousemove', (event: MouseEvent) => {
+      for (const marker of this._markers) {
+        const markerElement = this._markerTrack.querySelector(`#${markerElementPrefix}-${marker.id}`);
+        if (markerElement) {
+          if (event.clientX >= markerElement.getBoundingClientRect().x && event.clientX < markerElement.getBoundingClientRect().x + markerElement.getBoundingClientRect().width) {
+            if (!markerElement.classList.contains('focused')) {
+              markerElement.classList.add('focused');
+              this.onMarkerMouseEnter$.next({marker});
+            }
+          } else if (markerElement.classList.contains('focused')) {
+            markerElement.classList.remove('focused');
+            this.onMarkerMouseLeave$.next({marker});
+          }
+        }
+      }
+    });
+    rangeElement.addEventListener('mouseleave', () => {
+      for (const marker of this._markers) {
+        const markerElement = this._markerTrack.querySelector(`#${markerElementPrefix}-${marker.id}`);
+        if (markerElement && markerElement.classList.contains('focused')) {
+          markerElement.classList.remove('focused');
+          this.onMarkerMouseLeave$.next({marker});
+        }
+      }
+    });
+    rangeElement.addEventListener('click', () => {
+      const markerElement = this._markerTrack.querySelector(`.focused`);
+      if (markerElement) {
+        const marker = this._markers.find((marker) => marker.id === markerElement.id.replace(`${markerElementPrefix}-`, ''));
+        if (marker) {
+          this.onMarkerClick$.next({marker});
+        }
+      }
+    });
+  }
+
+  get name(): string {
+    return this.getAttribute('name') ?? '';
   }
 
   override handleEvent(evt: Event | MouseEvent): void {
@@ -54,6 +159,75 @@ export class OmakaseTimeRange extends MediaTimeRange {
     }
   }
 
+  getMarkers(): MarkerApi[] {
+    return this._markers;
+  }
+
+  addMarker(marker: MarkerApi): MarkerApi {
+    this._markers.push(marker);
+    this.addMarkerElement(marker);
+    this.onMarkerCreate$.next({marker});
+    (marker as MomentMarker).onChange$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
+      this.updateMarkerPosition(marker);
+      this.onMarkerUpdate$.next({marker, oldValue: {...marker, timeObservation: event.oldTimeObservation} as MomentMarker});
+    });
+    return marker;
+  }
+
+  removeMarker(id: string): void {
+    const marker = this._markers.find((marker) => marker.id === id);
+    if (marker) {
+      this._markers.splice(this._markers.indexOf(marker), 1);
+      this._markerTrack!.querySelector(`#${markerElementPrefix}-${id}`)?.remove();
+      this.onMarkerDelete$.next({marker});
+    }
+  }
+
+  updateMarker(id: string, data: Partial<MarkerApi>): void {
+    const marker = this._markers.find((marker) => marker.id === id);
+    if (marker) {
+      const oldValue = {...marker};
+      Object.assign(marker, data);
+      this.updateMarkerPosition(marker);
+      this.onMarkerUpdate$.next({oldValue, marker});
+    }
+  }
+
+  toggleMarker(id: string): void {
+    throw new Error('Method not supported.');
+  }
+
+  getSelectedMarker(): MarkerApi | undefined {
+    throw new Error('Method not supported.');
+  }
+
+  destroy(): void {
+    nextCompleteSubject(this._destroyed$);
+    completeUnsubscribeSubjects(this.onMarkerCreate$, this.onMarkerDelete$, this.onMarkerUpdate$, this.onMarkerInit$);
+    this.remove();
+  }
+
+  removeAllMarkers(): void {
+    this._markers = [];
+    this._markerTrack.innerHTML = '';
+  }
+
+  loadVtt(vttUrl: string, options?: TimeRangeMarkerTrackVttLoadOptions): Observable<MarkerVttFile | undefined> {
+    return passiveObservable((observer) => {
+      this._markerVttAdapter.loadVtt(vttUrl, {...options}).subscribe((vttFile) => {
+        const markers = vttFile?.cues.map((cue, index) => (options?.vttMarkerCreateFn ? options.vttMarkerCreateFn(cue, index) : MarkerUtil.createPeriodMarkerFromCue(cue)));
+        if (markers) {
+          for (const marker of markers) {
+            this.addMarker(marker);
+          }
+        }
+        this.onVttLoaded$.next(vttFile);
+        this.onMarkerInit$.next({markers: this._markers});
+        nextCompleteObserver(observer, vttFile);
+      });
+    });
+  }
+
   private getElementRects(box: HTMLElement) {
     // Get the element that enforces the bounds for the time range boxes.
     const bounds = (this.getAttribute('bounds') ? closestComposedNode(this, `#${this.getAttribute('bounds')}`) : this.parentElement) ?? this;
@@ -71,5 +245,37 @@ export class OmakaseTimeRange extends MediaTimeRange {
       bounds: boundsRect,
       range: rangeRect,
     };
+  }
+
+  private addMarkerElement(marker: MarkerApi) {
+    const markerStart = (marker as MomentMarker).timeObservation.time ?? (marker as PeriodMarker).timeObservation.start;
+    const markerEnd = (marker as PeriodMarker).timeObservation.end ?? markerStart;
+    const mediaDuration = this.mediaDuration ?? 0;
+    const markerElement = document.createElement('div');
+    markerElement.classList.add('marker');
+    markerElement.id = `${markerElementPrefix}-${marker.id}`;
+    markerElement.style.backgroundColor = marker.style.color;
+    const markerPosition = (100 * markerStart) / mediaDuration;
+    const markerSize = (100 * (markerEnd - markerStart)) / mediaDuration;
+    markerElement.style.width = `${markerSize}%`;
+    markerElement.style.left = `${markerPosition}%`;
+    const markerHalo = document.createElement('div');
+    markerHalo.classList.add('marker-halo');
+    markerHalo.style.backgroundColor = marker.style.color;
+    markerElement.appendChild(markerHalo);
+    this._markerTrack.appendChild(markerElement);
+  }
+
+  private updateMarkerPosition(marker: MarkerApi) {
+    const markerElement = this._markerTrack.querySelector(`#${markerElementPrefix}-${marker.id}`) as HTMLElement;
+    if (markerElement) {
+      const markerStart = (marker as MomentMarker).timeObservation.time ?? (marker as PeriodMarker).timeObservation.start;
+      const markerEnd = (marker as PeriodMarker).timeObservation.end ?? markerStart;
+      const mediaDuration = this.mediaDuration ?? 0;
+      const markerPosition = (100 * markerStart) / mediaDuration;
+      const markerSize = (100 * (markerEnd - markerStart)) / mediaDuration;
+      markerElement.style.width = `${markerSize}%`;
+      markerElement.style.left = `${markerPosition}%`;
+    }
   }
 }

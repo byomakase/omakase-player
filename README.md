@@ -55,17 +55,60 @@ omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8').subscribe({
 })
 ```
 
-Media chrome controls can be configured with the `mediaChrome` property. Possible values for visibility are `enabled` (always enabled), `disabled` (always disabled) and `fullscreen-only` (enabled in fullscreen, disabled otherwise). Default value is `fullscreen-only` in regular mode and `enabled` in detached mode.
+Player chroming can be configured with the `playerChroming` property. This property allows selection of a chroming theme, watermark, thumbnail url or selection function and other theme-specific configuration. Some code examples are shown below:
 
 ```javascript
-let omakasePlayer = new omakase.OmakasePlayer({
-  mediaChrome: {
-    visibility: 'enabled'
+let omakasePlayer = new OmakasePlayer({
+  playerChroming: {
+    theme: 'DEFAULT',
+    thumbnailUrl: 'https://byomakase.org/thumbs.vtt',
+    watermark: 'DEMO_SAMPLE',
+    themeConfig: {
+      controlBarVisibility: 'ENABLED',
+      controlBar: ['PLAY', 'SCRUBBER', 'VOLUME', 'TRACKSELECTOR','FULLSCREEN'],
+      trackSelectorAutoClose: false
+    }
   }
 });
+
+
+let omakasePlayer = new OmakasePlayer({
+  playerChroming: {
+    theme: 'DEFAULT',
+    themeConfig: {
+      controlBarVisibility: 'DISABLED',
+      floatingControls: ['PLAYBACK_CONTROLS']
+    }
+  }
+});
+
+let omakasePlayer = new OmakasePlayer({
+  playerChroming: {
+    theme: 'CHROMELESS'
+  }
+});
+
+/*  Custom template js  */
+let omakasePlayer = new OmakasePlayer({
+  playerChroming: {
+    theme: 'CUSTOM',
+    themeConfig: {
+      htmlTemplateId: 'custom-template'
+    }
+  }
+});
+
+/** Custom template HTML 
+<template id="custom-template">
+  <media-control-bar>
+    <omakase-marker-bar></omakase-marker-bar>
+    <omakase-time-range></omakase-time-range>
+  </media-control-bar>
+</template>
+*/
 ```
 
-More information about Player Chroming customization is available in [Player Chroming](docs/player-chroming/README.md) manual.
+More information about Player Chroming customization and specific theme configurations is available in [Player Chroming](docs/player-chroming/README.md) manual.
 
 ## Video API
 

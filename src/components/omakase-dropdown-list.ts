@@ -64,6 +64,7 @@ export class OmakaseDropdownList extends HTMLElement {
         this._selectedOption$.next({
           value: optionElement.getAttribute('value'),
           label: optionElement.innerText,
+          active: option.active
         });
       });
       this._list!.appendChild(optionElement);

@@ -3,12 +3,12 @@ import {DownsampleConfig, VttAwareApi, VttLoadOptions} from '../api/vtt-aware-ap
 import {OmakaseVttCue, OmakaseVttCueEvent, PlayheadMoveEvent, ScrubberMoveEvent, VideoTimeChangeEvent} from '../types';
 import {BaseTimelineLane, TimelineLaneConfig, TimelineLaneStyle, VTT_DOWNSAMPLE_CONFIG_DEFAULT} from './timeline-lane';
 import {VttAdapter} from '../common/vtt-adapter';
-import {AuthConfig} from '../auth/auth-config';
 import {AxiosRequestConfig} from 'axios';
 import {OmakaseVttFile} from '../vtt';
 import {errorCompleteObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
 import {KonvaFactory} from '../konva/konva-factory';
 import Konva from 'konva';
+import {AuthConfig} from '../common/authentication';
 
 const sampleTimeSyncVideoMetadata = 100;
 

@@ -42,4 +42,11 @@ export class DomUtil {
     if (this.getAttribute(el, attrName, undefined) === nextValue) return;
     el.setAttribute(attrName, nextValue);
   }
+
+  static removeElementById(elementId: string): void {
+    const el = document.getElementById(elementId);
+    if (el && el.parentNode) {
+      el.parentNode.removeChild(el);
+    }
+  }
 }

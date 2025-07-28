@@ -55,7 +55,7 @@ import {
   VideoWindowPlaybackStateChangeEvent,
   VolumeChangeEvent,
 } from '../types';
-import {AudioMeterStandard, OmpAudioRoutingConnection, OmpAudioRoutingPath, PlaybackState, Video, VideoController, VideoControllerApi, VideoLoadOptions} from './index';
+import {AudioMeterStandard, OmpAudioRoutingConnection, OmpAudioRoutingPath, MediaElementPlaybackState, Video, VideoController, VideoControllerApi, VideoLoadOptions} from './index';
 import {VideoControllerConfig} from './video-controller';
 import {nextCompleteSubject} from '../util/rxjs-util';
 import {Validators} from '../validators';
@@ -86,7 +86,7 @@ export class RemoteVideoController implements VideoControllerApi {
    * Tracks VideoController.getPlaybackState()
    * @private
    */
-  private _playbackState: PlaybackState | undefined = void 0;
+  private _playbackState: MediaElementPlaybackState | undefined = void 0;
   private _currentTime: number = 0;
   private _videoElementVolume: number = VideoController.videoVolumeDefault;
   private _videoElementMuted: boolean = VideoController.videoMutedDefault;
@@ -316,7 +316,7 @@ export class RemoteVideoController implements VideoControllerApi {
     return this._messageChannel.createRequestStream('VideoControllerApi.onAudioOutputVolumeChange$');
   }
 
-  get onPlaybackState$(): Observable<PlaybackState> {
+  get onPlaybackState$(): Observable<MediaElementPlaybackState> {
     return this._messageChannel.createRequestStream('VideoControllerApi.onPlaybackState$');
   }
 
@@ -432,7 +432,7 @@ export class RemoteVideoController implements VideoControllerApi {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.reloadVideo')));
   }
 
-  getPlaybackState(): PlaybackState | undefined {
+  getPlaybackState(): MediaElementPlaybackState | undefined {
     return this._playbackState;
   }
 
@@ -461,6 +461,10 @@ export class RemoteVideoController implements VideoControllerApi {
   }
 
   getAudioOutputNode(): AudioNode {
+    throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
+  }
+
+  getSidecarAudiosOutputNode(): AudioNode {
     throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
   }
 
@@ -753,6 +757,14 @@ export class RemoteVideoController implements VideoControllerApi {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.setActiveAudioTrack', [id])));
   }
 
+  activateMainAudio(): Observable<void> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.activateMainAudio')));
+  }
+
+  deactivateMainAudio(): Observable<void> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.deactivateMainAudio')));
+  }
+
   // region audio router
 
   createMainAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<OmpAudioRouterState> {
@@ -969,7 +981,6 @@ export class RemoteVideoController implements VideoControllerApi {
 
   getConfig(): VideoControllerConfig {
     throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
-    // TODO verify this
   }
 
   getHls(): Hls | undefined {

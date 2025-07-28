@@ -225,9 +225,7 @@ export class MarkerLane extends VttTimelineLane<MarkerLaneConfig, MarkerLaneStyl
     }
 
     if (this._markers) {
-      this._markers.forEach((marker) => {
-        this.removeMarker(marker.id);
-      });
+      this.removeMarkers([...this._markersById.keys()]);
     }
   }
 
@@ -245,6 +243,12 @@ export class MarkerLane extends VttTimelineLane<MarkerLaneConfig, MarkerLaneStyl
       this._markersById.delete(marker.id);
       marker.destroy();
     }
+  }
+
+  protected removeMarkers(ids: string[]): void {
+    ids.forEach((id) => {
+      this.removeMarker(id);
+    })
   }
 
   getMarker(id: string): Marker | undefined {

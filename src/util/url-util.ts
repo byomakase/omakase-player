@@ -36,4 +36,26 @@ export class UrlUtil {
       return url;
     }
   }
+
+  static isDataBase64Url(url: string): boolean {
+    return url.startsWith('data:');
+  }
+
+  static getDataBase64UrlContentLength(url: string): number {
+    if (!this.isDataBase64Url(url)) {
+      throw new Error('Not a valid data URL');
+    }
+
+    const base64Index = url.indexOf(';base64,');
+    if (base64Index === -1) {
+      throw new Error('Not a base64-encoded data URL');
+    }
+
+    const base64Data = url.slice(base64Index + ';base64,'.length);
+
+    const len = base64Data.length;
+    const padding = (base64Data.endsWith('==') ? 2 : base64Data.endsWith('=') ? 1 : 0);
+
+    return Math.floor((len * 3) / 4) - padding;
+  }
 }

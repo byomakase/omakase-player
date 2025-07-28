@@ -16,13 +16,12 @@
 
 // @ts-ignore
 import webvtt from 'node-webvtt';
-import {AuthenticationData} from '../authentication/model';
 import {forkJoin, from, map, Observable, of, switchMap} from 'rxjs';
 import {M3u8File} from './m3u8-file';
 import {UrlUtil} from '../util/url-util';
-import {AuthConfig} from '../auth/auth-config';
 import {httpGet} from '../http';
 import {VttFileParsed} from '../vtt';
+import {AuthConfig, AuthenticationData} from '../common/authentication';
 
 const webvttParseOptions = {strict: true, meta: true};
 
