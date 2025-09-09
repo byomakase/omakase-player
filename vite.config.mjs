@@ -17,9 +17,27 @@
 import {resolve} from 'path';
 import {defineConfig} from 'vite';
 import dtsPlugin from 'vite-plugin-dts';
+import {exec} from 'node:child_process';
+
+function styleUpdatePlugin() {
+  return {
+    name: 'style-update',
+    handleHotUpdate({file}) {
+      if (file.endsWith('player-chroming.scss')) {
+        exec('npm run build:style', (err, stdout, stderr) => {
+          if (err) {
+            console.error(stderr);
+          } else {
+            console.log(stdout);
+          }
+        });
+      }
+    },
+  };
+}
 
 export default defineConfig({
-  plugins: [dtsPlugin()],
+  plugins: [dtsPlugin(), styleUpdatePlugin()],
   build: {
     minify: true,
     sourcemap: true,

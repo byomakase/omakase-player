@@ -19,7 +19,7 @@ import Konva from 'konva';
 import {Dimension, HasRectMeasurement, Position, RectMeasurement} from '../../common';
 import {AudioVttCue, WithOptionalPartial} from '../../types';
 import Decimal from 'decimal.js';
-import {Constants} from '../../constants';
+import {fillLinearGradientAudioPeak} from '../../constants';
 import {ColorUtil} from '../../util/color-util';
 import {nullifier} from '../../util/destroy-util';
 import {KonvaFactory} from '../../konva/konva-factory';
@@ -48,8 +48,8 @@ const configDefault: Omit<AudioTrackLaneItemConfig, 'audioVttCue' | 'x' | 'width
     cornerRadius: 20,
     opacity: 1,
     visible: true,
-    maxSampleFillLinearGradientColorStops: Constants.fillLinearGradientAudioPeak,
-    minSampleFillLinearGradientColorStops: ColorUtil.inverseFillGradient(Constants.fillLinearGradientAudioPeak),
+    maxSampleFillLinearGradientColorStops: fillLinearGradientAudioPeak,
+    minSampleFillLinearGradientColorStops: ColorUtil.inverseFillGradient(fillLinearGradientAudioPeak),
   },
 };
 

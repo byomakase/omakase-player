@@ -20,7 +20,7 @@ import Decimal from 'decimal.js';
 import {HasRectMeasurement, Horizontals, OnMeasurementsChange, RectMeasurement} from '../../common/measurement';
 import {animate} from '../../util/animation-util';
 import {ScrollbarScrollEvent, ScrollbarZoomEvent} from '../../types';
-import {Constants} from '../../constants';
+import {positionTopLeft} from '../../constants';
 import {WindowUtil} from '../../util/window-util';
 import {filter, Observable, of, Subject, takeUntil} from 'rxjs';
 import {KonvaFactory} from '../../konva/konva-factory';
@@ -98,7 +98,7 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
     });
 
     this._bgRect = KonvaFactory.createRect({
-      ...Constants.positionTopLeft,
+      ...positionTopLeft,
       width: this._group.width(),
       height: this.style.height,
       fill: this.style.backgroundFill,
@@ -106,13 +106,13 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
     });
 
     this._handleGroup = KonvaFactory.createGroup({
-      ...Constants.positionTopLeft,
+      ...positionTopLeft,
       width: this._group.width(),
       height: this.style.height,
     });
 
     this._handleBar = KonvaFactory.createRect({
-      ...Constants.positionTopLeft,
+      ...positionTopLeft,
       width: this._handleGroup.width(),
       height: this.style.height,
       fill: this.style.handleBarFill,
@@ -121,7 +121,7 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
     });
 
     this._leftZoomHandle = new Konva.Circle({
-      ...Constants.positionTopLeft,
+      ...positionTopLeft,
       fill: this.style.handleBarFill,
       radius: this.style.height / 2,
       y: this.style.height / 2,
@@ -130,7 +130,7 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
     });
 
     this._rightZoomHandle = new Konva.Circle({
-      ...Constants.positionTopLeft,
+      ...positionTopLeft,
       fill: this.style.handleBarFill,
       radius: this.style.height / 2,
       y: this.style.height / 2,

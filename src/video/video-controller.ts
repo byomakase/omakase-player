@@ -31,6 +31,7 @@ import {
   SidecarAudioInputSoloMuteEvent,
   SidecarAudioPeakProcessorMessageEvent,
   SidecarAudioRemoveEvent,
+  SidecarAudiosChangeEvent,
   SidecarAudioVideoCurrentTimeBufferingEvent,
   SidecarAudioVolumeChangeEvent,
   SubtitlesCreateEvent,
@@ -56,7 +57,7 @@ import {
   VideoWindowPlaybackStateChangeEvent,
   VolumeChangeEvent,
 } from '../types';
-import {BehaviorSubject, concatMap, delay, filter, forkJoin, from, fromEvent, interval, map, Observable, of, Subject, switchMap, take, takeUntil, tap, timeout, toArray} from 'rxjs';
+import {BehaviorSubject, concatMap, delay, filter, forkJoin, from, fromEvent, interval, map, merge, Observable, of, Subject, switchMap, take, takeUntil, tap, timeout, toArray} from 'rxjs';
 import {FrameRateUtil} from '../util/frame-rate-util';
 import {completeSubject, completeSubjects, completeUnsubscribeSubjects, errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {z} from 'zod';
@@ -189,11 +190,13 @@ export class VideoController implements VideoControllerApi {
 
   // sidecar audio
   public readonly onSidecarAudioCreate$: Subject<SidecarAudioCreateEvent> = new Subject<SidecarAudioCreateEvent>();
+  public readonly onSidecarAudioLoaded$: Subject<SidecarAudioCreateEvent> = new Subject<SidecarAudioCreateEvent>();
   public readonly onSidecarAudioRemove$: Subject<SidecarAudioRemoveEvent> = new Subject<SidecarAudioRemoveEvent>();
   public readonly onSidecarAudioChange$: Subject<SidecarAudioChangeEvent> = new Subject<SidecarAudioChangeEvent>();
   public readonly onSidecarAudioVolumeChange$: Subject<SidecarAudioVolumeChangeEvent> = new Subject<SidecarAudioVolumeChangeEvent>();
   public readonly onSidecarAudioPeakProcessorMessage$: Subject<SidecarAudioPeakProcessorMessageEvent> = new Subject<SidecarAudioPeakProcessorMessageEvent>();
   public readonly onSidecarAudioInputSoloMute$: Subject<SidecarAudioInputSoloMuteEvent> = new Subject<SidecarAudioInputSoloMuteEvent>();
+  public readonly onSidecarAudiosChange$: Subject<SidecarAudiosChangeEvent> = new Subject<SidecarAudiosChangeEvent>();
 
   public readonly onSidecarAudioVideoCurrentTimeBuffering$: Subject<SidecarAudioVideoCurrentTimeBufferingEvent> = new Subject<SidecarAudioVideoCurrentTimeBufferingEvent>();
 
@@ -375,6 +378,16 @@ export class VideoController implements VideoControllerApi {
     this.onVolumeChange$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
       this._lastMainVolumeChangeEvent = event;
     });
+
+    merge(this.onSidecarAudioCreate$, this.onSidecarAudioRemove$, this.onSidecarAudioChange$)
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: (value) => {
+          this.onSidecarAudiosChange$.next({
+            sidecarAudioStates: this.getSidecarAudioStates(),
+          });
+        },
+      });
   }
 
   private isVideoHlsLoaderInSafari = () => {
@@ -427,7 +440,7 @@ export class VideoController implements VideoControllerApi {
           this.onSubtitlesLoaded$.next(void 0); // emit new value, BehaviourSubject
         }
 
-        if (StringUtil.isNonEmpty(options?.poster)) {
+        if (StringUtil.isNonEmpty(options?.poster) && !this._videoDomController.isCompactAudioTheme()) {
           this._videoDomController.getVideoElement().poster = options!.poster!;
         }
 
@@ -525,7 +538,7 @@ export class VideoController implements VideoControllerApi {
           ompAudioElement.onLoaded$
             .pipe(
               filter((p) => !!p),
-              take(1),
+              take(1)
             )
             .pipe(takeUntil(this._destroyed$))
             .subscribe({
@@ -581,7 +594,7 @@ export class VideoController implements VideoControllerApi {
     this._videoLoader.onAudioLoaded$
       .pipe(
         filter((p) => !!p),
-        takeUntil(this._videoEventBreaker$),
+        takeUntil(this._videoEventBreaker$)
       )
       .subscribe({
         next: (event) => {
@@ -602,7 +615,7 @@ export class VideoController implements VideoControllerApi {
     this._videoLoader.onSubtitlesLoaded$
       .pipe(
         filter((p) => !!p),
-        takeUntil(this._videoEventBreaker$),
+        takeUntil(this._videoEventBreaker$)
       )
       .subscribe({
         next: (event) => {
@@ -688,7 +701,7 @@ export class VideoController implements VideoControllerApi {
           if (this.getCurrentTime() >= this.getMostAccurateDuration()) {
             finalizePause();
           } else {
-            console.debug(`%cpause control sync start`, 'color: purple');
+            // console.debug(`%cpause control sync start`, 'color: purple');
             this.syncVideoFrames({}).subscribe((result) => {
               // playbackState.pausing can be either true (pause through API) or even false (pause initiated externally by browser with PIP close)
               // Thus, we will not inspect this._playbackStateMachine!.pausing
@@ -696,7 +709,7 @@ export class VideoController implements VideoControllerApi {
                 .pipe(takeUntil(this._pausingBreaker$), takeUntil(this._seekBreaker$), take(1))
                 .subscribe({
                   next: () => {
-                    console.debug(`%cpause control sync end`, 'color: purple');
+                    // console.debug(`%cpause control sync end`, 'color: purple');
                     finalizePause();
                   },
                 });
@@ -821,6 +834,7 @@ export class VideoController implements VideoControllerApi {
               }
             }
           }
+          // console.debug(`Waiting synced media: ${this._mediaElementPlayback.waitingSyncedMedia} ${this._mediaElementPlayback.waitingSyncedMedia ? Array.from(this._sidecarAudiosVideoCurrentTimeBuffering) : ''}`)
         }
       },
     });
@@ -884,7 +898,7 @@ export class VideoController implements VideoControllerApi {
   }
 
   protected startSWSynchronization() {
-    // console.log('startSWSynchronization');
+    // console.debug('startSWSynchronization');
     this.onSyncTick$.pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$)).subscribe({
       next: (event) => {
         if (!this._mediaElementPlayback!.seeking) {
@@ -903,7 +917,7 @@ export class VideoController implements VideoControllerApi {
   }
 
   protected startRVFCSynchronization() {
-    // console.log('startRVFCSynchronization');
+    // console.debug('startRVFCSynchronization');
     let nextVideoFrameCallback = () => {
       if (this.videoElement) {
         this._videoFrameCallbackHandle = this.videoElement.requestVideoFrameCallback((now, metadata) => {
@@ -944,14 +958,14 @@ export class VideoController implements VideoControllerApi {
   }
 
   private syncVideoFrames(syncConditions: SyncConditions): Observable<boolean> {
-    console.debug('syncFrames - START', syncConditions);
+    // console.debug('syncFrames - START', syncConditions);
     return new Observable<boolean>((o$) => {
       let syncBreaker$ = new BehaviorSubject<boolean>(false);
       let syncLoopVideoCallbackBreaker$ = new Subject<void>();
       let syncLoopIterationsLeft = this._syncLoopMaxIterations;
 
       this._seekBreaker$.pipe(takeUntil(syncLoopVideoCallbackBreaker$)).subscribe(() => {
-        console.debug(`%csyncFrames - seek breaker triggered`, 'color: gray');
+        // console.debug(`%csyncFrames - seek breaker triggered`, 'color: gray');
         syncBreaker$.next(true);
         completeSync();
       });
@@ -960,13 +974,13 @@ export class VideoController implements VideoControllerApi {
         nextCompleteSubject(syncLoopVideoCallbackBreaker$);
         o$.next(true);
         o$.complete();
-        console.debug(`%csyncFrames - END`, 'color: gray');
+        // console.debug(`%csyncFrames - END`, 'color: gray');
       };
 
       let seek = (time: number) => {
         syncBreaker$.pipe(take(1)).subscribe((syncBreak) => {
           if (syncBreak) {
-            console.debug(`%csyncFrames - seek skipped, breaker already triggered`, 'color: gray');
+            // console.debug(`%csyncFrames - seek skipped, breaker already triggered`, 'color: gray');
           } else {
             this._seekTimeFireAndForget(time);
           }
@@ -992,10 +1006,10 @@ export class VideoController implements VideoControllerApi {
       };
 
       if (this.isPlaying()) {
-        console.debug(`%csyncFrames - SKIPPED: video is playing`, 'color: gray');
+        // console.debug(`%csyncFrames - SKIPPED: video is playing`, 'color: gray');
         completeSync();
       } else if (this.getCurrentTime() >= this.getMostAccurateDuration()) {
-        console.debug(`%csyncFrames - SKIPPED: video exceeded duration`, 'color: magenta');
+        // console.debug(`%csyncFrames - SKIPPED: video exceeded duration`, 'color: magenta');
         completeSync();
       } else {
         let checkIfDone = (videoFrameCallbackData?: VideoFrameCallbackData) => {
@@ -1014,28 +1028,28 @@ export class VideoController implements VideoControllerApi {
           // });
 
           if (this.isPlaying()) {
-            console.debug(`%csyncFrames - UNKNOWN: video is playing`, 'color: gray');
+            // console.debug(`%csyncFrames - UNKNOWN: video is playing`, 'color: gray');
             return true;
           }
 
           if (currentTimeFrame === 0) {
-            console.debug(`%csyncFrames - OK: currentTimeFrame[${currentTimeFrame}] === 0`, 'color: green');
+            // console.debug(`%csyncFrames - OK: currentTimeFrame[${currentTimeFrame}] === 0`, 'color: green');
             return true;
           }
 
           if (syncConditions.seekToFrame) {
             if (syncConditions.seekToFrame === currentTimeFrame) {
               if (currentTimeFrame === mediaTimeFrame || !mediaTimeFrame) {
-                console.debug(`%csyncFrames - OK: ((currentTimeFrame[${currentTimeFrame}] === mediaTimeFrame[${mediaTimeFrame}]) || !mediaTimeFrame[${mediaTimeFrame}])`, 'color: green');
+                // console.debug(`%csyncFrames - OK: ((currentTimeFrame[${currentTimeFrame}] === mediaTimeFrame[${mediaTimeFrame}]) || !mediaTimeFrame[${mediaTimeFrame}])`, 'color: green');
                 return true;
               }
             }
           } else {
             if (currentTimeFrame === mediaTimeFrame || !mediaTimeFrame) {
-              console.debug(`%csyncFrames - OK: currentTimeFrame[${currentTimeFrame}] === mediaTimeFrame[${mediaTimeFrame}]`, 'color: green', {
-                currentTime: currentTime,
-                mediaTime: mediaTime,
-              });
+              // console.debug(`%csyncFrames - OK: currentTimeFrame[${currentTimeFrame}] === mediaTimeFrame[${mediaTimeFrame}]`, 'color: green', {
+              //   currentTime: currentTime,
+              //   mediaTime: mediaTime,
+              // });
 
               if (shouldCheckFrameTimeTolerance()) {
                 let frameTolerance = currentFrameTimeToleranceCheck();
@@ -1054,11 +1068,11 @@ export class VideoController implements VideoControllerApi {
 
         let syncLoop = (videoFrameCallbackData?: VideoFrameCallbackData) => {
           let syncLoopIteration = this._syncLoopMaxIterations - syncLoopIterationsLeft;
-          console.debug(`syncFrames.syncLoop - START (${syncLoopIteration})`, {
-            syncConditions: syncConditions,
-            videoFrameCallbackData: videoFrameCallbackData,
-            dropped: this.videoElement.getVideoPlaybackQuality(),
-          });
+          // console.debug(`syncFrames.syncLoop - START (${syncLoopIteration})`, {
+          //   syncConditions: syncConditions,
+          //   videoFrameCallbackData: videoFrameCallbackData,
+          //   dropped: this.videoElement.getVideoPlaybackQuality(),
+          // });
 
           if (this.isPlaying()) {
             completeSync();
@@ -1076,17 +1090,17 @@ export class VideoController implements VideoControllerApi {
           let mediaTimeFrame = mediaTime ? this.calculateTimeToFrame(mediaTime) : void 0;
 
           if (syncLoopIterationsLeft-- <= 0) {
-            console.debug(
-              `%csyncFrames - TOO MANY SYNCs, EXITING.. : currentTime[${currentTime}], mediaTime[${mediaTime}], currentTimeFrame[${currentTimeFrame}], mediaTimeFrame[${mediaTimeFrame}]`,
-              'color: red',
-            );
+            // console.debug(
+            //   `%csyncFrames - TOO MANY SYNCs, EXITING.. : currentTime[${currentTime}], mediaTime[${mediaTime}], currentTimeFrame[${currentTimeFrame}], mediaTimeFrame[${mediaTimeFrame}]`,
+            //   'color: red'
+            // );
             completeSync();
             return;
           }
 
-          console.debug(
-            `syncFrames - currentTime[${currentTime}|${this.formatToTimecode(currentTime)}], mediaTime[${mediaTime}|${mediaTime ? this.formatToTimecode(mediaTime) : void 0}], currentTimeFrame[${currentTimeFrame}], mediaTimeFrame[${mediaTimeFrame}], `,
-          );
+          // console.debug(
+          //   `syncFrames - currentTime[${currentTime}|${this.formatToTimecode(currentTime)}], mediaTime[${mediaTime}|${mediaTime ? this.formatToTimecode(mediaTime) : void 0}], currentTimeFrame[${currentTimeFrame}], mediaTimeFrame[${mediaTimeFrame}], `
+          // );
 
           if (syncConditions.seekToFrame) {
             if (!seekToFrameTimeBaseline) {
@@ -1095,16 +1109,16 @@ export class VideoController implements VideoControllerApi {
 
             if (syncConditions.seekToFrame === currentTimeFrame) {
               if (currentTimeFrame === mediaTimeFrame || !mediaTimeFrame) {
-                console.debug(`%csyncFrames - OK: ((currentTimeFrame[${currentTimeFrame}] === mediaTimeFrame[${mediaTimeFrame}]) || !mediaTimeFrame[${mediaTimeFrame}])`, 'color: green');
+                // console.debug(`%csyncFrames - OK: ((currentTimeFrame[${currentTimeFrame}] === mediaTimeFrame[${mediaTimeFrame}]) || !mediaTimeFrame[${mediaTimeFrame}])`, 'color: green');
                 completeSync();
               } else {
-                console.debug(
-                  `%csyncFrames - CORRECTION SEEK TO FRAME; currentTimeFrame[${currentTimeFrame}] ${currentTimeFrame > mediaTimeFrame ? '>' : '<'} mediaTimeFrame[${mediaTimeFrame}]`,
-                  'color: red',
-                );
+                // console.debug(
+                //   `%csyncFrames - CORRECTION SEEK TO FRAME; currentTimeFrame[${currentTimeFrame}] ${currentTimeFrame > mediaTimeFrame ? '>' : '<'} mediaTimeFrame[${mediaTimeFrame}]`,
+                //   'color: red'
+                // );
 
                 let frameDiff = Math.abs(currentTimeFrame - mediaTimeFrame);
-                console.debug(`%csyncFrames - frameDiff: ${frameDiff}`, 'color: orange');
+                // console.debug(`%csyncFrames - frameDiff: ${frameDiff}`, 'color: orange');
 
                 // in first sync iteration seek without nudging (frameCorrectionTime = 0)
                 let frameCorrectionTime = syncLoopIteration === 0 ? 0 : this._syncFrameNudgeTime * (currentTimeFrame > mediaTimeFrame ? 1 : -1);
@@ -1113,8 +1127,8 @@ export class VideoController implements VideoControllerApi {
               }
             } else {
               console.debug(
-                `%csyncFrames - CORRECTION SEEK TO FRAME; syncConditions.seekToFrame[${syncConditions.seekToFrame}] !== currentTimeFrame[${currentTimeFrame}] | seekToFrameTimeBaseline=${seekToFrameTimeBaseline}`,
-                'color: red',
+                // `%csyncFrames - CORRECTION SEEK TO FRAME; syncConditions.seekToFrame[${syncConditions.seekToFrame}] !== currentTimeFrame[${currentTimeFrame}] | seekToFrameTimeBaseline=${seekToFrameTimeBaseline}`,
+                'color: red'
               );
 
               let frameDiff = Math.abs(syncConditions.seekToFrame - currentTimeFrame);
@@ -1126,21 +1140,21 @@ export class VideoController implements VideoControllerApi {
 
               seekToFrameTimeBaseline = seekTo;
 
-              console.debug(`%csyncFrames - frameDiff: ${frameDiff}`, 'color: orange');
-              console.debug(`%csyncFrames - frameCorrectionTime: ${frameCorrectionTime}`, 'color: orange');
-              console.debug(`%csyncFrames - seekTo: ${seekTo}`, 'color: orange');
+              // console.debug(`%csyncFrames - frameDiff: ${frameDiff}`, 'color: orange');
+              // console.debug(`%csyncFrames - frameCorrectionTime: ${frameCorrectionTime}`, 'color: orange');
+              // console.debug(`%csyncFrames - seekTo: ${seekTo}`, 'color: orange');
 
               seek(seekTo);
             }
           } else {
             if (currentTimeFrame === mediaTimeFrame || !mediaTimeFrame) {
-              console.debug(`%csyncFrames - OK: currentTimeFrame[${currentTimeFrame}] === mediaTimeFrame[${mediaTimeFrame}]`, 'color: green');
+              // console.debug(`%csyncFrames - OK: currentTimeFrame[${currentTimeFrame}] === mediaTimeFrame[${mediaTimeFrame}]`, 'color: green');
 
               if (shouldCheckFrameTimeTolerance()) {
                 let currentFrameTimeTolerance = currentFrameTimeToleranceCheck();
                 // only seek if we have to seek forward, we don't want to seek backwards
                 if (currentFrameTimeTolerance < 0 && Math.abs(currentFrameTimeTolerance) > this._syncFineFrameTolerancePercent) {
-                  console.debug(`%c syncFrames - FINE FRAME TUNING`, 'color: blue');
+                  // console.debug(`%c syncFrames - FINE FRAME TUNING`, 'color: blue');
                   // currentTime returned by video element lags behind actual currentTime, shake it up a bit
                   seek(currentTime);
                 } else {
@@ -1150,7 +1164,7 @@ export class VideoController implements VideoControllerApi {
                 completeSync();
               }
             } else {
-              console.debug(`%csyncFrames - CORRECTION; currentTimeFrame[${currentTimeFrame}] ${currentTimeFrame > mediaTimeFrame ? '>' : '<'} mediaTimeFrame[${mediaTimeFrame}]`, 'color: red');
+              // console.debug(`%csyncFrames - CORRECTION; currentTimeFrame[${currentTimeFrame}] ${currentTimeFrame > mediaTimeFrame ? '>' : '<'} mediaTimeFrame[${mediaTimeFrame}]`, 'color: red');
               if (syncLoopIteration === 0) {
                 // first sync loop iteration, give video element some more time to update mediaTime, thus repeat initial seek
                 seek(currentTime);
@@ -1164,13 +1178,13 @@ export class VideoController implements VideoControllerApi {
             }
           }
 
-          console.debug('syncFrames.syncLoop - END');
+          // console.debug('syncFrames.syncLoop - END');
 
           completeSync();
         };
         this._videoFrameCallback$.pipe(delay(syncConditions.seekToFrame ? 0 : 0), takeUntil(syncLoopVideoCallbackBreaker$)).subscribe({
           next: (videoFrameCallbackData) => {
-            console.debug('syncFrames.syncLoop - videoFrameCallback$ trigger', videoFrameCallbackData);
+            // console.debug('syncFrames.syncLoop - videoFrameCallback$ trigger', videoFrameCallbackData);
             syncLoop(videoFrameCallbackData);
           },
         });
@@ -1193,6 +1207,7 @@ export class VideoController implements VideoControllerApi {
       // if we already have seek in progress, break previous seek operation
       if (this._mediaElementPlayback!.seeking) {
         nextCompleteSubject(this._seekBreaker$);
+        this._mediaElementPlayback!.seeking = false;
         this._seekBreaker$ = new Subject<void>();
       }
 
@@ -1255,7 +1270,7 @@ export class VideoController implements VideoControllerApi {
               }
             });
 
-          console.debug(`Seeking to timestamp (sync ON): ${newTime} \t ${this.formatToTimecode(newTime)}`);
+          // console.debug(`Seeking to timestamp (sync ON): ${newTime} \t ${this.formatToTimecode(newTime)}`);
           this.setCurrentTime(newTime);
         }
       }
@@ -1268,6 +1283,7 @@ export class VideoController implements VideoControllerApi {
       // do we have seek already in progress
       if (this._mediaElementPlayback!.seeking) {
         nextCompleteSubject(this._seekBreaker$);
+        this._mediaElementPlayback!.seeking = false;
         this._seekBreaker$ = new Subject<void>();
       }
 
@@ -1306,7 +1322,7 @@ export class VideoController implements VideoControllerApi {
             this.dispatchVideoTimeChange();
           });
 
-        console.debug(`Seeking to timestamp (sync OFF): ${newTime} \t ${this.formatToTimecode(newTime)}`);
+        // console.debug(`Seeking to timestamp (sync OFF): ${newTime} \t ${this.formatToTimecode(newTime)}`);
 
         this.setCurrentTime(newTime);
       }
@@ -1319,7 +1335,7 @@ export class VideoController implements VideoControllerApi {
       newTime = this.constrainSeekTime(newTime);
       let seekDirection: SeekDirection = newTime === currentTime ? 'o' : newTime > currentTime ? 'fw' : 'bw';
       let diffDecimal = Decimal.sub(currentTime, newTime).abs();
-      console.debug(`Seeking from currentTime[${currentTime}] to newTime[${newTime}], direction: ${seekDirection} ${diffDecimal.toNumber()}`);
+      // console.debug(`Seeking from currentTime[${currentTime}] to newTime[${newTime}], direction: ${seekDirection} ${diffDecimal.toNumber()}`);
       this.setCurrentTime(newTime);
     }
   }
@@ -1347,7 +1363,7 @@ export class VideoController implements VideoControllerApi {
     }
 
     let diff = Decimal.sub(currentTime, newTime).abs().toNumber();
-    console.debug(`Seeking from currentTime ${currentTime} to ${newTime}, direction: ${seekDirection} ${diff}`);
+    // console.debug(`Seeking from currentTime ${currentTime} to ${newTime}, direction: ${seekDirection} ${diff}`);
 
     return this.seekTimeAndSync(newTime, syncConditions);
   }
@@ -1417,11 +1433,11 @@ export class VideoController implements VideoControllerApi {
             return this.seekTimeWithoutSync(videoDuration, true, true).pipe(
               tap(() => {
                 this.onEnded$.next({});
-              }),
+              })
             );
-          }),
+          })
         );
-      }),
+      })
     );
   }
 
@@ -1433,7 +1449,7 @@ export class VideoController implements VideoControllerApi {
     let currentFrame = this.getCurrentFrame();
     let seekToFrame = this.constrainSeekFrame(currentFrame + framesCount);
 
-    console.debug(`seekFromCurrentFrame - Current frame: ${currentFrame}, wanted frame: ${seekToFrame}`);
+    // console.debug(`seekFromCurrentFrame - Current frame: ${currentFrame}, wanted frame: ${seekToFrame}`);
 
     if (currentFrame !== seekToFrame) {
       if (seekToFrame <= 0) {
@@ -1450,7 +1466,7 @@ export class VideoController implements VideoControllerApi {
         }).pipe(
           map((result) => {
             return result;
-          }),
+          })
         );
       }
     } else {
@@ -1799,7 +1815,7 @@ export class VideoController implements VideoControllerApi {
   }
 
   seekToTime(time: number): Observable<boolean> {
-    console.debug(`%cseekToTime: ${time}`, 'color: purple');
+    // console.debug(`%cseekToTime: ${time}`, 'color: purple');
 
     this.validateVideoLoaded();
 
@@ -2588,8 +2604,8 @@ export class VideoController implements VideoControllerApi {
     let mainAudioState = this.getMainAudioState();
     let event: MainAudioChangeEvent | undefined = mainAudioState
       ? {
-        mainAudioState: mainAudioState,
-      }
+          mainAudioState: mainAudioState,
+        }
       : void 0;
     this.onMainAudioChange$.next(event);
   }
@@ -2598,8 +2614,8 @@ export class VideoController implements VideoControllerApi {
     let mainAudioInputSoloMuteState = this.getMainAudioInputSoloMuteState();
     let event: MainAudioInputSoloMuteEvent | undefined = mainAudioInputSoloMuteState
       ? {
-        mainAudioInputSoloMuteState,
-      }
+          mainAudioInputSoloMuteState,
+        }
       : void 0;
     this.onMainAudioInputSoloMute$.next(event);
   }
@@ -2672,7 +2688,7 @@ export class VideoController implements VideoControllerApi {
     param: OmpAudioEffectParam,
     filter?: {
       routingPath?: Partial<OmpAudioRoutingPath>;
-    } & OmpAudioEffectFilter,
+    } & OmpAudioEffectFilter
   ): Observable<void> {
     return passiveObservable((observer) => {
       if (this._mainAudioRouter) {
@@ -2738,7 +2754,7 @@ export class VideoController implements VideoControllerApi {
             },
             (reason) => {
               console.debug('Problem while closing AudioContext', reason);
-            },
+            }
           );
         }
       } catch (e) {
@@ -2856,7 +2872,7 @@ export class VideoController implements VideoControllerApi {
         next: (sidecarAudios) => {
           nextCompleteObserver(
             observer,
-            sidecarAudios.map((p) => p.audioTrack),
+            sidecarAudios.map((p) => p.audioTrack)
           );
         },
         error: (err) => {
@@ -2873,8 +2889,6 @@ export class VideoController implements VideoControllerApi {
       } else if (track.id && this._sidecarAudios.has(track.id)) {
         errorCompleteObserver(observer, `track.id already exists ${track.id}`);
       } else {
-        console.debug('Creating sidecar audio', track);
-
         let sidecarAudioTrack: OmpAudioTrack = {
           id: StringUtil.isEmpty(track.id) ? CryptoUtil.uuid() : track.id!,
           label: track.label,
@@ -2886,22 +2900,26 @@ export class VideoController implements VideoControllerApi {
         };
 
         let sidecarAudio = SidecarAudioFactory.createSidecarAudio(this, sidecarAudioTrack);
+        this._sidecarAudios.set(sidecarAudioTrack.id, sidecarAudio);
+
+        console.debug('Created sidecar audio', sidecarAudio.getSidecarAudioState());
+
+        this.onSidecarAudioCreate$.next({
+          sidecarAudioState: sidecarAudio.getSidecarAudioState(),
+        });
+
+        console.debug('Loading sidecar audio', track);
 
         sidecarAudio
           .loadSource()
           .pipe(timeout(60000))
           .subscribe({
             next: (event) => {
-              this._sidecarAudios.set(sidecarAudioTrack.id, sidecarAudio);
-
-              console.debug('Created sidecar audio', sidecarAudio.getSidecarAudioState());
-
-              this.onSidecarAudioCreate$.next({
-                createdSidecarAudioState: sidecarAudio.getSidecarAudioState(),
-                sidecarAudioStates: this.getSidecarAudioStates(),
+              this.onSidecarAudioLoaded$.next({
+                sidecarAudioState: sidecarAudio.getSidecarAudioState(),
               });
 
-              let removed$ = this.onSidecarAudioRemove$.pipe(filter((p) => p.removedSidecarAudio.audioTrack.id === sidecarAudio.audioTrack.id));
+              let removed$ = this.onSidecarAudioRemove$.pipe(filter((p) => p.sidecarAudioState.audioTrack.id === sidecarAudio.audioTrack.id));
 
               sidecarAudio.onVideoCurrentTimeBuffering$
                 .pipe(takeUntil(removed$)) // take until removed
@@ -2921,8 +2939,7 @@ export class VideoController implements VideoControllerApi {
                 .subscribe({
                   next: (sidecarAudioState) => {
                     this.onSidecarAudioChange$.next({
-                      changedSidecarAudioState: sidecarAudioState,
-                      sidecarAudioStates: this.getSidecarAudioStates(),
+                      sidecarAudioState: sidecarAudioState,
                     });
                   },
                 });
@@ -2961,7 +2978,7 @@ export class VideoController implements VideoControllerApi {
                     this.deactivateSidecarAudioTracks(
                       this.getSidecarAudios()
                         .filter((p) => p.audioTrack.id !== sidecarAudio.getSidecarAudioState().audioTrack.id)
-                        .map((p) => p.audioTrack.id),
+                        .map((p) => p.audioTrack.id)
                     );
                   }
                 };
@@ -2969,7 +2986,7 @@ export class VideoController implements VideoControllerApi {
                 removed$.pipe(take(1)).subscribe({
                   next: (event) => {
                     // when active sidecar audio is removed, we have to activate main audio
-                    if (event.removedSidecarAudio.active) {
+                    if (event.sidecarAudioState.active) {
                       // activate main audio
                       this.activateMainAudio();
                     }
@@ -2988,11 +3005,18 @@ export class VideoController implements VideoControllerApi {
                 settleMainAndSidecarAudio();
               }
 
+              console.debug('Loaded sidecar audio', track);
+
               nextCompleteObserver(observer, sidecarAudio);
             },
             error: (error) => {
               console.error(error);
-              errorCompleteObserver(observer, `Error creating sidecar audio, track.src=${track.src}`);
+
+              this.onSidecarAudioLoaded$.error(error);
+
+              this._removeSidecarAudio(sidecarAudioTrack.id);
+
+              errorCompleteObserver(observer, `Error loading sidecar audio, track.src=${track.src}`);
             },
           });
       }
@@ -3006,13 +3030,13 @@ export class VideoController implements VideoControllerApi {
       from(observables)
         .pipe(
           concatMap((p) => p),
-          toArray(),
+          toArray()
         )
         .subscribe({
           next: (sidecarAudios) => {
             console.debug(
-              'Created sidecar audios:',
-              sidecarAudios.map((p) => p.getSidecarAudioState()),
+              'Loaded sidecar audios:',
+              sidecarAudios.map((p) => p.getSidecarAudioState())
             );
             nextCompleteObserver(observer, sidecarAudios);
           },
@@ -3056,13 +3080,14 @@ export class VideoController implements VideoControllerApi {
     let sidecarAudio = this._sidecarAudios.get(id)!;
 
     if (sidecarAudio) {
+      console.debug('Removing sidecar audio', sidecarAudio.getSidecarAudioState());
+
       let sidecarAudioState = sidecarAudio.getSidecarAudioState();
       sidecarAudio.destroy();
 
       this._sidecarAudios.delete(id);
       this.onSidecarAudioRemove$.next({
-        removedSidecarAudio: sidecarAudioState,
-        sidecarAudioStates: this.getSidecarAudioStates(),
+        sidecarAudioState: sidecarAudioState,
       });
     }
   }
@@ -3191,7 +3216,7 @@ export class VideoController implements VideoControllerApi {
     param: OmpAudioEffectParam,
     filter?: {
       routingPath?: Partial<OmpAudioRoutingPath>;
-    } & OmpAudioEffectFilter,
+    } & OmpAudioEffectFilter
   ): Observable<void> {
     return passiveObservable((observer) => {
       let sidecarAudio = this._sidecarAudios.get(sidecarAudioTrackId);
@@ -3210,7 +3235,7 @@ export class VideoController implements VideoControllerApi {
       if (sidecarAudio) {
         sidecarAudio.createAudioPeakProcessor(audioMeterStandard).subscribe({
           next: (audioPeakProcessor) => {
-            let removed$ = this.onSidecarAudioRemove$.pipe(filter((p) => p.removedSidecarAudio.audioTrack.id === sidecarAudio!.audioTrack.id));
+            let removed$ = this.onSidecarAudioRemove$.pipe(filter((p) => p.sidecarAudioState.audioTrack.id === sidecarAudio!.audioTrack.id));
             audioPeakProcessor.onMessage$
               .pipe(takeUntil(removed$))
               .pipe(takeUntil(this._destroyed$))
@@ -3255,7 +3280,7 @@ export class VideoController implements VideoControllerApi {
       from(observables)
         .pipe(
           concatMap((p) => p),
-          toArray(),
+          toArray()
         )
         .subscribe({
           next: (result) => {
@@ -3379,7 +3404,7 @@ export class VideoController implements VideoControllerApi {
       this.onSubtitlesHide$,
 
       this.onActiveNamedEventStreamsChange$,
-      this.onNamedEvent$,
+      this.onNamedEvent$
     );
 
     destroyer(this._videoLoader);
@@ -3393,7 +3418,7 @@ export class VideoController implements VideoControllerApi {
       this._video,
 
       this._activeSubtitlesTrack,
-      this._subtitlesTracks,
+      this._subtitlesTracks
     );
   }
 }

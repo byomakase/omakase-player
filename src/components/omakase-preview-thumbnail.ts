@@ -30,15 +30,19 @@ export class OmakasePreviewThumbnail extends HTMLElement {
     this._timeRange.onMouseOver$.pipe(takeUntil(this._destroyed$)).subscribe((time) => {
       if (this._vttFile) {
         const thumbnailUrl = this._thumbnailFn ? this._thumbnailFn(time) : this._vttFile.findNearestCue(time)?.url;
-        if (thumbnailUrl) {
-          if (AuthConfig.authentication) {
-            ImageUtil.getProtectedImageUrl(thumbnailUrl, AuthConfig.authentication).subscribe((objectUrl) => {
-              this.querySelector('img')!.src = objectUrl;
-            });
-          } else {
-            this.querySelector('img')!.src = thumbnailUrl;
-          }
+        if (!thumbnailUrl) {
+          return;
         }
+        let imageSub$;
+        const xywh = this._vttFile.findNearestCue(time)?.xywh;
+        if (xywh) {
+          imageSub$ = ImageUtil.createKonvaImageFromSpriteByWidth(thumbnailUrl, xywh, xywh.w, AuthConfig.authentication);
+        } else {
+          imageSub$ = ImageUtil.createKonvaImage(thumbnailUrl, AuthConfig.authentication);
+        }
+        imageSub$.subscribe((image) => {
+          this.querySelector('img')!.src = image.toDataURL();
+        });
       }
     });
   }

@@ -16,11 +16,11 @@
 
 import {MarkerApi, MarkerListApi} from '../api';
 import {VideoControllerApi} from '../video';
-import {MarkerListComponent} from './marker-list-component';
+import {MarkerListComponent, MarkerListMode} from './marker-list-component';
 import {MarkerListDomController} from './marker-list-dom-controller';
 import {MarkerVttFile, ThumbnailVttFile} from '../vtt';
 import {MarkerAwareApi} from '../api/marker-aware-api';
-import {map, merge, Subject, takeUntil} from 'rxjs';
+import {map, merge, mergeMap, Observable, Subject, takeUntil} from 'rxjs';
 import {VttAdapter} from '../common/vtt-adapter';
 import {VttLoadOptions} from '../api/vtt-aware-api';
 import {ColorUtil} from '../util/color-util';
@@ -41,6 +41,7 @@ import {nullifier} from '../util/destroy-util';
 import {MarkerListItem} from './marker-list-item';
 import {MarkerListController} from './marker-list-controller';
 import {completeUnsubscribeSubjects, nextCompleteSubject} from '../util/rxjs-util';
+import {ImageUtil} from '../util/image-util';
 
 export interface MarkerListConfig {
   markerListHTMLElementId: string;
@@ -60,6 +61,12 @@ export interface MarkerListConfig {
   nameOptions?: string[];
   nameValidationFn?: (name: string) => boolean;
   source?: MarkerAwareApi | MarkerAwareApi[];
+  mode?: MarkerListMode;
+}
+
+interface PendingMarkerInsertion {
+  id: string;
+  index: number;
 }
 
 const configDefault: MarkerListConfig = {
@@ -132,6 +139,9 @@ export class MarkerList implements Destroyable, MarkerListApi {
     } else {
       this._sources = [new MarkerListController()];
     }
+    if (this.config.mode) {
+      this._markerListComponent.mode = this.config.mode;
+    }
     if (this.config.vttUrl) {
       this._markerListComponent.isLoading = true;
       this._markerVttAdapter
@@ -170,8 +180,10 @@ export class MarkerList implements Destroyable, MarkerListApi {
     this._thumbnailVttFile = thumbnailVttFile;
     if (this._thumbnailVttFile) {
       for (const marker of this._markerListComponent.markers) {
-        this._markerListComponent.updateMarker(marker.id, {
-          thumbnail: marker.start !== undefined ? thumbnailVttFile?.findNearestCue(marker.start)?.url : undefined,
+        this.resolveThumbnail(marker).subscribe((thumbnail) => {
+          this._markerListComponent.updateMarker(marker.id, {
+            thumbnail,
+          });
         });
       }
     }
@@ -193,7 +205,7 @@ export class MarkerList implements Destroyable, MarkerListApi {
     }
   }
 
-  addMarker(createData: Partial<MarkerApi>, source?: MarkerAwareApi): MarkerApi {
+  addMarker(createData: Partial<MarkerApi>, source?: MarkerAwareApi, index?: number): MarkerApi {
     if (!source) {
       if (this._sources.length > 1) {
         throw new Error('Add marker error: Must specify source for marker list with more than one source');
@@ -203,7 +215,15 @@ export class MarkerList implements Destroyable, MarkerListApi {
     } else if (!this._sources.includes(source)) {
       throw new Error('Add marker error: Unknown source provided');
     }
-    return source.addMarker(createData);
+
+    // return source.addMarker(createData);
+    const marker = source.addMarker(createData);
+
+    if (index !== undefined) {
+      this.reorderMarker(marker.id, index);
+    }
+
+    return marker;
   }
 
   updateMarker(id: string, updateValue: Partial<MarkerListItem>) {
@@ -232,6 +252,10 @@ export class MarkerList implements Destroyable, MarkerListApi {
 
   getSelectedMarker(): MarkerApi | undefined {
     return this._lastActiveMarker;
+  }
+
+  reorderMarker(id: string, index: number) {
+    this._markerListComponent.reorderMarker(id, index);
   }
 
   destroy(): void {
@@ -275,13 +299,16 @@ export class MarkerList implements Destroyable, MarkerListApi {
         }
       });
     merge(...this._sources.map((source) => source.onMarkerUpdate$))
-      .pipe(takeUntil(this._destroyed$))
-      .subscribe(({marker}) => {
+      .pipe(
+        takeUntil(this._destroyed$),
+        mergeMap(({marker}) => this.resolveThumbnail(marker).pipe(map((thumbnail) => ({marker, thumbnail}))))
+      )
+      .subscribe(({marker, thumbnail}) => {
         this._markerListComponent.updateMarker(marker.id, {
           ...marker,
           name: marker.name,
           style: marker.style,
-          thumbnail: this.findThumbnail(marker),
+          thumbnail,
         });
       });
     merge(...this._sources.map((source) => source.onMarkerSelected$))
@@ -306,21 +333,37 @@ export class MarkerList implements Destroyable, MarkerListApi {
 
   private addMarkerToComponent(marker: MarkerApi, source: MarkerAwareApi) {
     const markerItem = marker instanceof MarkerListItem ? marker : new MarkerListItem(marker, source);
-    markerItem.thumbnail = this.findThumbnail(marker);
+    this.resolveThumbnail(marker).subscribe((thumbnail) => {
+      markerItem.thumbnail = thumbnail;
+    });
     this._markerListComponent.addMarker(markerItem);
   }
 
-  private findThumbnail(marker: MarkerApi): string | undefined {
-    const time = (marker.timeObservation as PeriodObservation).start ?? (marker.timeObservation as MomentObservation).time;
-    if (time === undefined) {
-      return;
-    }
-    if (this._config.thumbnailFn) {
-      return this._config.thumbnailFn(time);
-    } else {
-      const thumbnailVttCue = this._thumbnailVttFile?.findNearestCue(time);
-      return thumbnailVttCue?.url;
-    }
+  private resolveThumbnail(marker: MarkerApi): Observable<string | undefined> {
+    return new Observable<string | undefined>((o$) => {
+      const time = (marker.timeObservation as PeriodObservation).start ?? (marker.timeObservation as MomentObservation).time;
+      if (time === undefined) {
+        o$.next(undefined);
+        o$.complete();
+      }
+      if (this._config.thumbnailFn) {
+        o$.next(this._config.thumbnailFn(time));
+        o$.complete();
+      } else {
+        const thumbnailVttCue = this._thumbnailVttFile?.findNearestCue(time);
+        if (thumbnailVttCue?.xywh) {
+          ImageUtil.createKonvaImageFromSpriteByHeight(thumbnailVttCue.url, thumbnailVttCue.xywh, thumbnailVttCue.xywh.h).subscribe({
+            next: (konvaImage) => {
+              o$.next(konvaImage.toDataURL());
+              o$.complete();
+            },
+          });
+        } else {
+          o$.next(thumbnailVttCue?.url);
+          o$.complete();
+        }
+      }
+    });
   }
 
   private createDefaultMarker(cue: MarkerVttCue): MarkerListItem {

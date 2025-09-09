@@ -16,8 +16,8 @@
 
 import {TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle, VTT_DOWNSAMPLE_CONFIG_DEFAULT} from '../timeline-lane';
 import Konva from 'konva';
-import {Constants} from '../../constants';
-import {combineLatest, debounceTime, filter, Subject, takeUntil, zip} from 'rxjs';
+import {fillLinearGradientAudioPeak} from '../../constants';
+import {combineLatest, debounceTime, filter, takeUntil, zip} from 'rxjs';
 import {AudioVttCue} from '../../types';
 import {AudioTrackLaneItem} from './audio-track-lane-item';
 import Decimal from 'decimal.js';
@@ -59,8 +59,8 @@ const configDefault: AudioTrackLaneConfig = {
     itemWidth: 5,
     itemMinPadding: 2,
     itemCornerRadius: 5,
-    maxSampleFillLinearGradientColorStops: Constants.fillLinearGradientAudioPeak,
-    minSampleFillLinearGradientColorStops: ColorUtil.inverseFillGradient(Constants.fillLinearGradientAudioPeak),
+    maxSampleFillLinearGradientColorStops: fillLinearGradientAudioPeak,
+    minSampleFillLinearGradientColorStops: ColorUtil.inverseFillGradient(fillLinearGradientAudioPeak),
   },
 };
 

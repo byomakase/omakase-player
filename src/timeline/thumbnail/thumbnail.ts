@@ -18,7 +18,7 @@ import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle} from '../.
 import Konva from 'konva';
 import {Dimension, HasRectMeasurement, OnMeasurementsChange, Position, RectMeasurement} from '../../common/measurement';
 import {Comparable, ThumbnailEvent, ThumbnailVttCue} from '../../types';
-import {Constants} from '../../constants';
+import {dimensionZero, positionTopLeft} from '../../constants';
 import {Subject} from 'rxjs';
 import {completeUnsubscribeSubjects} from '../../util/rxjs-util';
 import {nullifier} from '../../util/destroy-util';
@@ -41,8 +41,8 @@ export interface ThumbnailConfig extends ComponentConfig<ThumbnailStyle> {
 const configDefault: ThumbnailConfig = {
   listening: false,
   style: {
-    ...Constants.positionTopLeft,
-    ...Constants.dimensionZero,
+    ...positionTopLeft,
+    ...dimensionZero,
     stroke: 'rgba(255,73,145)',
     strokeWidth: 5,
     visible: false,

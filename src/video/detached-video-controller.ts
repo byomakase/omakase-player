@@ -18,7 +18,7 @@ import {VideoControllerApi} from './video-controller-api';
 import {TypedOmpBroadcastChannel} from '../common/omp-broadcast-channel';
 import {HandshakeChannelActionsMap, MessageChannelActionsMap} from './channel-types';
 import {BehaviorSubject, catchError, filter, interval, map, Observable, Subject, take, takeUntil, timeout, timer} from 'rxjs';
-import {Constants} from '../constants';
+import {ompHandshakeBroadcastChannelId} from '../constants';
 import {CryptoUtil} from '../util/crypto-util';
 import {nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {destroyer} from '../util/destroy-util';
@@ -39,8 +39,10 @@ import {
   SidecarAudioChangeEvent,
   SidecarAudioCreateEvent,
   SidecarAudioInputSoloMuteEvent,
+  SidecarAudioLoadedEvent,
   SidecarAudioPeakProcessorMessageEvent,
   SidecarAudioRemoveEvent,
+  SidecarAudiosChangeEvent,
   SidecarAudioVolumeChangeEvent,
   SubtitlesCreateEvent,
   SubtitlesEvent,
@@ -66,6 +68,7 @@ import {
 import {
   AudioMeterStandard,
   BufferedTimespan,
+  MediaElementPlaybackState,
   OmpAudioRouterState,
   OmpAudioRoutingConnection,
   OmpAudioRoutingInputType,
@@ -74,7 +77,6 @@ import {
   OmpMainAudioState,
   OmpSidecarAudioInputSoloMuteState,
   OmpSidecarAudioState,
-  MediaElementPlaybackState,
   Video,
   VideoLoadOptions,
   VideoLoadOptionsInternal,
@@ -130,7 +132,7 @@ export class DetachedVideoController implements VideoControllerApi {
   constructor(videoController: VideoController) {
     this._videoController = videoController;
 
-    this._handshakeChannel = new TypedOmpBroadcastChannel(Constants.ompHandshakeBroadcastChannelId);
+    this._handshakeChannel = new TypedOmpBroadcastChannel(ompHandshakeBroadcastChannelId);
     this._proxyId = CryptoUtil.uuid();
 
     this._onConnectSuccess$
@@ -408,6 +410,12 @@ export class DetachedVideoController implements VideoControllerApi {
       },
     });
 
+    this._videoController.onSidecarAudioLoaded$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
+      next: (value) => {
+        this._messageChannel!.send('VideoControllerApi.onSidecarAudioLoaded$', value);
+      },
+    });
+
     this._videoController.onSidecarAudioRemove$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onSidecarAudioRemove$', value);
@@ -435,6 +443,12 @@ export class DetachedVideoController implements VideoControllerApi {
     this._videoController.onSidecarAudioInputSoloMute$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onSidecarAudioInputSoloMute$', value);
+      },
+    });
+
+    this._videoController.onSidecarAudiosChange$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
+      next: (value) => {
+        this._messageChannel!.send('VideoControllerApi.onSidecarAudiosChange$', value);
       },
     });
 
@@ -1329,6 +1343,10 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.onSidecarAudioCreate$;
   }
 
+  get onSidecarAudioLoaded$(): Observable<SidecarAudioLoadedEvent> {
+    return this._videoController.onSidecarAudioLoaded$;
+  }
+
   get onSidecarAudioRemove$(): Observable<SidecarAudioRemoveEvent> {
     return this._videoController.onSidecarAudioRemove$;
   }
@@ -1347,6 +1365,10 @@ export class DetachedVideoController implements VideoControllerApi {
 
   get onSidecarAudioInputSoloMute$(): Observable<SidecarAudioInputSoloMuteEvent> {
     return this._videoController.onSidecarAudioInputSoloMute$;
+  }
+
+  get onSidecarAudiosChange$(): Observable<SidecarAudiosChangeEvent> {
+    return this._videoController.onSidecarAudiosChange$;
   }
 
   addSafeZone(videoSafeZone: VideoSafeZone): Observable<VideoSafeZone> {

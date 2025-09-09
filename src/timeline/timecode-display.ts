@@ -16,8 +16,8 @@
 
 import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle} from '../layout/konva-component';
 import Konva from 'konva';
-import {Constants} from '../constants';
-import {HasRectMeasurement, OnMeasurementsChange, RectMeasurement} from '../common/measurement';
+import {positionTopLeft} from '../constants';
+import {HasRectMeasurement, OnMeasurementsChange, RectMeasurement} from '../common';
 import {filter, Subject, takeUntil} from 'rxjs';
 import {VideoLoadedEvent} from '../types';
 import {nextCompleteSubject} from '../util/rxjs-util';
@@ -41,7 +41,7 @@ export interface TimecodeDisplayConfig extends ComponentConfig<TimecodeDisplaySt
 
 const configDefault: TimecodeDisplayConfig = {
   style: {
-    ...Constants.positionTopLeft,
+    ...positionTopLeft,
     width: 150,
     height: 20,
 
@@ -85,7 +85,7 @@ export class TimecodeDisplay extends BaseKonvaComponent<TimecodeDisplayConfig, T
     });
 
     this._text = new Konva.Text({
-      ...Constants.positionTopLeft,
+      ...positionTopLeft,
       width: this._group.width(),
       // height: this._group.height(),
       text: ``,

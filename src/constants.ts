@@ -16,22 +16,22 @@
 
 import {Dimension, Position} from './common';
 
-export class Constants {
-  public static ompHandshakeBroadcastChannelId = 'ompHandshakeBroadcastChannelId';
+export const audioChannelsDefault = 2;
 
-  public static positionTopLeft: Position = {
-    x: 0,
-    y: 0,
-  };
+export const ompHandshakeBroadcastChannelId = 'ompHandshakeBroadcastChannelId';
 
-  public static dimensionZero: Dimension = {
-    width: 0,
-    height: 0,
-  };
+export const goldenRatio = 1.61;
 
-  public static goldenRatio = 1.61;
+export const twoPiRadians = Math.PI * 2;
 
-  public static twoPiRadians = Math.PI * 2;
+export const fillLinearGradientAudioPeak = [0, '#F58428', 0.33, '#FCD151', 0.5, '#FFF263', 0.59, '#DEE666', 0.78, '#A2D06C', 0.93, '#7DC370', 1, '#6FBE72'];
 
-  public static fillLinearGradientAudioPeak = [0, '#F58428', 0.33, '#FCD151', 0.5, '#FFF263', 0.59, '#DEE666', 0.78, '#A2D06C', 0.93, '#7DC370', 1, '#6FBE72'];
-}
+export const positionTopLeft: Position = {
+  x: 0,
+  y: 0,
+};
+
+export const dimensionZero: Dimension = {
+  width: 0,
+  height: 0,
+};

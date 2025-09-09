@@ -37,8 +37,15 @@ export interface OmakaseVttCue extends OmakaseTextTrackCue {
   extension?: OmakaseVttCueExtension;
 }
 
+export interface ThumbnailVttCueXYWH {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 export interface ThumbnailVttCue extends OmakaseVttCue {
   url: string;
+  xywh?: ThumbnailVttCueXYWH;
 }
 
 export interface SubtitlesVttCue extends OmakaseVttCue {}
@@ -83,7 +90,7 @@ export interface SubtitlesVttTrack extends OmakaseTextTrack {
   contentDigest?: string;
 }
 
-export type SubtitlesVttTrackCreateType = Partial<SubtitlesVttTrack> & Pick<SubtitlesVttTrack, 'id' | 'src' | 'default' | 'label' | 'language'>
+export type SubtitlesVttTrackCreateType = Partial<SubtitlesVttTrack> & Pick<SubtitlesVttTrack, 'id' | 'src' | 'default' | 'label' | 'language'>;
 
 export interface OmpAudioTrack {
   id: string;
@@ -92,7 +99,7 @@ export interface OmpAudioTrack {
   label: string;
   language?: string;
   active: boolean;
-  channelCount?: number
+  channelCount?: number;
 }
 
-export type OmpAudioTrackCreateType = Partial<OmpAudioTrack> & Pick<OmpAudioTrack, 'src' | 'label'>
+export type OmpAudioTrackCreateType = Partial<OmpAudioTrack> & Pick<OmpAudioTrack, 'src' | 'label'>;

@@ -16,14 +16,14 @@
 
 import Konva from 'konva';
 import Decimal from 'decimal.js';
-import {Constants} from '../constants';
+import {goldenRatio, positionTopLeft} from '../constants';
 import {ColorUtil} from './color-util';
 import {KonvaFactory} from '../konva/konva-factory';
 
 export class ShapeUtil {
   static createGoldenRatioWedge(config: {x: number; y: number; height: number; color: string}): Konva.Line {
     let b = new Decimal(config.height)
-      .div(Constants.goldenRatio + 1)
+      .div(goldenRatio + 1)
       .toDecimalPlaces(2)
       .toNumber();
     let a = config.height - b;
@@ -39,7 +39,7 @@ export class ShapeUtil {
 
   static createDebugRect(fill?: string) {
     return KonvaFactory.createRect({
-      ...Constants.positionTopLeft,
+      ...positionTopLeft,
       width: 100,
       height: 100,
       fill: fill ? fill : ColorUtil.randomHexColor(),

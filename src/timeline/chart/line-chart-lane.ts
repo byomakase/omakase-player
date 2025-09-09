@@ -47,6 +47,12 @@ export interface LineChartLaneStyle extends TimelineLaneStyle {
   lineStrokeWidth: number | number[];
 }
 
+export interface LineChartModel {
+  line: Konva.Line;
+  lineItems: LineChartLaneItem[];
+  linePoints: number[];
+}
+
 const configDefault: LineChartLaneConfig = {
   ...TIMELINE_LANE_CONFIG_DEFAULT,
   ...VTT_DOWNSAMPLE_CONFIG_DEFAULT,
@@ -68,15 +74,12 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
 
   protected _lineStyleFn: (index: number, count: number) => Partial<LineChartLaneStyle> = () => ({});
 
-  protected readonly _itemsMap: Map<number, LineChartLaneItem> = new Map<number, LineChartLaneItem>();
-
   protected _timecodedEventCatcher?: Konva.Rect;
 
   protected _group?: Konva.Group;
   protected _itemsGroup?: Konva.Group;
   protected _lineGroup?: Konva.Group;
-  protected _lines?: Konva.Line[];
-  protected _linePoints?: number[];
+  protected _lineChartModelMap?: Map<number, LineChartModel>;
 
   constructor(config: TimelineLaneConfigDefaultsExcluded<LineChartLaneConfig>) {
     super(timelineLaneComposeConfig(configDefault, config));
@@ -114,8 +117,6 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
       width: this._group.width(),
       height: this._group.height(),
     });
-
-    this._lines = [];
 
     this._group.add(this._lineGroup);
     this._group.add(this._itemsGroup);
@@ -276,17 +277,26 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
       tension: 0,
     });
 
-    this._lines!.push(line);
+    let lineChartModel: LineChartModel = {
+      line: line,
+      lineItems: [],
+      linePoints: [],
+    };
+
+    this._lineChartModelMap!.set(index, lineChartModel);
     this._lineGroup!.add(line);
   }
 
   private clearItems() {
-    this._itemsMap.forEach((p) => p.destroy());
-    this._itemsMap.clear();
     this._itemsGroup?.destroyChildren();
-    this._lines?.forEach((line) => line.destroy());
-    this._lines = [];
-    this._linePoints = void 0;
+    this._lineChartModelMap?.forEach((model) => {
+      model.line.destroy();
+      model.linePoints = [];
+      model.lineItems.forEach((p) => p.destroy());
+      model.lineItems = [];
+    });
+    this._lineChartModelMap?.clear();
+    this._lineChartModelMap = void 0;
   }
 
   private settleAll() {
@@ -302,14 +312,16 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
       return;
     }
 
-    if (this._itemsMap.size > 0) {
-      for (const [index, item] of this._itemsMap) {
-        let x = this._timeline!.timeToTimelinePosition(item.cue.startTime);
-        item.pointPosition = {x};
-        if (this._linePoints) {
-          this._linePoints[index * 2] = x;
-        }
-      }
+    if (this._lineChartModelMap && this._lineChartModelMap.size > 0) {
+      this._lineChartModelMap.forEach((lineChartModel) => {
+        lineChartModel.lineItems.forEach((item, index) => {
+          let x = this._timeline!.timeToTimelinePosition(item.cue.startTime);
+          item.pointPosition = {x};
+          if (lineChartModel.linePoints.length > 0) {
+            lineChartModel.linePoints[index * 2] = x;
+          }
+        });
+      });
     }
   }
 
@@ -328,8 +340,10 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
       return;
     }
 
+    this._lineChartModelMap = new Map<number, LineChartModel>();
+
     const firstCue = this.vttFile.cues[0];
-    const numMeasurements = firstCue.extension?.rows?.length ?? 1;
+    const numMeasurements = !firstCue.extension?.rows?.length ? 1 : firstCue.extension.rows.length;
 
     for (let i = 0; i < numMeasurements; i++) {
       this.addLine(i, numMeasurements);
@@ -345,18 +359,18 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
     let pointYMax = isNullOrUndefined(this._config.yMax) ? minMax.max : this._config.yMax!;
     let pointYScale = pointYMax - pointYMin;
 
-    this._lines!.forEach((line, lineIndex, lines) => {
+    this._lineChartModelMap.forEach((lineChartModel, lineIndex, lineChartModels) => {
       const style = {
         ...this.style,
-        ...this._lineStyleFn(lineIndex, lines.length),
+        ...this._lineStyleFn(lineIndex, lineChartModels.size),
       };
 
-      this._linePoints = [];
+      let linePoints: number[] = [];
       this.vttFile!.cues.forEach((cue, index) => {
         let pointX = this._timeline!.timeToTimelinePosition(cue.startTime);
         let pointY = itemHeight - new Decimal(this.getCueValue(cue, lineIndex) - pointYMin).mul(itemHeight).div(pointYScale).toNumber();
 
-        this._linePoints = this._linePoints!.concat(pointX, pointY);
+        linePoints = linePoints.concat(pointX, pointY);
 
         const item = new LineChartLaneItem({
           cue: cue,
@@ -371,16 +385,17 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
           },
         });
 
-        this._itemsMap.set(index, item);
+        lineChartModel.lineItems.push(item);
         this._itemsGroup!.add(item.konvaNode);
       });
 
-      line.points(this._linePoints);
+      lineChartModel.linePoints = linePoints;
+      lineChartModel.line.points(linePoints);
     });
   }
 
   private findMinMax(cues: LineChartVttCue[]): {min: number; max: number} {
-    if (this._lines!.length > 1) {
+    if (this._lineChartModelMap!.size > 1) {
       return {
         min: Math.min(...cues.map((cue) => Math.min(...cue.extension!.rows!.map((row) => (row.value ? parseFloat(row.value) : cue.value))))),
         max: Math.max(...cues.map((cue) => Math.max(...cue.extension!.rows!.map((row) => (row.value ? parseFloat(row.value) : cue.value))))),
@@ -407,7 +422,9 @@ export class LineChartLane extends VttTimelineLane<LineChartLaneConfig, LineChar
   }
 
   override destroy() {
-    destroyer(...this._itemsMap.values());
+    this._lineChartModelMap?.forEach((lineChartModel) => {
+      destroyer(...lineChartModel.lineItems);
+    });
 
     super.destroy();
   }

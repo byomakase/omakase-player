@@ -38,8 +38,14 @@ export class OmakaseTimeDisplay extends HTMLElement {
     });
   }
 
+  updateTime(): void {
+    if (this._video) {
+      this.querySelector('span')!.textContent = this.getDisplayTime(this._video.getCurrentTime(), true);
+    }
+  }
+
   getDisplayTime(time: number, isFirstFrame: boolean): string {
-    const displayTime = isFirstFrame && this.getAttribute('showduration') ? this._video!.getDuration() : this.getAttribute('countdown') ? this._video!.getDuration() - time : time;
+    const displayTime = isFirstFrame && this.getAttribute('showduration') ? this._video!.getDuration() : this.getAttribute('countdown') !== null ? this._video!.getDuration() - time : time;
     return this.getAttribute('format') === 'timecode' ? this._video!.formatToTimecode(displayTime) : this.formatToSeconds(displayTime);
   }
 

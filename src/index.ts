@@ -34,3 +34,5 @@ export * from './video';
 export * from './omakase-player';
 
 export * from './marker-list';
+export * from './player-chroming';
+export * from './components';

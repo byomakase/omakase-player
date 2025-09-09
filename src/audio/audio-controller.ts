@@ -28,8 +28,10 @@ import {
   SidecarAudioChangeEvent,
   SidecarAudioCreateEvent,
   SidecarAudioInputSoloMuteEvent,
+  SidecarAudioLoadedEvent,
   SidecarAudioPeakProcessorMessageEvent,
   SidecarAudioRemoveEvent,
+  SidecarAudiosChangeEvent,
   SidecarAudioVolumeChangeEvent,
   VolumeChangeEvent,
 } from '../types';
@@ -51,11 +53,13 @@ export class AudioController implements AudioApi, Destroyable {
 
   // sidecar audio
   public readonly onSidecarAudioCreate$: Observable<SidecarAudioCreateEvent> = new Subject<SidecarAudioCreateEvent>();
+  public readonly onSidecarAudioLoaded$: Observable<SidecarAudioLoadedEvent> = new Subject<SidecarAudioLoadedEvent>();
   public readonly onSidecarAudioRemove$: Observable<SidecarAudioRemoveEvent> = new Subject<SidecarAudioRemoveEvent>();
   public readonly onSidecarAudioChange$: Observable<SidecarAudioChangeEvent> = new Subject<SidecarAudioChangeEvent>();
   public readonly onSidecarAudioVolumeChange$: Observable<SidecarAudioVolumeChangeEvent> = new Subject<SidecarAudioVolumeChangeEvent>();
   public readonly onSidecarAudioPeakProcessorMessage$: Observable<SidecarAudioPeakProcessorMessageEvent> = new Subject<SidecarAudioPeakProcessorMessageEvent>();
   public readonly onSidecarAudioInputSoloMute$: Observable<SidecarAudioInputSoloMuteEvent> = new Subject<SidecarAudioInputSoloMuteEvent>();
+  public readonly onSidecarAudiosChange$: Observable<SidecarAudiosChangeEvent> = new Subject<SidecarAudiosChangeEvent>();
 
   protected _videoController: VideoControllerApi;
 
@@ -73,11 +77,13 @@ export class AudioController implements AudioApi, Destroyable {
 
     // sidecar audio
     this.onSidecarAudioCreate$ = this._videoController.onSidecarAudioCreate$;
+    this.onSidecarAudioLoaded$ = this._videoController.onSidecarAudioLoaded$;
     this.onSidecarAudioRemove$ = this._videoController.onSidecarAudioRemove$;
     this.onSidecarAudioChange$ = this._videoController.onSidecarAudioChange$;
     this.onSidecarAudioVolumeChange$ = this._videoController.onSidecarAudioVolumeChange$;
     this.onSidecarAudioPeakProcessorMessage$ = this._videoController.onSidecarAudioPeakProcessorMessage$;
     this.onSidecarAudioInputSoloMute$ = this._videoController.onSidecarAudioInputSoloMute$;
+    this.onSidecarAudiosChange$ = this._videoController.onSidecarAudiosChange$;
   }
 
   getActiveAudioTrack(): OmpAudioTrack | undefined {

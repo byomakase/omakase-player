@@ -151,9 +151,7 @@ export class RouterVisualizationComponent extends HTMLElement {
       .pipe(takeUntil(this._destroyed$))
       .pipe(createAttachedDetachedModeFilter<SidecarAudioChangeEvent>())
       .subscribe((event) => {
-        event.sidecarAudioStates.forEach((sidecarAudioState) => {
-          this.updateTogglesFromState(sidecarAudioState);
-        });
+        this.updateTogglesFromState(event.sidecarAudioState);
       });
 
     this._videoController.onAudioSwitched$

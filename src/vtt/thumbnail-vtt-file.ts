@@ -41,6 +41,14 @@ export class ThumbnailVttFile extends DownsampledVttFile<ThumbnailVttCue> {
     };
   }
 
+  protected override prepareCue(cue: ThumbnailVttCue) {
+    if (cue.text.indexOf('#xywh=') >= 0) {
+      const [_, xywh] = cue.text.split('#xywh=');
+      const [x, y, w, h] = xywh.split(',').map(Number);
+      cue.xywh = {x, y, w, h};
+    }
+  }
+
   static create(url: string, options: VttLoadOptions): Observable<ThumbnailVttFile> {
     let instance = new ThumbnailVttFile(url, options);
     return instance.fetch().pipe(

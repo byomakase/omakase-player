@@ -272,70 +272,60 @@ export interface OmpMediaElementErrorEvent extends OmpMediaElementEvent {
   error: any;
 }
 
-export interface SidecarAudioEvent extends AudioEvent {}
+export interface SidecarAudioEvent extends AudioEvent {
+  /**
+   * Sidecar audio state
+   */
+  sidecarAudioState: OmpSidecarAudioState;
+}
 
 export interface SidecarAudioLoadingEvent extends SidecarAudioEvent {
-  /**
-   * Sidecar audio track
-   */
-  audioTrack: OmpAudioTrack;
+
 }
 
 export interface SidecarAudioLoadedEvent extends SidecarAudioEvent {
-  /**
-   * Sidecar audio state
-   */
-  sidecarAudioState: OmpSidecarAudioState;
+
 }
 
 export interface SidecarAudioCreateEvent extends SidecarAudioEvent {
-  /**
-   * Created Sidecar audio state
-   */
-  createdSidecarAudioState: OmpSidecarAudioState;
 
-  /**
-   * All available Sidecar audio states
-   */
-  sidecarAudioStates: OmpSidecarAudioState[];
+}
+
+export interface SidecarAudioLoadedEvent extends SidecarAudioEvent {
+
 }
 
 export interface SidecarAudioRemoveEvent extends SidecarAudioEvent {
-  /**
-   * Removed Sidecar audio state
-   */
-  removedSidecarAudio: OmpSidecarAudioState;
 
-  /**
-   * All available Sidecar audio states
-   */
-  sidecarAudioStates: OmpSidecarAudioState[];
 }
 
 export interface SidecarAudioChangeEvent extends SidecarAudioEvent {
-  /**
-   * Changed Sidecar audio state
-   */
-  changedSidecarAudioState: OmpSidecarAudioState;
 
+}
+
+export interface SidecarAudioVolumeChangeEvent extends SidecarAudioEvent, VolumeChangeEvent {
+
+}
+
+export interface SidecarAudiosChangeEvent extends AudioEvent {
   /**
-   * All available Sidecar audio states
+   * Sidecar audio states
    */
   sidecarAudioStates: OmpSidecarAudioState[];
 }
 
-export interface SidecarAudioVolumeChangeEvent extends SidecarAudioEvent, VolumeChangeEvent {
+export interface SidecarAudioVideoCurrentTimeBufferingEvent extends SidecarAudioEvent {
   /**
-   * Sidecar audio state
+   * Is buffering video current time
    */
-  sidecarAudioState: OmpSidecarAudioState;
+  buffering: boolean;
 }
 
 export interface SidecarAudioPeakProcessorMessageEvent extends AudioPeakProcessorMessageEvent {
   sidecarAudioTrackId: string; // keep object as light as possible
 }
 
-export interface SidecarAudioInputSoloMuteEvent extends SidecarAudioEvent {
+export interface SidecarAudioInputSoloMuteEvent extends AudioEvent {
   /**
    * Changed sidecar audio input state
    */
@@ -345,18 +335,6 @@ export interface SidecarAudioInputSoloMuteEvent extends SidecarAudioEvent {
    * All available Sidecar audio input states
    */
   sidecarAudioInputSoloMuteStates: OmpSidecarAudioInputSoloMuteState[];
-}
-
-export interface SidecarAudioVideoCurrentTimeBufferingEvent extends SidecarAudioEvent {
-  /**
-   * Sidecar audio state
-   */
-  sidecarAudioState: OmpSidecarAudioState;
-
-  /**
-   * Is buffering video current time
-   */
-  buffering: boolean;
 }
 
 // endregion

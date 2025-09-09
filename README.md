@@ -60,12 +60,12 @@ Player chroming can be configured with the `playerChroming` property. This prope
 ```javascript
 let omakasePlayer = new OmakasePlayer({
   playerChroming: {
-    theme: 'DEFAULT',
+    theme: PlayerChromingTheme.Default,
     thumbnailUrl: 'https://byomakase.org/thumbs.vtt',
     watermark: 'DEMO_SAMPLE',
     themeConfig: {
-      controlBarVisibility: 'ENABLED',
-      controlBar: ['PLAY', 'SCRUBBER', 'VOLUME', 'TRACKSELECTOR','FULLSCREEN'],
+      controlBarVisibility: ControlBarVisibility.Enabled,
+      controlBar: [DefaultThemeControl.Play, DefaultThemeControl.Scrubber, DefaultThemeControl.Volume, DefaultThemeControl.Trackselector, DefaultThemeControl.Fullscreen],
       trackSelectorAutoClose: false
     }
   }
@@ -74,24 +74,24 @@ let omakasePlayer = new OmakasePlayer({
 
 let omakasePlayer = new OmakasePlayer({
   playerChroming: {
-    theme: 'DEFAULT',
+    theme: PlayerChromingTheme.Default,
     themeConfig: {
-      controlBarVisibility: 'DISABLED',
-      floatingControls: ['PLAYBACK_CONTROLS']
+      controlBarVisibility: ControlBarVisibility.Disabled,
+      floatingControls: [DefaultThemeFloatingControl.PlaybackControls]
     }
   }
 });
 
 let omakasePlayer = new OmakasePlayer({
   playerChroming: {
-    theme: 'CHROMELESS'
+    theme: PlayerChromingTheme.Chromeless
   }
 });
 
 /*  Custom template js  */
 let omakasePlayer = new OmakasePlayer({
   playerChroming: {
-    theme: 'CUSTOM',
+    theme: PlayerChromingTheme.Custom,
     themeConfig: {
       htmlTemplateId: 'custom-template'
     }
@@ -365,7 +365,6 @@ omakasePlayer.audio.onMainAudioPeakProcessorMessage$.subscribe({
 omakasePlayer.audio.onSidecarAudioCreate$.subscribe({
   next: (event) => {
     console.log(`Just created Sidecar audio track: `, event.createdSidecarAudioState)
-    console.log(`Current sidecar audio tracks: `, event.sidecarAudioStates)
   }
 })
 
@@ -373,7 +372,6 @@ omakasePlayer.audio.onSidecarAudioCreate$.subscribe({
 omakasePlayer.audio.onSidecarAudioRemove$.subscribe({
   next: (event) => {
     console.log(`Just removed Sidecar audio track: `, event.removedSidecarAudio)
-    console.log(`Current sidecar audio tracks: `, event.sidecarAudioStates)
   }
 })
 
@@ -413,7 +411,6 @@ omakasePlayer.audio.exportMainAudioTrackToSidecar('mainAudioTrackId1').subscribe
 omakasePlayer.audio.onSidecarAudioChange$.subscribe({
   next: (event) => {
     console.log(`Just changed Sidecar audio track: `, event.changedSidecarAudioState)
-    console.log(`Current sidecar audio tracks: `, event.sidecarAudioStates)
   }
 })
 

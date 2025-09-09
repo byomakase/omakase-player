@@ -16,18 +16,17 @@
 
 import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle} from '../layout/konva-component';
 import Konva from 'konva';
-import {Constants} from '../constants';
+import {positionTopLeft} from '../constants';
 import {OnMeasurementsChange, Position} from '../common';
 import {Timeline} from './timeline';
 import {BehaviorSubject, combineLatest, filter, merge, Subject, takeUntil} from 'rxjs';
-import {MediaElementPlaybackState, VideoControllerApi} from '../video';
+import {BufferedTimespan, MediaElementPlaybackState, VideoControllerApi} from '../video';
 import {KonvaFactory} from '../konva/konva-factory';
 import {WindowUtil} from '../util/window-util';
 import {KonvaUtil} from '../util/konva-util';
 import {nextCompleteSubject} from '../util/rxjs-util';
 import {isNullOrUndefined} from '../util/object-util';
 import {PlayheadMoveEvent} from '../types';
-import {BufferedTimespan} from '../video';
 
 export interface PlayheadState {
   dragging: boolean;
@@ -152,12 +151,12 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     this._playbackState = this._videoController.getPlaybackState();
 
     this._group = new Konva.Group({
-      ...Constants.positionTopLeft,
+      ...positionTopLeft,
       listening: true,
     });
 
     this._bgRect = KonvaFactory.createRect({
-      ...Constants.positionTopLeft,
+      ...positionTopLeft,
       height: this.style.scrubberHeight,
       fill: this.style.backgroundFill,
       opacity: this.style.backgroundOpacity,
@@ -165,7 +164,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     });
 
     this._playProgressBgRect = KonvaFactory.createRect({
-      ...Constants.positionTopLeft,
+      ...positionTopLeft,
       height: this.style.scrubberHeight,
       fill: this.style.playProgressFill,
       opacity: this.style.playProgressOpacity,
@@ -173,7 +172,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     });
 
     this._playheadGroup = KonvaFactory.createGroup({
-      ...Constants.positionTopLeft,
+      ...positionTopLeft,
       visible: this.style.visible,
       listening: true,
       draggable: true,
@@ -201,7 +200,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
       fontSize: this.style.textFontSize,
       fontFamily: this._timeline.style.textFontFamily,
       fill: this.style.textFill,
-      ...Constants.positionTopLeft,
+      ...positionTopLeft,
       text: ``,
       listening: false,
     });
@@ -210,7 +209,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     this._playheadGroup.add(this._timecodeLabel);
 
     this._bufferedGroup = new Konva.Group({
-      ...Constants.positionTopLeft,
+      ...positionTopLeft,
       listening: false,
     });
 

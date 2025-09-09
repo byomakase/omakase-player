@@ -21,11 +21,17 @@ import {markerListDefaultTemplates} from './marker-list-templates';
 import {OmakaseInlineEdit} from '../components/omakase-inline-edit';
 import {TimecodeUtil} from '../util/timecode-util';
 import Decimal from 'decimal.js';
+import Sortable from 'sortablejs';
+import {MarkerListComponentModeController} from './marker-list-component-mode-controllers/marker-list-component-mode-controller';
+import {TimelineMarkerListComponentModeController} from './marker-list-component-mode-controllers/timeline-marker-list-component-mode-controller';
+import {CutlistMarkerListComponentModeController} from './marker-list-component-mode-controllers/cutlist-marker-list-component-mode-controller';
 
 const classes = {
   markerListBody: 'omakase-marker-list-body',
   markerListWrapper: 'omakase-marker-list-wrapper',
 };
+
+export type MarkerListMode = 'TIMELINE' | 'CUTLIST';
 
 export class MarkerListComponent extends HTMLElement {
   onAction$: Subject<{marker: MarkerListItem; action: string}> = new Subject();
@@ -38,12 +44,15 @@ export class MarkerListComponent extends HTMLElement {
   private _emptyElement: HTMLElement;
   private _loadingElement: HTMLElement;
   private _listElement: HTMLElement;
+  private _listBodyElement: HTMLElement;
   private _videoController: VideoControllerApi | undefined;
   private _isLoading = false;
   private _nameEditable = false;
   private _timeEditable = false;
   private _nameOptions?: string[];
   private _nameValidationFn?: (text: string) => boolean;
+  private _mode: MarkerListMode = 'TIMELINE';
+  private _modeController: MarkerListComponentModeController = new TimelineMarkerListComponentModeController();
 
   constructor() {
     super();
@@ -64,6 +73,7 @@ export class MarkerListComponent extends HTMLElement {
     slot.name = 'item-template';
 
     this._listElement = document.createElement('div');
+    this._listBodyElement = document.createElement('div');
     this._headerElement = this.getDefaultHtmlElement('header');
     this._emptyElement = this.getDefaultHtmlElement('empty');
     this._loadingElement = this.getDefaultHtmlElement('loading');
@@ -129,6 +139,15 @@ export class MarkerListComponent extends HTMLElement {
     this._nameValidationFn = validationFn;
   }
 
+  set mode(newMode: MarkerListMode) {
+    this._mode = newMode;
+    if (this._mode === 'CUTLIST') {
+      this._modeController = new CutlistMarkerListComponentModeController();
+    } else {
+      this._modeController = new TimelineMarkerListComponentModeController();
+    }
+  }
+
   updateMarker(id: string, updateValue: Partial<MarkerListItem>) {
     const markerItem = this._markers.find((m) => m.id === id);
     if (!markerItem) {
@@ -138,7 +157,7 @@ export class MarkerListComponent extends HTMLElement {
     const listItem = this._listElement.querySelector<HTMLElement>(`#marker_${id}`);
     if (listItem) {
       this.setMarkerSlotValues(listItem, markerItem);
-      this.reorderMarker(markerItem);
+      this.resolveMarkerPosition(markerItem);
     }
   }
 
@@ -160,7 +179,7 @@ export class MarkerListComponent extends HTMLElement {
         const template = this.getTemplate();
         const container = this._listElement.querySelector<HTMLElement>(`.${classes.markerListBody}`);
         this.addMarkerToDom(template, container!, markerItem);
-        this.reorderMarker(markerItem);
+        this.resolveMarkerPosition(markerItem);
       }
     }
   }
@@ -177,7 +196,34 @@ export class MarkerListComponent extends HTMLElement {
     }
   }
 
-  private reorderMarker(markerItem: MarkerListItem) {
+  reorderMarker(id: string, index: number) {
+    if (!this._modeController.isReorderingEnabled()) {
+      console.error('Marker reordering is not supported in current MLC mode');
+      return;
+    }
+
+    const markerIndex = this._markers.findIndex((m) => m.id === id);
+
+    if (markerIndex === -1) {
+      console.error(`Marker with id ${id} does not exist`);
+      return;
+    }
+
+    if (index >= this._markers.length || index < -1) {
+      console.error('New position index is outside the list length');
+      return;
+    }
+
+    if (markerIndex === index) {
+      return;
+    }
+
+    const [marker] = this._markers.splice(markerIndex, 1);
+    this._markers.splice(index, 0, marker);
+    this.renderList();
+  }
+
+  private resolveMarkerPosition(markerItem: MarkerListItem) {
     const listItem = this._listElement.querySelector(`#marker_${markerItem.id}`);
     if (listItem) {
       const nextMarker = this.getNextMarker(markerItem);
@@ -196,21 +242,7 @@ export class MarkerListComponent extends HTMLElement {
   }
 
   private getNextMarker(markerItem: MarkerListItem) {
-    const sortedMarkers = this._markers.sort((a, b) => {
-      if (a.start !== undefined && b.start !== undefined && a.start !== b.start) {
-        return a.start - b.start;
-      } else if (a.end !== undefined && b.end !== undefined && a.end !== b.end) {
-        return a.end - b.end;
-      } else {
-        return 0;
-      }
-    });
-    return sortedMarkers.find(
-      (m) =>
-        m.start !== undefined &&
-        markerItem.start !== undefined &&
-        (m.start > markerItem.start || (m.start === markerItem.start && m.end !== undefined && markerItem.end !== undefined && m.end > markerItem.end))
-    );
+    return this._modeController.getNextMarker(this._markers, markerItem);
   }
 
   private renderList() {
@@ -230,12 +262,16 @@ export class MarkerListComponent extends HTMLElement {
 
     this._listElement.appendChild(this._headerElement);
 
-    const listBody = document.createElement('div');
-    listBody.classList.add(classes.markerListBody);
-    this._listElement.appendChild(listBody);
+    this._listBodyElement = document.createElement('div');
+    this._listBodyElement.classList.add(classes.markerListBody);
+    this._listElement.appendChild(this._listBodyElement);
+
+    if (this._modeController.isReorderingEnabled()) {
+      this.enableDragging();
+    }
 
     this._markers.forEach((item) => {
-      this.addMarkerToDom(template, listBody, item);
+      this.addMarkerToDom(template, this._listBodyElement, item);
     });
   }
 
@@ -381,5 +417,19 @@ export class MarkerListComponent extends HTMLElement {
     const defaultHTMLElement = document.createElement(name === 'row' ? 'template' : 'div');
     defaultHTMLElement.innerHTML = markerListDefaultTemplates[name];
     return defaultHTMLElement;
+  }
+
+  private enableDragging() {
+    new Sortable(this._listBodyElement, {
+      handle: '.drag-handle',
+      ghostClass: 'drag-ghost',
+      chosenClass: 'drag-item',
+      onEnd: (event) => {
+        const markers = [...this._markers];
+        const [removed] = markers.splice(event.oldIndex!, 1);
+        markers.splice(event.newIndex!, 0, removed);
+        this._markers = markers;
+      },
+    });
   }
 }

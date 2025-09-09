@@ -29,8 +29,10 @@ import {
   SidecarAudioChangeEvent,
   SidecarAudioCreateEvent,
   SidecarAudioInputSoloMuteEvent,
+  SidecarAudioLoadedEvent,
   SidecarAudioPeakProcessorMessageEvent,
   SidecarAudioRemoveEvent,
+  SidecarAudiosChangeEvent,
   SidecarAudioVolumeChangeEvent,
   SubtitlesCreateEvent,
   SubtitlesEvent,
@@ -177,6 +179,8 @@ export interface VideoControllerApi extends VideoApi, Destroyable {
 
   onSidecarAudioCreate$: Observable<SidecarAudioCreateEvent>;
 
+  onSidecarAudioLoaded$: Observable<SidecarAudioLoadedEvent>;
+
   onSidecarAudioRemove$: Observable<SidecarAudioRemoveEvent>;
 
   onSidecarAudioChange$: Observable<SidecarAudioChangeEvent>;
@@ -186,6 +190,8 @@ export interface VideoControllerApi extends VideoApi, Destroyable {
   onSidecarAudioPeakProcessorMessage$: Observable<SidecarAudioPeakProcessorMessageEvent>;
 
   onSidecarAudioInputSoloMute$: Observable<SidecarAudioInputSoloMuteEvent>;
+
+  onSidecarAudiosChange$: Observable<SidecarAudiosChangeEvent>;
 
   getSidecarAudios(): SidecarAudioApi[];
 

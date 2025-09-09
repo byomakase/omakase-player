@@ -20,7 +20,7 @@ import {errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiv
 import {destroyer} from '../util/destroy-util';
 import {TypedOmpBroadcastChannel} from '../common/omp-broadcast-channel';
 import {RemoteVideoController} from './remote-video-controller';
-import {Constants} from '../constants';
+import {ompHandshakeBroadcastChannelId} from '../constants';
 import {SwitchableVideoController} from './switchable-video-controller';
 import {WindowUtil} from '../util/window-util';
 import {HandshakeChannelActionsMap, MessageChannelActionsMap} from './channel-types';
@@ -108,7 +108,7 @@ export class DetachableVideoController extends SwitchableVideoController {
 
     this._localVideoController = this._videoController;
 
-    this._handshakeChannel = new TypedOmpBroadcastChannel(Constants.ompHandshakeBroadcastChannelId);
+    this._handshakeChannel = new TypedOmpBroadcastChannel(ompHandshakeBroadcastChannelId);
 
     if (this._config.thumbnailVttUrl) {
       this.loadThumbnailVttUrl(this._config.thumbnailVttUrl);
@@ -131,8 +131,12 @@ export class DetachableVideoController extends SwitchableVideoController {
     return !!this._config.detachedPlayerUrlFn;
   }
 
+  protected areSidecarAudiosLoaded(): boolean {
+    return !this._videoController.getSidecarAudioStates().find(p => !p.loaded)
+  }
+
   override canDetach(): boolean {
-    return this.isVideoLoaded() && this.getVideoWindowPlaybackState() === 'attached' && !this._isDetachInProgress && this.isDetachable();
+    return this.isVideoLoaded() && this.getVideoWindowPlaybackState() === 'attached' && !this._isDetachInProgress && this.isDetachable() && this.areSidecarAudiosLoaded();
   }
 
   override canAttach(): boolean {
@@ -292,6 +296,10 @@ export class DetachableVideoController extends SwitchableVideoController {
 
         if (!this.isVideoLoaded()) {
           message = `${message} Video not loaded.`;
+        }
+
+        if (!this.areSidecarAudiosLoaded()) {
+          message = `${message} Sidecar audios not loaded.`;
         }
 
         if (this._isDetachInProgress) {
@@ -627,43 +635,6 @@ export class DetachableVideoController extends SwitchableVideoController {
 
     afterVideoLoad(
       describedObservable(
-        `Playback Rate`,
-        new Observable((observer) => {
-          if (state.currentTime > 0) {
-            this.seekToTime(state.currentTime).subscribe({
-              next: () => {
-                this.setPlaybackRate(state.playbackRate).subscribe({
-                  next: () => {
-                    if (state.isPlaying) {
-                      // if (this.getVideoWindowPlaybackState() === 'detached' && BrowserProvider.instance().isSafari) {
-                      //   // Safari just throws to many errors, we will not even try to auto-play in detached mode
-                      // }
-
-                      this.play().subscribe({
-                        next: () => {
-                          nextCompleteObserver(observer);
-                        },
-                        error: (err) => {
-                          console.debug(`play() failed, user action will be required`, err);
-                          nextCompleteObserver(observer);
-                        },
-                      });
-                    } else {
-                      nextCompleteObserver(observer);
-                    }
-                  },
-                });
-              },
-            });
-          } else {
-            nextCompleteObserver(observer);
-          }
-        })
-      )
-    );
-
-    afterVideoLoad(
-      describedObservable(
         `Subtitles`,
         new Observable((observer) => {
           this.onSubtitlesLoaded$
@@ -813,7 +784,7 @@ export class DetachableVideoController extends SwitchableVideoController {
                     } else {
                       nextCompleteObserver(observer);
                     }
-                  }
+                  },
                 });
               },
               error: (error) => {
@@ -1128,8 +1099,42 @@ export class DetachableVideoController extends SwitchableVideoController {
       )
     );
 
+    let playback$ = describedObservable(
+      `Playback`,
+      new Observable((observer) => {
+        if (state.currentTime > 0) {
+          this.seekToTime(state.currentTime).subscribe({
+            next: () => {
+              this.setPlaybackRate(state.playbackRate).subscribe({
+                next: () => {
+                  if (state.isPlaying) {
+                    // if (this.getVideoWindowPlaybackState() === 'detached' && BrowserProvider.instance().isSafari) {
+                    //   // Safari just throws to many errors, we will not even try to auto-play in detached mode
+                    // }
+
+                    this.play().subscribe({
+                      next: () => {
+                        nextCompleteObserver(observer);
+                      },
+                      error: (err) => {
+                        console.debug(`play() failed, user action will be required`, err);
+                        nextCompleteObserver(observer);
+                      },
+                    });
+                  } else {
+                  }
+                },
+              });
+            },
+          });
+        } else {
+          nextCompleteObserver(observer);
+        }
+      })
+    );
+
     return new Observable((observer) => {
-      concat(forkJoin(beforeVideoLoads$), loadVideo$, forkJoin(afterVideoLoads$)).subscribe({
+      concat(forkJoin(beforeVideoLoads$), loadVideo$, forkJoin(afterVideoLoads$), playback$).subscribe({
         complete: () => {
           nextCompleteObserver(observer);
         },

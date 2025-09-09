@@ -32,6 +32,7 @@ import {MarkerTrackApi} from './marker-track-api';
 import {MarkerTrackConfig} from '../video/model';
 import {TimeRangeMarkerTrackApi} from './time-range-marker-track-api';
 import {AuthenticationData} from '../common/authentication';
+import {OmakasePlayerConfig} from '../omakase-player';
 
 export interface OmakasePlayerApi extends Api {
   /**
@@ -91,6 +92,12 @@ export interface OmakasePlayerApi extends Api {
   setWatermark(watermark: string): void;
 
   /**
+   * Get
+   * @param querySelector HTML query selector
+   */
+  getPlayerChromingElement<T>(querySelector: string): T;
+
+  /**
    * @returns Timeline API
    */
   get timeline(): TimelineApi | undefined;
@@ -116,9 +123,16 @@ export interface OmakasePlayerApi extends Api {
   get alerts(): AlertsApi;
 
   /**
-   * Get the progress bar marker track
+   * @returns TimeRangeMarkerTrackApi
    */
   get progressMarkerTrack(): TimeRangeMarkerTrackApi | undefined;
+
+  /**
+   * @returns OmakasePlayerConfig
+   */
+  get config(): OmakasePlayerConfig;
+
+  set config(config: OmakasePlayerConfig);
 
   /**
    * Destroys OmakasePlayer instance and frees up memory

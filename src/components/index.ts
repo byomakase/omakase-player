@@ -59,4 +59,17 @@ if (!globalThis.customElements.get('omakase-marker-bar')) {
   globalThis.customElements.define('omakase-marker-bar', OmakaseMarkerBar);
 }
 
-export {OmakaseTimeRange, OmakaseTimeDisplay, OmakasePreviewThumbnail, OmakaseTimecodeEdit, OmakaseMarkerTrack, OmakaseMarkerBar};
+export {
+  OmakaseTimeRange,
+  OmakaseVolumeRange,
+  OmakaseMuteButton,
+  OmakaseTimeDisplay,
+  OmakasePreviewThumbnail,
+  OmakaseTimecodeEdit,
+  OmakaseDropdown,
+  OmakaseDropdownList,
+  OmakaseDropdownToggle,
+  OmakaseDropdownOption,
+  OmakaseMarkerTrack,
+  OmakaseMarkerBar,
+};

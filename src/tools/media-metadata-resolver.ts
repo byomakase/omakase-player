@@ -14,13 +14,11 @@
  * limitations under the License.
  */
 
-import {forkJoin, from, map, Observable, of, switchMap, take, tap} from 'rxjs';
+import {forkJoin, from, map, Observable, of, switchMap, tap} from 'rxjs';
 import {ALL_FORMATS, Input, UrlSource} from 'mediabunny';
 import {formatAuthenticationHeaders} from '../http';
 import {FrameRateUtil} from '../util/frame-rate-util';
 import {errorCompleteObserver, nextCompleteObserver} from '../util/rxjs-util';
-import {MediaInfoUtil} from './media-info-util';
-import {AudioTrack} from 'mediainfo.js';
 
 export interface MediaMetadata {
   firstVideoTrackFrameRate?: number | undefined;
@@ -30,37 +28,7 @@ export interface MediaMetadata {
 
 export class MediaMetadataResolver {
   static getMediaMetadata<K extends keyof MediaMetadata>(src: string, keys: K[]): Observable<Pick<MediaMetadata, K>> {
-    if (src.toLowerCase().endsWith('.aac')) {
-      // mediabunny doesnt support AAC yet
-      return this.getMediaMetadataWithMediaInfo(src, keys);
-    } else {
-      return this.getMediaMetadataWithMediabunny(src, keys);
-    }
-  }
-
-  private static getMediaMetadataWithMediaInfo<K extends keyof MediaMetadata>(src: string, keys: K[]): Observable<Pick<MediaMetadata, K>> {
-    return MediaInfoUtil.analyze(src)
-      .pipe(take(1))
-      .pipe(
-        map((mediaInfoResult) => {
-          let mediaMetadataResult: MediaMetadata = {
-            firstVideoTrackFrameRate: void 0,
-            firstVideoTrackInitSegmentTime: void 0,
-            firstAudioTrackChannelsNumber: void 0,
-          };
-
-          if (keys.find((p) => p === 'firstVideoTrackFrameRate')) {
-            mediaMetadataResult.firstVideoTrackFrameRate = MediaInfoUtil.findFrameRate(mediaInfoResult);
-          }
-
-          if (keys.find((p) => p === 'firstAudioTrackChannelsNumber')) {
-            let firstAudioTrack = mediaInfoResult.media?.track.find((p) => p['@type'] === 'Audio') as AudioTrack | undefined;
-            mediaMetadataResult.firstAudioTrackChannelsNumber = firstAudioTrack?.Channels;
-          }
-
-          return mediaMetadataResult;
-        })
-      );
+    return this.getMediaMetadataWithMediabunny(src, keys);
   }
 
   private static getMediaMetadataWithMediabunny<K extends keyof MediaMetadata>(src: string, keys: K[]): Observable<Pick<MediaMetadata, K>> {
@@ -159,16 +127,8 @@ export class MediaMetadataResolver {
             nextCompleteObserver(observer, mediaMetadataResult);
           },
           error: (error) => {
-            console.debug(`Error parsing file with mediabunny, trying with mediainfo: `, error);
-            this.getMediaMetadataWithMediaInfo(src, keys).subscribe({
-              next: (mediaMetadataResultWithMediaInfo) => {
-                nextCompleteObserver(observer, mediaMetadataResultWithMediaInfo);
-              },
-              error: (error) => {
-                console.error(error);
-                errorCompleteObserver(observer, error);
-              },
-            });
+            console.debug(`Error parsing file with mediabunny: `, error);
+            errorCompleteObserver(observer, error);
           },
         });
       } else {

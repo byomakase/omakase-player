@@ -28,30 +28,29 @@ export class OmakaseDropdown extends HTMLElement {
   connectedCallback() {
     const lists = this.querySelectorAll('omakase-dropdown-list') as NodeListOf<OmakaseDropdownList>;
 
-    if (this.getAttribute('floating')) {
-      const closeButton = document.createElement('span');
-      closeButton.classList.add('omakase-dropdown-close');
-      closeButton.onclick = () => {
-        this.closeDropdown();
-      };
-      lists[lists.length - 1].appendChild(closeButton);
-    } else {
-      setTimeout(() => {
-        lists.forEach((list) => {
-          list.selectedOption$.subscribe((option) => {
+    const closeButton = document.createElement('span');
+    closeButton.classList.add('omakase-dropdown-close');
+    closeButton.onclick = () => {
+      this.closeDropdown();
+    };
+    lists[lists.length - 1].appendChild(closeButton);
+    setTimeout(() => {
+      lists.forEach((list) => {
+        list.selectedOption$.subscribe((option) => {
+          if (this.getAttribute('floating') === null) {
             this.closeDropdown();
-            if (this._toggle?.span) {
-              this._toggle.span.innerText = option?.label ?? '';
-            }
-          });
+          }
+          if (this._toggle?.span) {
+            this._toggle.span.innerText = option?.label ?? '';
+          }
         });
       });
-      document.addEventListener('click', (event) => {
-        if (!this.contains(event.target as Node)) {
-          this.closeDropdown();
-        }
-      });
-    }
+    });
+    document.addEventListener('click', (event) => {
+      if (this.getAttribute('floating') === null && !this.contains(event.target as Node)) {
+        this.closeDropdown();
+      }
+    });
   }
 
   private closeDropdown() {

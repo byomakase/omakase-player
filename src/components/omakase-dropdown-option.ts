@@ -6,7 +6,7 @@ export class OmakaseDropdownOption extends HTMLElement {
   }
 
   connectedCallback() {
-    const text = this.innerText;
+    const text = this.innerHTML;
     this.innerText = '';
     const iconElement = document.createElement('i');
     iconElement.classList.add('omakase-dropdown-option-icon');

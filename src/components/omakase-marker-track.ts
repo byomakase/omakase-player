@@ -178,7 +178,7 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
   }
 
   private isPeriodMarker(marker: Partial<MarkerApi>) {
-    return !isNullOrUndefined((marker as Partial<PeriodMarker>).timeObservation?.start) && !isNullOrUndefined((marker as Partial<PeriodMarker>).timeObservation?.end);
+    return !isNullOrUndefined((marker as Partial<PeriodMarker>).timeObservation?.start) || !isNullOrUndefined((marker as Partial<PeriodMarker>).timeObservation?.end);
   }
 
   private addMomentMarker(marker: MomentMarker) {

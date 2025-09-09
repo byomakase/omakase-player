@@ -14,7 +14,16 @@
  * limitations under the License.
  */
 
-import {AudioTrackLane, MarkerLane, MomentMarker, OmakasePlayer, PeriodMarker, SubtitlesLane, ThumbnailLane} from '../src';
+import {
+  AudioTrackLane,
+  LineChartLane,
+  MarkerLane,
+  MomentMarker,
+  OmakasePlayer,
+  PeriodMarker,
+  SubtitlesLane,
+  ThumbnailLane,
+} from '../src';
 import {RandomUtil} from '../src/util/random-util';
 import {ColorUtil} from '../src/util/color-util';
 
@@ -62,6 +71,12 @@ window.addEventListener('load', () => {
           id: 'audioLvl51',
           name: 'audioLvl51',
           url: 'https://demo.player.byomakase.org/data/waveforms/meridian_english_aud51t1c1-6-1-SEC-5_1.vtt',
+        },
+      ],
+      multipleMeasurements: [
+        {
+          description: 'R128 Loudness',
+          url: 'https://demo.player.byomakase.org/data/analysis/R128X_20_2-SEC.vtt'
         },
       ],
     },
@@ -216,6 +231,27 @@ window.addEventListener('load', () => {
           });
 
           timeline.addTimelineLane(audioTrackLane);
+        });
+      }
+
+      if (activeStreamData.multipleMeasurements && activeStreamData.multipleMeasurements.length > 0) {
+        activeStreamData.multipleMeasurements.forEach((multipleMeasurement) => {
+          let lineChartLaneForMultipleMeasurements = new LineChartLane({
+            vttUrl: multipleMeasurement.url,
+            description: multipleMeasurement.description,
+            yMax: 0,
+            yMin: -200,
+            style: {
+              pointWidth: 3,
+              lineStrokeWidth: 2,
+              fill: ['orange', 'green'],
+              pointFill: '#00000022',
+              backgroundFill: '#ffffff',
+              height: 100
+            },
+          });
+
+          timeline.addTimelineLane(lineChartLaneForMultipleMeasurements);
         });
       }
 
@@ -532,11 +568,11 @@ window.addEventListener('load', () => {
     ],
   });
 
-  setTimeout(() => {
-
-    omakasePlayer.video.loadBlackVideo()
-
-  }, 3000)
+  // setTimeout(() => {
+  //
+  //   omakasePlayer.video.loadBlackVideo()
+  //
+  // }, 3000)
 
   window.omakasePlayer = omakasePlayer; // for console debugging
 });

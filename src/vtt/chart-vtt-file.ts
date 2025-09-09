@@ -38,8 +38,8 @@ export abstract class ChartVttFile<T extends LineChartVttCue | BarChartVttCue | 
             measurements[row.measurement] = [parseFloat(row.value)];
           }
         }
-        return measurements;
       }
+      return measurements;
     }, {} as any);
 
     return {

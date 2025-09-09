@@ -19,7 +19,7 @@ import Konva from 'konva';
 import {Position} from '../../common';
 import {BarChartCue, ChartCueEvent, OgChartCue, WithOptionalPartial} from '../../types';
 import Decimal from 'decimal.js';
-import {Constants} from '../../constants';
+import {fillLinearGradientAudioPeak, twoPiRadians} from '../../constants';
 import {nullifier} from '../../util/destroy-util';
 import {Subject} from 'rxjs';
 import {KonvaFactory} from '../../konva/konva-factory';
@@ -39,6 +39,7 @@ export interface OgChartLaneItemConfig extends ComponentConfig<OgChartLaneItemSt
 
   value: number;
   valueScale: number;
+  valueMin: number;
 
   x: number;
   width: number;
@@ -46,13 +47,13 @@ export interface OgChartLaneItemConfig extends ComponentConfig<OgChartLaneItemSt
   listening?: boolean;
 }
 
-const configDefault: Omit<OgChartLaneItemConfig, 'cue' | 'value' | 'valueScale' | 'x' | 'width'> = {
+const configDefault: Omit<OgChartLaneItemConfig, 'cue' | 'value' | 'valueScale' | 'x' | 'width' | 'valueMin'> = {
   listening: false,
   style: {
     height: 20,
     opacity: 1,
     visible: true,
-    fillLinearGradientColorStops: Constants.fillLinearGradientAudioPeak,
+    fillLinearGradientColorStops: fillLinearGradientAudioPeak,
     paddingX: 2,
     paddingY: 2,
     scaleRatio: 1,
@@ -98,7 +99,7 @@ export class OgChartLaneItem extends BaseKonvaComponent<OgChartLaneItemConfig, O
 
     this._group.add(clipGroup);
 
-    let valueRatioDecimal = new Decimal(this.config.value).div(this.config.valueScale);
+    let valueRatioDecimal = new Decimal(this.config.value - this.config.valueMin).div(this.config.valueScale);
     let valueHeightExactDecimal = valueRatioDecimal.mul(this._group.height());
     let valueHeightExact = valueHeightExactDecimal.toNumber();
 
@@ -132,13 +133,11 @@ export class OgChartLaneItem extends BaseKonvaComponent<OgChartLaneItemConfig, O
           .mul(circleMaxRadius)
           .toNumber();
 
-        // let yFromTop = i * (circleMaxRadius * 2 + this.style.paddingY) + circleMaxRadius;
         let yFromTop = i * (circleMaxRadius * 2 + this.style.paddingY) + circleRadius;
 
         let y = clipGroup.height() - yFromTop;
 
-        // ctx.arc(circleX, y, circleMaxRadius, 0, Constants.TWO_PI_RADIANS, false);
-        ctx.arc(circleX, y, circleRadius, 0, Constants.twoPiRadians, false);
+        ctx.arc(circleX, y, circleRadius, 0, twoPiRadians, false);
       }
     });
   }

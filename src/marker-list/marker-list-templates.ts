@@ -17,6 +17,22 @@ export const markerListDefaultTemplates = {
       .active.flex-row {
         background-color: rgba(0, 0, 0, 0.2);
       }
+      .drag-ghost {
+        background-color: #ccc;
+        color: transparent;
+        border: none;
+        opacity: 1;
+        border-top: none !important;
+      }
+      .drag-ghost > * {
+        visibility: hidden;
+      }
+      .drag-handle {
+        cursor: grab;
+      }
+      .drag-item.flex-row {
+        border-top: 1px solid black;
+      }
       .flex-cell {
         height: 60px;
         line-height: 60px;
@@ -34,8 +50,8 @@ export const markerListDefaultTemplates = {
   row: `
         <div class="flex-row bordered">
             <div class="flex-cell"><span slot="color" style="display:inline-block;height:60px;min-width:10px"></span></div>
-            <div class="flex-cell" style="min-width: 120px"><img slot="thumbnail" height="60"></div>
-            <div class="flex-cell" style="flex-grow:1" slot="name"></div>
+            <div class="flex-cell" style="min-width: 120px"><img class="drag-handle" slot="thumbnail" height="60"></div>
+            <div class="flex-cell drag-handle" style="flex-grow:1" slot="name"></div>
             <div class="flex-cell" style="min-width:120px" slot="start"></div>
             <div class="flex-cell" style="min-width:120px" slot="end"></div>
             <div class="flex-cell" style="min-width:120px" slot="duration"></div>

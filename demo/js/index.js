@@ -159,7 +159,7 @@ function createOmakasePlayer() {
     playerChroming: {
       theme: 'DEFAULT',
       themeConfig: {
-        controlBarVisibility: 'DISABLED'
+        controlBarVisibility: 'FULLSCREEN_ONLY'
       }
     },
     style: {

@@ -40,9 +40,22 @@ import {OmpHlsConfig} from './video/video-hls-loader';
 import {RouterVisualization, RouterVisualizationConfig} from './router-visualization/router-visualization';
 import {removeEmptyValues} from './util/object-util';
 import {MarkerTrackConfig} from './video/model';
-import {ChromelessChroming, CustomChroming, DEFAULT_PLAYER_CHROMING_CONFIG, DEFAULT_STAMP_PLAYER_CHROMING_CONFIG, DefaultChroming, PlayerChroming, StampChroming} from './player-chroming/model';
+import {
+  AudioChroming,
+  ControlBarVisibility,
+  DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG,
+  DEFAULT_PLAYER_CHROMING_CONFIG,
+  DEFAULT_STAMP_PLAYER_CHROMING_CONFIG,
+  DefaultChroming,
+  FullscreenChroming,
+  PlayerChroming,
+  PlayerChromingTheme,
+  StampChroming,
+  WatermarkVisibility,
+} from './player-chroming/model';
 import {TimeRangeMarkerTrackApi} from './api/time-range-marker-track-api';
 import {AuthConfig, AuthenticationData} from './common/authentication';
+import {ConfigAdapter} from './common/config-adapter';
 
 export interface OmakasePlayerConfig {
   playerHTMLElementId?: string;
@@ -85,7 +98,7 @@ export interface OmakasePlayerConfig {
   /**
    * Player chroming configuration
    */
-  playerChroming?: DefaultChroming | CustomChroming | ChromelessChroming | StampChroming;
+  playerChroming?: PlayerChroming;
 }
 
 const configDefault: OmakasePlayerConfig = {
@@ -99,6 +112,8 @@ const configDefault: OmakasePlayerConfig = {
 
 export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
   public static instance: OmakasePlayerApi;
+
+  protected readonly _configAdapter: ConfigAdapter;
 
   private readonly _config: OmakasePlayerConfig;
 
@@ -121,22 +136,31 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
 
     if (!config?.playerChroming) {
       this._config.playerChroming = {
-        theme: 'DEFAULT',
+        theme: PlayerChromingTheme.Default,
+        fullscreenChroming: FullscreenChroming.Enabled,
       };
     }
 
-    if (this._config.playerChroming?.theme === 'DEFAULT') {
+    if (this._config.playerChroming?.theme === PlayerChromingTheme.Default) {
       this._config.playerChroming.themeConfig = {
         ...DEFAULT_PLAYER_CHROMING_CONFIG,
-        controlBarVisibility: this._config.detachedPlayer ? 'ENABLED' : 'FULLSCREEN_ONLY',
         ...(config?.playerChroming as DefaultChroming)?.themeConfig,
       };
-    } else if (this._config.playerChroming?.theme === 'STAMP') {
+      this._config.playerChroming.fullscreenChroming = config?.playerChroming?.fullscreenChroming ?? FullscreenChroming.Enabled;
+    } else if (this._config.playerChroming?.theme === PlayerChromingTheme.Stamp) {
       this._config.playerChroming.themeConfig = {
         ...DEFAULT_STAMP_PLAYER_CHROMING_CONFIG,
         ...(config?.playerChroming as StampChroming)?.themeConfig,
       };
-      this._config.playerChroming.watermarkVisibility = config?.playerChroming?.watermarkVisibility ?? 'AUTO_HIDE';
+      this._config.playerChroming.fullscreenChroming = config?.playerChroming?.fullscreenChroming ?? FullscreenChroming.Disabled;
+      this._config.playerChroming.watermarkVisibility = config?.playerChroming?.watermarkVisibility ?? WatermarkVisibility.AutoHide;
+    } else if (this._config.playerChroming?.theme === PlayerChromingTheme.Audio) {
+      this._config.playerChroming.themeConfig = {
+        ...DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG,
+        ...(config?.playerChroming as AudioChroming)?.themeConfig,
+      };
+    } else if (this._config.playerChroming?.theme === PlayerChromingTheme.Chromeless) {
+      this._config.playerChroming.fullscreenChroming = config?.playerChroming?.fullscreenChroming ?? FullscreenChroming.Disabled;
     }
 
     OmakasePlayer.instance = this;
@@ -186,6 +210,22 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
 
     this._audioController = new AudioController(this._videoController);
     this._subtitlesController = new SubtitlesController(this._videoController);
+
+    this._configAdapter = new ConfigAdapter(this._config);
+
+    this._configAdapter.onWatermarkChange$.pipe(takeUntil(this._destroyed$)).subscribe((watermark) => {
+      this._videoDomController.setWatermark(watermark ?? '');
+    });
+
+    this._configAdapter.onThumbnailUrlChange$.pipe(takeUntil(this._destroyed$)).subscribe((thumbnailUrl) => {
+      if (thumbnailUrl) {
+        this._videoDomController.loadThumbnailVtt(thumbnailUrl);
+      }
+    });
+
+    this._configAdapter.onThemeConfigChange$.pipe(takeUntil(this._destroyed$)).subscribe((config) => {
+      this._videoDomController.updateChromingTemplate(config.playerChroming!);
+    });
   }
 
   setAuthentication(authentication: AuthenticationData) {
@@ -198,6 +238,10 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
 
   setWatermark(watermark: string) {
     this._videoDomController.setWatermark(watermark);
+  }
+
+  getPlayerChromingElement<T>(querySelector: string): T {
+    return this._videoDomController.getPlayerChromingElement(querySelector);
   }
 
   loadVideo(videoSourceUrl: string, options?: VideoLoadOptions): Observable<Video> {
@@ -285,6 +329,14 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
 
   get progressMarkerTrack(): TimeRangeMarkerTrackApi | undefined {
     return this._videoDomController.getProgressMarkerTrack();
+  }
+
+  get config(): OmakasePlayerConfig {
+    return this._configAdapter.config;
+  }
+
+  set config(config: Partial<OmakasePlayerConfig>) {
+    this._configAdapter.config = config;
   }
 
   destroy() {

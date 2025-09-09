@@ -101,11 +101,13 @@ export type MessageChannelActionsMap = OmpBroadcastChannelActionsMap<{
 
   // sidecar audio
   'VideoControllerApi.onSidecarAudioCreate$': ExtractPropertyTypes<VideoControllerApi, 'onSidecarAudioCreate$'>;
+  'VideoControllerApi.onSidecarAudioLoaded$': ExtractPropertyTypes<VideoControllerApi, 'onSidecarAudioLoaded$'>;
   'VideoControllerApi.onSidecarAudioRemove$': ExtractPropertyTypes<VideoControllerApi, 'onSidecarAudioRemove$'>;
   'VideoControllerApi.onSidecarAudioChange$': ExtractPropertyTypes<VideoControllerApi, 'onSidecarAudioChange$'>;
   'VideoControllerApi.onSidecarAudioVolumeChange$': ExtractPropertyTypes<VideoControllerApi, 'onSidecarAudioVolumeChange$'>;
   'VideoControllerApi.onSidecarAudioPeakProcessorMessage$': ExtractPropertyTypes<VideoControllerApi, 'onSidecarAudioPeakProcessorMessage$'>;
   'VideoControllerApi.onSidecarAudioInputSoloMute$': ExtractPropertyTypes<VideoControllerApi, 'onSidecarAudioInputSoloMute$'>;
+  'VideoControllerApi.onSidecarAudiosChange$': ExtractPropertyTypes<VideoControllerApi, 'onSidecarAudiosChange$'>;
 
   'VideoControllerApi.onThumbnailVttUrlChanged$': ExtractPropertyTypes<VideoControllerApi, 'onThumbnailVttUrlChanged$'>;
   'VideoControllerApi.onActiveNamedEventStreamsChange$': ExtractPropertyTypes<VideoControllerApi, 'onActiveNamedEventStreamsChange$'>;

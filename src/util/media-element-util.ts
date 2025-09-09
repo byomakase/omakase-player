@@ -21,7 +21,6 @@ export class MediaElementUtil {
     if (!element) {
       return [];
     }
-
     let result: BufferedTimespan[] = [];
     let timeRanges: TimeRanges = element.buffered;
     for (let i = 0; i < timeRanges.length; i++) {

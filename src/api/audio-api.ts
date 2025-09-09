@@ -15,7 +15,7 @@
  */
 
 import {Api} from './api';
-import {Observable} from 'rxjs';
+import {Observable, Subject} from 'rxjs';
 import {
   AudioLoadedEvent,
   AudioPeakProcessorMessageEvent,
@@ -27,8 +27,9 @@ import {
   SidecarAudioChangeEvent,
   SidecarAudioCreateEvent,
   SidecarAudioInputSoloMuteEvent,
+  SidecarAudioLoadedEvent,
   SidecarAudioPeakProcessorMessageEvent,
-  SidecarAudioRemoveEvent,
+  SidecarAudioRemoveEvent, SidecarAudiosChangeEvent,
   SidecarAudioVolumeChangeEvent,
   VolumeChangeEvent,
 } from '../types';
@@ -255,6 +256,12 @@ export interface AudioApi extends Api {
   onSidecarAudioCreate$: Observable<SidecarAudioCreateEvent>;
 
   /**
+   * Fires when Sidecar audio is loaded
+   * @readonly
+   */
+  onSidecarAudioLoaded$: Observable<SidecarAudioLoadedEvent>;
+
+  /**
    * Fires when Sidecar audio is removed
    * @readonly
    */
@@ -283,6 +290,12 @@ export interface AudioApi extends Api {
    * @readonly
    */
   onSidecarAudioInputSoloMute$: Observable<SidecarAudioInputSoloMuteEvent>;
+
+  /**
+   * Fires when any Sidecar audio is created, removed or changed
+   * @readonly
+   */
+  onSidecarAudiosChange$: Observable<SidecarAudiosChangeEvent>;
 
   /**
    * @returns Sidecar audios

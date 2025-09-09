@@ -72,6 +72,7 @@ export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements Oma
           return this.mapCue(parsedCue, cueExtension, index);
         })
       ).forEach((cue) => {
+        this.prepareCue(cue);
         this._cues.push(cue);
         this._cuesStartTimesSorted.push(cue.startTime);
 
@@ -86,6 +87,8 @@ export abstract class BaseOmakaseVttFile<T extends OmakaseVttCue> implements Oma
       console.error(e);
     }
   }
+
+  protected prepareCue(cue: T) {}
 
   protected resolveExtensionVersion(vttFileParsed: VttFileParsed): OmakaseWebVttExtensionVersion | undefined {
     if (StringUtil.isNonEmpty(vttFileParsed.note)) {

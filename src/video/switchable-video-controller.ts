@@ -30,8 +30,10 @@ import {
   SidecarAudioChangeEvent,
   SidecarAudioCreateEvent,
   SidecarAudioInputSoloMuteEvent,
+  SidecarAudioLoadedEvent,
   SidecarAudioPeakProcessorMessageEvent,
   SidecarAudioRemoveEvent,
+  SidecarAudiosChangeEvent,
   SidecarAudioVolumeChangeEvent,
   SubtitlesCreateEvent,
   SubtitlesEvent,
@@ -108,11 +110,13 @@ export class SwitchableVideoController implements VideoControllerApi {
 
   // sidecar audio
   public readonly onSidecarAudioCreate$: Subject<SidecarAudioCreateEvent> = new Subject<SidecarAudioCreateEvent>();
+  public readonly onSidecarAudioLoaded$: Subject<SidecarAudioLoadedEvent> = new Subject<SidecarAudioLoadedEvent>();
   public readonly onSidecarAudioRemove$: Subject<SidecarAudioRemoveEvent> = new Subject<SidecarAudioRemoveEvent>();
   public readonly onSidecarAudioChange$: Subject<SidecarAudioChangeEvent> = new Subject<SidecarAudioChangeEvent>();
   public readonly onSidecarAudioVolumeChange$: Subject<SidecarAudioVolumeChangeEvent> = new Subject<SidecarAudioVolumeChangeEvent>();
   public readonly onSidecarAudioPeakProcessorMessage$: Subject<SidecarAudioPeakProcessorMessageEvent> = new Subject<SidecarAudioPeakProcessorMessageEvent>();
   public readonly onSidecarAudioInputSoloMute$: Subject<SidecarAudioInputSoloMuteEvent> = new Subject<SidecarAudioInputSoloMuteEvent>();
+  public readonly onSidecarAudiosChange$: Subject<SidecarAudiosChangeEvent> = new Subject<SidecarAudiosChangeEvent>();
 
   // VideoHlsLoader specific
   public readonly onActiveNamedEventStreamsChange$: Subject<OmpNamedEventEventName[]> = new Subject<OmpNamedEventEventName[]>();
@@ -244,6 +248,12 @@ export class SwitchableVideoController implements VideoControllerApi {
       },
     });
 
+    videoController.onSidecarAudioLoaded$.pipe(takeUntil(this._eventBreaker$)).subscribe({
+      next: (value) => {
+        this.onSidecarAudioLoaded$.next(value);
+      },
+    });
+
     videoController.onSidecarAudioRemove$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onSidecarAudioRemove$.next(value);
@@ -271,6 +281,12 @@ export class SwitchableVideoController implements VideoControllerApi {
     videoController.onSidecarAudioInputSoloMute$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onSidecarAudioInputSoloMute$.next(value);
+      },
+    });
+
+    videoController.onSidecarAudiosChange$.pipe(takeUntil(this._eventBreaker$)).subscribe({
+      next: (value) => {
+        this.onSidecarAudiosChange$.next(value);
       },
     });
 

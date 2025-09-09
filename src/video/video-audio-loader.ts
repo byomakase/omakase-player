@@ -28,8 +28,7 @@ import {BlobUtil} from '../util/blob-util';
 import {HTMLVideoElementEvents} from '../media-element/omp-media-element';
 import {AuthConfig} from '../common/authentication';
 import {MediaMetadata, MediaMetadataResolver} from '../tools/media-metadata-resolver';
-
-const audioChannelsDefault = 2;
+import {audioChannelsDefault} from '../constants';
 
 export class VideoAudioLoader extends BaseVideoLoader {
   private static audioLabelDefault = 'Default';

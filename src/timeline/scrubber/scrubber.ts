@@ -16,7 +16,7 @@
 
 import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle} from '../../layout/konva-component';
 import Konva from 'konva';
-import {Constants} from '../../constants';
+import {positionTopLeft} from '../../constants';
 import {OnMeasurementsChange} from '../../common/measurement';
 import {Timeline} from '../timeline';
 import {Subject, takeUntil} from 'rxjs';
@@ -99,7 +99,7 @@ export class Scrubber extends BaseKonvaComponent<ScrubberConfig, ScrubberStyle, 
     this._timeline = timeline;
 
     this._group = new Konva.Group({
-      ...Constants.positionTopLeft,
+      ...positionTopLeft,
       visible: this.style.visible,
       listening: listening,
     });
@@ -140,7 +140,7 @@ export class Scrubber extends BaseKonvaComponent<ScrubberConfig, ScrubberStyle, 
       fontSize: this.style.textFontSize,
       fontFamily: this._timeline.style.textFontFamily,
       fill: this.style.textFill,
-      ...Constants.positionTopLeft,
+      ...positionTopLeft,
       text: ``,
       listening: listening,
     });

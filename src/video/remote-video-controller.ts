@@ -31,8 +31,10 @@ import {
   SidecarAudioChangeEvent,
   SidecarAudioCreateEvent,
   SidecarAudioInputSoloMuteEvent,
+  SidecarAudioLoadedEvent,
   SidecarAudioPeakProcessorMessageEvent,
   SidecarAudioRemoveEvent,
+  SidecarAudiosChangeEvent,
   SidecarAudioVolumeChangeEvent,
   SubtitlesCreateEvent,
   SubtitlesEvent,
@@ -219,16 +221,6 @@ export class RemoteVideoController implements VideoControllerApi {
         },
       });
 
-    merge(this.onSidecarAudioCreate$, this.onSidecarAudioRemove$, this.onSidecarAudioChange$)
-      .pipe(takeUntil(this._destroyed$))
-      .subscribe({
-        next: (value) => {
-          if (value) {
-            this._sidecarAudioStates = value.sidecarAudioStates;
-          }
-        },
-      });
-
     this.onSidecarAudioInputSoloMute$.pipe(takeUntil(this._destroyed$)).subscribe({
       next: (value) => {
         if (value) {
@@ -236,6 +228,15 @@ export class RemoteVideoController implements VideoControllerApi {
         }
       },
     });
+
+    this.onSidecarAudiosChange$.pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: (value) => {
+          if (value) {
+            this._sidecarAudioStates = value.sidecarAudioStates;
+          }
+        },
+      });
 
     this.onFullscreenChange$.pipe(takeUntil(this._destroyed$)).subscribe({
       next: (value) => {
@@ -388,12 +389,20 @@ export class RemoteVideoController implements VideoControllerApi {
     return this._messageChannel.createRequestStream('VideoControllerApi.onSidecarAudioCreate$');
   }
 
+  get onSidecarAudioLoaded$(): Observable<SidecarAudioLoadedEvent> {
+    return this._messageChannel.createRequestStream('VideoControllerApi.onSidecarAudioLoaded$');
+  }
+
   get onSidecarAudioRemove$(): Observable<SidecarAudioRemoveEvent> {
     return this._messageChannel.createRequestStream('VideoControllerApi.onSidecarAudioRemove$');
   }
 
   get onSidecarAudioChange$(): Observable<SidecarAudioChangeEvent> {
     return this._messageChannel.createRequestStream('VideoControllerApi.onSidecarAudioChange$');
+  }
+
+  get onSidecarAudiosChange$(): Observable<SidecarAudiosChangeEvent> {
+    return this._messageChannel.createRequestStream('VideoControllerApi.onSidecarAudiosChange$');
   }
 
   get onSidecarAudioInputSoloMute$(): Observable<SidecarAudioInputSoloMuteEvent> {

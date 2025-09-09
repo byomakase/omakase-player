@@ -16,8 +16,8 @@
 
 import {TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle, VTT_DOWNSAMPLE_CONFIG_DEFAULT} from '../timeline-lane';
 import Konva from 'konva';
-import {Constants} from '../../constants';
-import {debounceTime, distinctUntilChanged, filter, Subject, takeUntil, zip} from 'rxjs';
+import {fillLinearGradientAudioPeak} from '../../constants';
+import {debounceTime, distinctUntilChanged, filter, takeUntil, zip} from 'rxjs';
 import {OgChartLaneItem} from './og-chart-lane-item';
 import Decimal from 'decimal.js';
 import {OgChartCue, OgChartVttCue, WithOptionalPartial} from '../../types';
@@ -64,7 +64,7 @@ const configDefault: OgChartLaneConfig = {
     paddingBottom: 0,
 
     interpolationWidth: 10,
-    itemFillLinearGradientColorStops: Constants.fillLinearGradientAudioPeak,
+    itemFillLinearGradientColorStops: fillLinearGradientAudioPeak,
     itemPadding: 1,
     itemScaleRatio: 1,
   },
@@ -233,15 +233,14 @@ export class OgChartLane extends VttTimelineLane<OgChartLaneConfig, OgChartLaneS
         let itemPosition = this.resolveInterpolatedItemPosition(i);
 
         let value = this._valueTransformFn(cue.value);
-        value = value < 0 ? 0 : value > valueScale ? valueScale : value;
-
         let laneItem = new OgChartLaneItem({
           x: itemPosition,
           width: this.style.interpolationWidth,
           cue: cue,
 
-          value: value,
+          value: Math.min(Math.max(value, valueMin), valueMax),
           valueScale: valueScale,
+          valueMin: valueMin,
           listening: true,
 
           style: {

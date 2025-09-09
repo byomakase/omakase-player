@@ -1049,20 +1049,24 @@ export class Timeline implements Destroyable, ScrollableHorizontally, TimelineAp
       this._thumbnailHover.setPosition(position);
       this._thumbnailHover.konvaNode.moveToTop();
     } else {
-      ImageUtil.createKonvaImageSizedByWidth(thumbnailVttCue.url, this.style.thumbnailHoverWidth)
-        .pipe(takeUntil(this._destroyed$))
-        .subscribe({
-          next: (image) => {
-            this._thumbnailHover.cue = thumbnailVttCue;
-            this._thumbnailHover.setDimension(image.getSize());
-            this._thumbnailHover.setImage(image);
-            this._thumbnailHover.setPosition(this.resolveThumbnailPosition(this._thumbnailHover));
-            this._thumbnailHover.konvaNode.moveToTop();
-          },
-          error: (err) => {
-            console.error(err);
-          },
-        });
+      let imageSub$: Observable<Konva.Image>;
+      if (thumbnailVttCue.xywh) {
+        imageSub$ = ImageUtil.createKonvaImageFromSpriteByWidth(thumbnailVttCue.url, thumbnailVttCue.xywh, this.style.thumbnailHoverWidth);
+      } else {
+        imageSub$ = ImageUtil.createKonvaImageSizedByWidth(thumbnailVttCue.url, this.style.thumbnailHoverWidth);
+      }
+      imageSub$.pipe(takeUntil(this._destroyed$)).subscribe({
+        next: (image) => {
+          this._thumbnailHover.cue = thumbnailVttCue;
+          this._thumbnailHover.setDimension(image.getSize());
+          this._thumbnailHover.setImage(image);
+          this._thumbnailHover.setPosition(this.resolveThumbnailPosition(this._thumbnailHover));
+          this._thumbnailHover.konvaNode.moveToTop();
+        },
+        error: (err) => {
+          console.error(err);
+        },
+      });
     }
   }
 

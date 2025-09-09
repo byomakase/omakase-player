@@ -182,13 +182,6 @@ export class OmpAudioElement extends BaseOmpMediaElement<HTMLAudioElement, OmpMe
   constructor(config?: OmpAudioElementConfig) {
     super(new Audio());
 
-    // don't display any of the <audio> elements
-    // audioElement.style.display = 'none'; // TODO remove
-
-    // don't allow controls (not visible anyway)
-    // audioElement.controls = false;
-    // this._mediaElement.controls = true; // TODO remove
-
     this._mediaElement.id = this._id;
     if (config && config.loop !== void 0) {
       this._mediaElement.loop = config.loop;

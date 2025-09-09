@@ -18,7 +18,12 @@ export class OmakaseDropdownToggle extends HTMLElement {
 
   attributeChangedCallback(name: string, _oldValue: any, newValue: any) {
     if (name === 'dropdown') {
-      this._dropdown = document.getElementById(newValue) as OmakaseDropdown;
+      const rootNode = this.getRootNode();
+      if (rootNode instanceof ShadowRoot) {
+        this._dropdown = rootNode.getElementById(newValue) as OmakaseDropdown;
+      } else {
+        this._dropdown = document.getElementById(newValue) as OmakaseDropdown;
+      }
       if (this._dropdown) {
         this._dropdown!.toggle = this;
       }
@@ -26,20 +31,22 @@ export class OmakaseDropdownToggle extends HTMLElement {
   }
 
   connectedCallback() {
-    let innerElement: any;
-    if (this.children[0]) {
-      innerElement = this.children[0] as HTMLElement;
-    } else {
+    if (!this.children.length) {
       this._span = document.createElement('span');
       this._span.classList.add('omakase-dropdown-toggle');
       this.appendChild(this._span);
-      innerElement = this._span;
     }
-    innerElement.onclick = () => {
+    this.onclick = (event) => {
+      if (this.hasAttribute('disabled')) {
+        event.stopPropagation();
+        return;
+      }
       if (this._dropdown?.style.display === 'none') {
         if (!this._dropdown!.style.right) {
-          if (this._dropdown!.getAttribute('align') === 'center') {
-            this._dropdown!.style.left = this.offsetLeft + innerElement.offsetWidth / 2 - this._dropdown!.width / 2 + 'px';
+          if (this._dropdown!.getAttribute('alignment') === 'center') {
+            this._dropdown!.style.left = this.offsetLeft + this.offsetWidth / 2 - this._dropdown!.width / 2 + 'px';
+          } else if (this._dropdown!.getAttribute('alignment') === 'right') {
+            this._dropdown!.style.left = this.offsetLeft + this.offsetWidth - this._dropdown!.width + 'px';
           } else {
             this._dropdown!.style.left = this.offsetLeft + 'px';
           }

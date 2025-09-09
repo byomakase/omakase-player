@@ -218,6 +218,14 @@
         Available under Apache License Version 2.0
       <https://github.com/videojs/m3u8-parser/blob/main/LICENSE>
 
+      media-chrome <https://github.com/muxinc/media-chrome>
+        Available under MIT license
+      <https://github.com/muxinc/media-chrome/blob/main/LICENSE>
+
+      mediabunny <https://github.com/Vanilagy/mediabunny>
+        Available under Mozilla Public License Version 2.0
+      <https://github.com/Vanilagy/mediabunny/blob/main/LICENSE>
+
       node-webvtt <https://github.com/osk/node-webvtt>
         Available under MIT license
       <https://github.com/osk/node-webvtt/blob/master/LICENSE>
@@ -237,14 +245,6 @@
       zod <https://github.com/colinhacks/zod>
         Available under MIT license
       <https://github.com/colinhacks/zod/blob/master/LICENSE>
-
-      media-chrome <https://github.com/muxinc/media-chrome>
-        Available under MIT license
-      <https://github.com/muxinc/media-chrome/blob/main/LICENSE>
-
-      mediainfo.js <https://github.com/buzz/mediainfo.js>
-        Available under BSD-2-Clause license
-      <https://github.com/buzz/mediainfo.js/blob/main/LICENSE.txt>
 
 
 

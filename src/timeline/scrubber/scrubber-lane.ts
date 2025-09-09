@@ -15,8 +15,8 @@
  */
 
 import Konva from 'konva';
-import {RectMeasurement} from '../../common/measurement';
-import {Constants} from '../../constants';
+import {RectMeasurement} from '../../common';
+import {goldenRatio} from '../../constants';
 import Decimal from 'decimal.js';
 import {BaseTimelineLane, TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle} from '../timeline-lane';
 import {filter, Subject, takeUntil} from 'rxjs';
@@ -51,7 +51,7 @@ const configDefault: ScrubberLaneConfig = {
     tickDivisionMinWidth: 18,
     tickFill: '#0d0f05',
     tickHeight: 12,
-    divisionTickHeight: 12 * Constants.goldenRatio,
+    divisionTickHeight: 12 * goldenRatio,
     timecodeShowFirst: true,
     timecodeFontSize: 11,
     timecodeFill: '#0d0f05',

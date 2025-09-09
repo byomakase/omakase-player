@@ -19,7 +19,7 @@ import Konva from 'konva';
 import {Position} from '../../common';
 import {BarChartCue, ChartCueEvent, WithOptionalPartial} from '../../types';
 import Decimal from 'decimal.js';
-import {Constants} from '../../constants';
+import {fillLinearGradientAudioPeak} from '../../constants';
 import {nullifier} from '../../util/destroy-util';
 import {Subject} from 'rxjs';
 import {KonvaFactory} from '../../konva/konva-factory';
@@ -39,19 +39,21 @@ export interface BarChartLaneItemConfig extends ComponentConfig<BarChartLaneItem
   value: number;
   valueScale: number;
 
+  valueMin: number;
+
   x: number;
   width: number;
 
   listening?: boolean;
 }
 
-const configDefault: Omit<BarChartLaneItemConfig, 'cue' | 'value' | 'valueScale' | 'x' | 'width'> = {
+const configDefault: Omit<BarChartLaneItemConfig, 'cue' | 'value' | 'valueScale' | 'x' | 'width' | 'valueMin'> = {
   listening: false,
   style: {
     height: 20,
     opacity: 1,
     visible: true,
-    fillLinearGradientColorStops: Constants.fillLinearGradientAudioPeak,
+    fillLinearGradientColorStops: fillLinearGradientAudioPeak,
     paddingX: 2,
     cornerRadius: 0,
   },
@@ -96,7 +98,7 @@ export class BarChartLaneItem extends BaseKonvaComponent<BarChartLaneItemConfig,
 
     this._group.add(barGroup);
 
-    let valueRatioDecimal = new Decimal(this.config.value).div(this.config.valueScale);
+    let valueRatioDecimal = new Decimal(this.config.value - this.config.valueMin).div(this.config.valueScale);
     let valueHeightExact = valueRatioDecimal.mul(this._group.height()).toNumber();
 
     barGroup.add(

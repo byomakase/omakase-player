@@ -7,10 +7,12 @@ This guide provides documentation on customizing and polishing chroming of the O
 ## What is Player Chroming?
 
 "Chroming" refers to the visual interface layered on top of a media player and includes following capabilities
+
  * player controls such as play/pause, scrubber, volume and fullscreen
  * overlays such as help, BITC display
  * tracks selector 
  * various specific components as e.g.  marker bar
+
 It's essentially the UI that wraps the core video/audio content, providing interactivity.
 
 ---
@@ -111,63 +113,151 @@ let omakasePlayer = new OmakasePlayer({
 });
 ```
 
+Chroming configuration for updatable parameters can be changed after instantiation:
+
+```javascript
+omakasePlayer.config = {
+  playerChroming: {
+    ...
+  }
+};
+```
+
 The following attributes are supported in the `PlayerChroming` object:
 
-| Field                 | Description                                                                 | Type                                 | Required | Comments                                                                                           |
-|----------------------|-----------------------------------------------------------------------------|--------------------------------------|----------|----------------------------------------------------------------------------------------------------|
-| `theme`              | Chroming theme determines how the player will be chromed.                   | Constrained values: `CHROMELESS`, `DEFAULT`, `STAMP`, `CUSTOM` | Yes      | Default type is `DEFAULT`. `CHROMELESS` type renders the player without any chroming. |
-| `themeConfig`        | Theme specific configuration                                                 | `ThemeConfig`                        | No       | Configuration with attributes depending on `theme`.            |
-| `thumbnailUrl`       | URL for the thumbnails (used for preview in media chrome time range)        | `string`                             | No       |          |
-| `thumbnailSelectionFn` | Function that allows custom handler for getting a thumbnail for given time | `function(time: number) ⇒ URL`       | No       |                                                                                                    |
-| `watermark`          |                                                                             | `string`                             | No       | Text string or string containing SVG XML content                                                        |
-| `watermarkVisibility`          |                                                                             | Constrained values: `ALWAYS_ON`, `AUTO_HIDE`                            | No       | Specifies watermark visibility                                                         |
+| Field   | Description  | Type      | Required | Updatable | Comments   |
+|---------|--------------|-----------|----------|-----------|------------|
+| `theme`  | Chroming theme determines how the player will be chromed.   | Constrained values: `CHROMELESS`, `DEFAULT`, `STAMP`, `CUSTOM` | Yes   | No | Default type is `DEFAULT`. `CHROMELESS` type renders the player without any chroming. |
+| `themeConfig`  | Theme specific configuration     | `ThemeConfig`   | No  | No  | Configuration with attributes depending on `theme`.   |
+| `thumbnailUrl`  | URL for the thumbnails (used for preview in media chrome time range)  | `string`    | No  | Yes |         |
+| `thumbnailSelectionFn` | Function that allows custom handler for getting a thumbnail for given time | `function(time: number) ⇒ URL`       | No  | No     |                                                                                                    |
+| `watermark`    |    | `string`   | No   | Yes    | Text string or string containing SVG XML content  |
+| `watermarkVisibility` | Specifies if watermark is always visible, even when video is playing | Constrained values: `ALWAYS_ON`, `AUTO_HIDE`  | No  | No     | Default is `ALWAYS_ON`
+| `styleUrl` | Specifies URL for the style customization css file | `string`       | No  | No   |   
+| `fullscreenChroming` | Specifies if the fullscreen player will show chromed or default browser video controls | Constrained values: `ENABLED`, `DISABLED`       | No  | No    | Default is `ENABLED` except for `CHROMELESS` and `STAMP` themes                                                                                              |
+
 
 ---
 
 The following attributes are supported in the `themeConfig` object for the `DEFAULT` theme:
 
-| Field                    | Description                                                                                              | Type                    |
-|--------------------------|----------------------------------------------------------------------------------------------------------|-------------------------|
-| `controlBarVisibility`   | Specifies controls visibility                                                                             | Constrained values: `DISABLED`, `ENABLED`, `FULLSCREEN_ONLY` |
-| `controlBar`             | Specifies list of enabled controls in control bar                                                        | Constrained values: `PLAY`, `FRAME_FORWARD`, `TEN_FRAMES_FORWARD`, `FRAME_BACKWARD`, `TEN_FRAMES_BACKWARD`, `BITC`, `FULLSCREEN`, `CAPTIONS`, `VOLUME`, `SCRUBBER`, `TRACKSELECTOR`, `PLAYBACK_RATE`, `DETACH` |
-| `floatingControls`       | Specifies list of enabled floating controls                                                              | `TRACKSELECTOR`, `HELP_MENU`, `PLAYBACK_CONTROLS` |
-| `playbackRates`          | Sets the available playback rates in menu                                                                | `number[]`              |
-| `trackSelectorAutoClose` | If `false`, track selection menu will keep open until explicitly closed. If `true` it will close on track selection or when clicking outside of the menu | `boolean`               |
+| Field | Description | Type | Updatable | Comment |
+|-------|-------------|------|-----------|---------|
+| `controlBarVisibility`   | Specifies controls visibility | Constrained values: `DISABLED`, `ENABLED`, `FULLSCREEN_ONLY` | Yes | Default is `ENABLED`
+| `controlBar` | Specifies list of enabled controls in control bar | Constrained values: `PLAY`, `FRAME_FORWARD`, `TEN_FRAMES_FORWARD`, `FRAME_BACKWARD`, `TEN_FRAMES_BACKWARD`, `BITC`, `FULLSCREEN`, `CAPTIONS`, `VOLUME`, `SCRUBBER`, `TRACKSELECTOR`, `PLAYBACK_RATE`, `DETACH` | Yes | Default: all controls
+| `floatingControls`       | Specifies list of enabled floating controls | `TRACKSELECTOR`, `HELP_MENU`, `PLAYBACK_CONTROLS` | No | Default: `HELP_MENU`, `PLAYBACK_CONTROLS`
+| `playbackRates` | Sets the available playback rates in menu | `number[]` | No | Default: `[0.25,0.5,0.75,1,2,4,8]`
+| `trackSelectorAutoClose` | If `false`, track selection menu will keep open until explicitly closed. If `true` it will close on track selection or when clicking outside of the menu | `boolean` | No | Default: `true`
+| `htmlTemplateId`   | Id of the template used for customization slots | `string` | No
 
 ---
 
 The following attributes are supported in the `themeConfig` object for the `CUSTOM` theme:
 
-| Field                    | Description                                                                                              | Type                    |
-|--------------------------|----------------------------------------------------------------------------------------------------------|-------------------------|
-| `htmlTemplateId`   | Id of the custom web component used for Player chroming                                                                              | `string` |
+| Field  | Description | Type | Updatable | Comment |
+|--------|-------------|------|-----------|---------|
+| `htmlTemplateId` | Id of the custom template used for player chroming | `string` | No | Required
 
 ---
 
 The following attributes are supported in the `themeConfig` object for the `STAMP` theme:
 
-| Field                    | Description                                                                                              | Type                    |
-|--------------------------|----------------------------------------------------------------------------------------------------------|-------------------------|
-| `floatingControls`   | Specifies list of enabled floating controls                                                                              | Constrained values: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`, `PLAYBACK_CONTROLS` |
-| `alwaysOnfloatingControls`   | Specifies floating control that will stay always visible                                                                               | Constrained values: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`, `PLAYBACK_CONTROLS` |
-| `stampScale`             | Specifies how the video will fill the container                                                        | Constrained values: `FILL`, `FIT` |
-| `timeFormat`       | Specifies mode of time floating component                                                              | Constrained values: `TIMECODE`, `COUNTDOWN_TIMER`, `MEDIA_TIME` |
+| Field | Description | Type | Updatable | Comment |
+|-------|-------------|------|-----------|---------|
+| `floatingControls` | Specifies list of enabled floating controls | Constrained values: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`, `PLAYBACK_CONTROLS`, `FULLSCREEN` | No | Default: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`, `PLAYBACK_CONTROLS`
+| `alwaysOnfloatingControls`   | Specifies floating control that will stay always visible | Constrained values: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`, `PLAYBACK_CONTROLS`, `FULLSCREEN` | No | Default: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`
+| `stampScale` | Specifies how the video will fill the container | Constrained values: `FILL`, `FIT` | Yes | Default: `FIT`
+| `timeFormat`       | Specifies mode of time floating component | Constrained values: `TIMECODE`, `COUNTDOWN_TIMER`, `MEDIA_TIME` | Yes |Default: `MEDIA_TIME`
+| `htmlTemplateId`   | Id of the template used for customization slots | `string` | No |
 
-## Default Chroming
+The following attributes are supported in the `themeConfig` object for the `AUDIO` theme:
+
+| Field | Description | Type | Updatable | Comment |
+|-------|-------------|------|-----------|---------|
+| `controlBarVisibility` | Specifies controls visibility | Constrained values: `DISABLED`, `ENABLED`| Yes | Default: `ENABLED`
+| `controlBar` | Specifies list of enabled controls in control bar | Constrained values: `PLAY`, `BITC`, `CAPTIONS`, `VOLUME`, `SCRUBBER`, `TRACKSELECTOR`, `PLAYBACK_RATE` | Yes | Default: all controls
+| `floatingControls` | Specifies list of enabled floating controls | `HELP_MENU`, `PLAYBACK_CONTROLS` | No | Default: all controls
+| `playbackRates` | Sets the available playback rates in menu | `number[]` | No | Default: `[0.5,0.75,1,2]`
+| `playerSize` | Audio player size | Constrained values: `FULL`, `COMPACT`| Yes | Default: `FULL`
+| `htmlTemplateId`   | Id of the template used for customization slots | `string` | No |
+
+## Default Theme
 
 Here's the default Omakase Player media chroming (with one marker track):
 
 ![Default Media Chroming](./chroming-default.png)
 
+Visibility and behaviour of some elements of the default chroming theme can be modified with configuration. Some code samples are shown below:
+
+```js
+let omakasePlayer = new OmakasePlayer({
+  playerChroming: {
+    theme: PlayerChromingTheme.Default,
+    thumbnailUrl: 'https://byomakase.org/thumbs.vtt',
+    watermark: 'DEMO_SAMPLE',
+    themeConfig: {
+      controlBarVisibility: ControlBarVisibility.Enabled,
+      controlBar: [DefaultThemeControl.Play, DefaultThemeControl.Scrubber, DefaultThemeControl.Volume, DefaultThemeControl.Trackselector, DefaultThemeControl.Fullscreen],
+      trackSelectorAutoClose: false
+    }
+  }
+});
+```
+
+```js
+let omakasePlayer = new OmakasePlayer({
+  playerChroming: {
+    theme: PlayerChromingTheme.Default,
+    themeConfig: {
+      controlBarVisibility: ControlBarVisibility.Disabled,
+      floatingControls: [DefaultThemeFloatingControl.PlaybackControls]
+    }
+  }
+});
+```
+
 ---
 
-## Custom Chroming Example
+## Chromeless Theme
+
+Omakase player can be initiated without chroming, by using the `CHROMELESS` theme.
+
+```js
+let omakasePlayer = new OmakasePlayer({
+  playerChroming: {
+    theme: PlayerChromingTheme.Chromeless
+  }
+});
+```
+
+---
+
+## Stamp Theme
+
+Stamp theme is a specialized theme focused on micro presentation (i.e. when showing multiple smaller videos on the same page).
+
+```js
+let omakasePlayer = new OmakasePlayer({
+  playerChroming: {
+    theme: PlayerChromingTheme.Stamp,
+    themeConfig: {
+      alwaysOnFloatingControls: [StampThemeFloatingControl.PlaybackControls],
+      stampScale: StampThemeScale.Fit,
+      timeFormat: StampTimeFormat.Timecode,
+    }
+  },
+});
+```
+
+---
+
+## Custom Theme
 
 You can use a combination of Media Chrome components, Omakase components, custom Web Components or plain HTML for custom chroming. You can also set up multiple Omakase Player instances with different chroming for each one. Here's an example of setting up an Omakase Player with customized chroming:
 
 ```html
 <div id="omakase-player"></div>
-<template id="omakase-media-chrome">
+<template id="custom-template">
   <media-control-bar>
     <omakase-marker-bar></omakase-marker-bar>
     <omakase-time-range></omakase-time-range>
@@ -181,7 +271,7 @@ let omakasePlayer = new OmakasePlayer({
   playerChroming: {
     theme: 'CUSTOM',
     themeConfig: {
-      htmlTemplateId: 'omakase-media-chrome'
+      htmlTemplateId: 'custom-template'
     }
   }
 });
@@ -190,6 +280,17 @@ let omakasePlayer = new OmakasePlayer({
 ---
 
 ## Styling
+
+Player chroming style can be customised by passing a css file url. The parameter `styleUrl` can be an array to provide multiple css files.
+
+```js
+let omakasePlayer = new OmakasePlayer({
+  playerHTMLElementId: 'omakase-player',
+  playerChroming: {
+    styleUrl: './style.css'
+  }
+});
+```
 
 Media Chrome components and Omakase components based on Media Chrome are easy to style with CSS variables. For the list of CSS variables, refer to the [Media Chrome styling reference](https://www.media-chrome.org/docs/en/reference/styling).
 
@@ -207,3 +308,88 @@ omakase-time-range {
 Here's what the custom chroming example combined with the styling example should look like:
 
 ![Custom Media Chroming](./chroming-custom.png)
+
+---
+
+## Custom slots
+
+You can insert your own custom HTML into specified areas of certain themes. The available slots for the `DEFAULT` and `AUDIO` themes are:
+
+| Slot                     | Position                                                                                                 |
+|--------------------------|----------------------------------------------------------------------------------------------------------|
+| `start-container`        | Left side of the control bar, after the playback speed dropdown toggle                                   |
+| `end-container`          | Right side of the control bar, before the audio/text selection dropdown toggle                           |
+| `top-left`               | Top left corner of the player, over the watermark area                                                   |
+| `top-right`              | Top right corner of the player, under the help button                                                    |
+| `dropdown-container`     | Above the control bar                                                                                    |
+
+The available slots for the `STAMP` theme are:
+
+| Slot                     | Position                                                                                                 |
+|--------------------------|----------------------------------------------------------------------------------------------------------|
+| `top-right`              | Top right corner of the player, under the mute/unmute button                                             |
+
+Here is an example of adding a custom dropdown to the `DEFAULT` theme using custom slots:
+
+```javascript
+let omakasePlayer = new OmakasePlayer({
+  playerHTMLElementId: 'omakase-player',
+  playerChroming: {
+    theme: 'DEFAULT',
+    themeConfig: {
+      htmlTemplateId: 'omakase-chroming-slots'
+    }
+  }
+});
+```
+
+```html
+<template id="omakase-chroming-slots">
+  <omakase-dropdown slot="dropdown-container" id="quality">
+    <omakase-dropdown-list class="quality-dropdown-list" title="Quality" width="100">
+      <omakase-dropdown-option value="auto" selected>Auto</omakase-dropdown-option>
+      <omakase-dropdown-option value="360">360p</omakase-dropdown-option>
+      <omakase-dropdown-option value="720">720p</omakase-dropdown-option>
+      <omakase-dropdown-option value="1080">1080p</omakase-dropdown-option>
+    </omakase-dropdown-list>
+  </omakase-dropdown>
+  <omakase-dropdown-toggle slot="start-container" dropdown="quality"></omakase-dropdown-toggle>
+</template>
+```
+
+```javascript
+omakasePlayer.getPlayerChromingElement<OmakaseDropdownList>('.quality-dropdown-list').selectedOption$.subscribe((option) => {
+  if (option) {
+    omakasePlayer.loadVideo(`https://my-server.com/myvideo-${option.value}.m3u8`)
+  }
+});
+```
+
+## Conditional templates
+
+Player chroming can have conditional sub-templates that are either hidden or only shown in full screen. Code example is shown below:
+
+```html
+<template id="default">
+  <media-controller>
+    <slot name="media" slot="media"></slot>
+    <template if="!fullscreen">
+        <media-control-bar>
+            <media-play-button></media-play-button>
+            <media-time-display show-duration></media-time-display>
+            <media-time-range></media-time-range>
+            <media-playback-rate-button></media-playback-rate-button>
+            <media-mute-button></media-mute-button>
+            <media-volume-range></media-volume-range>
+        </media-control-bar>
+    </template>
+      <template if="fullscreen">
+        <media-control-bar>
+            <media-play-button></media-play-button>
+        </media-control-bar>
+    </template>
+  </media-controller>
+</template>
+```
+
+For more information on conditional templates, refer to the [Media Chrome conditionals reference](https://www.media-chrome.org/docs/en/themes#conditionals)

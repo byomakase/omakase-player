@@ -1,4 +1,3 @@
-import {TimeRangeMarkerTrackApi} from './../api/time-range-marker-track-api';
 /*
  * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
@@ -15,11 +14,13 @@ import {TimeRangeMarkerTrackApi} from './../api/time-range-marker-track-api';
  * limitations under the License.
  */
 
-import {BehaviorSubject, Observable} from 'rxjs';
+import {Observable} from 'rxjs';
 import {Destroyable, OmakaseTextTrack, VideoFullscreenChangeEvent, VideoSafeZoneChangeEvent} from '../types';
 import {MarkerTrackConfig, VideoSafeZone} from './model';
 import {VideoControllerApi} from './video-controller-api';
 import {MarkerTrackApi} from '../api';
+import {TimeRangeMarkerTrackApi} from './../api/time-range-marker-track-api';
+import {PlayerChroming} from '../player-chroming';
 
 export interface VideoDomControllerApi extends Destroyable {
   attachVideoController(videoController: VideoControllerApi): void;
@@ -61,4 +62,10 @@ export interface VideoDomControllerApi extends Destroyable {
   getProgressMarkerTrack(): TimeRangeMarkerTrackApi | undefined;
 
   setWatermark(watermark: string): void;
+
+  getPlayerChromingElement<T>(querySelector: string): T;
+
+  isCompactAudioTheme(): boolean;
+
+  updateChromingTemplate(playerChroming: PlayerChroming): void;
 }

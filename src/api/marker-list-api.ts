@@ -54,6 +54,11 @@ export interface MarkerListApi extends MarkerAwareApi {
   getSelectedMarker(): MarkerApi | undefined;
 
   /**
+   * Reorder a marker to the new position in a list
+   */
+  reorderMarker(id: string, index: number): void;
+
+  /**
    * Destroys Marker List and cleans up resources
    */
   destroy(): void;
