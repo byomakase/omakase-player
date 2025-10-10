@@ -30,8 +30,8 @@ export class AlertsController implements AlertsApi {
   private _alertDuration = 5000;
   private _alertsDomController!: AlertsDomController;
 
-  constructor() {
-    this._alertsDomController = new AlertsDomController(this);
+  constructor(playerHTMLElementId: string) {
+    this._alertsDomController = new AlertsDomController(this, playerHTMLElementId);
   }
 
   get alerts() {

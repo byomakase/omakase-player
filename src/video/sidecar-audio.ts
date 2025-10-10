@@ -14,7 +14,18 @@
  * limitations under the License.
  */
 
-import {Destroyable, OmpAudioTrack, SidecarAudioLoadedEvent, SidecarAudioLoadingEvent, VideoPlaybackRateEvent, VideoPlayEvent, VideoSeekedEvent, VideoSeekingEvent, VideoTimeChangeEvent, VolumeChangeEvent,} from '../types';
+import {
+  Destroyable,
+  OmpAudioTrack,
+  SidecarAudioLoadedEvent,
+  SidecarAudioLoadingEvent,
+  VideoPlaybackRateEvent,
+  VideoPlayEvent,
+  VideoSeekedEvent,
+  VideoSeekingEvent,
+  VideoTimeChangeEvent,
+  VolumeChangeEvent,
+} from '../types';
 import {BehaviorSubject, combineLatest, filter, from, fromEvent, merge, mergeMap, Observable, sampleTime, Subject, take, takeUntil, timer} from 'rxjs';
 import {OmpAudioRouter} from './audio-router';
 import {VideoController} from './video-controller';
@@ -111,7 +122,10 @@ export abstract class BaseOmpSidecarAudio implements SidecarAudioApi, Destroyabl
       return this._audioRouter;
     } else {
       if (isNullOrUndefined(inputsNumber)) {
-        // inputsNumber = this._audioBuffer.numberOfChannels;
+        if (isNullOrUndefined(this.audioTrack.channelCount)) {
+          throw new Error(`Can't create audio router before audio track is loaded`);
+        }
+        inputsNumber = this.audioTrack.channelCount!;
       }
 
       if (isNullOrUndefined(outputsNumber)) {
@@ -330,7 +344,7 @@ export class OmpSidecarAudio extends BaseOmpSidecarAudio {
     fromEvent(this._ompAudioElement.mediaElement, HTMLMediaElementEvents.ENDED)
       .pipe(takeUntil(this._destroyed$))
       .subscribe((event) => {
-        this._mediaElementPlayback.setEnded()
+        this._mediaElementPlayback.setEnded();
       });
 
     this.onStateChange$
@@ -389,7 +403,7 @@ export class OmpSidecarAudio extends BaseOmpSidecarAudio {
       .subscribe({
         next: (event) => {
           this.audioPause();
-          this.seekToTime(event.toTime)
+          this.seekToTime(event.toTime);
         },
       });
 
@@ -433,14 +447,14 @@ export class OmpSidecarAudio extends BaseOmpSidecarAudio {
       let isInDuration = currentTime <= this._ompAudioElement.mediaElement.duration;
       if (this._isBrowserFirefox) {
         // Firefox defers visible updates to TimeRanges during steady playback unless something interesting happens ( seek / pause / resume), thus we check readyState instead of buffer
-        let haveEnoughData = this._ompAudioElement.mediaElement.readyState === this._ompAudioElement.mediaElement.HAVE_ENOUGH_DATA
+        let haveEnoughData = this._ompAudioElement.mediaElement.readyState === this._ompAudioElement.mediaElement.HAVE_ENOUGH_DATA;
         return isInDuration && !haveEnoughData;
       } else {
         let bufferedTimespans = this._ompAudioElement.getBufferedTimespans();
         let isBuffered = bufferedTimespans.find((p) => currentTime >= p.start && currentTime <= p.end);
         return isInDuration && !isBuffered;
       }
-    }
+    };
 
     let checkEnoughBuffered = (currentTime: number) => {
       let isBuffering = checkIsBuffering(currentTime);
@@ -451,28 +465,24 @@ export class OmpSidecarAudio extends BaseOmpSidecarAudio {
     };
 
     let enoughBufferedTimerBreaker$ = new Subject();
-    this.onVideoCurrentTimeBuffering$
-      .pipe(takeUntil(this._destroyed$))
-      .subscribe({
-        next: (event) => {
-          if (event) {
-            // check periodically if audio got enough data to play
-            timer(0, 200)
-              .pipe(takeUntil(enoughBufferedTimerBreaker$))
-              .pipe(takeUntil(this._destroyed$))
-              .subscribe({
-                next: () => {
-                  checkEnoughBuffered(this._videoController.getCurrentTime());
-                }
-              })
-          } else {
-            nextCompleteSubject(enoughBufferedTimerBreaker$);
-            enoughBufferedTimerBreaker$ = new Subject();
-          }
+    this.onVideoCurrentTimeBuffering$.pipe(takeUntil(this._destroyed$)).subscribe({
+      next: (event) => {
+        if (event) {
+          // check periodically if audio got enough data to play
+          timer(0, 200)
+            .pipe(takeUntil(enoughBufferedTimerBreaker$))
+            .pipe(takeUntil(this._destroyed$))
+            .subscribe({
+              next: () => {
+                checkEnoughBuffered(this._videoController.getCurrentTime());
+              },
+            });
+        } else {
+          nextCompleteSubject(enoughBufferedTimerBreaker$);
+          enoughBufferedTimerBreaker$ = new Subject();
         }
-      })
-
-
+      },
+    });
 
     this._videoController.onVideoTimeChange$
       .pipe(createAttachedModeFilter<VideoTimeChangeEvent>())
@@ -514,7 +524,7 @@ export class OmpSidecarAudio extends BaseOmpSidecarAudio {
     });
     this.emitStateChange();
 
-    return new Observable<SidecarAudioLoadedEvent>(observer => {
+    return new Observable<SidecarAudioLoadedEvent>((observer) => {
       // initial track activation
       this.setActiveInactive(this._audioTrack.active);
 
@@ -612,7 +622,7 @@ export class OmpSidecarAudio extends BaseOmpSidecarAudio {
   }
 
   protected syncWithVideo() {
-    this.seekToTime(this._videoController.getCurrentTime())
+    this.seekToTime(this._videoController.getCurrentTime());
   }
 
   protected seekToTime(time: number) {

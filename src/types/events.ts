@@ -238,6 +238,13 @@ export interface AudioSwitchedEvent extends AudioEvent {
   activeAudioTrack: OmpAudioTrack;
 }
 
+export interface AudioUpdatedEvent extends AudioEvent {
+  /**
+   * Audio tracks
+   */
+  audioTracks: OmpAudioTrack[];
+}
+
 export interface MainAudioEvent extends AudioEvent {}
 
 export interface MainAudioChangeEvent extends MainAudioEvent {

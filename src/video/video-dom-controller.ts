@@ -18,9 +18,7 @@ import {Fullscreen} from '../dom/fullscreen';
 import {filter, fromEvent, Observable, race, Subject, take, takeUntil} from 'rxjs';
 import {OmakaseTextTrack, VideoFullscreenChangeEvent, VideoHelpMenuChangeEvent, VideoSafeZoneChangeEvent} from '../types';
 import {errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
-import {z} from 'zod';
 import {VideoControllerApi} from './video-controller-api';
-import {StringUtil} from '../util/string-util';
 import {nullifier} from '../util/destroy-util';
 import {DomUtil} from '../util/dom-util';
 import {MarkerTrackConfig, VideoSafeZone} from './model';
@@ -159,6 +157,7 @@ export class VideoDomController extends DomController implements VideoDomControl
   updateChromingTemplate(playerChroming: PlayerChroming) {
     this._config.playerChroming = playerChroming;
     this._playerChromingDomController.playerChroming = playerChroming;
+    this._playerChromingDomController.updateControlBar();
     if (playerChroming.theme === PlayerChromingTheme.Stamp) {
       this._videoElement.classList.remove(`${this._domClasses.video}-${StampThemeScale.Fill.toLowerCase()}`, `${this._domClasses.video}-${StampThemeScale.Fit.toLowerCase()}`);
       this._videoElement.classList.add(`${this._domClasses.video}-${playerChroming.themeConfig?.stampScale?.toLowerCase()}`);
@@ -173,7 +172,7 @@ export class VideoDomController extends DomController implements VideoDomControl
   private createPlayerDom() {
     this._divPlayer.classList.add(`${this._domClasses.player}`);
 
-    this._divPlayer.innerHTML = `<div class="${this._domClasses.playerWrapper} ${this._domClasses.playerWrapper}-${this._config.playerChroming.theme.toLowerCase()}">
+    this._divPlayer.innerHTML = `<div class="${this._domClasses.playerWrapper} ${this._domClasses.playerWrapper}-${this._config.playerChroming.theme.toLowerCase()} ${this.isCompactAudioTheme() ? `${this._domClasses.playerWrapper}-compact` : ''}">
           ${this._playerChromingDomController.createTemplateDom()}
           <media-theme template="omakase-player-theme-${this._config.playerHTMLElementId}">
             <video slot="media" class="${this._domClasses.video} ${this._domClasses.video}-${(this._config.playerChroming as StampChroming).themeConfig?.stampScale?.toLowerCase()} ${this.isCompactAudioTheme() ? 'd-none' : ''}" playsinline=""></video>
@@ -196,6 +195,7 @@ export class VideoDomController extends DomController implements VideoDomControl
       </div>`;
 
     this._playerChromingDomController.initializeDomProperties();
+    this._playerChromingDomController.updateControlBar();
 
     this._videoElement = this.getPlayerElement<HTMLVideoElement>(this._domClasses.video);
     this._videoElement.controls = false;
@@ -229,15 +229,13 @@ export class VideoDomController extends DomController implements VideoDomControl
     this._divWatermarkWrapper = this.getShadowElementByClass<HTMLElement>(this._domClasses.watermarkWrapper);
     this._divWatermark = this.getShadowElementByClass<HTMLElement>(this._domClasses.watermark);
 
-    // this._mediaControllerElement.hotkeys.add('noarrowleft', 'noarrowright');
-
     if (this._config.playerChroming.watermark) {
       this.setWatermark(this._config.playerChroming.watermark);
     }
   }
 
   getPlayerChromingElement<T>(querySelector: string): T {
-    return this._playerChromingDomController.themeElement.querySelector(querySelector) as T;
+    return (this._playerChromingDomController.themeElement.querySelector(querySelector) ?? this._playerChromingDomController.themeElement.shadowRoot?.querySelector(querySelector)) as T;
   }
 
   private getPlayerElement<T>(className: string): T {
@@ -342,31 +340,8 @@ export class VideoDomController extends DomController implements VideoDomControl
 
       if (videoSafeZone.topRightBottomLeftPercent && videoSafeZone.topRightBottomLeftPercent.length > 0) {
         // nop
-      } else if (!StringUtil.isNullUndefinedOrWhitespace(videoSafeZone.aspectRatio)) {
-        let ratioSplitted = videoSafeZone.aspectRatio!.split('/');
-        let aspectRatio = z.coerce.number().parse(ratioSplitted[0]) / z.coerce.number().parse(ratioSplitted[1]);
-
-        let width = this._divSafeZoneWrapper.clientWidth;
-        let height = this._divSafeZoneWrapper.clientHeight;
-
-        videoSafeZone.scalePercent = videoSafeZone.scalePercent ? videoSafeZone.scalePercent : 100;
-        let safeZoneWidth: number;
-        let safeZoneHeight: number;
-
-        if (aspectRatio >= 1) {
-          safeZoneWidth = width * (videoSafeZone.scalePercent / 100);
-          safeZoneHeight = (height / aspectRatio) * (videoSafeZone.scalePercent / 100);
-        } else {
-          safeZoneWidth = height * aspectRatio * (videoSafeZone.scalePercent / 100);
-          safeZoneHeight = height * (videoSafeZone.scalePercent / 100);
-        }
-
-        let yPercent = ((height - safeZoneHeight) / 2 / height) * 100;
-        let xPercent = ((width - safeZoneWidth) / 2 / width) * 100;
-
-        videoSafeZone.topRightBottomLeftPercent = [yPercent, xPercent, yPercent, xPercent];
       } else {
-        throw new Error(`topRightBottomLeftPercent or aspectRatio must be provided`);
+        throw new Error(`topRightBottomLeftPercent must be provided`);
       }
 
       let topRightBottomLeftPercent: number[] = [
@@ -419,14 +394,6 @@ export class VideoDomController extends DomController implements VideoDomControl
 
   getSafeZones(): VideoSafeZone[] {
     return this._videoSafeZones;
-  }
-
-  setSafeZoneAspectRatio(aspectRatio: string): void {
-    if (this._config.playerChroming.theme !== 'STAMP') {
-      this._divSafeZoneWrapper.style.aspectRatio = aspectRatio;
-      this._divWatermarkWrapper.style.aspectRatio = aspectRatio;
-      this._divPlayerWrapper.style.aspectRatio = aspectRatio;
-    }
   }
 
   loadThumbnailVtt(vttUrl: string) {
@@ -553,7 +520,7 @@ export class VideoDomController extends DomController implements VideoDomControl
                 if (['VIDEO', 'DIV'].includes((event.target as HTMLElement).tagName)) {
                   if (this._config.playerClickHandler) {
                     this._config.playerClickHandler();
-                  } else {
+                  } else if (this._config.playerChroming?.theme !== PlayerChromingTheme.Chromeless) {
                     this._videoController.togglePlayPause();
                   }
                 }
@@ -579,6 +546,11 @@ export class VideoDomController extends DomController implements VideoDomControl
       .pipe(filter((p) => this._videoController.getVideoWindowPlaybackState() === 'attached'))
       .subscribe({
         next: (event) => {
+          if (event.options?.poster) {
+            setTimeout(() => {
+              this.hideElements(this._divBackgroundImage);
+            }, 1000);
+          }
           this.hideElements(...allOverlayButtons)
             .hideElements(this._divErrorMessage)
             .showElements(this._divButtonOverlayLoading)
@@ -591,9 +563,10 @@ export class VideoDomController extends DomController implements VideoDomControl
       .pipe(filter((p) => this._videoController.getVideoWindowPlaybackState() === 'attached'))
       .subscribe({
         next: (videoLoaded) => {
-          this.hideElements(...allOverlayButtons)
-            .hideElements(this._divErrorMessage)
-            .hideElements(this._divBackgroundImage);
+          this.hideElements(...allOverlayButtons).hideElements(this._divErrorMessage);
+          if (!videoLoaded?.videoLoadOptions?.poster) {
+            this.hideElements(this._divBackgroundImage);
+          }
           if (!videoLoaded) {
             this.showElements(this._divButtonOverlayLoading).showElements(this._divBackgroundImage);
           }
@@ -624,7 +597,9 @@ export class VideoDomController extends DomController implements VideoDomControl
                 .hideElements(this._divErrorMessage)
                 .showElements(this._divButtonOverlayLoading);
             } else if (state.playing) {
-              this.hideElements(...allOverlayButtons).hideElements(this._divErrorMessage);
+              this.hideElements(...allOverlayButtons)
+                .hideElements(this._divErrorMessage)
+                .hideElements(this._divBackgroundImage);
               if (state.seeking && state.waiting) {
                 this.showElements(this._divButtonOverlayLoading);
               } else if (this._config.playerChroming.theme === 'STAMP') {

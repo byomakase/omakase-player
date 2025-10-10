@@ -18,6 +18,7 @@ import {
   AudioLoadedEvent,
   AudioPeakProcessorMessageEvent,
   AudioSwitchedEvent,
+  AudioUpdatedEvent,
   HelpMenuGroup,
   MainAudioChangeEvent,
   MainAudioInputSoloMuteEvent,
@@ -156,6 +157,7 @@ export class VideoController implements VideoControllerApi {
 
   public readonly onAudioLoaded$: BehaviorSubject<AudioLoadedEvent | undefined> = new BehaviorSubject<AudioLoadedEvent | undefined>(void 0);
   public readonly onAudioSwitched$: Subject<AudioSwitchedEvent> = new Subject<AudioSwitchedEvent>();
+  public readonly onAudioUpdated$: Subject<AudioUpdatedEvent> = new Subject<AudioUpdatedEvent>();
 
   public readonly onSubtitlesLoaded$: BehaviorSubject<SubtitlesLoadedEvent | undefined> = new BehaviorSubject<SubtitlesLoadedEvent | undefined>(void 0);
   public readonly onSubtitlesCreate$: Subject<SubtitlesCreateEvent> = new Subject<SubtitlesCreateEvent>();
@@ -251,7 +253,7 @@ export class VideoController implements VideoControllerApi {
    * Created in constructor
    * @protected
    */
-  protected _mainAudioNode!: AudioNode;
+  protected _mainAudioNode?: AudioNode;
   protected _mainAudioRouter?: OmpAudioRouter;
   protected _mainAudioPeakProcessor?: OmpAudioPeakProcessor;
 
@@ -476,7 +478,7 @@ export class VideoController implements VideoControllerApi {
           .pipe(take(1))
           .subscribe({
             next: (video) => {
-              if (this.isMainAudioCreationDelayed()) {
+              if (this.isMainAudioCreationDelayed() && !this._mainAudioNode) {
                 this.createMainAudio();
               }
 
@@ -509,8 +511,6 @@ export class VideoController implements VideoControllerApi {
                 // we have to align that value with audioOutputVolume
                 this.setVolume(VideoController.videoVolumeDefault);
               }
-
-              this._videoDomController.setSafeZoneAspectRatio(`${this.videoElement.videoWidth} / ${this.videoElement.videoHeight}`);
 
               nextCompleteObserver(observer, video);
             },
@@ -597,10 +597,15 @@ export class VideoController implements VideoControllerApi {
         takeUntil(this._videoEventBreaker$)
       )
       .subscribe({
-        next: (event) => {
-          this.setAudioTracks(event!.audioTracks);
-          if (event!.activeAudioTrack) {
-            this.updateActiveAudioTrack(event!.activeAudioTrack.id);
+        next: (audioLoadedEvent) => {
+          if (audioLoadedEvent!.audioTracks.length > 0) {
+            this.setAudioTracks(audioLoadedEvent!.audioTracks).subscribe({
+              next: (event) => {
+                if (audioLoadedEvent!.activeAudioTrack) {
+                  this.updateActiveAudioTrack(audioLoadedEvent!.activeAudioTrack.id);
+                }
+              },
+            });
           }
         },
       });
@@ -2004,13 +2009,11 @@ export class VideoController implements VideoControllerApi {
   }
 
   setActiveAudioTrack(id: string): Observable<void> {
-    console.debug(`Set active audio track requested for id:`, id);
+    // console.debug(`Set active audio track requested for id:`, id);
 
     return passiveObservable((observer) => {
       let activeTrack = this.getActiveAudioTrack();
       let newActiveTrack = this.getAudioTracks().find((p) => p.id === id);
-
-      console.debug(`Trying to set active audio track to:`, newActiveTrack);
 
       if (this.isVideoLoaded()) {
         if (newActiveTrack) {
@@ -2020,6 +2023,7 @@ export class VideoController implements VideoControllerApi {
           }
 
           if (newActiveTrack.id !== activeTrack?.id) {
+            // console.debug(`Trying to set active audio track to:`, newActiveTrack);
             this._videoLoader!.setActiveAudioTrack(id).subscribe({
               next: (event) => {
                 this.updateActiveAudioTrack(id);
@@ -2047,6 +2051,23 @@ export class VideoController implements VideoControllerApi {
     });
   }
 
+  updateAudioTrack(newAudioTrack: OmpAudioTrack): Observable<void> {
+    return passiveObservable((observer) => {
+      let audioTrack = this.getAudioTracks().find((p) => p.id === newAudioTrack.id);
+      if (audioTrack) {
+        this._audioTracks.set(audioTrack.id, {
+          ...audioTrack,
+          label: newAudioTrack.label,
+          language: newAudioTrack.language,
+        });
+        this.onAudioUpdated$.next({
+          audioTracks: this.getAudioTracks(),
+        });
+      }
+      nextCompleteObserver(observer);
+    });
+  }
+
   activateMainAudio(): Observable<void> {
     return passiveObservable((observer) => {
       this._setMainAudioActive(true);
@@ -2071,16 +2092,14 @@ export class VideoController implements VideoControllerApi {
   }
 
   protected updateActiveAudioTrack(id: string) {
-    console.debug(`Update active audio track requested for id:`, id);
-
     let activeTrack = this.getActiveAudioTrack();
     let newActiveTrack = this.getAudioTracks().find((p) => p.id === id);
-
-    console.debug(`Trying to update active audio track to:`, newActiveTrack);
 
     if (newActiveTrack) {
       // let's say we cannot unset active audio track
       if (newActiveTrack.id !== activeTrack?.id) {
+        console.debug(`Trying to update active audio track to:`, newActiveTrack);
+
         this._audioTracks.forEach((p) => (p.active = false));
         newActiveTrack.active = true;
         newActiveTrack = this.getActiveAudioTrack(); // ensure all is ok
@@ -2091,7 +2110,7 @@ export class VideoController implements VideoControllerApi {
           });
         }
       } else {
-        console.debug(`Track already active, update skipped, event dispatch canceled:`, newActiveTrack);
+        // console.debug(`Track already active, update skipped, event dispatch canceled:`, newActiveTrack);
       }
     } else {
       console.debug(`Track not found:`, newActiveTrack);
@@ -2493,7 +2512,7 @@ export class VideoController implements VideoControllerApi {
     });
   }
 
-  getMainAudioNode(): AudioNode {
+  getMainAudioNode(): AudioNode | undefined {
     return this._mainAudioNode;
   }
 
@@ -2502,7 +2521,7 @@ export class VideoController implements VideoControllerApi {
       active: this._mainAudioActive,
       audioRouterState: this._mainAudioRouter?.getAudioRouterState(),
       audioPeakProcessorState: this._mainAudioPeakProcessor?.getAudioPeakProcessorState(),
-      numberOfChannels: this._mainAudioNode.channelCount,
+      numberOfChannels: this._mainAudioNode ? this._mainAudioNode.channelCount : 0,
     };
   }
 
@@ -2534,7 +2553,9 @@ export class VideoController implements VideoControllerApi {
 
   createMainAudioRouter(inputsNumber: number, outputsNumber?: number): Observable<OmpAudioRouterState> {
     return passiveObservable((observer) => {
-      if (this._mainAudioRouter) {
+      if (!this._mainAudioNode) {
+        errorCompleteObserver(observer, 'Main audio not created yet');
+      } else if (this._mainAudioRouter) {
         this._mainAudioRouter.resetInputsSoloMuteState();
         console.debug('Main audio router already created');
         nextCompleteObserver(observer, this._mainAudioRouter.getAudioRouterState());
@@ -2543,10 +2564,10 @@ export class VideoController implements VideoControllerApi {
           next: (audioRouter) => {
             this._mainAudioRouter = audioRouter;
 
-            this._mainAudioNode.channelCount = this._mainAudioRouter.inputsNumber;
+            this._mainAudioNode!.channelCount = this._mainAudioRouter.inputsNumber;
 
-            this._mainAudioNode.disconnect(this._audioOutputNode);
-            this._mainAudioRouter.connectSource(this._mainAudioNode);
+            this._mainAudioNode!.disconnect(this._audioOutputNode);
+            this._mainAudioRouter.connectSource(this._mainAudioNode!);
 
             this._emitMainAudioChange();
             this._emitSoloMute();
@@ -2568,7 +2589,9 @@ export class VideoController implements VideoControllerApi {
 
   createMainAudioRouterWithOutputsResolver(inputsNumber: number, outputsNumberResolver: (maxChannelCount: number) => number): Observable<OmpAudioRouterState> {
     return passiveObservable((observer) => {
-      if (this._mainAudioRouter) {
+      if (!this._mainAudioNode) {
+        errorCompleteObserver(observer, 'Main audio not created yet');
+      } else if (this._mainAudioRouter) {
         this._mainAudioRouter.resetInputsSoloMuteState();
         console.debug('Main audio router already created');
         nextCompleteObserver(observer, this._mainAudioRouter.getAudioRouterState());
@@ -2577,10 +2600,10 @@ export class VideoController implements VideoControllerApi {
           next: (audioRouter) => {
             this._mainAudioRouter = audioRouter;
 
-            this._mainAudioNode.channelCount = this._mainAudioRouter.inputsNumber;
+            this._mainAudioNode!.channelCount = this._mainAudioRouter.inputsNumber;
 
-            this._mainAudioNode.disconnect(this._audioOutputNode);
-            this._mainAudioRouter.connectSource(this._mainAudioNode);
+            this._mainAudioNode!.disconnect(this._audioOutputNode);
+            this._mainAudioRouter.connectSource(this._mainAudioNode!);
 
             this._emitMainAudioChange();
             this._emitSoloMute();
@@ -2622,14 +2645,16 @@ export class VideoController implements VideoControllerApi {
 
   createMainAudioPeakProcessor(audioMeterStandard?: AudioMeterStandard): Observable<Observable<AudioPeakProcessorMessageEvent>> {
     return passiveObservable<Observable<AudioPeakProcessorMessageEvent>>((observer) => {
-      if (this._mainAudioPeakProcessor) {
+      if (!this._mainAudioNode) {
+        errorCompleteObserver(observer, 'Main audio not created yet');
+      } else if (this._mainAudioPeakProcessor) {
         console.debug('Main audio peak processor already created');
         nextCompleteObserver(observer, this.onMainAudioPeakProcessorMessage$);
       } else {
         this._mainAudioPeakProcessor = new OmpAudioPeakProcessor(this._audioContext, audioMeterStandard);
         this._mainAudioPeakProcessor.onAudioWorkletLoaded$.pipe(filter((p) => !!p)).subscribe({
           next: () => {
-            this._mainAudioPeakProcessor!.connectSource(this._mainAudioNode);
+            this._mainAudioPeakProcessor!.connectSource(this._mainAudioNode!);
 
             this._emitMainAudioChange();
             nextCompleteObserver(observer, this.onMainAudioPeakProcessorMessage$);

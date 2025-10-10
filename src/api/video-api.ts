@@ -389,6 +389,12 @@ export interface VideoApi extends Api {
   setActiveAudioTrack(id: string): Observable<void>;
 
   /**
+   * Updates loaded audio track. Updateable properties are: {@link OmpAudioTrack.label}, {@link OmpAudioTrack.language}. Other changes will be ignored.
+   * @param audioTrack
+   */
+  updateAudioTrack(audioTrack: OmpAudioTrack): Observable<void>
+
+  /**
    * Sets main audio active (unmuted)
    */
   activateMainAudio(): Observable<void>;

@@ -19,6 +19,8 @@ import {Alert, AlertConfig} from '../alerts/model';
 import {Api} from './api';
 
 export interface AlertsApi extends Api {
+  get alerts(): Alert[];
+
   /**
    * set configuration for the alerts component
    * @param config alerts configuration options

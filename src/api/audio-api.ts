@@ -20,6 +20,7 @@ import {
   AudioLoadedEvent,
   AudioPeakProcessorMessageEvent,
   AudioSwitchedEvent,
+  AudioUpdatedEvent,
   MainAudioChangeEvent,
   MainAudioInputSoloMuteEvent,
   OmpAudioTrack,
@@ -29,7 +30,8 @@ import {
   SidecarAudioInputSoloMuteEvent,
   SidecarAudioLoadedEvent,
   SidecarAudioPeakProcessorMessageEvent,
-  SidecarAudioRemoveEvent, SidecarAudiosChangeEvent,
+  SidecarAudioRemoveEvent,
+  SidecarAudiosChangeEvent,
   SidecarAudioVolumeChangeEvent,
   VolumeChangeEvent,
 } from '../types';
@@ -55,6 +57,12 @@ export interface AudioApi extends Api {
   onAudioSwitched$: Observable<AudioSwitchedEvent>;
 
   /**
+   *  Fires on audio track updated
+   *  @readonly
+   */
+  onAudioUpdated$: Observable<AudioUpdatedEvent>
+
+  /**
    * Fires on master audio output volume change
    * @readonly
    */
@@ -75,6 +83,12 @@ export interface AudioApi extends Api {
    * @param id {@link OmpAudioTrack} id
    */
   setActiveAudioTrack(id: string): Observable<void>;
+
+  /**
+   * Updates loaded audio track. Updateable properties are: {@link OmpAudioTrack.label}, {@link OmpAudioTrack.language}. Other changes will be ignored.
+   * @param audioTrack
+   */
+  updateAudioTrack(audioTrack: OmpAudioTrack): Observable<void>;
 
   /**
    * @returns {@link AudioContext}
@@ -143,7 +157,7 @@ export interface AudioApi extends Api {
   /**
    * @returns Main {@link AudioNode}
    */
-  getMainAudioNode(): AudioNode;
+  getMainAudioNode(): AudioNode | undefined;
 
   /**
    * @returns Main audio state

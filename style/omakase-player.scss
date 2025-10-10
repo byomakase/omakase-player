@@ -41,6 +41,14 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
     width: 700px;
     aspect-ratio: 16/9;
 
+    &.omakase-player-wrapper-compact {
+      height: var(--compact-player-height, 250px);
+
+      .omakase-video {
+        opacity: 0;
+      }
+    }
+
     &.omakase-player-wrapper-stamp {
       width: 100%;
       height: 100%;

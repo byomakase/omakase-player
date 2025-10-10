@@ -279,11 +279,6 @@ omakasePlayer.video.addSafeZone({
   topRightBottomLeftPercent: [10, 10, 10, 10]
 })
 
-// adds safe zone calculated from provided aspect ratio expression
-omakasePlayer.video.addSafeZone({
-  aspectRatio: "16/9"
-})
-
 // toggles fullscreen
 omakasePlayer.video.toggleFullscreen();
 ```

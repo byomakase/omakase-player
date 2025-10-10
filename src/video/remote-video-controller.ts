@@ -20,6 +20,7 @@ import {
   AudioLoadedEvent,
   AudioPeakProcessorMessageEvent,
   AudioSwitchedEvent,
+  AudioUpdatedEvent,
   HelpMenuGroup,
   MainAudioChangeEvent,
   MainAudioInputSoloMuteEvent,
@@ -99,6 +100,7 @@ export class RemoteVideoController implements VideoControllerApi {
   private _bufferedTimespans: BufferedTimespan[] = [];
   private _subtitlesTracks: SubtitlesVttTrack[] = [];
   private _activeSubtitlesTrack: SubtitlesVttTrack | undefined;
+  private _audioTracks: OmpAudioTrack[] = [];
   private _activeAudioTrack: OmpAudioTrack | undefined = void 0;
   private _sidecarAudioStates: OmpSidecarAudioState[] = [];
   private _sidecarAudioInputSoloMuteStates: OmpSidecarAudioInputSoloMuteState[] = [];
@@ -145,7 +147,23 @@ export class RemoteVideoController implements VideoControllerApi {
       .createRequestStream('VideoControllerApi.onAudioLoaded$')
       .pipe(takeUntil(this._destroyed$))
       .subscribe({
-        next: (value) => this._get_onAudioLoaded$.next(value),
+        next: (value) => {
+          this._get_onAudioLoaded$.next(value);
+          if (value) {
+            this._audioTracks = value.audioTracks
+          }
+        },
+      });
+
+    this._messageChannel
+      .createRequestStream('VideoControllerApi.onAudioUpdated$')
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: (value) => {
+          if (value) {
+            this._audioTracks = value.audioTracks
+          }
+        },
       });
 
     this._messageChannel
@@ -229,14 +247,13 @@ export class RemoteVideoController implements VideoControllerApi {
       },
     });
 
-    this.onSidecarAudiosChange$.pipe(takeUntil(this._destroyed$))
-      .subscribe({
-        next: (value) => {
-          if (value) {
-            this._sidecarAudioStates = value.sidecarAudioStates;
-          }
-        },
-      });
+    this.onSidecarAudiosChange$.pipe(takeUntil(this._destroyed$)).subscribe({
+      next: (value) => {
+        if (value) {
+          this._sidecarAudioStates = value.sidecarAudioStates;
+        }
+      },
+    });
 
     this.onFullscreenChange$.pipe(takeUntil(this._destroyed$)).subscribe({
       next: (value) => {
@@ -311,6 +328,10 @@ export class RemoteVideoController implements VideoControllerApi {
 
   get onAudioSwitched$(): Observable<AudioSwitchedEvent> {
     return this._messageChannel.createRequestStream('VideoControllerApi.onAudioSwitched$');
+  }
+
+  get onAudioUpdated$(): Observable<AudioUpdatedEvent> {
+    return this._messageChannel.createRequestStream('VideoControllerApi.onAudioUpdated$');
   }
 
   get onAudioOutputVolumeChange$(): Observable<VolumeChangeEvent> {
@@ -759,11 +780,15 @@ export class RemoteVideoController implements VideoControllerApi {
   }
 
   getAudioTracks(): OmpAudioTrack[] {
-    return this.onAudioLoaded$.value ? this.onAudioLoaded$.value.audioTracks : [];
+    return this._audioTracks;
   }
 
   setActiveAudioTrack(id: string): Observable<void> {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.setActiveAudioTrack', [id])));
+  }
+
+  updateAudioTrack(audioTrack: OmpAudioTrack): Observable<void> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.updateAudioTrack', [audioTrack])));
   }
 
   activateMainAudio(): Observable<void> {
@@ -791,7 +816,7 @@ export class RemoteVideoController implements VideoControllerApi {
     );
   }
 
-  getMainAudioNode(): AudioNode {
+  getMainAudioNode(): AudioNode | undefined {
     throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
   }
 

@@ -20,6 +20,7 @@ import {
   AudioLoadedEvent,
   AudioPeakProcessorMessageEvent,
   AudioSwitchedEvent,
+  AudioUpdatedEvent,
   Destroyable,
   MainAudioChangeEvent,
   MainAudioInputSoloMuteEvent,
@@ -69,6 +70,7 @@ import {OmpAudioEffectFilter, OmpAudioEffectParam, OmpAudioEffectsGraphDef} from
 export interface VideoControllerApi extends VideoApi, Destroyable {
   onAudioLoaded$: BehaviorSubject<AudioLoadedEvent | undefined>;
   onAudioSwitched$: Observable<AudioSwitchedEvent>;
+  onAudioUpdated$: Observable<AudioUpdatedEvent>;
 
   onAudioOutputVolumeChange$: Observable<VolumeChangeEvent>;
 
@@ -141,7 +143,7 @@ export interface VideoControllerApi extends VideoApi, Destroyable {
 
   onMainAudioInputSoloMute$: Observable<MainAudioInputSoloMuteEvent | undefined>;
 
-  getMainAudioNode(): AudioNode;
+  getMainAudioNode(): AudioNode | undefined;
 
   getMainAudioState(): OmpMainAudioState | undefined;
 

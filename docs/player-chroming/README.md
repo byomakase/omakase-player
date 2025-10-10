@@ -167,7 +167,7 @@ The following attributes are supported in the `themeConfig` object for the `STAM
 | `floatingControls` | Specifies list of enabled floating controls | Constrained values: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`, `PLAYBACK_CONTROLS`, `FULLSCREEN` | No | Default: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`, `PLAYBACK_CONTROLS`
 | `alwaysOnfloatingControls`   | Specifies floating control that will stay always visible | Constrained values: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`, `PLAYBACK_CONTROLS`, `FULLSCREEN` | No | Default: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`
 | `stampScale` | Specifies how the video will fill the container | Constrained values: `FILL`, `FIT` | Yes | Default: `FIT`
-| `timeFormat`       | Specifies mode of time floating component | Constrained values: `TIMECODE`, `COUNTDOWN_TIMER`, `MEDIA_TIME` | Yes |Default: `MEDIA_TIME`
+| `timeFormat`       | Specifies mode of time floating component | Constrained values: `TIMECODE`, `COUNTDOWN_TIMER`, `MEDIA_TIME` | Yes | Default: `MEDIA_TIME`
 | `htmlTemplateId`   | Id of the template used for customization slots | `string` | No |
 
 The following attributes are supported in the `themeConfig` object for the `AUDIO` theme:
@@ -179,6 +179,15 @@ The following attributes are supported in the `themeConfig` object for the `AUDI
 | `floatingControls` | Specifies list of enabled floating controls | `HELP_MENU`, `PLAYBACK_CONTROLS` | No | Default: all controls
 | `playbackRates` | Sets the available playback rates in menu | `number[]` | No | Default: `[0.5,0.75,1,2]`
 | `playerSize` | Audio player size | Constrained values: `FULL`, `COMPACT`| Yes | Default: `FULL`
+| `htmlTemplateId`   | Id of the template used for customization slots | `string` | No |
+
+The following attributes are supported in the `themeConfig` object for the `EDITORIAL` theme:
+
+| Field | Description | Type | Updatable | Comment |
+|-------|-------------|------|-----------|---------|
+| `floatingControls` | Specifies list of enabled floating controls | Constrained values: `PROGRESS_BAR`, `TIME`, `PLAYBACK_CONTROLS`, `HELP_MENU` | No | Default: all controls
+| `alwaysOnfloatingControls`   | Specifies floating control that will stay always visible | Constrained values: `PROGRESS_BAR`, `TIME`, `PLAYBACK_CONTROLS`, `HELP_MENU` | No | Default: `TIME`
+| `timeFormat`       | Specifies mode of time floating component | Constrained values: `TIMECODE`, `MEDIA_TIME` | Yes | Default: `MEDIA_TIME`
 | `htmlTemplateId`   | Id of the template used for customization slots | `string` | No |
 
 ## Default Theme
@@ -251,6 +260,24 @@ let omakasePlayer = new OmakasePlayer({
 
 ---
 
+## Editorial Theme
+
+Editorial theme is a theme with few controls in the player, geared towards scenarios in which more complex controls are implemented outside of the player (i.e. in some form of toolbar)
+
+```js
+let omakasePlayer = new OmakasePlayer({
+  playerChroming: {
+    theme: PlayerChromingTheme.Editorial,
+    themeConfig: {
+      alwaysOnFloatingControls: [EditorialThemeFloatingControl.PlaybackControls, EditorialThemeFloatingControl.Time],
+      timeFormat: EditorialTimeFormat.Timecode,
+    }
+  },
+});
+```
+
+---
+
 ## Custom Theme
 
 You can use a combination of Media Chrome components, Omakase components, custom Web Components or plain HTML for custom chroming. You can also set up multiple Omakase Player instances with different chroming for each one. Here's an example of setting up an Omakase Player with customized chroming:
@@ -292,6 +319,22 @@ let omakasePlayer = new OmakasePlayer({
 });
 ```
 
+The CSS structure of the `DEFAULT` theme is shown below:
+
+![Omakase Player CSS structure](./default-theme-diagram.svg)
+
+The CSS structure of the `AUDIO` theme is shown below:
+
+![Omakase Player CSS structure](./audio-theme-diagram.svg)
+
+The CSS structure of the `STAMP` theme is shown below:
+
+![Omakase Player CSS structure](./stamp-theme-diagram.svg)
+
+The CSS structure of the `EDITORIAL` theme is shown below:
+
+![Omakase Player CSS structure](./editorial-theme-diagram.svg)
+
 Media Chrome components and Omakase components based on Media Chrome are easy to style with CSS variables. For the list of CSS variables, refer to the [Media Chrome styling reference](https://www.media-chrome.org/docs/en/reference/styling).
 
 Here's a style customization example:
@@ -317,17 +360,21 @@ You can insert your own custom HTML into specified areas of certain themes. The 
 
 | Slot                     | Position                                                                                                 |
 |--------------------------|----------------------------------------------------------------------------------------------------------|
-| `start-container`        | Left side of the control bar, after the playback speed dropdown toggle                                   |
-| `end-container`          | Right side of the control bar, before the audio/text selection dropdown toggle                           |
-| `top-left`               | Top left corner of the player, over the watermark area                                                   |
-| `top-right`              | Top right corner of the player, under the help button                                                    |
-| `dropdown-container`     | Above the control bar                                                                                    |
+| `start-container`        | Left side of the control bar, after the playback speed dropdown toggle (1)   |
+| `end-container`          | Right side of the control bar, before the audio/text selection dropdown toggle (2) |
+| `top-left`               | Top left corner of the player, over the watermark area (3) |
+| `top-right`              | Top right corner of the player, under the help button (4) |
+| `dropdown-container`     | Above the control (5)                   |
 
-The available slots for the `STAMP` theme are:
+![Custom slots in default theme](./chroming-default-slots.png)
+
+The available slots for the `STAMP` and `EDITORIAL` themes are:
 
 | Slot                     | Position                                                                                                 |
 |--------------------------|----------------------------------------------------------------------------------------------------------|
-| `top-right`              | Top right corner of the player, under the mute/unmute button                                             |
+| `top-right`              | Top right corner of the player, under the help/mute/unmute button (1)   |
+
+![Custom slots in stamp theme](./chroming-stamp-slots.png)
 
 Here is an example of adding a custom dropdown to the `DEFAULT` theme using custom slots:
 

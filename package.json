@@ -1,6 +1,6 @@
 {
     "name": "@byomakase/omakase-player",
-    "version": "0.21.1",
+    "version": "0.22.0",
     "description": "## Omakase Player - Open source JavaScript framework for building frame accurate video experiences",
     "author": "ByOmakase",
     "homepage": "https://player.byomakase.org",
@@ -29,17 +29,19 @@
         "dev:tsc": "rm -rf dist/lib && tsc --watch",
         "build:workers": "vite build --config vite.workers.config.mjs",
         "build:style": "vite build --config vite.style.config.mjs",
-        "build:prod": "rm -rf dist && npm run build:workers && npm run build:style && tsc --noEmit && vite build --debug"
+        "build:prod": "rm -rf dist && npm run build:workers && npm run build:style && tsc --noEmit && vite build --debug",
+        "postinstall": "patch-package"
     },
     "dependencies": {
-        "axios": "1.8.3",
+        "axios": "1.12.2",
         "decimal.js": "10.4.3",
         "eventemitter3": "5.0.0",
         "hls.js": "1.6.10",
         "konva": "8.3.14",
         "m3u8-parser": "^7.2.0",
+        "media-captions": "1.0.4",
         "media-chrome": "^4.2.1",
-        "mediabunny": "^1.9.0",
+        "mediabunny": "^1.23.0",
         "node-webvtt": "1.9.4",
         "rxjs": "7.8.2",
         "sortablejs": "^1.15.6",
@@ -48,6 +50,8 @@
     },
     "devDependencies": {
         "@types/sortablejs": "^1.15.8",
+        "patch-package": "^8.0.1",
+        "postinstall-postinstall": "^2.1.0",
         "prettier": "^3.3.3",
         "sass": "^1.59.2",
         "typescript": "^4.9.5",

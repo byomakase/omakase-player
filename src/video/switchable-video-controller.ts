@@ -20,6 +20,7 @@ import {
   AudioLoadedEvent,
   AudioPeakProcessorMessageEvent,
   AudioSwitchedEvent,
+  AudioUpdatedEvent,
   HelpMenuGroup,
   MainAudioChangeEvent,
   MainAudioInputSoloMuteEvent,
@@ -75,6 +76,7 @@ export class SwitchableVideoController implements VideoControllerApi {
 
   public readonly onAudioLoaded$: BehaviorSubject<AudioLoadedEvent | undefined> = new BehaviorSubject<AudioLoadedEvent | undefined>(void 0);
   public readonly onAudioSwitched$: Subject<AudioSwitchedEvent> = new Subject<AudioSwitchedEvent>();
+  public readonly onAudioUpdated$: Subject<AudioUpdatedEvent> = new Subject<AudioUpdatedEvent>();
 
   public readonly onAudioOutputVolumeChange$: Subject<VolumeChangeEvent> = new Subject<VolumeChangeEvent>();
 
@@ -211,6 +213,12 @@ export class SwitchableVideoController implements VideoControllerApi {
     videoController.onAudioSwitched$.pipe(takeUntil(this._eventBreaker$)).subscribe({
       next: (value) => {
         this.onAudioSwitched$.next(value);
+      },
+    });
+
+    videoController.onAudioUpdated$.pipe(takeUntil(this._eventBreaker$)).subscribe({
+      next: (value) => {
+        this.onAudioUpdated$.next(value);
       },
     });
 
@@ -632,6 +640,10 @@ export class SwitchableVideoController implements VideoControllerApi {
     return this._videoController.setActiveAudioTrack(id);
   }
 
+  updateAudioTrack(audioTrack: OmpAudioTrack): Observable<void> {
+    return this._videoController.updateAudioTrack(audioTrack);
+  }
+
   activateMainAudio(): Observable<void> {
     return this._videoController.activateMainAudio();
   }
@@ -729,7 +741,7 @@ export class SwitchableVideoController implements VideoControllerApi {
     return this._videoController.createMainAudioPeakProcessor(audioMeterStandard).pipe(map((p) => this.onMainAudioPeakProcessorMessage$));
   }
 
-  getMainAudioNode(): AudioNode {
+  getMainAudioNode(): AudioNode | undefined {
     return this._videoController.getMainAudioNode();
   }
 

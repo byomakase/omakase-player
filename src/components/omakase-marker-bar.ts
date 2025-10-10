@@ -18,6 +18,9 @@ export class OmakaseMarkerBar extends HTMLElement {
   createMarkerTrack(config: MarkerTrackComponentConfig) {
     const markerTrack = document.createElement('omakase-marker-track') as OmakaseMarkerTrack;
     markerTrack.setAttribute('mediaduration', config.mediaDuration.toString());
+    if (this.getAttribute('editorial') !== null) {
+      markerTrack.setAttribute('editorial', '');
+    }
     markerTrack.uuid = config.id ?? CryptoUtil.uuid();
     if (config.description) {
       markerTrack.setAttribute('name', config.description);

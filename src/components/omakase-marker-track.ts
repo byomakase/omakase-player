@@ -1,4 +1,4 @@
-import {BehaviorSubject, Subject, takeUntil} from 'rxjs';
+import {BehaviorSubject, fromEvent, Subject, takeUntil} from 'rxjs';
 import {completeUnsubscribeSubjects, nextCompleteSubject} from '../util/rxjs-util';
 import {MomentMarker, PeriodMarker} from '../timeline';
 import {MarkerTrackApi} from '../api/marker-track-api';
@@ -65,6 +65,17 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
     this._container.onclick = (event) => {
       event.stopPropagation();
     };
+
+    fromEvent(window, 'resize')
+      .pipe(takeUntil(this._destroyed$))
+      .subscribe({
+        next: () => {
+          for (const marker of this._markers) {
+            this.updateMarkerSize(marker);
+          }
+        },
+      });
+
     this._mouseupListener = this.clearDraggingMarker.bind(this);
     document.addEventListener('mouseup', this._mouseupListener);
     this._mousemoveListener = this.moveDraggingMarker.bind(this);
@@ -124,6 +135,7 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
       Object.assign(marker, data);
       this.onMarkerUpdate$.next({oldValue, marker});
       this.updateMarkerPosition(marker);
+      this.updateMarkerColor(marker);
     }
   }
 
@@ -147,7 +159,7 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
   }
 
   isVisible(): boolean {
-    return this.classList.contains('d-none');
+    return !this.classList.contains('d-none');
   }
 
   toggleVisibility(): void {
@@ -185,9 +197,13 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
     const markerContainer = document.createElement('div');
     const circleDiv = document.createElement('div');
     circleDiv.style.width = this._container!.offsetHeight / 2 + 'px';
-    circleDiv.style.height = this._container!.offsetHeight / 2 + 'px';
     circleDiv.style.left = `-${this._container!.offsetHeight / 4}px`;
-    circleDiv.style.top = this._container!.offsetHeight / 4 + 'px';
+    if (this.hasAttribute('editorial')) {
+      circleDiv.style.height = this._container!.offsetHeight + 'px';
+    } else {
+      circleDiv.style.height = this._container!.offsetHeight / 2 + 'px';
+      circleDiv.style.top = this._container!.offsetHeight / 4 + 'px';
+    }
     circleDiv.style.backgroundColor = marker.style.color;
     circleDiv.classList.add('omakase-moment-marker-circle');
     markerContainer.appendChild(circleDiv);
@@ -199,6 +215,10 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
     const selectedDiv = document.createElement('div');
     selectedDiv.style.height = this._container!.offsetHeight + 'px';
     selectedDiv.style.backgroundColor = marker.style.color;
+    if (this.hasAttribute('editorial')) {
+      selectedDiv.style.left = circleDiv.style.left;
+      selectedDiv.style.width = circleDiv.style.width;
+    }
     selectedDiv.classList.add('omakase-moment-marker-selected-area');
     markerContainer.appendChild(selectedDiv);
     markerContainer.style.left = `${(marker.timeObservation.time * this._container!.offsetWidth) / this.mediaDuration}px`;
@@ -229,14 +249,22 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
       this.updateMarkerPosition(marker);
       this.onMarkerUpdate$.next({marker, oldValue: {...marker, timeObservation: event.oldTimeObservation} as MomentMarker});
     });
+    marker.onStyleChange$.pipe(takeUntil(this._destroyed$)).subscribe(() => {
+      this.updateMarkerColor(marker);
+      this.onMarkerUpdate$.next({marker, oldValue: {...marker} as MomentMarker});
+    });
     return marker;
   }
 
   private addPeriodMarker(marker: PeriodMarker) {
     const markerContainer = document.createElement('div');
     const rectangleDiv = document.createElement('div');
-    rectangleDiv.style.height = this._container!.offsetHeight / 2 + 'px';
-    rectangleDiv.style.top = this._container!.offsetHeight / 4 + 'px';
+    if (this.getAttribute('editorial') !== null) {
+      rectangleDiv.style.height = this._container!.offsetHeight + 'px';
+    } else {
+      rectangleDiv.style.height = this._container!.offsetHeight / 2 + 'px';
+      rectangleDiv.style.top = this._container!.offsetHeight / 4 + 'px';
+    }
     rectangleDiv.style.backgroundColor = marker.style.color;
     rectangleDiv.classList.add('omakase-period-marker-rectangle');
     markerContainer.appendChild(rectangleDiv);
@@ -293,6 +321,10 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
     marker.onChange$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
       this.updateMarkerPosition(marker);
       this.onMarkerUpdate$.next({marker, oldValue: {...marker, timeObservation: event.oldTimeObservation} as PeriodMarker});
+    });
+    marker.onStyleChange$.pipe(takeUntil(this._destroyed$)).subscribe(() => {
+      this.updateMarkerColor(marker);
+      this.onMarkerUpdate$.next({marker, oldValue: {...marker} as PeriodMarker});
     });
     return marker;
   }
@@ -351,6 +383,96 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
       } else if (this.isPeriodMarker(marker)) {
         markerElement.style.left = ((marker as PeriodMarker).timeObservation.start! / this.mediaDuration) * this._container!.offsetWidth + 'px';
         markerElement.style.right = this._container!.offsetWidth - ((marker as PeriodMarker).timeObservation.end! / this.mediaDuration) * this._container!.offsetWidth + 'px';
+      }
+    }
+  }
+
+  private updateMarkerColor(marker: MomentMarker | PeriodMarker) {
+    const markerElement = this._container?.querySelector(`#${markerElementPrefix}-${marker.id}`) as HTMLDivElement | null;
+    if (markerElement) {
+      if (this.isMomentMarker(marker)) {
+        const circleDiv = markerElement.querySelector('.omakase-moment-marker-circle') as HTMLDivElement | null;
+        const lineDiv = markerElement.querySelector('.omakase-moment-marker-line') as HTMLDivElement | null;
+        const selectedDiv = markerElement.querySelector('.omakase-moment-marker-selected-area') as HTMLDivElement | null;
+        if (circleDiv) {
+          circleDiv.style.backgroundColor = marker.style.color;
+        }
+        if (lineDiv) {
+          lineDiv.style.backgroundColor = marker.style.color;
+        }
+        if (selectedDiv) {
+          selectedDiv.style.backgroundColor = marker.style.color;
+        }
+      } else if (this.isPeriodMarker(marker)) {
+        const rectangleDiv = markerElement.querySelector('.omakase-period-marker-rectangle') as HTMLDivElement | null;
+        const startLine = markerElement.querySelector('.omakase-period-marker-start-line') as HTMLDivElement | null;
+        const endLine = markerElement.querySelector('.omakase-period-marker-end-line') as HTMLDivElement | null;
+        const selectedDiv = markerElement.querySelector('.omakase-period-marker-selected-area') as HTMLDivElement | null;
+        if (rectangleDiv) {
+          rectangleDiv.style.backgroundColor = marker.style.color;
+        }
+        if (startLine) {
+          startLine.style.backgroundColor = marker.style.color;
+        }
+        if (endLine) {
+          endLine.style.backgroundColor = marker.style.color;
+        }
+        if (selectedDiv) {
+          selectedDiv.style.backgroundColor = marker.style.color;
+        }
+      }
+    }
+  }
+
+  private updateMarkerSize(marker: MomentMarker | PeriodMarker) {
+    const markerElement = this._container?.querySelector(`#${markerElementPrefix}-${marker.id}`) as HTMLDivElement | null;
+    if (markerElement) {
+      if (this.isMomentMarker(marker)) {
+        const circleDiv = markerElement.querySelector('.omakase-moment-marker-circle') as HTMLDivElement | null;
+        const lineDiv = markerElement.querySelector('.omakase-moment-marker-line') as HTMLDivElement | null;
+        const selectedDiv = markerElement.querySelector('.omakase-moment-marker-selected-area') as HTMLDivElement | null;
+        if (circleDiv) {
+          circleDiv.style.width = this._container!.offsetHeight / 2 + 'px';
+          circleDiv.style.left = `-${this._container!.offsetHeight / 4}px`;
+          if (this.hasAttribute('editorial')) {
+            circleDiv.style.height = this._container!.offsetHeight + 'px';
+          } else {
+            circleDiv.style.height = this._container!.offsetHeight / 2 + 'px';
+            circleDiv.style.top = this._container!.offsetHeight / 4 + 'px';
+          }
+        }
+        if (lineDiv) {
+          lineDiv.style.height = this._container!.offsetHeight + 'px';
+        }
+        if (selectedDiv) {
+          selectedDiv.style.height = this._container!.offsetHeight + 'px';
+          if (this.hasAttribute('editorial') && circleDiv) {
+            selectedDiv.style.left = circleDiv.style.left;
+            selectedDiv.style.width = circleDiv.style.width;
+          }
+        }
+      } else if (this.isPeriodMarker(marker)) {
+        const rectangleDiv = markerElement.querySelector('.omakase-period-marker-rectangle') as HTMLDivElement | null;
+        const startLine = markerElement.querySelector('.omakase-period-marker-start-line') as HTMLDivElement | null;
+        const endLine = markerElement.querySelector('.omakase-period-marker-end-line') as HTMLDivElement | null;
+        const selectedDiv = markerElement.querySelector('.omakase-period-marker-selected-area') as HTMLDivElement | null;
+        if (rectangleDiv) {
+          if (this.getAttribute('editorial') !== null) {
+            rectangleDiv.style.height = this._container!.offsetHeight + 'px';
+          } else {
+            rectangleDiv.style.height = this._container!.offsetHeight / 2 + 'px';
+            rectangleDiv.style.top = this._container!.offsetHeight / 4 + 'px';
+          }
+        }
+        if (startLine) {
+          startLine.style.height = this._container!.offsetHeight + 'px';
+        }
+        if (endLine) {
+          endLine.style.height = this._container!.offsetHeight + 'px';
+        }
+        if (selectedDiv) {
+          selectedDiv.style.height = this._container!.offsetHeight + 'px';
+        }
       }
     }
   }

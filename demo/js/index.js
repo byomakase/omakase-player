@@ -159,8 +159,8 @@ function createOmakasePlayer() {
     playerChroming: {
       theme: 'DEFAULT',
       themeConfig: {
-        controlBarVisibility: 'FULLSCREEN_ONLY'
-      }
+        controlBarVisibility: 'FULLSCREEN_ONLY',
+      },
     },
     style: {
       fontFamily: 'Arial',
@@ -1509,8 +1509,10 @@ function initializePlayerControlButtons() {
   videoElement.addEventListener('enterpictureinpicture', (event) => {
     if (event instanceof PictureInPictureEvent) {
       togglePIP(true);
-      let op = domHelper.querySelector('.omakase-video-controls');
-      domHelper.setProperty(op, 'className', 'omakase-video-controls d-none');
+      let op = omakasePlayer.getPlayerChromingElement('.omakase-video-controls');
+      if (op) {
+        domHelper.setProperty(op, 'className', 'omakase-video-controls d-none');
+      }
     } else {
       alert('Picture in Picture mode failed');
     }
@@ -1519,8 +1521,10 @@ function initializePlayerControlButtons() {
   videoElement.addEventListener('leavepictureinpicture', (event) => {
     if (event instanceof PictureInPictureEvent) {
       togglePIP(false);
-      let op = domHelper.querySelector('.omakase-video-controls');
-      domHelper.setProperty(op, 'className', 'omakase-video-controls');
+      let op = omakasePlayer.getPlayerChromingElement('.omakase-video-controls');
+      if (op) {
+        domHelper.setProperty(op, 'className', 'omakase-video-controls');
+      }
     } else {
       alert('Picture in Picture mode failed');
     }

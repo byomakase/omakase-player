@@ -42,11 +42,12 @@ import {removeEmptyValues} from './util/object-util';
 import {MarkerTrackConfig} from './video/model';
 import {
   AudioChroming,
-  ControlBarVisibility,
   DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG,
+  DEFAULT_EDITORIAL_PLAYER_CHROMING_CONFIG,
   DEFAULT_PLAYER_CHROMING_CONFIG,
   DEFAULT_STAMP_PLAYER_CHROMING_CONFIG,
   DefaultChroming,
+  EditorialChroming,
   FullscreenChroming,
   PlayerChroming,
   PlayerChromingTheme,
@@ -159,6 +160,11 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
         ...DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG,
         ...(config?.playerChroming as AudioChroming)?.themeConfig,
       };
+    } else if (this._config.playerChroming?.theme === PlayerChromingTheme.Editorial) {
+      this._config.playerChroming.themeConfig = {
+        ...DEFAULT_EDITORIAL_PLAYER_CHROMING_CONFIG,
+        ...(config?.playerChroming as EditorialChroming)?.themeConfig,
+      };
     } else if (this._config.playerChroming?.theme === PlayerChromingTheme.Chromeless) {
       this._config.playerChroming.fullscreenChroming = config?.playerChroming?.fullscreenChroming ?? FullscreenChroming.Disabled;
     }
@@ -171,7 +177,7 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
       VTT_DOWNSAMPLE_CONFIG_DEFAULT.downsamplePeriod = config.vttDownsamplePeriod;
     }
 
-    this._alertsController = new AlertsController();
+    this._alertsController = new AlertsController(this._config.playerHTMLElementId!);
 
     this._videoDomController = new VideoDomController(
       removeEmptyValues({

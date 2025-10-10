@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {catchError, filter, first, forkJoin, from, fromEvent, map, Observable, Subject, take, takeUntil, timeout, timer} from 'rxjs';
+import {catchError, combineLatest, filter, first, forkJoin, from, fromEvent, map, Observable, Subject, take, takeUntil, timeout, timer} from 'rxjs';
 import {Video, VideoLoadOptions} from './model';
 import {BaseVideoLoader} from './video-loader';
-import Hls, {AudioTracksUpdatedData, AudioTrackSwitchingData, ErrorData, ErrorDetails, Events as HlsEvents, FragLoadedData, FragLoadingData, HlsConfig, ManifestParsedData, MediaAttachedData, MediaKeySessionContext, MediaPlaylist} from 'hls.js';
+import Hls, {AudioTracksUpdatedData, AudioTrackSwitchingData, ErrorData, ErrorDetails, Events as HlsEvents, FragLoadedData, FragLoadingData, HlsConfig, ManifestParsedData, MediaAttachedData, MediaKeySessionContext, MediaPlaylist,} from 'hls.js';
 import {errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {isNullOrUndefined} from '../util/object-util';
 import {z} from 'zod';
@@ -37,7 +37,7 @@ import {M3u8File} from '../m3u8/m3u8-file';
 
 import {HTMLVideoElementEvents} from '../media-element/omp-media-element';
 import {AuthConfig} from '../common/authentication';
-import {MediaMetadataResolver} from '../tools/media-metadata-resolver';
+import {MediaMetadataResolver} from '../tools';
 
 export type HlsLicenseXhrSetupFn = (xhr: XMLHttpRequest, url: string, keyContext: MediaKeySessionContext, licenseChallenge: Uint8Array) => void | Uint8Array | Promise<Uint8Array | void>;
 
@@ -186,31 +186,6 @@ export class VideoHlsLoader extends BaseVideoLoader {
 
                       throw new OmpError(`Could not revert to default track`);
                     }
-
-                    //
-                    //
-                    // console.debug(`Track: ${hlsAudioTrackForPreload?.id} preloaded, waiting a bit..`);
-                    // hlsAudioTrackForPreload = void 0;
-                    //
-                    // // wait until <video> element recognizes change
-                    // timer(300).subscribe(() => {
-                    //   console.debug(`Reverting to default track: ${hlsActiveAudioTrack.id}`);
-                    //
-                    //   this.setActiveHlsAudioTrack(hlsActiveAudioTrack.id)
-                    //     .pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$))
-                    //     .subscribe(() => {
-                    //       console.debug(`Reverted to default track: ${hlsActiveAudioTrack.id}`);
-                    //       hlsAudioTrackRevertToDefaultActive = false;
-                    //
-                    //       // emit previously skipped onAudioLoaded$ event
-                    //       handleHlsAudioTracksUpdated();
-                    //       // emit onAudioSwitched$
-                    //
-                    //       this.onAudioSwitched$.next({
-                    //         activeAudioTrack: this.mapToOmpAudioTrack(hlsActiveAudioTrack),
-                    //       });
-                    //     });
-                    // });
                   });
               });
             } else {
@@ -270,7 +245,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
            * This error propagation is causing that HLS streams, with audio group defined but without audio tracks,
            * are not to be playable by OmakasePlayer
            */
-          if (!data.details.includes(ErrorDetails.AUDIO_TRACK_LOAD_ERROR)) {
+          if (data.details.includes(ErrorDetails.AUDIO_TRACK_LOAD_ERROR)) {
             console.debug(`Hls fatal error "${data.details}" ignored intentionally.`);
           } else {
             errorCompleteObserver(observer, `Error loading video. ${message}`);
@@ -280,128 +255,122 @@ export class VideoHlsLoader extends BaseVideoLoader {
         }
       });
 
-      let hlsMediaAttached$ = new Observable<boolean>((observer) => {
-        // MEDIA_ATTACHED event is fired by hls object once MediaSource is ready
-        this._hls!.once(HlsEvents.MEDIA_ATTACHED, function (event, data) {
-          // console.debug('video element and hls.js are now bound together');
-          nextCompleteObserver(observer, true);
-        });
+      let hlsMediaAttached$ = new Subject<void>();
+      let hlsManifestParsed$ = new Subject<void>();
+      let hlsFragParsingInitSegment$ = new Subject<void>();
+      let initSegmentResolution$ = new Subject<void>();
+      let frameRate$ = new Subject<number | undefined>();
+
+      this._hls!.once(HlsEvents.MEDIA_ATTACHED, function (event, data) {
+        console.debug('video element and hls.js are now bound together');
+        nextCompleteSubject(hlsMediaAttached$);
       });
 
       let audioOnly = false;
       let defaultAudioTrack: MediaPlaylist | undefined;
       let hlsAudioTrackForPreload: MediaPlaylist | undefined;
 
-      let hlsManifestParsed$ = new Observable<boolean>((observer) => {
-        this._hls!.once(HlsEvents.MANIFEST_PARSED, (event, data) => {
-          // console.debug(event, data);
+      this._hls!.once(HlsEvents.MANIFEST_PARSED, (event, data) => {
+        // console.debug(event, data);
 
-          defaultAudioTrack = this._hls!.allAudioTracks.find((p) => p.default);
+        defaultAudioTrack = this._hls!.allAudioTracks.find((p) => p.default);
+        defaultAudioTrack = defaultAudioTrack ? defaultAudioTrack : this._hls!.allAudioTracks[0]; // if no tracks are marked as default, take first one as default one
 
-          // audio tracks with channels set
-          let audioTracksWithChannels = this._hls!.allAudioTracks.filter((audioTrack) => !!audioTrack.channels).map((audioTrack) => ({
-            audioTrack: audioTrack,
-            numOfChannels: parseInt(audioTrack.channels!),
-          }));
+        // audio tracks with channels set
+        let audioTracksWithChannels = this._hls!.allAudioTracks.filter((audioTrack) => !!audioTrack.channels).map((audioTrack) => ({
+          audioTrack: audioTrack,
+          numOfChannels: parseInt(audioTrack.channels!),
+        }));
 
-          if (audioTracksWithChannels.length > 0) {
-            let maxChannels = Math.max(...audioTracksWithChannels.map((p) => p.numOfChannels));
+        if (audioTracksWithChannels.length > 0) {
+          let maxChannels = Math.max(...audioTracksWithChannels.map((p) => p.numOfChannels));
 
-            // all audio tracks have same number of channels and number of channels is equal to maxChannels
-            let isAllAudioTracksChannelsEqualToMaxChannels = audioTracksWithChannels.filter((p) => p.numOfChannels === maxChannels).length === this._hls!.allAudioTracks.length;
+          // all audio tracks have same number of channels and number of channels is equal to maxChannels
+          let isAllAudioTracksChannelsEqualToMaxChannels = audioTracksWithChannels.filter((p) => p.numOfChannels === maxChannels).length === this._hls!.allAudioTracks.length;
 
-            let defaultAudioTrackWithChannels = audioTracksWithChannels.find((p) => p.audioTrack.id === defaultAudioTrack?.id);
-            let isDefaultAudioTrackWithMaxChannels = defaultAudioTrackWithChannels && defaultAudioTrackWithChannels.numOfChannels === maxChannels;
+          let defaultAudioTrackWithChannels = audioTracksWithChannels.find((p) => p.audioTrack.id === defaultAudioTrack?.id);
+          let isDefaultAudioTrackWithMaxChannels = defaultAudioTrackWithChannels && defaultAudioTrackWithChannels.numOfChannels === maxChannels;
 
-            let preloadAudioTrackCandidate = audioTracksWithChannels.find((p) => p.numOfChannels === maxChannels)?.audioTrack;
+          let preloadAudioTrackCandidate = audioTracksWithChannels.find((p) => p.numOfChannels === maxChannels)?.audioTrack;
 
-            if (preloadAudioTrackCandidate && defaultAudioTrack?.id !== preloadAudioTrackCandidate.id && !isAllAudioTracksChannelsEqualToMaxChannels && !isDefaultAudioTrackWithMaxChannels) {
-              // set only if candidate is found, and it's not default track
-              hlsAudioTrackForPreload = preloadAudioTrackCandidate;
-            }
+          if (preloadAudioTrackCandidate && defaultAudioTrack?.id !== preloadAudioTrackCandidate.id && !isAllAudioTracksChannelsEqualToMaxChannels && !isDefaultAudioTrackWithMaxChannels) {
+            // set only if candidate is found, and it's not default track
+            hlsAudioTrackForPreload = preloadAudioTrackCandidate;
           }
+        }
 
-          if (hlsAudioTrackForPreload) {
-            console.debug(`Track marked for preload, setting as default audio option`, hlsAudioTrackForPreload);
-            this._hls!.setAudioOption(hlsAudioTrackForPreload);
-          }
+        if (hlsAudioTrackForPreload) {
+          console.debug(`Track marked for preload, setting as default audio option`, hlsAudioTrackForPreload);
+          this._hls!.setAudioOption(hlsAudioTrackForPreload);
+        }
 
-          let firstLevelIndex = data.firstLevel;
-          let firstLevel = data.levels[firstLevelIndex];
+        let firstLevelIndex = data.firstLevel;
+        let firstLevel = data.levels[firstLevelIndex];
 
-          let hasVideo = !!(
-            !isNullOrUndefined(firstLevel.videoCodec) ||
-            (firstLevel.width && firstLevel.height) ||
-            (firstLevel.details && firstLevel.details.fragments[0] && firstLevel.details.fragments[0].elementaryStreams && firstLevel.details.fragments[0].elementaryStreams.video)
-          );
+        let hasVideo = !!(
+          !isNullOrUndefined(firstLevel.videoCodec) ||
+          (firstLevel.width && firstLevel.height) ||
+          (firstLevel.details && firstLevel.details.fragments[0] && firstLevel.details.fragments[0].elementaryStreams && firstLevel.details.fragments[0].elementaryStreams.video)
+        );
 
-          audioOnly = !hasVideo; // if it doesn't contain video / audio, it'll still be audioOnly for now
+        audioOnly = !hasVideo; // if it doesn't contain video / audio, it'll still be audioOnly for now
 
-          nextCompleteObserver(observer, true);
-        });
+        nextCompleteSubject(hlsManifestParsed$);
       });
 
       let hasInitSegment = false;
       let initSegmentTimeOffset: number | undefined = void 0;
 
-      let hlsFragParsingInitSegment$ = new Observable<boolean>((observer) => {
-        this._hls!.once(HlsEvents.FRAG_PARSING_INIT_SEGMENT, function (event, data) {
-          if ((data as FragLoadedData).frag.sn === 'initSegment' && (data as FragLoadedData).frag.data) {
-            hasInitSegment = true;
-          }
-          nextCompleteObserver(observer, true);
-        });
+      this._hls!.once(HlsEvents.FRAG_PARSING_INIT_SEGMENT, function (event, data) {
+        if ((data as FragLoadedData).frag.sn === 'initSegment' && (data as FragLoadedData).frag.data) {
+          hasInitSegment = true;
+        }
+        nextCompleteSubject(hlsFragParsingInitSegment$);
       });
 
-      let initSegmentResolution$ = new Observable<boolean>((observer) => {
-        forkJoin([hlsMediaAttached$, hlsManifestParsed$, hlsFragParsingInitSegment$])
-          .pipe(first())
-          .subscribe(([mediaAttached, manifestParsed, fragParsingInitSegment]) => {
-            if (hasInitSegment) {
-              let firstFragment = this._hls!.levels[0].details?.fragments[0];
-
-              if (firstFragment) {
-                MediaMetadataResolver.getMediaMetadata(firstFragment.url, ['firstVideoTrackInitSegmentTime']).subscribe({
-                  next: (mediaMetadata) => {
-                    initSegmentTimeOffset = mediaMetadata.firstVideoTrackInitSegmentTime;
-                    console.debug(`Init segment resolved to`, initSegmentTimeOffset);
-                  },
-                  error: (err) => {
-                    console.debug(err);
-                  },
-                  complete: () => {
-                    nextCompleteObserver(observer, true);
-                  },
-                });
-              } else {
-                console.debug(`First fragment not detected. How to resolve init segment time offset?`);
-                console.error('TODO');
-                nextCompleteObserver(observer, true);
-              }
+      combineLatest([hlsMediaAttached$, hlsManifestParsed$, hlsFragParsingInitSegment$])
+        .pipe(take(1))
+        .subscribe(([mediaAttached, manifestParsed, fragParsingInitSegment]) => {
+          if (hasInitSegment) {
+            let preloadedLevel = this._hls!.levels.find((p, index) => p.details && p.details.fragments && p.details.fragments[0])
+            if (preloadedLevel) {
+              MediaMetadataResolver.getMediaMetadata(preloadedLevel.details!.fragments[0].url, ['firstVideoTrackInitSegmentTime']).subscribe({
+                next: (mediaMetadata) => {
+                  initSegmentTimeOffset = mediaMetadata.firstVideoTrackInitSegmentTime;
+                  console.debug(`Init segment resolved to`, initSegmentTimeOffset);
+                },
+                error: (err) => {
+                  console.debug(err);
+                },
+                complete: () => {
+                  nextCompleteSubject(initSegmentResolution$);
+                },
+              });
             } else {
-              nextCompleteObserver(observer, true);
+              console.error('First fragment not detected. How to resolve init segment time offset?');
+              nextCompleteSubject(initSegmentResolution$);
             }
-          });
-      });
-
-      let frameRate$ = new Observable<number | undefined>((observer) => {
-        this._hls!.once(HlsEvents.MANIFEST_PARSED, function (event, data) {
-          if (options?.frameRate) {
-            nextCompleteObserver(observer, FrameRateUtil.resolveFrameRate(options.frameRate));
           } else {
-            let firstLevelIndex = data.firstLevel;
-            let firstLevel = data.levels[firstLevelIndex];
-            let requestedFrameRate = firstLevel.videoCodec ? firstLevel.frameRate : FrameRateUtil.AUDIO_FRAME_RATE;
-            nextCompleteObserver(observer, FrameRateUtil.resolveFrameRate(requestedFrameRate));
+            nextCompleteSubject(initSegmentResolution$);
           }
         });
+
+      this._hls!.once(HlsEvents.MANIFEST_PARSED, function (event, data) {
+        if (options?.frameRate) {
+          nextCompleteSubject(frameRate$, FrameRateUtil.resolveFrameRate(options.frameRate));
+        } else {
+          let firstLevelIndex = data.firstLevel;
+          let firstLevel = data.levels[firstLevelIndex];
+          let requestedFrameRate = firstLevel.videoCodec ? firstLevel.frameRate : FrameRateUtil.AUDIO_FRAME_RATE;
+          nextCompleteSubject(frameRate$, FrameRateUtil.resolveFrameRate(requestedFrameRate));
+        }
       });
 
       let videoLoadedData$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEvents.LOADEDDATA).pipe(first());
       let videoLoadedMetadata$ = fromEvent(this._videoController.getHTMLVideoElement(), HTMLVideoElementEvents.LOADEDMETEDATA).pipe(first());
 
-      forkJoin([hlsMediaAttached$, hlsManifestParsed$, initSegmentResolution$, videoLoadedData$, videoLoadedMetadata$, frameRate$])
-        .pipe(first())
+      combineLatest([hlsMediaAttached$, hlsManifestParsed$, initSegmentResolution$, videoLoadedData$, videoLoadedMetadata$, frameRate$])
+        .pipe(take(1))
         .subscribe(([mediaAttached, manifestParsed, initSegmentResolution, videoLoadedData, videoLoadedMetadata, frameRate]) => {
           let duration: number;
           if (options && options.duration) {
@@ -532,10 +501,10 @@ export class VideoHlsLoader extends BaseVideoLoader {
           nextCompleteSubject(this._loadVideoBreaker$);
         });
 
+      this._hls.on(HlsEvents.ERROR, this.onHlsError);
+
       this._hls.loadSource(sourceUrl);
       this._hls.attachMedia(this._videoController.getHTMLVideoElement());
-
-      this._hls.on(HlsEvents.ERROR, this.onHlsError);
     });
   }
 
@@ -560,11 +529,6 @@ export class VideoHlsLoader extends BaseVideoLoader {
       // console.debug(`hls.js destroyed, error ocurred in already destroyed instance`, data)
     }
   }
-
-  // override getActiveAudioTracks(): OmpAudioTrack[] {
-  //   let activeMediaPlaylist = this._hls!.audioTracks[this._hls!.audioTrack];
-  //   return activeMediaPlaylist ? [this._audioTracks.get(this._mediaPlaylistsMapping.get(activeMediaPlaylist.id)!)!] : []
-  // }
 
   override setActiveAudioTrack(ompAudioTrackId: string): Observable<void> {
     let hlsAudioTrackId = parseInt(ompAudioTrackId);

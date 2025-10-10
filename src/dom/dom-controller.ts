@@ -38,6 +38,7 @@ export class DomController {
     audioTextToggle: 'omakase-audio-text-toggle',
     audioTextDropdown: 'omakase-audio-text-dropdown',
     timecodeWrapper: 'omakase-timecode-wrapper',
+    captions: 'omakase-captions',
 
     mediaChromeButton: 'media-chrome-button',
     mediaChromePlay: 'media-chrome-play',
@@ -46,7 +47,6 @@ export class DomController {
     mediaFastRewindButton: 'media-chrome-ten-frames-backwards',
     mediaForwardButton: 'media-chrome-frame-forward',
     mediaFastForwardButton: 'media-chrome-ten-frames-forward',
-    mediaChromeFullscreen: 'media-chrome-fullscreen',
     mediaChromeFullscreenEnter: 'media-chrome-fullscreen-enter',
     mediaChromeFullscreenExit: 'media-chrome-fullscreen-exit',
     mediaChromeDetach: 'media-chrome-detach',
@@ -74,18 +74,13 @@ export class DomController {
       if (!element) {
         return;
       }
-      if (element.classList.contains('d-none')) {
-        element.classList.remove('d-none');
-      }
-      if (!element.classList.contains('d-block')) {
-        element.classList.add('d-block');
-      }
+      element.classList.remove('d-none');
     });
     return this;
   }
 
   isShown(element: HTMLElement) {
-    return element.classList.contains('d-block');
+    return !element.classList.contains('d-none');
   }
 
   hideElements(...element: Array<HTMLElement | undefined>): DomController {
@@ -93,12 +88,7 @@ export class DomController {
       if (!element) {
         return;
       }
-      if (element.classList.contains('d-block')) {
-        element.classList.remove('d-block');
-      }
-      if (!element.classList.contains('d-none')) {
-        element.classList.add('d-none');
-      }
+      element.classList.add('d-none');
     });
     return this;
   }

@@ -78,6 +78,7 @@ export type MessageChannelActionsMap = OmpBroadcastChannelActionsMap<{
   'VideoControllerApi.onBuffering$': ExtractPropertyTypes<VideoControllerApi, 'onBuffering$'>;
   'VideoControllerApi.onEnded$': ExtractPropertyTypes<VideoControllerApi, 'onEnded$'>;
   'VideoControllerApi.onAudioSwitched$': ExtractPropertyTypes<VideoControllerApi, 'onAudioSwitched$'>;
+  'VideoControllerApi.onAudioUpdated$': ExtractPropertyTypes<VideoControllerApi, 'onAudioUpdated$'>;
   'VideoControllerApi.onAudioOutputVolumeChange$': ExtractPropertyTypes<VideoControllerApi, 'onAudioOutputVolumeChange$'>;
   'VideoControllerApi.onVideoWindowPlaybackStateChange$': ExtractPropertyTypes<VideoControllerApi, 'onVideoWindowPlaybackStateChange$'>;
   'VideoControllerApi.onVideoError$': ExtractPropertyTypes<VideoControllerApi, 'onVideoError$'>;
@@ -147,6 +148,7 @@ export type MessageChannelActionsMap = OmpBroadcastChannelActionsMap<{
   'VideoControllerApi.removeSubtitlesTrack': ExtractMethodTypes<VideoControllerApi, 'removeSubtitlesTrack'>;
   'VideoControllerApi.showSubtitlesTrack': ExtractMethodTypes<VideoControllerApi, 'showSubtitlesTrack'>;
   'VideoControllerApi.setActiveAudioTrack': ExtractMethodTypes<VideoControllerApi, 'setActiveAudioTrack'>;
+  'VideoControllerApi.updateAudioTrack': ExtractMethodTypes<VideoControllerApi, 'updateAudioTrack'>;
   'VideoControllerApi.activateMainAudio': ExtractMethodTypes<VideoControllerApi, 'activateMainAudio'>;
   'VideoControllerApi.deactivateMainAudio': ExtractMethodTypes<VideoControllerApi, 'deactivateMainAudio'>;
 

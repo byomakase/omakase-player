@@ -235,4 +235,8 @@ export abstract class BaseMarker<T extends TimeObservation, C extends MarkerConf
   set data(data: Record<string, any> | undefined) {
     this._data = data;
   }
+
+  get onStyleChange$(): Observable<MarkerStyle> {
+    return this._styleAdapter.onChange$;
+  }
 }

@@ -35,6 +35,8 @@ export interface PlayerChromingDomControllerApi {
 
   initializeDomProperties(): void;
 
+  updateControlBar(): void;
+
   loadThumbnailVtt(vttUrl: string): Observable<void>;
 
   attachVideoController(videoController: VideoControllerApi): void;

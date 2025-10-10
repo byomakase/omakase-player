@@ -142,20 +142,7 @@ export interface FrameRateModel {
 export interface VideoSafeZone {
   id?: string;
 
-  /**
-   * If provided {@link aspectRatio} will be ignored
-   */
   topRightBottomLeftPercent?: number[];
-
-  /**
-   * Aspect ratio for safe zone
-   */
-  aspectRatio?: string;
-
-  /**
-   * If used {@link aspectRatio} must be provided
-   */
-  scalePercent?: number;
 
   htmlId?: string;
   htmlClass?: string;

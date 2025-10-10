@@ -20,6 +20,7 @@ import {
   AudioLoadedEvent,
   AudioPeakProcessorMessageEvent,
   AudioSwitchedEvent,
+  AudioUpdatedEvent,
   Destroyable,
   MainAudioChangeEvent,
   MainAudioInputSoloMuteEvent,
@@ -44,6 +45,7 @@ import {OmpAudioRoutingInputType, OmpMainAudioInputSoloMuteState, OmpSidecarAudi
 export class AudioController implements AudioApi, Destroyable {
   public readonly onAudioLoaded$: BehaviorSubject<AudioLoadedEvent | undefined> = new BehaviorSubject<AudioLoadedEvent | undefined>(void 0);
   public readonly onAudioSwitched$: Observable<AudioSwitchedEvent> = new Subject<AudioSwitchedEvent>();
+  public readonly onAudioUpdated$: Observable<AudioUpdatedEvent> = new Subject<AudioUpdatedEvent>();
   public readonly onAudioOutputVolumeChange$: Observable<VolumeChangeEvent> = new Subject<VolumeChangeEvent>();
 
   // audio router
@@ -68,6 +70,7 @@ export class AudioController implements AudioApi, Destroyable {
 
     this.onAudioLoaded$ = this._videoController.onAudioLoaded$;
     this.onAudioSwitched$ = this._videoController.onAudioSwitched$;
+    this.onAudioUpdated$ = this._videoController.onAudioUpdated$;
     this.onAudioOutputVolumeChange$ = this._videoController.onAudioOutputVolumeChange$;
 
     // audio router
@@ -96,6 +99,10 @@ export class AudioController implements AudioApi, Destroyable {
 
   setActiveAudioTrack(id: string): Observable<void> {
     return this._videoController.setActiveAudioTrack(id);
+  }
+
+  updateAudioTrack(audioTrack: OmpAudioTrack): Observable<void> {
+    return this._videoController.updateAudioTrack(audioTrack);
   }
 
   getAudioContext(): AudioContext {
@@ -142,7 +149,7 @@ export class AudioController implements AudioApi, Destroyable {
 
   // audio router
 
-  getMainAudioNode(): AudioNode {
+  getMainAudioNode(): AudioNode | undefined {
     return this._videoController.getMainAudioNode();
   }
 

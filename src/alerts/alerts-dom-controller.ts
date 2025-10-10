@@ -22,8 +22,10 @@ export class AlertsDomController {
   private _alertsController!: AlertsController;
   private _maxAlertCount = 5;
   private _maxStackCount = 3;
+  private _playerHTMLElementId: string;
 
-  constructor(alertsController: AlertsController) {
+  constructor(alertsController: AlertsController, playerHTMLElementId: string) {
+    this._playerHTMLElementId = playerHTMLElementId;
     this._alertsController = alertsController;
   }
 
@@ -45,14 +47,14 @@ export class AlertsDomController {
     alertElement.appendChild(iconElement);
     alertElement.appendChild(textElement);
     alertElement.appendChild(closeElement);
-    DomUtil.getElementByClass<HTMLDivElement>('omakase-player-alerts')?.appendChild(alertElement);
+    DomUtil.getElementByClass<HTMLDivElement>('omakase-player-alerts', DomUtil.getElementById(this._playerHTMLElementId))?.appendChild(alertElement);
     this.stackAlertsInDom();
   }
 
   removeAlertFromDom(alert: Alert) {
     const alertElement = DomUtil.getElementById<HTMLDivElement>(alert.id);
     if (alertElement) {
-      DomUtil.getElementByClass<HTMLDivElement>('omakase-player-alerts')?.removeChild(alertElement);
+      DomUtil.getElementByClass<HTMLDivElement>('omakase-player-alerts', DomUtil.getElementById(this._playerHTMLElementId))?.removeChild(alertElement);
     }
     this.stackAlertsInDom();
   }
@@ -97,7 +99,7 @@ export class AlertsDomController {
   moveAlertToEndInDom(alert: Alert) {
     const alertElement = DomUtil.getElementById<HTMLDivElement>(alert.id);
     if (alertElement) {
-      DomUtil.getElementByClass<HTMLDivElement>('omakase-player-alerts')?.appendChild(alertElement);
+      DomUtil.getElementByClass<HTMLDivElement>('omakase-player-alerts', DomUtil.getElementById(this._playerHTMLElementId))?.appendChild(alertElement);
     }
     this.stackAlertsInDom();
   }

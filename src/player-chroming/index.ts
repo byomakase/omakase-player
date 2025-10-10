@@ -1,4 +1,3 @@
-import {AudioPlayerSize, FullscreenChroming} from './model';
 /*
  * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
  *
@@ -14,18 +13,49 @@ import {AudioPlayerSize, FullscreenChroming} from './model';
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-import {ControlBarVisibility, DefaultThemeControl, DefaultThemeFloatingControl, PlayerChromingTheme, StampThemeFloatingControl, StampThemeScale, StampTimeFormat, WatermarkVisibility} from './model';
-export type {PlayerChroming, DefaultThemeConfig, DefaultChroming, CustomChroming, StampThemeConfig, StampChroming, ChromelessChroming, AudioChroming} from './model';
+import {
+  ControlBarVisibility,
+  DefaultThemeControl,
+  DefaultThemeFloatingControl,
+  PlayerChromingTheme,
+  StampThemeFloatingControl,
+  StampThemeScale,
+  StampTimeFormat,
+  WatermarkVisibility,
+  EditorialThemeFloatingControl,
+  AudioPlayerSize,
+  FullscreenChroming,
+  EditorialTimeFormat,
+  AudioThemeControl,
+  AudioThemeFloatingControl,
+} from './model';
+export type {
+  PlayerChroming,
+  DefaultThemeConfig,
+  DefaultChroming,
+  CustomThemeConfig,
+  CustomChroming,
+  StampThemeConfig,
+  StampChroming,
+  ChromelessChroming,
+  AudioThemeConfig,
+  AudioChroming,
+  EditorialThemeConfig,
+  EditorialChroming,
+} from './model';
 export {
   PlayerChromingTheme,
   ControlBarVisibility,
   DefaultThemeControl,
   DefaultThemeFloatingControl,
   StampThemeFloatingControl,
+  EditorialThemeFloatingControl,
   StampThemeScale,
   StampTimeFormat,
   WatermarkVisibility,
   AudioPlayerSize,
   FullscreenChroming,
+  EditorialTimeFormat,
+  AudioThemeControl,
+  AudioThemeFloatingControl,
 };

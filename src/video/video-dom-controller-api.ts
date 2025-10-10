@@ -43,8 +43,6 @@ export interface VideoDomControllerApi extends Destroyable {
 
   getSafeZones(): VideoSafeZone[];
 
-  setSafeZoneAspectRatio(aspectRatio: string): void;
-
   appendHTMLTrackElement(omakaseTextTrack: OmakaseTextTrack): Observable<HTMLTrackElement | undefined>;
 
   getTextTrackList(): TextTrackList;

@@ -59,8 +59,10 @@ export class OmakaseTimeRange extends MediaTimeRange implements TimeRangeMarkerT
       #markers {
         position: absolute;
         width: 100%;
-        height: 100%;
         z-index: 1;
+        height: var(--time-range-markers-height, 100%);
+        bottom: var(--time-range-markers-bottom-offset, 0);
+        background: var(--time-range-background, transparent);
       }
       .marker {
         position: absolute;
@@ -78,8 +80,9 @@ export class OmakaseTimeRange extends MediaTimeRange implements TimeRangeMarkerT
       }
       .marker.focused {
         height: calc(100% + var(--time-range-marker-focus-height, 3px));
-        top: calc(-1 * var(--time-range-marker-focus-height, 3px));
+        top: var(--time-range-marker-focus-top, calc(-1 * var(--time-range-marker-focus-height, 3px)));
         z-index: 1;
+        filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.25));
       }
       .marker.focused .marker-halo {
         display: block;
@@ -90,6 +93,7 @@ export class OmakaseTimeRange extends MediaTimeRange implements TimeRangeMarkerT
     this._previewBox = this.shadowRoot!.querySelector('[part~="preview-box"]')!;
     const markerTrackContainer = this.shadowRoot!.querySelector('#appearance')!;
     this._markerTrack = document.createElement('div');
+    this.classList.remove('has-markers');
     this._markerTrack.id = 'markers';
     markerTrackContainer.appendChild(this._markerTrack);
     const rangeElement = this.shadowRoot!.querySelector('#range') as HTMLElement;
@@ -97,7 +101,12 @@ export class OmakaseTimeRange extends MediaTimeRange implements TimeRangeMarkerT
       for (const marker of this._markers) {
         const markerElement = this._markerTrack.querySelector(`#${markerElementPrefix}-${marker.id}`);
         if (markerElement) {
-          if (event.clientX >= markerElement.getBoundingClientRect().x && event.clientX < markerElement.getBoundingClientRect().x + markerElement.getBoundingClientRect().width) {
+          if (
+            event.clientX >= markerElement.getBoundingClientRect().x &&
+            event.clientX < markerElement.getBoundingClientRect().x + markerElement.getBoundingClientRect().width &&
+            (this.getAttribute('editorial') === null ||
+              (event.clientY >= markerElement.getBoundingClientRect().y && event.clientY < markerElement.getBoundingClientRect().y + markerElement.getBoundingClientRect().height))
+          ) {
             if (!markerElement.classList.contains('focused')) {
               markerElement.classList.add('focused');
               this.onMarkerMouseEnter$.next({marker});
@@ -165,6 +174,7 @@ export class OmakaseTimeRange extends MediaTimeRange implements TimeRangeMarkerT
 
   addMarker(marker: MarkerApi): MarkerApi {
     this._markers.push(marker);
+    this.classList.add('has-markers');
     this.addMarkerElement(marker);
     this.onMarkerCreate$.next({marker});
     (marker as MomentMarker).onChange$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
@@ -178,8 +188,11 @@ export class OmakaseTimeRange extends MediaTimeRange implements TimeRangeMarkerT
     const marker = this._markers.find((marker) => marker.id === id);
     if (marker) {
       this._markers.splice(this._markers.indexOf(marker), 1);
-      this._markerTrack!.querySelector(`#${markerElementPrefix}-${id}`)?.remove();
+      this._markerTrack.querySelector(`#${markerElementPrefix}-${id}`)?.remove();
       this.onMarkerDelete$.next({marker});
+    }
+    if (!this._markers.length) {
+      this.classList.remove('has-markers');
     }
   }
 
@@ -210,6 +223,7 @@ export class OmakaseTimeRange extends MediaTimeRange implements TimeRangeMarkerT
   removeAllMarkers(): void {
     this._markers = [];
     this._markerTrack.innerHTML = '';
+    this.classList.remove('has-markers');
   }
 
   loadVtt(vttUrl: string, options?: TimeRangeMarkerTrackVttLoadOptions): Observable<MarkerVttFile | undefined> {

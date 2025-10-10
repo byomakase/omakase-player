@@ -1122,6 +1122,7 @@ export class DetachableVideoController extends SwitchableVideoController {
                       },
                     });
                   } else {
+                    nextCompleteObserver(observer);
                   }
                 },
               });

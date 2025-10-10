@@ -20,6 +20,7 @@ export enum PlayerChromingTheme {
   Chromeless = 'CHROMELESS',
   Custom = 'CUSTOM',
   Audio = 'AUDIO',
+  Editorial = 'EDITORIAL',
 }
 
 export enum ControlBarVisibility {
@@ -72,6 +73,13 @@ export enum AudioThemeFloatingControl {
   HelpMenu = 'HELP_MENU',
 }
 
+export enum EditorialThemeFloatingControl {
+  ProgressBar = 'PROGRESS_BAR',
+  Time = 'TIME',
+  PlaybackControls = 'PLAYBACK_CONTROLS',
+  HelpMenu = 'HELP_MENU',
+}
+
 export enum StampThemeScale {
   Fill = 'FILL',
   Fit = 'FIT',
@@ -80,6 +88,11 @@ export enum StampThemeScale {
 export enum StampTimeFormat {
   Timecode = 'TIMECODE',
   CountdownTimer = 'COUNTDOWN_TIMER',
+  MediaTime = 'MEDIA_TIME',
+}
+
+export enum EditorialTimeFormat {
+  Timecode = 'TIMECODE',
   MediaTime = 'MEDIA_TIME',
 }
 
@@ -170,17 +183,19 @@ export interface DefaultThemeConfig {
   htmlTemplateId?: string;
 }
 
+export interface CustomThemeConfig {
+  /**
+   * Id of the custom web component used for Player chroming
+   */
+  htmlTemplateId: string;
+}
+
 export interface DefaultChroming extends BasePlayerChroming<PlayerChromingTheme.Default> {
   themeConfig?: Partial<DefaultThemeConfig>;
 }
 
 export interface CustomChroming extends BasePlayerChroming<PlayerChromingTheme.Custom> {
-  themeConfig?: {
-    /**
-     * Id of the custom web component used for Player chroming
-     */
-    htmlTemplateId: string;
-  };
+  themeConfig?: Partial<CustomThemeConfig>;
 }
 
 export interface StampThemeConfig {
@@ -242,6 +257,27 @@ export interface AudioThemeConfig {
   htmlTemplateId?: string;
 }
 
+export interface EditorialThemeConfig {
+  /**
+   * Specifies list of enabled floating controls
+   */
+  floatingControls: EditorialThemeFloatingControl[];
+
+  /**
+   * Specifies list of floating controls that are shown when the video is playing
+   */
+  alwaysOnFloatingControls: EditorialThemeFloatingControl[];
+  /**
+   * Specifies which time format will be used in the timer control
+   */
+  timeFormat: EditorialTimeFormat;
+
+  /**
+   * Id of the custom web component used for Player chroming
+   */
+  htmlTemplateId?: string;
+}
+
 export interface StampChroming extends BasePlayerChroming<PlayerChromingTheme.Stamp> {
   themeConfig?: Partial<StampThemeConfig>;
 }
@@ -250,9 +286,13 @@ export interface AudioChroming extends BasePlayerChroming<PlayerChromingTheme.Au
   themeConfig?: Partial<AudioThemeConfig>;
 }
 
+export interface EditorialChroming extends BasePlayerChroming<PlayerChromingTheme.Editorial> {
+  themeConfig?: Partial<EditorialThemeConfig>;
+}
+
 export interface ChromelessChroming extends BasePlayerChroming<PlayerChromingTheme.Chromeless> {}
 
-export type PlayerChroming = DefaultChroming | StampChroming | CustomChroming | ChromelessChroming | AudioChroming;
+export type PlayerChroming = DefaultChroming | StampChroming | CustomChroming | ChromelessChroming | AudioChroming | EditorialChroming;
 
 export const DEFAULT_PLAYER_CHROMING_CONFIG: DefaultThemeConfig = {
   controlBarVisibility: ControlBarVisibility.Enabled,
@@ -290,6 +330,12 @@ export const DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG: AudioThemeConfig = {
   floatingControls: [AudioThemeFloatingControl.PlaybackControls, AudioThemeFloatingControl.HelpMenu],
   playbackRates: [0.5, 0.75, 1, 2],
   playerSize: AudioPlayerSize.Full,
+};
+
+export const DEFAULT_EDITORIAL_PLAYER_CHROMING_CONFIG: EditorialThemeConfig = {
+  timeFormat: EditorialTimeFormat.MediaTime,
+  floatingControls: [EditorialThemeFloatingControl.PlaybackControls, EditorialThemeFloatingControl.ProgressBar, EditorialThemeFloatingControl.Time, EditorialThemeFloatingControl.HelpMenu],
+  alwaysOnFloatingControls: [EditorialThemeFloatingControl.Time, EditorialThemeFloatingControl.ProgressBar],
 };
 
 export const DEFAULT_PLAYER_CHROMING: DefaultChroming = {

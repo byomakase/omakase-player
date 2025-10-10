@@ -27,7 +27,7 @@ import {Alert} from '../alerts/model';
 import {
   AudioLoadedEvent,
   AudioPeakProcessorMessageEvent,
-  AudioSwitchedEvent,
+  AudioSwitchedEvent, AudioUpdatedEvent,
   HelpMenuGroup,
   MainAudioChangeEvent,
   MainAudioInputSoloMuteEvent,
@@ -379,6 +379,12 @@ export class DetachedVideoController implements VideoControllerApi {
     this._videoController.onAudioLoaded$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
       next: (value) => {
         this._messageChannel!.send('VideoControllerApi.onAudioLoaded$', value);
+      },
+    });
+
+    this._videoController.onAudioUpdated$.pipe(takeUntil(this._messageChannelBreaker$)).subscribe({
+      next: (value) => {
+        this._messageChannel!.send('VideoControllerApi.onAudioUpdated$', value);
       },
     });
 
@@ -865,6 +871,14 @@ export class DetachedVideoController implements VideoControllerApi {
         },
       });
 
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.updateAudioTrack')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.updateAudioTrack(request[0]));
+        },
+      });
+
     this._messageChannel!.createRequestResponseStream('VideoControllerApi.activateMainAudio')
       .pipe(takeUntil(this._messageChannelBreaker$))
       .subscribe({
@@ -1250,6 +1264,10 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.onAudioSwitched$;
   }
 
+  get onAudioUpdated$(): Observable<AudioUpdatedEvent> {
+    return this._videoController.onAudioUpdated$;
+  }
+
   get onPlaybackState$(): Observable<MediaElementPlaybackState> {
     return this._videoController.onPlaybackState$;
   }
@@ -1615,6 +1633,10 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.setActiveAudioTrack(id);
   }
 
+  updateAudioTrack(audioTrack: OmpAudioTrack): Observable<void> {
+    return this._videoController.updateAudioTrack(audioTrack);
+  }
+
   activateMainAudio(): Observable<void> {
     return this._videoController.activateMainAudio();
   }
@@ -1724,7 +1746,7 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.createMainAudioPeakProcessor(audioMeterStandard);
   }
 
-  getMainAudioNode(): AudioNode {
+  getMainAudioNode(): AudioNode | undefined {
     return this._videoController.getMainAudioNode();
   }
 

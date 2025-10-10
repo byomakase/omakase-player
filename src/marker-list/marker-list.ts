@@ -335,6 +335,7 @@ export class MarkerList implements Destroyable, MarkerListApi {
     const markerItem = marker instanceof MarkerListItem ? marker : new MarkerListItem(marker, source);
     this.resolveThumbnail(marker).subscribe((thumbnail) => {
       markerItem.thumbnail = thumbnail;
+      this._markerListComponent.updateMarker(markerItem.id, {thumbnail});
     });
     this._markerListComponent.addMarker(markerItem);
   }
