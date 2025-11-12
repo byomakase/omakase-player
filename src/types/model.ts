@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import {Observable} from 'rxjs';
+
 export interface TimeObservation {}
 
 export interface MomentObservation extends TimeObservation {
@@ -36,6 +38,9 @@ export interface HelpMenuItem {
 }
 
 export interface ComponentVisibility {
+  onHide$: Observable<void>;
+  onShow$: Observable<void>;
+
   /**
    * Is component visible
    */

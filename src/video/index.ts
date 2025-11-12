@@ -31,7 +31,7 @@ export type {
   OmpPeakProcessorDataPeaks,
   BufferedTimespan,
   VideoWindowPlaybackState,
-  OmpAudioNodeParamType,
+  OmpAudioEffectParamType,
   OmpAudioNodeParamPropType,
   TimecodeObject,
   VideoProtocol,

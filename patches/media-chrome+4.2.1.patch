@@ -1,0 +1,13 @@
+diff --git a/node_modules/media-chrome/dist/utils/range-animation.js b/node_modules/media-chrome/dist/utils/range-animation.js
+index 13d7abe..8042943 100644
+--- a/node_modules/media-chrome/dist/utils/range-animation.js
++++ b/node_modules/media-chrome/dist/utils/range-animation.js
+@@ -76,7 +76,7 @@ class RangeAnimation {
+   update({ start, duration, playbackRate }) {
+     const increase = start - __privateGet(this, _range).valueAsNumber;
+     const durationDelta = Math.abs(duration - this.duration);
+-    if (increase > 0 || increase < -0.03 || durationDelta >= 0.5) {
++    if (increase !== 0 || durationDelta >= 0.5) {
+       this.callback(start);
+     }
+     __privateSet(this, _updateStartValue, start);

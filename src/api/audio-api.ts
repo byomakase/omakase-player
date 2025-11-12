@@ -38,8 +38,9 @@ import {
 import {AudioMeterStandard, OmpAudioRouterState, OmpAudioRoutingConnection, OmpAudioRoutingPath, OmpMainAudioState, OmpSidecarAudioState} from '../video';
 import {OmpAudioRouter} from '../video/audio-router';
 import {SidecarAudioApi} from './sidecar-audio-api';
-import {OmpAudioEffectFilter, OmpAudioEffectParam, OmpAudioEffectsGraphDef} from '../audio';
+import {OmpAudioEffectFactory, OmpAudioEffectFilter, OmpAudioEffectParam} from '../audio';
 import {OmpAudioRoutingInputType, OmpMainAudioInputSoloMuteState, OmpSidecarAudioInputSoloMuteState} from '../video/model';
+import {OmpAudioEffectsGraphConnection, OmpAudioEffectsGraphDef} from '../audio/model';
 
 export interface AudioApi extends Api {
   /**
@@ -60,7 +61,7 @@ export interface AudioApi extends Api {
    *  Fires on audio track updated
    *  @readonly
    */
-  onAudioUpdated$: Observable<AudioUpdatedEvent>
+  onAudioUpdated$: Observable<AudioUpdatedEvent>;
 
   /**
    * Fires on master audio output volume change
@@ -217,35 +218,40 @@ export interface AudioApi extends Api {
   updateMainAudioRouterConnections(connections: OmpAudioRoutingConnection[]): Observable<void>;
 
   /**
-   * Creates {@link OmpAudioEffectsGraph}'s from provided {@link effectsGraphDef}'s to routing paths provided with {@link routingPath}. </br>
+   * Creates {@link OmpAudioEffectsGraph}'s from provided {@link effectsGraphDef}'s to slot provided through {@link effectsGraphConnection}. </br>
    *
-   * If {@link routingPath} is not provided {@link OmpAudioEffectsGraph}s will be set on all available routing paths. </br>
-   * If {@link routingPath.output} is not provided {@link OmpAudioEffectsGraph}s will be set on all available routing paths where {@link OmpAudioRoutingPath.input} = {@link routingPath.input}. </br>
-   * If {@link routingPath.input} is not provided {@link OmpAudioEffectsGraph}s will be set on all available routing paths where {@link OmpAudioRoutingPath.output} = {@link routingPath.output}. </br>
+   * If {@link effectsGraphConnection} specifies a router slot the following routing logic is used: </br>
+   *
+   * If {@link effectsGraphConnection.routingPath} is not provided {@link OmpAudioEffectsGraph}s will be set on all available routing paths. </br>
+   * If {@link effectGraphConnection.routingPath.output} is not provided {@link OmpAudioEffectsGraph}s will be set on all available routing paths where {@link OmpAudioRoutingPath.input} = {@link effectGraphConnection.routingPath.input}. </br>
+   * If {@link effectGraphConnection.routingPath.input} is not provided {@link OmpAudioEffectsGraph}s will be set on all available routing paths where {@link OmpAudioRoutingPath.output} = {@link effectGraphConnection.routingPath.output}. </br>
    *
    * @param effectsGraphDef
-   * @param routingPath
+   * @param effectsGraphConnection
    */
-  setMainAudioEffectsGraphs(effectsGraphDef: OmpAudioEffectsGraphDef, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void>;
+  setMainAudioEffectsGraphs(effectsGraphDef: OmpAudioEffectsGraphDef, effectsGraphConnection: OmpAudioEffectsGraphConnection): Observable<void>;
 
   /**
-   * Removes {@link OmpAudioEffectsGraph}'s from routing paths provided with {@link routingPath}. </br>
+   * Removes {@link OmpAudioEffectsGraph}'s from slot provided with {@link effectsGraphConnection}. </br>
    *
-   * If {@link routingPath} is not provided {@link OmpAudioEffectsGraph}s will be removed on all available routing paths. </br>
-   * If {@link routingPath.output} is not provided {@link OmpAudioEffectsGraph}s will be removed on all available routing paths where {@link OmpAudioRoutingPath.input} = {@link routingPath.input}. </br>
-   * If {@link routingPath.input} is not provided {@link OmpAudioEffectsGraph}s will be removed on all available routing paths where {@link OmpAudioRoutingPath.output} = {@link routingPath.output}. </br>
+   * If {@link effectsGraphConnection} specifies a router slot the following routing logic is used: </br>
    *
-   * @param routingPath
+   * If {@link effectsGraphConnection.routingPath} is not provided {@link OmpAudioEffectsGraph}s will be removed on all available routing paths. </br>
+   * If {@link effectsGraphConnection.routingPath.output} is not provided {@link OmpAudioEffectsGraph}s will be removed on all available routing paths where {@link OmpAudioRoutingPath.input} = {@link effectsGraphConnection.routingPath.input}. </br>
+   * If {@link effectsGraphConnection.routingPath.input} is not provided {@link OmpAudioEffectsGraph}s will be removed on all available routing paths where {@link OmpAudioRoutingPath.output} = {@link effectsGraphConnection.routingPath.output}. </br>
+   *
+   * @param effectsGraphConnection
    */
-  removeMainAudioEffectsGraphs(routingPath?: Partial<OmpAudioRoutingPath>): Observable<void>;
+  removeMainAudioEffectsGraphs(effectsGraphConnection: OmpAudioEffectsGraphConnection): Observable<void>;
 
   /**
-   * Sets {@link OmpAudioEffectParam} for audio effects that match {@link filter}
+   * Sets {@link OmpAudioEffectParam} for audio effects that match {@link filter} on a given {@link effectGraphConnection.slot}
    *
    * @param param
+   * @param effectGraphConnection
    * @param filter
    */
-  setMainAudioEffectsParams(param: OmpAudioEffectParam, filter?: {routingPath?: Partial<OmpAudioRoutingPath>} & OmpAudioEffectFilter): Observable<void>;
+  setMainAudioEffectsParams(param: OmpAudioEffectParam, effectGraphConnection: OmpAudioEffectsGraphConnection, filter?: OmpAudioEffectFilter): Observable<void>;
 
   /**
    * Solo or unsolo (depending on current input state) given main audio router input
@@ -440,38 +446,43 @@ export interface AudioApi extends Api {
   updateSidecarAudioRouterConnections(sidecarAudioTrackId: string, connections: OmpAudioRoutingConnection[]): Observable<void>;
 
   /**
-   * Creates {@link OmpAudioEffectsGraph}'s from provided {@link effectsGraphDef}'s to routing paths provided with {@link routingPath}. </br>
+   * Creates {@link OmpAudioEffectsGraph}'s from provided {@link effectsGraphDef}'s to slot provided through {@link effectsGraphConnection}. </br>
    *
-   * If {@link routingPath} is not provided {@link OmpAudioEffectsGraph}s will be set on all available routing paths. </br>
-   * If {@link routingPath.output} is not provided {@link OmpAudioEffectsGraph}s will be set on all available routing paths where {@link OmpAudioRoutingPath.input} = {@link routingPath.input}. </br>
-   * If {@link routingPath.input} is not provided {@link OmpAudioEffectsGraph}s will be set on all available routing paths where {@link OmpAudioRoutingPath.output} = {@link routingPath.output}. </br>
+   * If {@link effectsGraphConnection} specifies a router slot the following routing logic is used: </br>
+   *
+   * If {@link effectsGraphConnection.routingPath} is not provided {@link OmpAudioEffectsGraph}s will be set on all available routing paths. </br>
+   * If {@link effectGraphConnection.routingPath.output} is not provided {@link OmpAudioEffectsGraph}s will be set on all available routing paths where {@link OmpAudioRoutingPath.input} = {@link effectGraphConnection.routingPath.input}. </br>
+   * If {@link effectGraphConnection.routingPath.input} is not provided {@link OmpAudioEffectsGraph}s will be set on all available routing paths where {@link OmpAudioRoutingPath.output} = {@link effectGraphConnection.routingPath.output}. </br>
    *
    * @param sidecarAudioTrackId id Sidecar audio {@link OmpAudioTrack.id}
    * @param effectsGraphDef
-   * @param routingPath
+   * @param effectsGraphConnection
    */
-  setSidecarAudioEffectsGraph(sidecarAudioTrackId: string, effectsGraphDef: OmpAudioEffectsGraphDef, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void>;
+  setSidecarAudioEffectsGraph(sidecarAudioTrackId: string, effectsGraphDef: OmpAudioEffectsGraphDef, effectsGraphConnection: OmpAudioEffectsGraphConnection): Observable<void>;
 
   /**
-   * Removes {@link OmpAudioEffectsGraph}'s from routing paths provided with {@link routingPath}. </br>
+   * Removes {@link OmpAudioEffectsGraph}'s from slot provided with {@link effectsGraphConnection}. </br>
    *
-   * If {@link routingPath} is not provided {@link OmpAudioEffectsGraph}s will be removed on all available routing paths. </br>
-   * If {@link routingPath.output} is not provided {@link OmpAudioEffectsGraph}s will be removed on all available routing paths where {@link OmpAudioRoutingPath.input} = {@link routingPath.input}. </br>
-   * If {@link routingPath.input} is not provided {@link OmpAudioEffectsGraph}s will be removed on all available routing paths where {@link OmpAudioRoutingPath.output} = {@link routingPath.output}. </br>
+   * If {@link effectsGraphConnection} specifies a router slot the following routing logic is used: </br>
+   *
+   * If {@link effectsGraphConnection.routingPath} is not provided {@link OmpAudioEffectsGraph}s will be removed on all available routing paths. </br>
+   * If {@link effectsGraphConnection.routingPath.output} is not provided {@link OmpAudioEffectsGraph}s will be removed on all available routing paths where {@link OmpAudioRoutingPath.input} = {@link effectsGraphConnection.routingPath.input}. </br>
+   * If {@link effectsGraphConnection.routingPath.input} is not provided {@link OmpAudioEffectsGraph}s will be removed on all available routing paths where {@link OmpAudioRoutingPath.output} = {@link effectsGraphConnection.routingPath.output}. </br>
    *
    * @param sidecarAudioTrackId id Sidecar audio {@link OmpAudioTrack.id}
-   * @param routingPath
+   * @param effectsGraphConnection
    */
-  removeSidecarAudioEffectsGraphs(sidecarAudioTrackId: string, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void>;
+  removeSidecarAudioEffectsGraphs(sidecarAudioTrackId: string, effectsGraphConnection: OmpAudioEffectsGraphConnection): Observable<void>;
 
   /**
-   * Sets {@link OmpAudioEffectParam} for audio effects that match {@link filter}
+   * Sets {@link OmpAudioEffectParam} for audio effects that match {@link filter} on a given {@link effectGraphConnection.slot}
    *
    * @param sidecarAudioTrackId id Sidecar audio {@link OmpAudioTrack.id}
    * @param param
+   * @param effectGraphConnection
    * @param filter
    */
-  setSidecarAudioEffectsParams(sidecarAudioTrackId: string, param: OmpAudioEffectParam, filter?: {routingPath?: Partial<OmpAudioRoutingPath>} & OmpAudioEffectFilter): Observable<void>;
+  setSidecarAudioEffectsParams(sidecarAudioTrackId: string, param: OmpAudioEffectParam, effectGraphConnection: OmpAudioEffectsGraphConnection, filter?: OmpAudioEffectFilter): Observable<void>;
 
   /**
    * Creates Sidecar audio peak processor
@@ -509,4 +520,6 @@ export interface AudioApi extends Api {
    * @param routingPath
    */
   toggleSidecarAudioRouterMute(sidecarAudioTrackId: string, routingPath: OmpAudioRoutingInputType): Observable<void>;
+
+  registerAudioEffect(effectType: string, effectFactory: OmpAudioEffectFactory): void;
 }

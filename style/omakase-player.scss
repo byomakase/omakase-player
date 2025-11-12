@@ -40,6 +40,7 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
     position: relative;
     width: 700px;
     aspect-ratio: 16/9;
+    container-type: inline-size;
 
     &.omakase-player-wrapper-compact {
       height: var(--compact-player-height, 250px);
@@ -47,6 +48,10 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
       .omakase-video {
         opacity: 0;
       }
+    }
+
+    media-theme {
+      container-type: inline-size;
     }
 
     &.omakase-player-wrapper-stamp {
@@ -68,6 +73,13 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
       }
     }
 
+    &.omakase-player-wrapper-stamp,
+    &.omakase-player-wrapper-audio {
+      .omakase-video::cue {
+        opacity: 0;
+      }
+    }
+
     .omakase-video {
       display: block;
       width: 100%;
@@ -85,10 +97,26 @@ $colors: (#fff #ffe500 #00ffd7 #0fe000 #ff00fe #e30013 #002dbc) (#002dbc #353535
       top: 0;
       left: 0;
       background-color: #000;
-      background-image: url(/images/background-omp.svg);
+      background-image: url(/images/background-small.svg);
       background-position: bottom;
       background-size: 100%;
       background-repeat: no-repeat;
+
+      @container (min-width: 600px) {
+        background-image: url(/images/background-large.svg);
+
+        .omakase-background-logo {
+          width: 27.5%;
+          aspect-ratio: 551 / 81;
+          position: absolute;
+          top: 5%;
+          left: 5%;
+          background-image: url(/images/background-logo.svg);
+          background-position: top;
+          background-size: 100%;
+          background-repeat: no-repeat;
+        }
+      }
     }
 
     .omakase-detached-background {

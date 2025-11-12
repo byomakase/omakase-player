@@ -165,7 +165,7 @@ The following attributes are supported in the `themeConfig` object for the `STAM
 | Field | Description | Type | Updatable | Comment |
 |-------|-------------|------|-----------|---------|
 | `floatingControls` | Specifies list of enabled floating controls | Constrained values: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`, `PLAYBACK_CONTROLS`, `FULLSCREEN` | No | Default: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`, `PLAYBACK_CONTROLS`
-| `alwaysOnfloatingControls`   | Specifies floating control that will stay always visible | Constrained values: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`, `PLAYBACK_CONTROLS`, `FULLSCREEN` | No | Default: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`
+| `alwaysOnFloatingControls`   | Specifies floating control that will stay always visible | Constrained values: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`, `PLAYBACK_CONTROLS`, `FULLSCREEN` | No | Default: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`
 | `stampScale` | Specifies how the video will fill the container | Constrained values: `FILL`, `FIT` | Yes | Default: `FIT`
 | `timeFormat`       | Specifies mode of time floating component | Constrained values: `TIMECODE`, `COUNTDOWN_TIMER`, `MEDIA_TIME` | Yes | Default: `MEDIA_TIME`
 | `htmlTemplateId`   | Id of the template used for customization slots | `string` | No |
@@ -179,15 +179,25 @@ The following attributes are supported in the `themeConfig` object for the `AUDI
 | `floatingControls` | Specifies list of enabled floating controls | `HELP_MENU`, `PLAYBACK_CONTROLS` | No | Default: all controls
 | `playbackRates` | Sets the available playback rates in menu | `number[]` | No | Default: `[0.5,0.75,1,2]`
 | `playerSize` | Audio player size | Constrained values: `FULL`, `COMPACT`| Yes | Default: `FULL`
+| `visualization` | Audio player visualization | Constrained values: `ENABLED`, `DISABLED`| No | Default: `DISABLED`
+| `visualizationConfig` | Audio player visualization configuration | `object` | No | Described in table below
 | `htmlTemplateId`   | Id of the template used for customization slots | `string` | No |
+
+The following attributes are supported in the `visualizationConfig` object for the `AUDIO` theme with `visualization` set to `ENABLED`:
+
+| Field | Description | Type | Updatable | Comment |
+|-------|-------------|------|-----------|---------|
+| `strokeColor` | Specifies the border color of the bars | string | No | Default: `#9968BF`
+| `fillColors` | Specifies the fill gradient colors of the bars | string[] | No | Default: [`#F79433`, `#88B840`, `#CC6984`, `#662D91`]
 
 The following attributes are supported in the `themeConfig` object for the `EDITORIAL` theme:
 
 | Field | Description | Type | Updatable | Comment |
 |-------|-------------|------|-----------|---------|
-| `floatingControls` | Specifies list of enabled floating controls | Constrained values: `PROGRESS_BAR`, `TIME`, `PLAYBACK_CONTROLS`, `HELP_MENU` | No | Default: all controls
-| `alwaysOnfloatingControls`   | Specifies floating control that will stay always visible | Constrained values: `PROGRESS_BAR`, `TIME`, `PLAYBACK_CONTROLS`, `HELP_MENU` | No | Default: `TIME`
-| `timeFormat`       | Specifies mode of time floating component | Constrained values: `TIMECODE`, `MEDIA_TIME` | Yes | Default: `MEDIA_TIME`
+| `floatingControls` | Specifies list of enabled floating controls | Constrained values: `PROGRESS_BAR`, `TIME`, `PLAYBACK_CONTROLS`, `HELP_MENU`, `AUDIO_TOGGLE`, `FULLSCREEN` | No | Default: all controls
+| `alwaysOnFloatingControls`   | Specifies floating control that will stay always visible | Constrained values: `PROGRESS_BAR`, `TIME`, `PLAYBACK_CONTROLS` | No | Default: `TIME`
+| `timeFormat`       | Specifies mode of time floating component | Constrained values: `TIMECODE`, `MEDIA_TIME` | Yes | Default: `TIMECODE`
+| `controlBarPosition` | Specifies the position of the control bar relative to the video | Constrained values: `OVER_VIDEO`, `UNDER_VIDEO` | Yes | Default: `OVER_VIDEO` |
 | `htmlTemplateId`   | Id of the template used for customization slots | `string` | No |
 
 ## Default Theme

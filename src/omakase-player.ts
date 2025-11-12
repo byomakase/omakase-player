@@ -159,6 +159,10 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
       this._config.playerChroming.themeConfig = {
         ...DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG,
         ...(config?.playerChroming as AudioChroming)?.themeConfig,
+        visualizationConfig: {
+          ...DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG.visualizationConfig,
+          ...(config?.playerChroming as AudioChroming)?.themeConfig?.visualizationConfig,
+        },
       };
     } else if (this._config.playerChroming?.theme === PlayerChromingTheme.Editorial) {
       this._config.playerChroming.themeConfig = {

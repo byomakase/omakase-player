@@ -18,6 +18,7 @@ import {MarkerVttCue, OmpAudioTrack} from '../types';
 import {OmpAudioEffectsGraphDef} from '../audio';
 import {VttLoadOptions} from '../api/vtt-aware-api';
 import {MarkerApi} from '../api';
+import {OmpAudioEffectsGraphConnection} from '../audio/model';
 
 export type VideoProtocol = 'hls' | 'native' | 'audio';
 
@@ -180,6 +181,11 @@ export interface OmpAudioState {
    * Source audio node channel count
    */
   numberOfChannels: number;
+
+  /**
+   * Active audio effects that transform interleaved channel audio either before or after audio router.
+   */
+  interleavedAudioEffects: AudioEffectBundle[];
 }
 
 export interface OmpAudioInputSoloMuteState {
@@ -404,6 +410,8 @@ export interface OmpAudioNodeParamType {
   props: OmpAudioNodeParamPropType[];
 }
 
+export interface OmpAudioEffectParamType extends OmpAudioNodeParamType {}
+
 export interface MarkerTrackConfig {
   id?: string;
   description?: string;
@@ -411,4 +419,13 @@ export interface MarkerTrackConfig {
   vttUrl?: string;
   vttLoadOptions?: VttLoadOptions;
   vttMarkerCreateFn?: (marker: MarkerVttCue, index: number) => MarkerApi;
+}
+
+export interface MainAudioEffects {
+  effects: AudioEffectBundle[];
+}
+
+export interface AudioEffectBundle {
+  effectsGraphDef: OmpAudioEffectsGraphDef;
+  effectsGraphConnection: OmpAudioEffectsGraphConnection;
 }

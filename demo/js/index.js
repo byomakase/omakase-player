@@ -1109,6 +1109,10 @@ function initializeOmakaseTimeline() {
 
 function processSubtitles() {
   omakasePlayer.subtitles.onSubtitlesLoaded$.subscribe((event) => {
+    let firstSubtitleTrack = omakasePlayer.subtitles.getTracks()[0]?.id;
+    if (firstSubtitleTrack) {
+      omakasePlayer.subtitles.showTrack(omakasePlayer.subtitles.getTracks()[0].id)
+      }
     if (event === undefined) {
       return;
     }
@@ -1210,7 +1214,7 @@ function processSubtitles() {
           src: urls[urlSelector].dkSubtitle,
           label: 'DK',
           language: 'da-dk',
-          default: false,
+          default: true
         })
         .subscribe((daDkSubtitles) => {
           console.debug(daDkSubtitles);

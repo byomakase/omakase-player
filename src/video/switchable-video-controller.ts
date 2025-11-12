@@ -57,15 +57,29 @@ import {
   VideoWindowPlaybackStateChangeEvent,
   VolumeChangeEvent,
 } from '../types';
-import {AudioMeterStandard, BufferedTimespan, OmpAudioRouterState, OmpAudioRoutingConnection, OmpAudioRoutingPath, OmpMainAudioState, OmpSidecarAudioState, MediaElementPlaybackState, Video, VideoLoadOptions, VideoSafeZone, VideoWindowPlaybackState} from './index';
+import {
+  AudioMeterStandard,
+  BufferedTimespan,
+  OmpAudioRouterState,
+  OmpAudioRoutingConnection,
+  OmpAudioRoutingPath,
+  OmpMainAudioState,
+  OmpSidecarAudioState,
+  MediaElementPlaybackState,
+  Video,
+  VideoLoadOptions,
+  VideoSafeZone,
+  VideoWindowPlaybackState,
+} from './index';
 import {nextCompleteSubject} from '../util/rxjs-util';
 import {VideoControllerConfig} from './video-controller';
 import Hls from 'hls.js';
 import {destroyer} from '../util/destroy-util';
 import {OmpAudioRouter} from './audio-router';
 import {SidecarAudioApi} from '../api/sidecar-audio-api';
-import {OmpAudioEffectFilter, OmpAudioEffectParam, OmpAudioEffectsGraphDef} from '../audio';
+import {OmpAudioEffectFactory, OmpAudioEffectFilter, OmpAudioEffectParam, OmpAudioEffectsGraphDef} from '../audio';
 import {OmpAudioRoutingInputType, OmpMainAudioInputSoloMuteState, OmpSidecarAudioInputSoloMuteState, VideoLoadOptionsInternal} from './model';
+import {OmpAudioEffectsGraphConnection} from '../audio/model';
 
 /**
  * Used for switching between {@link VideoControllerApi} instances
@@ -765,21 +779,16 @@ export class SwitchableVideoController implements VideoControllerApi {
     return this._videoController.updateMainAudioRouterConnections(connections);
   }
 
-  setMainAudioEffectsGraphs(effectsGraphDef: OmpAudioEffectsGraphDef, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
-    return this._videoController.setMainAudioEffectsGraphs(effectsGraphDef, routingPath);
+  setMainAudioEffectsGraphs(effectsGraphDef: OmpAudioEffectsGraphDef, effectsGraphConnection: OmpAudioEffectsGraphConnection): Observable<void> {
+    return this._videoController.setMainAudioEffectsGraphs(effectsGraphDef, effectsGraphConnection);
   }
 
-  removeMainAudioEffectsGraphs(routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
-    return this._videoController.removeMainAudioEffectsGraphs(routingPath);
+  removeMainAudioEffectsGraphs(effectsGraphConnection: OmpAudioEffectsGraphConnection): Observable<void> {
+    return this._videoController.removeMainAudioEffectsGraphs(effectsGraphConnection);
   }
 
-  setMainAudioEffectsParams(
-    param: OmpAudioEffectParam,
-    filter?: {
-      routingPath?: Partial<OmpAudioRoutingPath>;
-    } & OmpAudioEffectFilter
-  ): Observable<void> {
-    return this._videoController.setMainAudioEffectsParams(param, filter);
+  setMainAudioEffectsParams(param: OmpAudioEffectParam, effectGraphConnection: OmpAudioEffectsGraphConnection, filter?: OmpAudioEffectFilter): Observable<void> {
+    return this._videoController.setMainAudioEffectsParams(param, effectGraphConnection, filter);
   }
 
   getSidecarAudios(): SidecarAudioApi[] {
@@ -870,22 +879,23 @@ export class SwitchableVideoController implements VideoControllerApi {
     return this._videoController.updateSidecarAudioRouterConnections(sidecarAudioTrackId, connections);
   }
 
-  setSidecarAudioEffectsGraph(sidecarAudioTrackId: string, effectsGraphDef: OmpAudioEffectsGraphDef, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
-    return this._videoController.setSidecarAudioEffectsGraph(sidecarAudioTrackId, effectsGraphDef, routingPath);
+  setSidecarAudioEffectsGraph(sidecarAudioTrackId: string, effectsGraphDef: OmpAudioEffectsGraphDef, effectsGraphConnection: OmpAudioEffectsGraphConnection): Observable<void> {
+    return this._videoController.setSidecarAudioEffectsGraph(sidecarAudioTrackId, effectsGraphDef, effectsGraphConnection);
   }
 
-  removeSidecarAudioEffectsGraphs(sidecarAudioTrackId: string, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
-    return this._videoController.removeSidecarAudioEffectsGraphs(sidecarAudioTrackId, routingPath);
+  removeSidecarAudioEffectsGraphs(sidecarAudioTrackId: string, effectsGraphConnection: OmpAudioEffectsGraphConnection): Observable<void> {
+    return this._videoController.removeSidecarAudioEffectsGraphs(sidecarAudioTrackId, effectsGraphConnection);
   }
 
   setSidecarAudioEffectsParams(
     sidecarAudioTrackId: string,
     param: OmpAudioEffectParam,
+    effectGraphConnection: OmpAudioEffectsGraphConnection,
     filter?: {
       routingPath?: Partial<OmpAudioRoutingPath>;
     } & OmpAudioEffectFilter
   ): Observable<void> {
-    return this._videoController.setSidecarAudioEffectsParams(sidecarAudioTrackId, param, filter);
+    return this._videoController.setSidecarAudioEffectsParams(sidecarAudioTrackId, param, effectGraphConnection, filter);
   }
 
   createSidecarAudioPeakProcessor(sidecarAudioTrackId: string, audioMeterStandard?: AudioMeterStandard): Observable<Observable<AudioPeakProcessorMessageEvent>> {
@@ -957,5 +967,9 @@ export class SwitchableVideoController implements VideoControllerApi {
 
   toggleSidecarAudioRouterMute(sidecarAudioTrackId: string, routingPath: OmpAudioRoutingInputType): Observable<void> {
     return this._videoController.toggleSidecarAudioRouterMute(sidecarAudioTrackId, routingPath);
+  }
+
+  registerAudioEffect(effectType: string, effectFactory: OmpAudioEffectFactory): void {
+    return this._videoController.registerAudioEffect(effectType, effectFactory);
   }
 }

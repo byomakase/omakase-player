@@ -340,7 +340,8 @@ export class VideoHlsLoader extends BaseVideoLoader {
                   console.debug(`Init segment resolved to`, initSegmentTimeOffset);
                 },
                 error: (err) => {
-                  console.debug(err);
+                  nextCompleteSubject(initSegmentResolution$);
+                  console.debug(`Could not resolve init segment time offset, ignoring init segment time offset.`);
                 },
                 complete: () => {
                   nextCompleteSubject(initSegmentResolution$);

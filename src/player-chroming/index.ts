@@ -23,11 +23,13 @@ import {
   StampTimeFormat,
   WatermarkVisibility,
   EditorialThemeFloatingControl,
+  EditorialControlBarPosition,
   AudioPlayerSize,
   FullscreenChroming,
   EditorialTimeFormat,
   AudioThemeControl,
   AudioThemeFloatingControl,
+  AudioVisualization,
 } from './model';
 export type {
   PlayerChroming,
@@ -50,6 +52,7 @@ export {
   DefaultThemeFloatingControl,
   StampThemeFloatingControl,
   EditorialThemeFloatingControl,
+  EditorialControlBarPosition,
   StampThemeScale,
   StampTimeFormat,
   WatermarkVisibility,
@@ -58,4 +61,5 @@ export {
   EditorialTimeFormat,
   AudioThemeControl,
   AudioThemeFloatingControl,
+  AudioVisualization,
 };

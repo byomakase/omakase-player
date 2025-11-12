@@ -115,6 +115,7 @@ export class OmakaseMuteButton extends MediaChromeButton {
     if (this._videoController) {
       this._videoController.setAudioOutputMuted(!this._videoController.isAudioOutputMuted());
     }
+    this.blur();
   }
 
   override disconnectedCallback() {

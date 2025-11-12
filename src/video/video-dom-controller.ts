@@ -38,6 +38,7 @@ import {HTMLElementEvents} from '../media-element/omp-media-element';
 import {PlayerChromingDomController} from '../player-chroming/player-chroming-dom-controller';
 import {PlayerChromingDomControllerApi} from '../player-chroming/player-chroming-dom-controller-api';
 import {DomController} from '../dom/dom-controller';
+import {OmakaseAudioVisualization} from '../components';
 
 export interface VideoDomControllerConfig {
   playerHTMLElementId: string;
@@ -180,7 +181,9 @@ export class VideoDomController extends DomController implements VideoDomControl
           </media-theme>
           <div class="${this._domClasses.detachedBackground} d-none">
           </div>
-          <div class="${this._domClasses.backgroundImage} d-none"></div>
+          <div class="${this._domClasses.backgroundImage} d-none">
+            <div class="${this._domClasses.backgroundLogo}"></div>
+          </div>
 
           <div class="${this._domClasses.sectionBottomRight} d-none">
               <button class="${this._domClasses.buttonAttach}"></button>
@@ -273,6 +276,10 @@ export class VideoDomController extends DomController implements VideoDomControl
       }
       this.hideElements(this._divHelp);
     }
+  }
+
+  private arePlaybackButtonEventsHandled(): boolean {
+    return this._config.playerChroming.theme === 'STAMP' || this._config.playerChroming.theme === 'EDITORIAL';
   }
 
   isFullscreen(): boolean {
@@ -473,7 +480,7 @@ export class VideoDomController extends DomController implements VideoDomControl
                 this.showElements(this._audioTextToggle);
               }
 
-              if (this._config.playerChroming.theme !== 'STAMP') {
+              if (!this.arePlaybackButtonEventsHandled()) {
                 this._showTemporaryOnMouseMoveTimeoutId = setTimeout(() => {
                   this.hideElements(playControlToShow).hideElements(this._divSectionBottomRight);
 
@@ -498,7 +505,7 @@ export class VideoDomController extends DomController implements VideoDomControl
       .pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$))
       .subscribe({
         next: (event) => {
-          if (this._config.playerChroming.theme !== 'STAMP') {
+          if (!this.arePlaybackButtonEventsHandled()) {
             this.hideElements(this._divButtonOverlayPlay, this._divButtonOverlayPause).hideElements(this._divButtonHelp, this._divHelpMenu).hideElements(this._divSectionBottomRight);
           }
           if (this._audioTextToggle) {
@@ -570,7 +577,7 @@ export class VideoDomController extends DomController implements VideoDomControl
           if (!videoLoaded) {
             this.showElements(this._divButtonOverlayLoading).showElements(this._divBackgroundImage);
           }
-          if (this._config.playerChroming.theme === 'STAMP' && this._videoController.isPaused()) {
+          if (this.arePlaybackButtonEventsHandled() && this._videoController.isPaused()) {
             this.showElements(this._divButtonOverlayPlay);
           }
 
@@ -602,7 +609,7 @@ export class VideoDomController extends DomController implements VideoDomControl
                 .hideElements(this._divBackgroundImage);
               if (state.seeking && state.waiting) {
                 this.showElements(this._divButtonOverlayLoading);
-              } else if (this._config.playerChroming.theme === 'STAMP') {
+              } else if (this.arePlaybackButtonEventsHandled()) {
                 this.showElements(this._divButtonOverlayPause);
               }
             } else if (state.paused) {
@@ -611,7 +618,7 @@ export class VideoDomController extends DomController implements VideoDomControl
                 this.showElements(this._divButtonOverlayLoading);
               } else if (state.ended && !this._config.playerClickHandler) {
                 this.showElements(this._divButtonOverlayReplay);
-              } else if (this._config.playerChroming.theme === 'STAMP') {
+              } else if (this.arePlaybackButtonEventsHandled()) {
                 this.showElements(this._divButtonOverlayPlay);
               }
             } else if (state.seeking && state.waiting) {
@@ -629,6 +636,9 @@ export class VideoDomController extends DomController implements VideoDomControl
           .hideElements(this._divBackgroundImage)
           .showElements(this._divErrorMessage, this._divButtonOverlayError);
         this._divErrorMessage.innerHTML = event.message ? event.message : '';
+        if (this._config.playerChroming.theme === PlayerChromingTheme.Stamp) {
+          this._playerChromingDomController.hideStampOverlay();
+        }
       },
     });
 

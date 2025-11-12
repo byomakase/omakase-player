@@ -1,3 +1,5 @@
+import {OmakaseFullscreenButton} from './omakase-fullscreen-button';
+import {OmakasePlayButton} from './omakase-play-button';
 import {OmakaseTimeRange} from './omakase-time-range';
 import {OmakaseTimeDisplay} from './omakase-time-display';
 import {OmakasePreviewThumbnail} from './omakase-preview-thumbnail';
@@ -10,6 +12,7 @@ import {OmakaseMuteButton} from './omakase-mute-button';
 import {OmakaseDropdownList} from './omakase-dropdown-list';
 import {OmakaseMarkerTrack} from './omakase-marker-track';
 import {OmakaseMarkerBar} from './omakase-marker-bar';
+import {OmakaseAudioVisualization} from './omakase-audio-visualization';
 
 if (!globalThis.customElements.get('omakase-time-range')) {
   globalThis.customElements.define('omakase-time-range', OmakaseTimeRange);
@@ -21,6 +24,14 @@ if (!globalThis.customElements.get('omakase-volume-range')) {
 
 if (!globalThis.customElements.get('omakase-mute-button')) {
   globalThis.customElements.define('omakase-mute-button', OmakaseMuteButton);
+}
+
+if (!globalThis.customElements.get('omakase-play-button')) {
+  globalThis.customElements.define('omakase-play-button', OmakasePlayButton);
+}
+
+if (!globalThis.customElements.get('omakase-fullscreen-button')) {
+  globalThis.customElements.define('omakase-fullscreen-button', OmakaseFullscreenButton);
 }
 
 if (!globalThis.customElements.get('omakase-time-display')) {
@@ -59,10 +70,16 @@ if (!globalThis.customElements.get('omakase-marker-bar')) {
   globalThis.customElements.define('omakase-marker-bar', OmakaseMarkerBar);
 }
 
+if (!globalThis.customElements.get('omakase-audio-visualization')) {
+  globalThis.customElements.define('omakase-audio-visualization', OmakaseAudioVisualization);
+}
+
 export {
   OmakaseTimeRange,
   OmakaseVolumeRange,
   OmakaseMuteButton,
+  OmakasePlayButton,
+  OmakaseFullscreenButton,
   OmakaseTimeDisplay,
   OmakasePreviewThumbnail,
   OmakaseTimecodeEdit,
@@ -72,4 +89,5 @@ export {
   OmakaseDropdownOption,
   OmakaseMarkerTrack,
   OmakaseMarkerBar,
+  OmakaseAudioVisualization,
 };

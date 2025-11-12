@@ -23,6 +23,8 @@ import {Observable} from 'rxjs';
 import {OmpSidecarAudioInputSoloMuteState} from '../video/model';
 import {OmpAudioPeakProcessor} from '../video/audio-peak-processor';
 import {OmpAudioRouter} from '../video/audio-router';
+import {OmpAudioEffectsGraphDef, OmpAudioEffectsGraphConnection} from '../audio/model';
+import {OmpAudioEffectFilter, OmpAudioEffectParam} from '../audio';
 
 /**
  * For Sidecar audio operations
@@ -74,6 +76,9 @@ export interface SidecarAudioApi extends Api, Destroyable {
 
   createAudioPeakProcessor(audioMeterStandard?: AudioMeterStandard): Observable<OmpAudioPeakProcessor>;
 
+  setEffectsGraph(effectsGraphDef: OmpAudioEffectsGraphDef, effectsGraphConnection: OmpAudioEffectsGraphConnection): Observable<void>;
+  removeEffectsGraph(effectsGraphConnection: OmpAudioEffectsGraphConnection): void;
+  setAudioEffectsParams(param: OmpAudioEffectParam, effectGraphConnection: OmpAudioEffectsGraphConnection, filter?: OmpAudioEffectFilter): void;
   /**
    * Sidecar audio track
    */

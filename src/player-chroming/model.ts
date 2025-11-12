@@ -78,6 +78,8 @@ export enum EditorialThemeFloatingControl {
   Time = 'TIME',
   PlaybackControls = 'PLAYBACK_CONTROLS',
   HelpMenu = 'HELP_MENU',
+  AudioToggle = 'AUDIO_TOGGLE',
+  Fullscreen = 'FULLSCREEN',
 }
 
 export enum StampThemeScale {
@@ -109,6 +111,16 @@ export enum AudioPlayerSize {
 export enum FullscreenChroming {
   Enabled = 'ENABLED',
   Disabled = 'DISABLED',
+}
+
+export enum EditorialControlBarPosition {
+  OverVideo = 'OVER_VIDEO',
+  UnderVideo = 'UNDER_VIDEO',
+}
+
+export enum AudioVisualization {
+  Disabled = 'DISABLED',
+  Enabled = 'ENABLED',
 }
 
 interface BasePlayerChroming<T extends PlayerChromingTheme> {
@@ -225,6 +237,18 @@ export interface StampThemeConfig {
   htmlTemplateId?: string;
 }
 
+export interface AudioVisualizationConfig {
+  /**
+   * Hex value for the stroke color
+   */
+  strokeColor: string;
+
+  /**
+   * Hex values for the fill gradient colors
+   */
+  fillColors: string[];
+}
+
 export interface AudioThemeConfig {
   /**
    * Specifies controls visibility
@@ -252,6 +276,16 @@ export interface AudioThemeConfig {
   playerSize: AudioPlayerSize;
 
   /**
+   * Enables/disables the audio visualization
+   */
+  visualization: AudioVisualization;
+
+  /**
+   * Configures the audio visualization
+   */
+  visualizationConfig: AudioVisualizationConfig;
+
+  /**
    * Id of the custom web component used for Player chroming
    */
   htmlTemplateId?: string;
@@ -271,6 +305,11 @@ export interface EditorialThemeConfig {
    * Specifies which time format will be used in the timer control
    */
   timeFormat: EditorialTimeFormat;
+
+  /**
+   * Specifies control bar position
+   */
+  controlBarPosition: EditorialControlBarPosition;
 
   /**
    * Id of the custom web component used for Player chroming
@@ -330,11 +369,24 @@ export const DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG: AudioThemeConfig = {
   floatingControls: [AudioThemeFloatingControl.PlaybackControls, AudioThemeFloatingControl.HelpMenu],
   playbackRates: [0.5, 0.75, 1, 2],
   playerSize: AudioPlayerSize.Full,
+  visualization: AudioVisualization.Disabled,
+  visualizationConfig: {
+    strokeColor: '#9968BF',
+    fillColors: ['#F79433', '#88B840', '#CC6984', '#662D91'],
+  },
 };
 
 export const DEFAULT_EDITORIAL_PLAYER_CHROMING_CONFIG: EditorialThemeConfig = {
-  timeFormat: EditorialTimeFormat.MediaTime,
-  floatingControls: [EditorialThemeFloatingControl.PlaybackControls, EditorialThemeFloatingControl.ProgressBar, EditorialThemeFloatingControl.Time, EditorialThemeFloatingControl.HelpMenu],
+  timeFormat: EditorialTimeFormat.Timecode,
+  controlBarPosition: EditorialControlBarPosition.OverVideo,
+  floatingControls: [
+    EditorialThemeFloatingControl.PlaybackControls,
+    EditorialThemeFloatingControl.ProgressBar,
+    EditorialThemeFloatingControl.Time,
+    EditorialThemeFloatingControl.HelpMenu,
+    EditorialThemeFloatingControl.Fullscreen,
+    EditorialThemeFloatingControl.AudioToggle,
+  ],
   alwaysOnFloatingControls: [EditorialThemeFloatingControl.Time, EditorialThemeFloatingControl.ProgressBar],
 };
 

@@ -45,5 +45,7 @@ export interface PlayerChromingDomControllerApi {
 
   getProgressMarkerTrack(): TimeRangeMarkerTrackApi | undefined;
 
+  hideStampOverlay(): void;
+
   destroy(): void;
 }

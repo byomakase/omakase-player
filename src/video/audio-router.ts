@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import {Destroyable, OmpAudioRouterChangeEvent, OmpAudioRouterInputSoloMuteEvent} from '../types';
-import {Subject} from 'rxjs';
+import {Destroyable, OmpAudioRouterChangeEvent, OmpAudioRouterInputSoloMuteEvent, OmpError} from '../types';
+import {forkJoin, map, Observable, ReplaySubject, Subject, tap} from 'rxjs';
 import {OmpAudioRouterInputSoloMuteState, OmpAudioRouterState, OmpAudioRoutingConnection, OmpAudioRoutingInputType, OmpAudioRoutingPath, OmpAudioRoutingRoute} from './model';
 import {Validators} from '../validators';
 import {AudioUtil} from '../util/audio-util';
-import {completeUnsubscribeSubjects, nextCompleteSubject} from '../util/rxjs-util';
+import {completeUnsubscribeSubjects, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {AudioRouterApi} from '../api/audio-router-api';
 import {OmpAudioEffect, OmpAudioEffectFilter, OmpAudioEffectParam, OmpAudioEffectsGraph, OmpAudioEffectsGraphDef} from '../audio';
 import {isNonNullable} from '../util/function-util';
@@ -204,7 +204,7 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
 
   getAudioRouterInputSoloMuteState(): OmpAudioRouterInputSoloMuteState {
     if (this._lastChangedSoloMuteStateInput === void 0) {
-      throw new Error('Solo/mute is undefined')
+      throw new Error('Solo/mute is undefined');
     }
 
     return this._soloMuteStatesByInput.get(this._lastChangedSoloMuteStateInput)!;
@@ -252,8 +252,8 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
     }
   }
 
-  setAudioEffectsGraphs(effectsGraphDef: OmpAudioEffectsGraphDef, routingPath?: Partial<OmpAudioRoutingPath>) {
-    this._setEffectsGraphs(effectsGraphDef, routingPath);
+  setAudioEffectsGraphs(effectsGraphDef: OmpAudioEffectsGraphDef, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
+    return this._setEffectsGraphs(effectsGraphDef, routingPath);
   }
 
   removeAudioEffectsGraphs(routingPath?: Partial<OmpAudioRoutingPath>) {
@@ -267,7 +267,7 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
   findAudioEffects(filter?: {routingPath?: Partial<OmpAudioRoutingPath>} & OmpAudioEffectFilter): OmpAudioEffect[] {
     let audioEffectsGraphs = this.findAudioEffectsGraphs(filter?.routingPath);
     return audioEffectsGraphs.flatMap((audioEffectsGraph) => {
-      return audioEffectsGraph.findAudioEffects({id: filter?.id, type: filter?.type, attrs: filter?.attrs});
+      return audioEffectsGraph.findAudioEffects({id: filter?.id, effectType: filter?.effectType, attrs: filter?.attrs});
     });
   }
 
@@ -286,7 +286,7 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
 
   resetInputsSoloMuteState(): void {
     [...Array(this._inputsNumber).keys()].forEach((inputNumber) => {
-      this.resetInputSoloMuteState(inputNumber)
+      this.resetInputSoloMuteState(inputNumber);
     });
   }
 
@@ -302,7 +302,7 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
       unsoloConnections: [],
       soloed: false,
       muted: false,
-    }
+    };
   }
 
   setInitialRoutingConnections(connections: OmpAudioRoutingConnection[]): void {
@@ -479,7 +479,7 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
       });
     }
 
-    this.resetInputSoloMuteState(inputNumber)
+    this.resetInputSoloMuteState(inputNumber);
   }
 
   protected _mute(inputNumber: number) {
@@ -508,7 +508,7 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
     this.setInputSoloMuteState(inputNumber, {
       ...this.createInitialSoloMuteState(inputNumber),
       inputMutedConnections,
-      muted: true
+      muted: true,
     });
   }
 
@@ -531,7 +531,7 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
       }
     }
 
-    this.resetInputSoloMuteState(inputNumber)
+    this.resetInputSoloMuteState(inputNumber);
   }
 
   protected _updateInputsSoloMuteState() {
@@ -542,7 +542,7 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
       for (let inputNumber = 0; inputNumber < routingConnections.length; inputNumber++) {
         const filteredConnections = routingConnections[inputNumber].filter((connection) => connection.connected);
         if ((inputSoloedState.inputNumber === inputNumber && !filteredConnections.length) || (inputSoloedState.inputNumber !== inputNumber && filteredConnections.length)) {
-          this.resetInputSoloMuteState(inputSoloedState.inputNumber)
+          this.resetInputSoloMuteState(inputSoloedState.inputNumber);
           inputSoloedState = void 0;
           break;
         }
@@ -559,7 +559,7 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
           muted: true,
         });
       } else if (filteredConnections.length && inputState && inputState.muted) {
-        this.resetInputSoloMuteState(inputState.inputNumber)
+        this.resetInputSoloMuteState(inputState.inputNumber);
       }
     });
   }
@@ -572,48 +572,99 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
 
   private connectEffectsGraph(effectsGraph: OmpAudioEffectsGraph, splitterOutput: number, mergerInput: number) {
     effectsGraph.sourceEffects.forEach((effect) => {
-      this._channelSplitterNode.connect(effect.audioNode, splitterOutput);
+      effect.getInputNodes().forEach((node) => {
+        this._channelSplitterNode.connect(node, splitterOutput);
+      });
     });
     effectsGraph.destinationEffects.forEach((effect) => {
-      effect.audioNode.connect(this._channelMergerNode, 0, mergerInput);
+      effect.getOutputNode().connect(this._channelMergerNode, 0, mergerInput);
     });
   }
 
   private disconnectEffectsGraph(effectsGraph: OmpAudioEffectsGraph, splitterOutput: number, mergerInput: number) {
     effectsGraph.sourceEffects.forEach((effect) => {
-      this._channelSplitterNode.disconnect(effect.audioNode, splitterOutput);
+      effect.getInputNodes().forEach((node) => {
+        this._channelSplitterNode.disconnect(node, splitterOutput);
+      });
     });
     effectsGraph.destinationEffects.forEach((effect) => {
-      effect.audioNode.disconnect(this._channelMergerNode, 0, mergerInput);
+      effect.getOutputNode().disconnect(this._channelMergerNode, 0, mergerInput);
     });
   }
 
-  private _setEffectsGraphs(effectsGraphDef: OmpAudioEffectsGraphDef | undefined, routingPath?: Partial<OmpAudioRoutingPath>): void {
+  private _checkIfEffectsGraphsCanBeChanged(routingPath?: Partial<OmpAudioRoutingPath>) {
     if (!routingPath || (routingPath.input === void 0 && routingPath.output === void 0)) {
       for (let inputNumber = 0; inputNumber < this._inputsNumber; inputNumber++) {
         for (let outputNumber = 0; outputNumber < this._outputsNumber; outputNumber++) {
-          this._setEffectsGraph(effectsGraphDef, inputNumber, outputNumber, false);
+          const effectsGraph = this._effectsGraphsByInputOutput.get(inputNumber)?.get(outputNumber);
+          if (effectsGraph && !effectsGraph.initialized) {
+            return false;
+          }
         }
       }
     } else {
       if (routingPath.input !== void 0 && routingPath.output !== void 0) {
-        this._setEffectsGraph(effectsGraphDef, routingPath.input, routingPath.output, false);
+        const effectsGraph = this._effectsGraphsByInputOutput.get(routingPath.input)?.get(routingPath.output);
+        if (effectsGraph && !effectsGraph.initialized) {
+          return false;
+        }
+      } else if (routingPath.input === void 0 && routingPath.output !== void 0) {
+        for (let inputNumber = 0; inputNumber < this._inputsNumber; inputNumber++) {
+          const effectsGraph = this._effectsGraphsByInputOutput.get(inputNumber)?.get(routingPath.output);
+          if (effectsGraph && !effectsGraph.initialized) {
+            return false;
+          }
+        }
+      } else if (routingPath.input !== void 0 && routingPath.output === void 0) {
+        for (let outputNumber = 0; outputNumber < this._outputsNumber; outputNumber++) {
+          const effectsGraph = this._effectsGraphsByInputOutput.get(routingPath.input)?.get(outputNumber);
+          if (effectsGraph && !effectsGraph.initialized) {
+            return false;
+          }
+        }
+      }
+    }
+
+    return true;
+  }
+  private _setEffectsGraphs(effectsGraphDef: OmpAudioEffectsGraphDef | undefined, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
+    if (!this._checkIfEffectsGraphsCanBeChanged(routingPath)) {
+      throw new OmpError(`Effects can't be changed before initialization finishes on routing path ${routingPath}`);
+    }
+    const allReady$: Observable<void>[] = [];
+    if (!routingPath || (routingPath.input === void 0 && routingPath.output === void 0)) {
+      for (let inputNumber = 0; inputNumber < this._inputsNumber; inputNumber++) {
+        for (let outputNumber = 0; outputNumber < this._outputsNumber; outputNumber++) {
+          const ready$ = this._setEffectsGraph(effectsGraphDef, inputNumber, outputNumber, false);
+          allReady$.push(ready$);
+        }
+      }
+    } else {
+      if (routingPath.input !== void 0 && routingPath.output !== void 0) {
+        const ready$ = this._setEffectsGraph(effectsGraphDef, routingPath.input, routingPath.output, false);
+        allReady$.push(ready$);
       } else if (routingPath.input === void 0 && routingPath.output !== void 0) {
         // set on all input's and given output
         for (let inputNumber = 0; inputNumber < this._inputsNumber; inputNumber++) {
-          this._setEffectsGraph(effectsGraphDef, inputNumber, routingPath.output, false);
+          const ready$ = this._setEffectsGraph(effectsGraphDef, inputNumber, routingPath.output, false);
+          allReady$.push(ready$);
         }
       } else if (routingPath.input !== void 0 && routingPath.output === void 0) {
         // set on all output's and given input
         for (let outputNumber = 0; outputNumber < this._outputsNumber; outputNumber++) {
-          this._setEffectsGraph(effectsGraphDef, routingPath.input, outputNumber, false);
+          const ready$ = this._setEffectsGraph(effectsGraphDef, routingPath.input, outputNumber, false);
+          allReady$.push(ready$);
         }
       }
     }
-    this.emitChange();
+
+    return new Observable((observer) => {
+      forkJoin(allReady$).subscribe(() => nextCompleteObserver(observer));
+      this.emitChange();
+    });
   }
 
-  private _setEffectsGraph(effectsGraphDef: OmpAudioEffectsGraphDef | undefined, input: number, output: number, emitEvent = true): void {
+  private _setEffectsGraph(effectsGraphDef: OmpAudioEffectsGraphDef | undefined, input: number, output: number, emitEvent = true): Observable<void> {
     let oldConnection = this._connectionsByInputOutput.get(input)!.get(output)!;
 
     // if node was connected, first disconnect that node
@@ -632,37 +683,58 @@ export class OmpAudioRouter implements AudioRouterApi, Destroyable {
 
     let existingEffectsGraph = this._effectsGraphsByInputOutput.get(input)!.get(output);
     if (existingEffectsGraph) {
+      // initialization check is done externally to this method
       existingEffectsGraph.destroy();
     }
 
-    let effectsGraph = effectsGraphDef
-      ? new OmpAudioEffectsGraph(
-          this._audioContext,
-          {
-            input,
-            output,
-          },
-          effectsGraphDef
-        )
-      : void 0;
+    let effectsGraph = effectsGraphDef ? new OmpAudioEffectsGraph(this._audioContext, effectsGraphDef) : void 0;
+
     this._effectsGraphsByInputOutput.get(input)!.set(output, effectsGraph);
 
-    // reconnect if node was previously connected
-    if (oldConnection.connected) {
-      this._updateConnection(
-        {
-          path: {
-            input,
-            output,
+    if (effectsGraph) {
+      return new Observable((observer) => {
+        effectsGraph!
+          .initialize()
+          .pipe(
+            tap(() => {
+              if (oldConnection.connected) {
+                this._updateConnection(
+                  {
+                    path: {
+                      input,
+                      output,
+                    },
+                    connected: true,
+                  },
+                  false
+                );
+              }
+              if (emitEvent) {
+                this.emitChange();
+              }
+            }),
+            map(() => undefined)
+          )
+          .subscribe(() => nextCompleteObserver(observer));
+      });
+    } else {
+      // reconnect if node was previously connected
+      if (oldConnection.connected) {
+        this._updateConnection(
+          {
+            path: {
+              input,
+              output,
+            },
+            connected: true,
           },
-          connected: true,
-        },
-        false
-      );
-    }
-
-    if (emitEvent) {
-      this.emitChange();
+          false
+        );
+        if (emitEvent) {
+          this.emitChange();
+        }
+      }
+      return new Observable((observer) => nextCompleteObserver(observer));
     }
   }
 

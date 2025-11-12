@@ -55,6 +55,7 @@ export class OmakaseTimeRange extends MediaTimeRange implements TimeRangeMarkerT
       }
       #thumb {
         z-index: 2;
+        bottom: var(--time-range-thumb-bottom, unset);
       }
       #markers {
         position: absolute;

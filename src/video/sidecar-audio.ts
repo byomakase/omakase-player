@@ -17,6 +17,7 @@
 import {
   Destroyable,
   OmpAudioTrack,
+  OmpError,
   SidecarAudioLoadedEvent,
   SidecarAudioLoadingEvent,
   VideoPlaybackRateEvent,
@@ -34,15 +35,17 @@ import {isNullOrUndefined} from '../util/object-util';
 import {SidecarAudioApi} from '../api/sidecar-audio-api';
 import {AudioRouterApi} from '../api/audio-router-api';
 import {OmpAudioPeakProcessor} from './audio-peak-processor';
-import {AudioMeterStandard, MediaElementPlaybackState, OmpSidecarAudioInputSoloMuteState, OmpSidecarAudioState} from './model';
+import {AudioEffectBundle, AudioMeterStandard, MediaElementPlaybackState, OmpSidecarAudioInputSoloMuteState, OmpSidecarAudioState} from './model';
 import {MediaElementPlayback} from './media-element-playback';
-import {HTMLMediaElementEvents, HTMLVideoElementEvents, OmpAudioElement} from '../media-element/omp-media-element';
+import {HTMLMediaElementEvents, OmpAudioElement} from '../media-element/omp-media-element';
 import {httpGet} from '../http';
 import {VideoControllerApi} from './video-controller-api';
 import {AuthConfig} from '../common/authentication';
 import {MediaMetadata, MediaMetadataResolver} from '../tools/media-metadata-resolver';
 import {audioChannelsDefault} from '../constants';
 import {BrowserProvider} from '../common/browser-provider';
+import {OmpAudioEffectFilter, OmpAudioEffectsGraphDef, OmpAudioEffectParam, OmpAudioEffectsGraph} from '../audio';
+import {OmpAudioEffectsGraphConnection, OmpAudioEffectsSlot} from '../audio/model';
 
 export abstract class BaseOmpSidecarAudio implements SidecarAudioApi, Destroyable {
   public readonly onLoading$: Subject<SidecarAudioLoadingEvent> = new Subject<SidecarAudioLoadingEvent>();
@@ -69,6 +72,14 @@ export abstract class BaseOmpSidecarAudio implements SidecarAudioApi, Destroyabl
   protected _muted = VideoController.videoMutedDefault;
   protected _volume = VideoController.videoVolumeDefault;
 
+  protected _sourceSlot!: OmpAudioEffectsSlot;
+  protected _sourceSlotEffectsGraph?: OmpAudioEffectsGraph;
+  protected _isSourceSlotEffectAttaching = false;
+
+  protected _destinationSlot!: OmpAudioEffectsSlot;
+  protected _destinationSlotEffectsGraph?: OmpAudioEffectsGraph;
+  protected _isDestinationSlotEffectAttaching = false;
+
   protected _destroyed$ = new Subject<void>();
 
   protected constructor(videoController: VideoControllerApi, audioTrack: OmpAudioTrack) {
@@ -84,6 +95,8 @@ export abstract class BaseOmpSidecarAudio implements SidecarAudioApi, Destroyabl
     this._audioInputIfNode.channelCountMode = 'max';
 
     this._audioInputIfNode.connect(audioOutputNode);
+
+    this.createInterleavedEffectsSlot();
   }
 
   abstract loadSource(): Observable<SidecarAudioLoadedEvent>;
@@ -114,7 +127,6 @@ export abstract class BaseOmpSidecarAudio implements SidecarAudioApi, Destroyabl
 
   createAudioRouter(inputsNumber?: number, outputsNumber?: number): OmpAudioRouter {
     let audioContext = this._videoController.getAudioContext();
-    let audioOutputNode = this._videoController.getSidecarAudiosOutputNode();
 
     if (this._audioRouter) {
       this._audioRouter.resetInputsSoloMuteState();
@@ -129,18 +141,19 @@ export abstract class BaseOmpSidecarAudio implements SidecarAudioApi, Destroyabl
       }
 
       if (isNullOrUndefined(outputsNumber)) {
-        this._audioRouter = new OmpAudioRouter(audioContext, audioOutputNode, inputsNumber!);
+        this._audioRouter = new OmpAudioRouter(audioContext, this._destinationSlot.inputNode, inputsNumber!);
       } else {
-        this._audioRouter = new OmpAudioRouter(audioContext, audioOutputNode, inputsNumber!, (maxChannelCount: number) => outputsNumber!);
+        this._audioRouter = new OmpAudioRouter(audioContext, this._destinationSlot.inputNode, inputsNumber!, (maxChannelCount: number) => outputsNumber!);
       }
 
       // rewire to router
       // in case of router deletion, we'll have to re-wire it back to destination
-      this._audioInputIfNode.disconnect(audioOutputNode);
+      const routerSourceNode = this._sourceSlot.outputNode;
+      routerSourceNode.disconnect(this._destinationSlot.inputNode);
 
-      this._audioInputIfNode.channelCount = inputsNumber!;
+      routerSourceNode.channelCount = inputsNumber!;
 
-      this._audioRouter.connectSource(this._audioInputIfNode);
+      this._audioRouter.connectSource(routerSourceNode);
 
       this.emitStateChange();
       this.emitInputSoloMute();
@@ -175,6 +188,124 @@ export abstract class BaseOmpSidecarAudio implements SidecarAudioApi, Destroyabl
         });
       }
     });
+  }
+
+  protected createInterleavedEffectsSlot() {
+    if (this._sourceSlot || this._destinationSlot) {
+      throw new OmpError(`Source slot already created for sidecar audio ${this._audioTrack.id}`);
+    }
+
+    let audioOutputNode = this._videoController.getSidecarAudiosOutputNode();
+
+    this._destinationSlot = {
+      inputNode: this._videoController.getAudioContext().createGain(),
+      outputNode: audioOutputNode,
+    };
+    this._sourceSlot = {
+      inputNode: this._audioInputIfNode,
+      outputNode: this._videoController.getAudioContext().createGain(),
+    };
+
+    this._audioInputIfNode.disconnect(audioOutputNode);
+    this._sourceSlot.outputNode.connect(this._destinationSlot.inputNode);
+
+    this._sourceSlot.inputNode.connect(this._sourceSlot.outputNode);
+    this._destinationSlot.inputNode.connect(this._destinationSlot.outputNode);
+  }
+
+  public setEffectsGraph(effectsGraphDef: OmpAudioEffectsGraphDef, effectsGraphConnection: OmpAudioEffectsGraphConnection) {
+    let slot: OmpAudioEffectsSlot;
+    if (effectsGraphConnection.slot === 'source') {
+      slot = this._sourceSlot;
+      this._isSourceSlotEffectAttaching = true;
+    } else if (effectsGraphConnection.slot === 'destination') {
+      slot = this._destinationSlot;
+      this._isDestinationSlotEffectAttaching = true;
+    } else {
+      throw new OmpError('Invalid interleaved slot selected');
+    }
+
+    let effectsGraph = new OmpAudioEffectsGraph(this._videoController.getAudioContext(), effectsGraphDef);
+    return new Observable<void>((observer) => {
+      effectsGraph.initialize().subscribe(() => {
+        slot.inputNode.disconnect(slot.outputNode);
+        effectsGraph.sourceEffects.forEach((sourceEffect) => {
+          const inputNodes = sourceEffect.getInputNodes();
+          inputNodes.forEach((inputNode) => {
+            slot.inputNode.connect(inputNode);
+          });
+        });
+
+        effectsGraph.destinationEffects.forEach((destinationEffect) => {
+          destinationEffect.getOutputNode().connect(slot.outputNode);
+        });
+
+        if (effectsGraphConnection.slot === 'source') {
+          this._sourceSlotEffectsGraph = effectsGraph;
+          this._isSourceSlotEffectAttaching = false;
+        } else {
+          this._destinationSlotEffectsGraph = effectsGraph;
+          this._isDestinationSlotEffectAttaching = false;
+        }
+        this.emitStateChange();
+        nextCompleteObserver(observer);
+      });
+    });
+  }
+
+  public removeEffectsGraph(effectsGraphConnection: OmpAudioEffectsGraphConnection) {
+    let effectsGraph: OmpAudioEffectsGraph | undefined;
+    let effectsSlot: OmpAudioEffectsSlot;
+    if (effectsGraphConnection.slot === 'source') {
+      effectsGraph = this._sourceSlotEffectsGraph;
+      effectsSlot = this._sourceSlot;
+      if (this._isSourceSlotEffectAttaching) {
+        throw new OmpError(`Can't remove audio effect in slot ${effectsGraphConnection.slot} before it is initialized`);
+      }
+    } else if (effectsGraphConnection.slot === 'destination') {
+      effectsGraph = this._destinationSlotEffectsGraph;
+      effectsSlot = this._destinationSlot;
+      if (this._isDestinationSlotEffectAttaching) {
+        throw new OmpError(`Can't remove audio effect in slot ${effectsGraphConnection.slot} before it is initialized`);
+      }
+    } else {
+      throw new OmpError('Slot not supported for interleaved audio');
+    }
+
+    if (!effectsGraph) {
+      return;
+    }
+
+    effectsGraph.sourceEffects.forEach((sourceEffect) => {
+      const inputNodes = sourceEffect.getInputNodes();
+      inputNodes.forEach((inputNode) => {
+        effectsSlot.inputNode.disconnect(inputNode);
+      });
+    });
+
+    effectsGraph.destinationEffects.forEach((destinationEffect) => {
+      destinationEffect.getOutputNode().disconnect(effectsSlot.outputNode);
+    });
+
+    effectsSlot.inputNode.connect(effectsSlot.outputNode);
+    effectsGraph.destroy();
+    if (effectsGraphConnection.slot === 'source') {
+      this._sourceSlotEffectsGraph = undefined;
+    } else {
+      this._destinationSlotEffectsGraph = undefined;
+    }
+    this.emitStateChange();
+  }
+
+  setAudioEffectsParams(param: OmpAudioEffectParam, effectGraphConnection: OmpAudioEffectsGraphConnection, filter?: OmpAudioEffectFilter) {
+    if (effectGraphConnection.slot === 'source') {
+      if (!this._sourceSlotEffectsGraph) {
+        throw new OmpError(`Source slot effects graph not defined for sidecar audio with id: ${this._audioTrack.id}`);
+      }
+      const effects = this._sourceSlotEffectsGraph.findAudioEffects(filter);
+      effects.forEach((effect) => effect.setParam(param));
+      this.emitStateChange();
+    }
   }
 
   protected validateLoaded() {
@@ -264,6 +395,7 @@ export abstract class BaseOmpSidecarAudio implements SidecarAudioApi, Destroyabl
       numberOfChannels: this.getChannelsNumber(),
       volume: this.getVolume(),
       muted: this.isMuted(),
+      interleavedAudioEffects: this.getInterleavedAudioEffects(),
     };
   }
 
@@ -308,6 +440,34 @@ export abstract class BaseOmpSidecarAudio implements SidecarAudioApi, Destroyabl
     completeUnsubscribeSubjects(this.onStateChange$, this.onInputSoloMute$, this.onVolumeChange$);
 
     nextCompleteSubject(this._destroyed$);
+  }
+
+  protected _resolveRouterSourceNode() {
+    if (this._sourceSlot) {
+      return this._sourceSlot.outputNode;
+    } else {
+      return this._audioInputIfNode;
+    }
+  }
+
+  protected getInterleavedAudioEffects(): AudioEffectBundle[] {
+    const effects: AudioEffectBundle[] = [];
+
+    if (this._sourceSlotEffectsGraph) {
+      effects.push({
+        effectsGraphConnection: {slot: 'source'},
+        effectsGraphDef: this._sourceSlotEffectsGraph.toDef(),
+      });
+    }
+
+    if (this._destinationSlotEffectsGraph) {
+      effects.push({
+        effectsGraphConnection: {slot: 'destination'},
+        effectsGraphDef: this._destinationSlotEffectsGraph.toDef(),
+      });
+    }
+
+    return effects;
   }
 }
 

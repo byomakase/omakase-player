@@ -43,21 +43,6 @@ const initFrameRates: {fraction: string; dropFramesOnMinute?: number}[] = [
   },
 ];
 
-const initDropFrames: {fraction: string; dropFrameEnabled: boolean}[] = [
-  {
-    fraction: '24000/1001',
-    dropFrameEnabled: false,
-  },
-  {
-    fraction: '30000/1001',
-    dropFrameEnabled: true,
-  },
-  {
-    fraction: '60000/1001',
-    dropFrameEnabled: false,
-  },
-];
-
 export class FrameRateUtil {
   static AUDIO_FRAME_RATE = 100;
 
@@ -77,10 +62,6 @@ export class FrameRateUtil {
 
     this.frameRateModels.forEach((frameRateModel) => {
       this.frameRateModelByValue.set(frameRateModel.value, frameRateModel);
-    });
-
-    initDropFrames.forEach((dropFrame) => {
-      this.dropFrameByFramerate.set(this.resolveFrameRateValueFromFraction(dropFrame.fraction), dropFrame.dropFrameEnabled);
     });
   }
 

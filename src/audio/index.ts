@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-export type {OmpAudioGraphDef, OmpAudioNodeConnectionDef, OmpAudioNodeDef} from './model';
-export {OmpAudioNodeUtil, OmpAudioNodeConnection, BaseOmpAudioNode, OmpAudioNodeParam, OmpAudioNodeValueParam} from './omp-web-audio';
-export type {OmpAudioGraph, OmpAudioNode} from './omp-web-audio';
+export type {OmpAudioEffectsGraphDef, OmpAudioEffectConnectionDef, OmpAudioEffectDef} from './model';
+export {OmpAudioNodeUtil, OmpAudioNodeParam, OmpAudioNodeValueParam} from './omp-web-audio';
+// export type {OmpAudioGraph} from './omp-web-audio';
 export * from './audio-effects';

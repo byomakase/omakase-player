@@ -1,4 +1,4 @@
-import {BehaviorSubject, fromEvent, Subject, takeUntil} from 'rxjs';
+import {BehaviorSubject, fromEvent, Observable, Subject, takeUntil} from 'rxjs';
 import {completeUnsubscribeSubjects, nextCompleteSubject} from '../util/rxjs-util';
 import {MomentMarker, PeriodMarker} from '../timeline';
 import {MarkerTrackApi} from '../api/marker-track-api';
@@ -32,6 +32,8 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
     }
   });
 
+  onShow$ = new Subject<void>();
+  onHide$ = new Subject<void>();
   onMarkerInit$ = new Subject<MarkerInitEvent>();
   onMarkerCreate$ = new Subject<MarkerCreateEvent>();
   onMarkerDelete$ = new Subject<MarkerDeleteEvent>();
@@ -57,6 +59,10 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
 
   set uuid(uuid: string | undefined) {
     this._uuid = uuid;
+  }
+
+  get onDestroy$(): Observable<void> {
+    return this._destroyed$;
   }
 
   connectedCallback() {
@@ -168,10 +174,12 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
 
   hide(): void {
     this.classList.add('d-none');
+    this.onHide$.next();
   }
 
   show(): void {
     this.classList.remove('d-none');
+    this.onShow$.next();
   }
 
   private focusMarker(id: string): void {

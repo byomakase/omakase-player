@@ -91,7 +91,7 @@ export class OmakaseDropdownList extends HTMLElement {
     if (!this.getAttribute('multiselect')) {
       this.selectedOption$.subscribe((newValue) => {
         this.querySelectorAll('omakase-dropdown-option').forEach((option) => {
-          if (option.getAttribute('value') === newValue?.value) {
+          if (option.getAttribute('value') === newValue?.value || (!option.getAttribute('value') && !newValue?.value)) {
             option.classList.add('active');
           } else {
             option.classList.remove('active');

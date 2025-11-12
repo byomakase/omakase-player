@@ -27,7 +27,8 @@ import {Alert} from '../alerts/model';
 import {
   AudioLoadedEvent,
   AudioPeakProcessorMessageEvent,
-  AudioSwitchedEvent, AudioUpdatedEvent,
+  AudioSwitchedEvent,
+  AudioUpdatedEvent,
   HelpMenuGroup,
   MainAudioChangeEvent,
   MainAudioInputSoloMuteEvent,
@@ -88,7 +89,8 @@ import Hls from 'hls.js';
 import {WindowUtil} from '../util/window-util';
 import {OmpAudioRouter} from './audio-router';
 import {SidecarAudioApi} from '../api/sidecar-audio-api';
-import {OmpAudioEffectFilter, OmpAudioEffectParam, OmpAudioEffectsGraphDef} from '../audio';
+import {OmpAudioEffectFactory, OmpAudioEffectFilter, OmpAudioEffectParam, OmpAudioEffectsGraphDef} from '../audio';
+import {OmpAudioEffectsGraphConnection} from '../audio/model';
 
 interface OutboundLatest {
   heartbeat?: number;
@@ -1006,7 +1008,7 @@ export class DetachedVideoController implements VideoControllerApi {
       .pipe(takeUntil(this._messageChannelBreaker$))
       .subscribe({
         next: ([request, sendResponseHook]) => {
-          sendResponseHook(this._videoController.setMainAudioEffectsParams(request[0], request[1]));
+          sendResponseHook(this._videoController.setMainAudioEffectsParams(request[0], request[1], request[2]));
         },
       });
 
@@ -1136,7 +1138,7 @@ export class DetachedVideoController implements VideoControllerApi {
       .pipe(takeUntil(this._messageChannelBreaker$))
       .subscribe({
         next: ([request, sendResponseHook]) => {
-          sendResponseHook(this._videoController.setSidecarAudioEffectsParams(request[0], request[1], request[2]));
+          sendResponseHook(this._videoController.setSidecarAudioEffectsParams(request[0], request[1], request[2], request[3]));
         },
       });
 
@@ -1778,21 +1780,16 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.toggleMainAudioRouterMute(routingPath);
   }
 
-  setMainAudioEffectsGraphs(effectsGraphDef: OmpAudioEffectsGraphDef, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
-    return this._videoController.setMainAudioEffectsGraphs(effectsGraphDef, routingPath);
+  setMainAudioEffectsGraphs(effectsGraphDef: OmpAudioEffectsGraphDef, effectsGraphConnection: OmpAudioEffectsGraphConnection): Observable<void> {
+    return this._videoController.setMainAudioEffectsGraphs(effectsGraphDef, effectsGraphConnection);
   }
 
-  removeMainAudioEffectsGraphs(routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
-    return this._videoController.removeMainAudioEffectsGraphs(routingPath);
+  removeMainAudioEffectsGraphs(effectsGraphConnection: OmpAudioEffectsGraphConnection): Observable<void> {
+    return this._videoController.removeMainAudioEffectsGraphs(effectsGraphConnection);
   }
 
-  setMainAudioEffectsParams(
-    param: OmpAudioEffectParam,
-    filter?: {
-      routingPath?: Partial<OmpAudioRoutingPath>;
-    } & OmpAudioEffectFilter
-  ): Observable<void> {
-    return this._videoController.setMainAudioEffectsParams(param, filter);
+  setMainAudioEffectsParams(param: OmpAudioEffectParam, effectGraphConnection: OmpAudioEffectsGraphConnection, filter?: OmpAudioEffectFilter): Observable<void> {
+    return this._videoController.setMainAudioEffectsParams(param, effectGraphConnection, filter);
   }
 
   // endregion
@@ -1887,22 +1884,16 @@ export class DetachedVideoController implements VideoControllerApi {
     return this._videoController.updateSidecarAudioRouterConnections(sidecarAudioTrackId, connections);
   }
 
-  setSidecarAudioEffectsGraph(sidecarAudioTrackId: string, effectsGraphDef: OmpAudioEffectsGraphDef, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
-    return this._videoController.setSidecarAudioEffectsGraph(sidecarAudioTrackId, effectsGraphDef, routingPath);
+  setSidecarAudioEffectsGraph(sidecarAudioTrackId: string, effectsGraphDef: OmpAudioEffectsGraphDef, effectsGraphConnection: OmpAudioEffectsGraphConnection): Observable<void> {
+    return this._videoController.setSidecarAudioEffectsGraph(sidecarAudioTrackId, effectsGraphDef, effectsGraphConnection);
   }
 
-  removeSidecarAudioEffectsGraphs(sidecarAudioTrackId: string, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
-    return this._videoController.removeSidecarAudioEffectsGraphs(sidecarAudioTrackId, routingPath);
+  removeSidecarAudioEffectsGraphs(sidecarAudioTrackId: string, effectsGraphConnection: OmpAudioEffectsGraphConnection): Observable<void> {
+    return this._videoController.removeSidecarAudioEffectsGraphs(sidecarAudioTrackId, effectsGraphConnection);
   }
 
-  setSidecarAudioEffectsParams(
-    sidecarAudioTrackId: string,
-    param: OmpAudioEffectParam,
-    filter?: {
-      routingPath?: Partial<OmpAudioRoutingPath>;
-    } & OmpAudioEffectFilter
-  ): Observable<void> {
-    return this._videoController.setSidecarAudioEffectsParams(sidecarAudioTrackId, param, filter);
+  setSidecarAudioEffectsParams(sidecarAudioTrackId: string, param: OmpAudioEffectParam, effectGraphConnection: OmpAudioEffectsGraphConnection, filter?: OmpAudioEffectFilter): Observable<void> {
+    return this._videoController.setSidecarAudioEffectsParams(sidecarAudioTrackId, param, effectGraphConnection, filter);
   }
 
   createSidecarAudioPeakProcessor(sidecarAudioTrackId: string, audioMeterStandard?: AudioMeterStandard): Observable<Observable<AudioPeakProcessorMessageEvent>> {
@@ -1965,5 +1956,9 @@ export class DetachedVideoController implements VideoControllerApi {
 
   loadBlackVideo(): Observable<Video> {
     return this._videoController.loadBlackVideo();
+  }
+
+  registerAudioEffect(effectType: string, effectFactory: OmpAudioEffectFactory): void {
+    return this._videoController.registerAudioEffect(effectType, effectFactory);
   }
 }

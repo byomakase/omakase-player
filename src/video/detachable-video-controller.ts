@@ -24,10 +24,12 @@ import {ompHandshakeBroadcastChannelId} from '../constants';
 import {SwitchableVideoController} from './switchable-video-controller';
 import {WindowUtil} from '../util/window-util';
 import {HandshakeChannelActionsMap, MessageChannelActionsMap} from './channel-types';
-import {OmpSidecarAudioInputSoloMuteState, OmpSidecarAudioState, Video, VideoLoadOptions, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
+import {MainAudioEffects, OmpSidecarAudioInputSoloMuteState, OmpSidecarAudioState, Video, VideoLoadOptions, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
 import {HelpMenuGroup, MainAudioChangeEvent, MainAudioInputSoloMuteEvent, OmpAudioTrack, OmpError, OmpNamedEventEventName, SubtitlesVttTrack} from '../types';
 import {CryptoUtil} from '../util/crypto-util';
 import {StringUtil} from '../util/string-util';
+import {OmpAudioEffectsGraphDef} from '../audio';
+import {OmpAudioEffectGraphSlot, OmpAudioEffectsGraphConnection} from '../audio/model';
 
 interface VideoControllerState {
   video: Video;
@@ -132,7 +134,7 @@ export class DetachableVideoController extends SwitchableVideoController {
   }
 
   protected areSidecarAudiosLoaded(): boolean {
-    return !this._videoController.getSidecarAudioStates().find(p => !p.loaded)
+    return !this._videoController.getSidecarAudioStates().find((p) => !p.loaded);
   }
 
   override canDetach(): boolean {
@@ -893,11 +895,11 @@ export class DetachableVideoController extends SwitchableVideoController {
               // we will not wait for this to finish, just execute
               if (mainAudioState.audioRouterState) {
                 // remove all existing graphs
-                this.removeMainAudioEffectsGraphs();
+                this.removeMainAudioEffectsGraphs({slot: 'router'});
 
                 mainAudioState.audioRouterState.routingRoutes.forEach((routingRoute) => {
                   if (routingRoute.audioEffectsGraph) {
-                    this.setMainAudioEffectsGraphs(routingRoute.audioEffectsGraph, routingRoute.path);
+                    this.setMainAudioEffectsGraphs(routingRoute.audioEffectsGraph, {slot: 'router', routingPath: routingRoute.path});
                   }
                 });
                 if (state.mainAudioInputSoloMuteEvent?.mainAudioInputSoloMuteState.audioRouterInputSoloMuteState?.soloed) {
@@ -921,13 +923,29 @@ export class DetachableVideoController extends SwitchableVideoController {
       })
     );
 
+    const activateInterleavedAudioEffects$ = describedObservable(
+      'interleaved audio effects',
+      new Observable((observer) => {
+        if (state.mainAudioChangeEvent?.mainAudioState) {
+          const mainAudioState = state.mainAudioChangeEvent.mainAudioState;
+          (['source', 'destination'] as OmpAudioEffectGraphSlot[]).forEach((slot) => this.removeMainAudioEffectsGraphs({slot: slot}));
+          mainAudioState.interleavedAudioEffects.forEach((effectBundle) => {
+            if (effectBundle.effectsGraphDef) {
+              this.setMainAudioEffectsGraphs(effectBundle.effectsGraphDef, effectBundle.effectsGraphConnection);
+            }
+          });
+        }
+        nextCompleteObserver(observer);
+      })
+    );
+
     // in case audio track activation is required - we have to activate it first, then consolidate router connections
     // in case audio track activation is not required - we only have to consolidate router connections
 
     if (state.activeAudioTrack) {
       afterVideoLoad(
         new Observable((observer) => {
-          concat(audioTrackActivation$, routerConnectionsConsolidation$).subscribe({
+          concat(audioTrackActivation$, routerConnectionsConsolidation$, activateInterleavedAudioEffects$).subscribe({
             complete: () => {
               nextCompleteObserver(observer);
             },
@@ -938,7 +956,18 @@ export class DetachableVideoController extends SwitchableVideoController {
         })
       );
     } else {
-      afterVideoLoad(routerConnectionsConsolidation$);
+      afterVideoLoad(
+        new Observable((observer) => {
+          concat(routerConnectionsConsolidation$, activateInterleavedAudioEffects$).subscribe({
+            complete: () => {
+              nextCompleteObserver(observer);
+            },
+            error: (error) => {
+              console.error(error);
+            },
+          });
+        })
+      );
     }
 
     afterVideoLoad(
@@ -1005,7 +1034,6 @@ export class DetachableVideoController extends SwitchableVideoController {
         })
       )
     );
-
     afterVideoLoad(
       describedObservable(
         `Sidecar audio tracks`,
@@ -1018,6 +1046,10 @@ export class DetachableVideoController extends SwitchableVideoController {
                   return new Observable((sidecarAudioObserver) => {
                     this.createSidecarAudioTrack(sidecarAudioState.audioTrack).subscribe({
                       next: (sidecarAudioTrack) => {
+                        (['source', 'destination'] as OmpAudioEffectGraphSlot[]).forEach((slot) => this.removeSidecarAudioEffectsGraphs(sidecarAudioState.audioTrack.id, {slot: slot}));
+                        sidecarAudioState.interleavedAudioEffects.forEach((effect) => {
+                          this.setSidecarAudioEffectsGraph(sidecarAudioState.audioTrack.id, effect.effectsGraphDef, effect.effectsGraphConnection);
+                        });
                         let o1$ = sidecarAudioState.audioRouterState
                           ? this.createSidecarAudioRouter(sidecarAudioState.audioTrack.id, sidecarAudioState.audioRouterState.inputsNumber, sidecarAudioState.audioRouterState.outputsNumber)
                           : of(true);
@@ -1027,13 +1059,14 @@ export class DetachableVideoController extends SwitchableVideoController {
                         forkJoin([o1$, o2$]).subscribe({
                           next: () => {
                             // we will not wait for this to finish, just execute
+
                             if (sidecarAudioState.audioRouterState) {
                               // remove all existing graphs
-                              this.removeSidecarAudioEffectsGraphs(sidecarAudioState.audioTrack.id);
+                              this.removeSidecarAudioEffectsGraphs(sidecarAudioState.audioTrack.id, {slot: 'router'});
 
                               sidecarAudioState.audioRouterState.routingRoutes.forEach((routingRoute) => {
                                 if (routingRoute.audioEffectsGraph) {
-                                  this.setSidecarAudioEffectsGraph(sidecarAudioState.audioTrack.id, routingRoute.audioEffectsGraph, routingRoute.path);
+                                  this.setSidecarAudioEffectsGraph(sidecarAudioState.audioTrack.id, routingRoute.audioEffectsGraph, {slot: 'router', routingPath: routingRoute.path});
                                 }
                               });
 

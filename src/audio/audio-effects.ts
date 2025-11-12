@@ -14,13 +14,112 @@
  * limitations under the License.
  */
 
-import {OmpAudioGraphDef, OmpAudioNodeConnectionDef, OmpAudioNodeDef} from './model';
-import {OmpAudioNodeParamType, OmpAudioNodeType} from '../video';
-import {BaseOmpAudioNode, OmpAudioGraph, OmpAudioNode, OmpAudioNodeParam, OmpAudioNodeUtil, OmpAudioNodeValueParam} from './omp-web-audio';
-import {OmpAudioRoutingPath} from '../video';
+import {OmpAudioEffectConnectionDef, OmpAudioEffectDef, OmpAudioEffectGraphSlot, OmpAudioEffectsGraphDef} from './model';
+import {OmpAudioNodeParam, OmpAudioNodeUtil, OmpAudioNodeValueParam} from './omp-web-audio';
 import {OmpError} from '../types';
 import {isNonNullable} from '../util/function-util';
+import {OmpAudioEffectParamType} from '../video/model';
+import {hasProperty} from '../util/object-util';
+import {combineLatest, map, mapTo, Observable, ReplaySubject, take, tap} from 'rxjs';
 
+/**
+ * Implementation of {@link OmpAudioEffectDef}
+ */
+export interface OmpAudioEffect {
+  /**
+   * Converts effect to effect definition
+   */
+  toDef(): OmpAudioEffectDef;
+  /**
+   * Returns input audio nodes
+   */
+  getInputNodes(): AudioNode[];
+  /**
+   * Returns output audio nodes
+   */
+  getOutputNode(): AudioNode;
+
+  /**
+   * Returns all audio nodes
+   */
+  getNodes(): AudioNode[];
+
+  /**
+   * Effect's id. Unique at {@link OmpAudioEffectsGraph} level.
+   */
+  id: string;
+
+  /**
+   * Effect's effect type. Used for dynamic effect instantiation.
+   */
+  effectType: string;
+
+  /**
+   * Arbitrary values used to describe the effect
+   */
+  attrs: Map<string, any>;
+
+  /**
+   * Signals when effect is fully initialized.
+   */
+  onReady$: Observable<void>;
+
+  /**
+   * Sets effect parameter.
+   *
+   * @param param
+   */
+  setParam(param: OmpAudioEffectParam): void;
+
+  /**
+   * Returns all effect parameters
+   */
+  getParams(): OmpAudioEffectParamType[] | undefined;
+
+  /**
+   * Destroys all effect's nodes and sets up the effect to be garbage collected
+   */
+  destroy(): void;
+}
+
+export class DefaultOmpAudioEffectDef implements OmpAudioEffectDef {
+  public id: string;
+  public effectType: string;
+  public attrs?: Record<string, any>;
+  public connections?: OmpAudioEffectConnectionDef[];
+  public audioParams?: OmpAudioEffectParamType[];
+
+  constructor(id: string, effectType: string) {
+    this.id = id;
+    this.effectType = effectType;
+  }
+
+  withAttrs(attrs: Record<string, any>): DefaultOmpAudioEffectDef {
+    this.attrs = attrs;
+    return this;
+  }
+
+  outputTo(...effectConnections: (string | OmpAudioEffectConnectionDef)[]): DefaultOmpAudioEffectDef {
+    if (!this.connections) {
+      this.connections = [];
+    }
+
+    effectConnections.forEach((effectConnection: string | OmpAudioEffectConnectionDef) => {
+      const connection = typeof effectConnection === 'string' ? {effectId: effectConnection} : effectConnection;
+      this.connections!.push(connection);
+    });
+    return this;
+  }
+
+  addParam(audioParam: OmpAudioEffectParamType) {
+    if (!this.audioParams) {
+      this.audioParams = [];
+    }
+
+    this.audioParams.push(audioParam);
+    return this;
+  }
+}
 export class OmpAudioEffectsGraphDefBuilder {
   protected _effectDefs: OmpAudioEffectDef[] = [];
   protected _effectDefsMap: Map<string, OmpAudioEffectDef> = new Map();
@@ -34,9 +133,9 @@ export class OmpAudioEffectsGraphDefBuilder {
     return new OmpAudioEffectsGraphDefBuilder();
   }
 
-  addEffects(nodes: OmpAudioEffectDef[]): this {
-    nodes.forEach((node) => {
-      this.addEffect(node);
+  addEffects(effectDefs: OmpAudioEffectDef[]): this {
+    effectDefs.forEach((effectDef) => {
+      this.addEffect(effectDef);
     });
     return this;
   }
@@ -72,7 +171,7 @@ export class OmpAudioEffectsGraphDefBuilder {
     }
 
     sourceNode.connections.push({
-      nodeId: destinationNodeId,
+      effectId: destinationNodeId,
     });
 
     return this;
@@ -114,7 +213,7 @@ export class OmpAudioEffectsGraphDefBuilder {
     // nodes that are not connected to anything are source nodes candidates
     let nodeIdsInConnections = this._effectDefs
       .flatMap((node) => node.connections)
-      .map((connection) => connection?.nodeId)
+      .map((connection) => connection?.effectId)
       .filter(isNonNullable);
     let sourceNodesCandidates = this._effectDefs.filter((node) => !nodeIdsInConnections.find((p) => p === node.id));
 
@@ -132,7 +231,7 @@ export class OmpAudioEffectsGraphDefBuilder {
 
     // nodes without connections are destination nodes candidates
     let destinationNodesCandidates = this._effectDefs.filter((node) => !node.connections || node.connections.length < 1);
-    if (this._destinationEffectDefs) {
+    if (this._destinationEffectDefs && this._destinationEffectDefs.length > 0) {
       let hangingNodes = destinationNodesCandidates.filter((candidate) => !this._destinationEffectDefs!.find((p) => p.id === candidate.id));
       if (hangingNodes.length > 0) {
         console.warn(
@@ -153,9 +252,9 @@ export class OmpAudioEffectsGraphDefBuilder {
     }
 
     return {
-      nodes: this._effectDefs,
-      sourceNodeIds: this._sourceEffectDefs.map((p) => p.id),
-      destinationNodeIds: this._destinationEffectDefs.map((p) => p.id),
+      effectDefs: this._effectDefs,
+      sourceEffectIds: this._sourceEffectDefs.map((p) => p.id),
+      destinationEffectIds: this._destinationEffectDefs.map((p) => p.id),
     };
   }
 }
@@ -163,95 +262,20 @@ export class OmpAudioEffectsGraphDefBuilder {
 /**
  * Audio effects graph definition. Contains {@link OmpAudioEffectDef}'s
  */
-export class OmpAudioEffectsGraphDef implements OmpAudioGraphDef {
-  nodes: OmpAudioEffectDef[];
-  sourceNodeIds: string[];
-  destinationNodeIds: string[];
+export class DefaultOmpAudioEffectsGraphDef implements OmpAudioEffectsGraphDef {
+  effectDefs: OmpAudioEffectDef[];
+  sourceEffectIds: string[];
+  destinationEffectIds: string[];
 
-  private constructor(nodes: OmpAudioEffectDef[]) {
-    let audioGraphDef = OmpAudioEffectsGraphDefBuilder.instance().addEffects(nodes).build();
-    this.nodes = audioGraphDef.nodes as OmpAudioEffectDef[];
-    this.sourceNodeIds = audioGraphDef.sourceNodeIds;
-    this.destinationNodeIds = audioGraphDef.destinationNodeIds;
+  private constructor(effectDefs: OmpAudioEffectDef[]) {
+    let audioGraphDef = OmpAudioEffectsGraphDefBuilder.instance().addEffects(effectDefs).build();
+    this.effectDefs = audioGraphDef.effectDefs as OmpAudioEffectDef[];
+    this.sourceEffectIds = audioGraphDef.sourceEffectIds;
+    this.destinationEffectIds = audioGraphDef.destinationEffectIds;
   }
 
-  public static create(...effects: OmpAudioEffectDef[]): OmpAudioEffectsGraphDef {
-    return new OmpAudioEffectsGraphDef(effects);
-  }
-}
-
-/**
- * Audio effect definition
- */
-export interface OmpAudioEffectDef extends OmpAudioNodeDef {
-
-}
-
-export class BaseOmpAudioEffectDef implements OmpAudioEffectDef {
-  id: string;
-  type: OmpAudioNodeType;
-  audioNodeOptions?: any;
-
-  attrs: Record<string, any> = {};
-  connections: OmpAudioNodeConnectionDef[] = [];
-  audioParams: OmpAudioNodeParamType[] = [];
-
-  constructor(id: string, type: OmpAudioNodeType, audioNodeOptions?: any) {
-    this.id = id;
-    this.type = type;
-    this.audioNodeOptions = audioNodeOptions;
-  }
-
-  protected addParam(param: OmpAudioNodeParamType) {
-    this.audioParams.push(param);
-  }
-
-  outputTo(...effectIds: string[]): BaseOmpAudioEffectDef {
-    effectIds.forEach((effectId: string) => {
-      this.connections.push({
-        nodeId: effectId,
-      });
-    });
-    return this;
-  }
-
-  withAttrs(attrs: Record<string, any>): BaseOmpAudioEffectDef {
-    this.attrs = attrs;
-    return this;
-  }
-}
-
-/**
- * Gain effect definition
- */
-export class OmpGainEffectDef extends BaseOmpAudioEffectDef {
-  protected readonly _gainParam: OmpAudioEffectGainParam;
-
-  static create(id: string, gain?: number) {
-    return new OmpGainEffectDef(id, gain);
-  }
-
-  private constructor(id: string, gain?: number) {
-    super(id, 'gain');
-    this._gainParam = new OmpAudioEffectGainParam(gain);
-    this.addParam(this._gainParam);
-  }
-}
-
-/**
- * Delay effect definition
- */
-export class OmpDelayEffectDef extends BaseOmpAudioEffectDef {
-  protected readonly _delayTimeParam: OmpAudioEffectDelayTimeParam;
-
-  static create(id: string, delayTime?: number) {
-    return new OmpDelayEffectDef(id, delayTime);
-  }
-
-  private constructor(id: string, delayTime?: number) {
-    super(id, 'delay');
-    this._delayTimeParam = new OmpAudioEffectDelayTimeParam(delayTime);
-    this.addParam(this._delayTimeParam);
+  public static create(...effects: OmpAudioEffectDef[]): DefaultOmpAudioEffectsGraphDef {
+    return new DefaultOmpAudioEffectsGraphDef(effects);
   }
 }
 
@@ -285,73 +309,224 @@ export class OmpAudioEffectDelayTimeParam extends OmpAudioEffectParam {
   }
 }
 
-export interface OmpAudioEffect extends OmpAudioNode {
-  setParam(param: OmpAudioEffectParam): void;
+export type OmpAudioEffectFactory = (ctx: AudioContext, effectDef: OmpAudioEffectDef) => OmpAudioEffect;
+export class OmpAudioEffectsRegistry {
+  private static _instance?: OmpAudioEffectsRegistry;
+  private registry: Map<string, OmpAudioEffectFactory> = new Map();
 
-  toDef(): OmpAudioEffectDef;
-}
-
-export abstract class BaseOmpAudioEffect<T extends AudioNode> extends BaseOmpAudioNode<T> implements OmpAudioEffect {
-  constructor(audioContext: AudioContext, def: OmpAudioEffectDef) {
-    super(audioContext, def);
+  private constructor() {
+    this.registry.set('gain', (ctx, def) => new OmpGainEffect(ctx, def));
+    this.registry.set('delay', (ctx, def) => new OmpDelayEffect(ctx, def));
   }
 
-  setParam(param: OmpAudioEffectParam): void {
-    this.setAudioParam(param);
+  static get instance(): OmpAudioEffectsRegistry {
+    if (!this._instance) {
+      this._instance = new OmpAudioEffectsRegistry();
+    }
+    return this._instance;
   }
 
-  override toDef(): OmpAudioEffectDef {
-    let defAttrs: Record<string, any> = {};
-    this._attrs.forEach((value: any, key) => {
-      defAttrs[key] = value;
-    });
-
-    return {
-      id: this._id,
-      type: this._type,
-      audioNodeOptions: this._audioNodeOptions,
-      attrs: defAttrs,
-      connections: this._connections.map((p) => p.toDef()),
-      audioParams: this.extractAudioNodeParams(),
-    };
+  register(name: string, effect: OmpAudioEffectFactory) {
+    this.registry.set(name, effect);
   }
 
-  protected abstract extractAudioNodeParams(): OmpAudioNodeParamType[];
+  get(name: string) {
+    return this.registry.get(name);
+  }
 }
 
 /**
  * Gain effect
  */
-export class OmpGainEffect extends BaseOmpAudioEffect<GainNode> {
-  protected createAudioNode(audioContext: AudioContext, def: OmpAudioNodeDef): GainNode {
-    return new GainNode(audioContext, def.audioNodeOptions);
+export class OmpGainEffect implements OmpAudioEffect {
+  private _gainNode;
+  private _def: OmpAudioEffectDef;
+  public readonly id: string;
+  public readonly effectType: string;
+  public attrs = new Map<string, any>();
+  public onReady$ = new ReplaySubject<void>(1);
+  constructor(audioContext: AudioContext, def: OmpAudioEffectDef) {
+    this._def = def;
+    this._gainNode = new GainNode(audioContext, {gain: this.extractGainParamFromDef()});
+    this.id = def.id;
+    this.effectType = def.effectType;
+
+    if (def.attrs) {
+      for (const [key, value] of Object.entries(def.attrs)) {
+        this.attrs.set(key, value);
+      }
+    }
+
+    this.onReady$.next();
   }
 
-  protected override extractAudioNodeParams(): OmpAudioNodeParamType[] {
-    return [
-      {
-        name: 'gain',
-        props: OmpAudioNodeUtil.extractAudioParamProps(this.audioNode.gain),
-      },
-    ];
+  private extractGainParamFromDef(): number {
+    return this._def.audioParams?.find((param) => param.name === 'gain')?.props[0].value ?? 1;
+  }
+
+  getInputNodes(): AudioNode[] {
+    return [this._gainNode];
+  }
+
+  getOutputNode(): AudioNode {
+    return this._gainNode;
+  }
+
+  getNodes(): AudioNode[] {
+    return [this._gainNode];
+  }
+
+  getParams(): OmpAudioEffectParamType[] | undefined {
+    return this._def.audioParams;
+  }
+
+  toDef(): OmpAudioEffectDef {
+    return {
+      ...this._def,
+    };
+  }
+
+  setParam(param: OmpAudioEffectParam): void {
+    // @ts-ignore
+    let audioParam: AudioParam = this._gainNode[param.name] as AudioParam;
+    if (!audioParam) {
+      throw new OmpError('AudioParam not found:' + param.name);
+    }
+    param.props.forEach((prop) => {
+      if (hasProperty(audioParam, prop.name)) {
+        // @ts-ignore
+        audioParam[prop.name] = prop.value;
+      }
+    });
+    this.updateDefParam(param);
+  }
+
+  private updateDefParam(param: OmpAudioEffectParamType) {
+    if (!this._def.audioParams) {
+      this._def.audioParams = [param];
+    } else {
+      const oldParam = this._def.audioParams.find((oldParam) => oldParam.name === param.name);
+
+      if (!oldParam) {
+        this._def.audioParams.push(param);
+      } else {
+        oldParam.props = param.props;
+      }
+    }
+  }
+
+  destroy(): void {
+    this._gainNode.disconnect();
+  }
+
+  public static createDef(id: string, gain: number): DefaultOmpAudioEffectDef {
+    return new DefaultOmpAudioEffectDef(id, 'gain').addParam({
+      name: 'gain',
+      props: [
+        {
+          name: 'value',
+          value: gain,
+        },
+      ],
+    });
   }
 }
 
 /**
  * Delay effect
  */
-export class OmpDelayEffect extends BaseOmpAudioEffect<DelayNode> {
-  protected createAudioNode(audioContext: AudioContext, def: OmpAudioNodeDef): DelayNode {
-    return new DelayNode(audioContext, def.audioNodeOptions);
+export class OmpDelayEffect implements OmpAudioEffect {
+  private _delayNode;
+  private _def: OmpAudioEffectDef;
+  public readonly id: string;
+  public readonly effectType: string;
+  public attrs = new Map<string, any>();
+  public onReady$ = new ReplaySubject<void>(1);
+
+  constructor(audioContext: AudioContext, def: OmpAudioEffectDef) {
+    this._def = def;
+    this._delayNode = new DelayNode(audioContext, {delayTime: this.extractDelayTimeParamFromDef()});
+    this.id = def.id;
+    this.effectType = def.effectType;
+
+    if (def.attrs) {
+      for (const [key, value] of Object.entries(def.attrs)) {
+        this.attrs.set(key, value);
+      }
+    }
+
+    this.onReady$.next();
   }
 
-  protected override extractAudioNodeParams(): OmpAudioNodeParamType[] {
-    return [
-      {
-        name: 'delayTime',
-        props: OmpAudioNodeUtil.extractAudioParamProps(this.audioNode.delayTime),
-      },
-    ];
+  private extractDelayTimeParamFromDef(): number {
+    return this._def.audioParams?.find((param) => param.name === 'delayTime')?.props[0].value ?? 0;
+  }
+
+  getInputNodes(): AudioNode[] {
+    return [this._delayNode];
+  }
+
+  getOutputNode(): AudioNode {
+    return this._delayNode;
+  }
+
+  getNodes(): AudioNode[] {
+    return [this._delayNode];
+  }
+
+  getParams(): OmpAudioEffectParamType[] | undefined {
+    return this._def.audioParams;
+  }
+
+  toDef(): OmpAudioEffectDef {
+    return {
+      ...this._def,
+    };
+  }
+
+  setParam(param: OmpAudioEffectParam): void {
+    // @ts-ignore
+    let audioParam: AudioParam = this._delayNode[param.name] as AudioParam;
+    if (!audioParam) {
+      throw new OmpError('AudioParam not found:' + param.name);
+    }
+    param.props.forEach((prop) => {
+      if (hasProperty(audioParam, prop.name)) {
+        // @ts-ignore
+        audioParam[prop.name] = prop.value;
+      }
+    });
+    this.updateDefParam(param);
+  }
+
+  private updateDefParam(param: OmpAudioEffectParam) {
+    if (!this._def.audioParams) {
+      this._def.audioParams = [param];
+    } else {
+      const oldParam = this._def.audioParams.find((oldParam) => oldParam.name === param.name);
+
+      if (!oldParam) {
+        this._def.audioParams.push(param);
+      } else {
+        oldParam.props = param.props;
+      }
+    }
+  }
+
+  destroy(): void {
+    this._delayNode.disconnect();
+  }
+
+  public static createDef(id: string, delayTime: number): DefaultOmpAudioEffectDef {
+    return new DefaultOmpAudioEffectDef(id, 'delay').addParam({
+      name: 'delayTime',
+      props: [
+        {
+          name: 'value',
+          value: delayTime,
+        },
+      ],
+    });
   }
 }
 
@@ -359,7 +534,6 @@ export class OmpDelayEffect extends BaseOmpAudioEffect<DelayNode> {
  * Filter values used for filtering {@link OmpAudioEffect}'s
  */
 export interface OmpAudioEffectFilter {
-
   /**
    * {@link OmpAudioEffect.id}
    */
@@ -368,7 +542,7 @@ export interface OmpAudioEffectFilter {
   /**
    * {@link OmpAudioEffect.type}
    */
-  type?: OmpAudioNodeType;
+  effectType?: string;
 
   /**
    * {@link OmpAudioEffect.attrs}
@@ -379,73 +553,80 @@ export interface OmpAudioEffectFilter {
 /**
  * Audio effects graph. Implementation corresponds to definition {@link OmpAudioEffectsGraph.toDef}
  */
-export class OmpAudioEffectsGraph implements OmpAudioGraph {
-  protected readonly _routingPath: OmpAudioRoutingPath;
-
-  protected _effects: OmpAudioEffect[];
+export class OmpAudioEffectsGraph {
+  protected _effects: OmpAudioEffect[] = [];
   protected _effectsById: Map<string, OmpAudioEffect> = new Map();
-  protected _sourceEffects: OmpAudioEffect[];
-  protected _destinationEffects: OmpAudioEffect[];
-
-  constructor(audioContext: AudioContext, routingPath: OmpAudioRoutingPath, def: OmpAudioEffectsGraphDef) {
-    this._routingPath = routingPath;
-
-    this._effects = [];
-
-    // create nodes
-    def.nodes.forEach((effectDef) => {
-      let ompAudioNode = this.createEffect(audioContext, effectDef);
-
-      if (this._effectsById.has(ompAudioNode.id)) {
-        throw new OmpError('Node with same id already exists in graph: ' + ompAudioNode.id);
-      }
-
-      this._effects.push(ompAudioNode);
-      this._effectsById.set(ompAudioNode.id, ompAudioNode);
-    });
-
-    // create connections
-    def.nodes.forEach((audioNodeDef) => {
-      if (audioNodeDef.connections) {
-        audioNodeDef.connections.forEach((connectionDef) => {
-          let sourceNode = this._effectsById.get(audioNodeDef.id)!;
-          let destinationNode = this._effectsById.get(connectionDef.nodeId);
-
-          if (destinationNode === void 0) {
-            throw new OmpError('destinationNode not found: ' + connectionDef.nodeId);
-          }
-
-          if (connectionDef.paramName === void 0) {
-            sourceNode.connectNode(destinationNode, connectionDef.output, connectionDef.input);
-          } else {
-            sourceNode.connectParam(destinationNode, connectionDef.paramName, connectionDef.output);
-          }
-        });
-      }
-    });
-
-    let sourceNodes = def.sourceNodeIds.map((id) => this._effectsById.get(id)).filter(isNonNullable);
-    if (sourceNodes.length < 1) {
-      throw new OmpError('sourceNodes not found: ' + def.sourceNodeIds);
-    }
-    this._sourceEffects = sourceNodes;
-
-    let destinationNodes = def.destinationNodeIds.map((id) => this._effectsById.get(id)).filter(isNonNullable);
-    if (destinationNodes.length < 1) {
-      throw new OmpError('destinationNodes not found: ' + def.destinationNodeIds);
-    }
-    this._destinationEffects = destinationNodes;
+  protected _sourceEffects: OmpAudioEffect[] = [];
+  protected _destinationEffects: OmpAudioEffect[] = [];
+  protected _initialized = false;
+  public get initialized() {
+    return this._initialized;
   }
 
-  protected createEffect(audioContext: AudioContext, effectDef: OmpAudioEffectDef): OmpAudioEffect {
-    switch (effectDef.type) {
-      case 'gain':
-        return new OmpGainEffect(audioContext, effectDef);
-      case 'delay':
-        return new OmpDelayEffect(audioContext, effectDef);
-      default:
-        throw new Error('Method not implemented.');
-    }
+  constructor(
+    private audioContext: AudioContext,
+    private def: OmpAudioEffectsGraphDef
+  ) {}
+
+  public initialize(): Observable<void> {
+    this._effects = [];
+    const effectsRegistry = OmpAudioEffectsRegistry.instance;
+    const effectsReady$: Observable<void>[] = [];
+    // create effects
+    this.def.effectDefs.forEach((effectDef) => {
+      const effectFactory = effectsRegistry.get(effectDef.effectType);
+      if (!effectFactory) {
+        throw new OmpError(`Effect ${effectDef.id} of type ${effectDef.effectType} is not registered`);
+      }
+      let effect = effectFactory(this.audioContext, effectDef);
+      effectsReady$.push(effect.onReady$);
+
+      if (this._effectsById.has(effect.id)) {
+        throw new OmpError('Effect with same id already exists in graph: ' + effect.id);
+      }
+
+      this._effects.push(effect);
+      this._effectsById.set(effect.id, effect);
+    });
+
+    const allReady$ = combineLatest(effectsReady$);
+
+    return allReady$.pipe(
+      tap(() => {
+        // create connections
+        this.def.effectDefs.forEach((effectDef) => {
+          if (effectDef.connections) {
+            effectDef.connections.forEach((connectionDef) => {
+              const sourceNode = this._effectsById.get(effectDef.id)!.getOutputNode();
+              const destinationEffect = this._effectsById.get(connectionDef.effectId);
+
+              if (!destinationEffect) {
+                throw new OmpError('destinationNode not found: ' + connectionDef.effectId);
+              }
+
+              destinationEffect.getInputNodes().forEach((destinationNode) => {
+                sourceNode.connect(destinationNode, connectionDef.output, connectionDef.input);
+              });
+            });
+          }
+        });
+
+        const sourceEffects = this.def.sourceEffectIds.map((id) => this._effectsById.get(id)).filter(isNonNullable);
+        if (sourceEffects.length < 1) {
+          throw new OmpError('sourceEffects not found: ' + this.def.sourceEffectIds);
+        }
+        this._sourceEffects = sourceEffects;
+
+        const destinationEffects = this.def.destinationEffectIds.map((id) => this._effectsById.get(id)).filter(isNonNullable);
+        if (destinationEffects.length < 1) {
+          throw new OmpError('destinationEffects not found: ' + this.def.destinationEffectIds);
+        }
+        this._destinationEffects = destinationEffects;
+
+        this._initialized = true;
+      }),
+      map(() => undefined)
+    );
   }
 
   /**
@@ -453,7 +634,10 @@ export class OmpAudioEffectsGraph implements OmpAudioGraph {
    *
    * @param filter
    */
-  findAudioEffects(filter: OmpAudioEffectFilter): OmpAudioEffect[] {
+  findAudioEffects(filter?: OmpAudioEffectFilter): OmpAudioEffect[] {
+    if (!filter) {
+      return this._effects;
+    }
     return this._effects.filter((effect) => {
       let include = true;
 
@@ -461,8 +645,8 @@ export class OmpAudioEffectsGraph implements OmpAudioGraph {
         include = effect.id === filter.id;
       }
 
-      if (filter.type !== void 0) {
-        include = effect.type === filter.type;
+      if (filter.effectType !== void 0) {
+        include = effect.effectType === filter.effectType;
       }
 
       if (filter.attrs !== void 0) {
@@ -499,25 +683,24 @@ export class OmpAudioEffectsGraph implements OmpAudioGraph {
   toDef(): OmpAudioEffectsGraphDef {
     let builder = OmpAudioEffectsGraphDefBuilder.instance();
 
-    this._effects.forEach((node) => {
-      builder.addEffect(node.toDef());
+    this._effects.forEach((effect) => {
+      builder.addEffect(effect.toDef());
     });
 
-    builder.sourceEffectsIds(this._sourceEffects.map((node) => node.id));
-    builder.destinationEffectsIds(this._destinationEffects.map((node) => node.id));
+    builder.sourceEffectsIds(this._sourceEffects.map((effect) => effect.id));
+    builder.destinationEffectsIds(this._destinationEffects.map((effect) => effect.id));
 
     return builder.build();
   }
 
   destroy() {
-    this._effects.forEach((node) => {
-      node.destroy();
+    this._effects.forEach((effect) => {
+      effect.destroy();
     });
   }
 }
 
 export class OmpAudioEffectsUtil {
-
   /**
    * Calculates crossfade gain value for {@link value} and {@link curve}
    *

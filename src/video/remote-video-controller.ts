@@ -68,10 +68,22 @@ import Decimal from 'decimal.js';
 import {TypedOmpBroadcastChannel} from '../common/omp-broadcast-channel';
 import {MessageChannelActionsMap} from './channel-types';
 import {fromPromise} from 'rxjs/internal/observable/innerFrom';
-import {BufferedTimespan, OmpAudioRouterState, OmpAudioRoutingInputType, OmpMainAudioInputSoloMuteState, OmpMainAudioState, OmpSidecarAudioInputSoloMuteState, OmpSidecarAudioState, VideoLoadOptionsInternal, VideoSafeZone, VideoWindowPlaybackState} from './model';
+import {
+  BufferedTimespan,
+  OmpAudioRouterState,
+  OmpAudioRoutingInputType,
+  OmpMainAudioInputSoloMuteState,
+  OmpMainAudioState,
+  OmpSidecarAudioInputSoloMuteState,
+  OmpSidecarAudioState,
+  VideoLoadOptionsInternal,
+  VideoSafeZone,
+  VideoWindowPlaybackState,
+} from './model';
 import {OmpAudioRouter} from './audio-router';
 import {SidecarAudioApi} from '../api/sidecar-audio-api';
-import {OmpAudioEffectFilter, OmpAudioEffectParam, OmpAudioEffectsGraphDef} from '../audio';
+import {OmpAudioEffectFactory, OmpAudioEffectFilter, OmpAudioEffectParam, OmpAudioEffectsGraphDef} from '../audio';
+import {OmpAudioEffectsGraphConnection} from '../audio/model';
 
 export class RemoteVideoController implements VideoControllerApi {
   private readonly _messageChannel: TypedOmpBroadcastChannel<MessageChannelActionsMap>;
@@ -150,7 +162,7 @@ export class RemoteVideoController implements VideoControllerApi {
         next: (value) => {
           this._get_onAudioLoaded$.next(value);
           if (value) {
-            this._audioTracks = value.audioTracks
+            this._audioTracks = value.audioTracks;
           }
         },
       });
@@ -161,7 +173,7 @@ export class RemoteVideoController implements VideoControllerApi {
       .subscribe({
         next: (value) => {
           if (value) {
-            this._audioTracks = value.audioTracks
+            this._audioTracks = value.audioTracks;
           }
         },
       });
@@ -840,16 +852,16 @@ export class RemoteVideoController implements VideoControllerApi {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.updateMainAudioRouterConnections', [connections])));
   }
 
-  setMainAudioEffectsGraphs(effectsGraphDef: OmpAudioEffectsGraphDef, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
-    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.setMainAudioEffectsGraphs', [effectsGraphDef, routingPath])));
+  setMainAudioEffectsGraphs(effectsGraphDef: OmpAudioEffectsGraphDef, effectsGraphConnection: OmpAudioEffectsGraphConnection): Observable<void> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.setMainAudioEffectsGraphs', [effectsGraphDef, effectsGraphConnection])));
   }
 
-  removeMainAudioEffectsGraphs(routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
-    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.removeMainAudioEffectsGraphs', [routingPath])));
+  removeMainAudioEffectsGraphs(effectsGraphConnection: OmpAudioEffectsGraphConnection): Observable<void> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.removeMainAudioEffectsGraphs', [effectsGraphConnection])));
   }
 
-  setMainAudioEffectsParams(param: OmpAudioEffectParam, filter?: {routingPath?: Partial<OmpAudioRoutingPath>} & OmpAudioEffectFilter): Observable<void> {
-    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.setMainAudioEffectsParams', [param, filter])));
+  setMainAudioEffectsParams(param: OmpAudioEffectParam, effectGraphConnection: OmpAudioEffectsGraphConnection, filter?: OmpAudioEffectFilter): Observable<void> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.setMainAudioEffectsParams', [param, effectGraphConnection, filter])));
   }
 
   toggleMainAudioRouterSolo(routingPath: OmpAudioRoutingInputType): Observable<void> {
@@ -952,16 +964,21 @@ export class RemoteVideoController implements VideoControllerApi {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.updateSidecarAudioRouterConnections', [sidecarAudioTrackId, connections])));
   }
 
-  setSidecarAudioEffectsGraph(sidecarAudioTrackId: string, effectsGraphDef: OmpAudioEffectsGraphDef, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
-    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.setSidecarAudioEffectsGraph', [sidecarAudioTrackId, effectsGraphDef, routingPath])));
+  setSidecarAudioEffectsGraph(sidecarAudioTrackId: string, effectsGraphDef: OmpAudioEffectsGraphDef, effectsGraphConnection: OmpAudioEffectsGraphConnection): Observable<void> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.setSidecarAudioEffectsGraph', [sidecarAudioTrackId, effectsGraphDef, effectsGraphConnection])));
   }
 
-  removeSidecarAudioEffectsGraphs(sidecarAudioTrackId: string, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void> {
-    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.removeSidecarAudioEffectsGraphs', [sidecarAudioTrackId, routingPath])));
+  removeSidecarAudioEffectsGraphs(sidecarAudioTrackId: string, effectsGraphConnection: OmpAudioEffectsGraphConnection): Observable<void> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.removeSidecarAudioEffectsGraphs', [sidecarAudioTrackId, effectsGraphConnection])));
   }
 
-  setSidecarAudioEffectsParams(sidecarAudioTrackId: string, param: OmpAudioEffectParam, filter?: {routingPath?: Partial<OmpAudioRoutingPath>} & OmpAudioEffectFilter): Observable<void> {
-    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.setSidecarAudioEffectsParams', [sidecarAudioTrackId, param, filter])));
+  setSidecarAudioEffectsParams(
+    sidecarAudioTrackId: string,
+    param: OmpAudioEffectParam,
+    effectGraphConnection: OmpAudioEffectsGraphConnection,
+    filter?: {routingPath?: Partial<OmpAudioRoutingPath>} & OmpAudioEffectFilter
+  ): Observable<void> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.setSidecarAudioEffectsParams', [sidecarAudioTrackId, param, effectGraphConnection, filter])));
   }
 
   createSidecarAudioPeakProcessor(sidecarAudioTrackId: string, audioMeterStandard?: AudioMeterStandard): Observable<Observable<AudioPeakProcessorMessageEvent>> {
@@ -1031,5 +1048,9 @@ export class RemoteVideoController implements VideoControllerApi {
 
   loadBlackVideo(): Observable<Video> {
     return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.loadBlackVideo')));
+  }
+
+  registerAudioEffect(effectType: string, effectFactory: OmpAudioEffectFactory): void {
+    throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
   }
 }

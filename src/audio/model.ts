@@ -14,49 +14,55 @@
  * limitations under the License.
  */
 
-import {OmpAudioNodeParamType, OmpAudioNodeType} from '../video';
+import {OmpAudioEffectParamType, OmpAudioRoutingPath} from '../video/model';
+
+export interface OmpAudioEffectsSlot {
+  inputNode: AudioNode;
+  outputNode: AudioNode;
+}
+
+export type OmpAudioEffectGraphSlot = 'source' | 'router' | 'destination';
 
 /**
- * Audio node definition for Web Audio API {@link AudioNode} wrapper
+ * Definition of an audio effect.
  */
-export interface OmpAudioNodeDef {
+export interface OmpAudioEffectDef {
   id: string;
-  type: OmpAudioNodeType;
 
   /**
-   * Arbitrary attributes which can be used to describe audio node.
+   * Effect type as used in EffectsRegistry. There are no limitations to effect types
+   * but they need to be dynamically added to EffectsRegistry.
+   */
+  effectType: string;
+
+  /**
+   * Arbitrary attributes which can be used to describe audio effect.
    */
   attrs?: Record<string, any>;
 
   /**
    * Connections to other {@link OmpAudioNodeDef}'s
    */
-  connections?: OmpAudioNodeConnectionDef[];
+  connections?: OmpAudioEffectConnectionDef[];
 
   /**
-   * Used only during {@link AudioNode} creation. This options will be passed in {@link AudioNode} constructor
+   * Audio effect params
    */
-  audioNodeOptions?: any;
-
-  /**
-   * Audio node params
-   */
-  audioParams?: OmpAudioNodeParamType[];
+  audioParams?: OmpAudioEffectParamType[];
 }
 
+export interface OmpAudioNodeParamFilter {
+  name?: string;
+  id?: string;
+}
 /**
- * Connection definition to {@link OmpAudioNodeDef}
+ * Connection definition to {@link OmpAudioEffectDef}
  */
-export interface OmpAudioNodeConnectionDef {
+export interface OmpAudioEffectConnectionDef {
   /**
    * {@link OmpAudioNodeDef.id}
    */
-  nodeId: string;
-
-  /**
-   * {@link OmpAudioNodeDef.audioParams[].name}
-   */
-  paramName?: string;
+  effectId: string;
 
   /**
    * Input
@@ -70,18 +76,28 @@ export interface OmpAudioNodeConnectionDef {
 }
 
 /**
- * Audio graph definition. Contains {@link OmpAudioNodeDef}'s
+ * Audio graph definition. Contains {@link OmpAudioEffectDef}'s
  */
-export interface OmpAudioGraphDef {
-  nodes: OmpAudioNodeDef[];
+export interface OmpAudioEffectsGraphDef {
+  effectDefs: OmpAudioEffectDef[];
+  /**
+   * Effects graph input effects ids
+   */
+  sourceEffectIds: string[];
 
   /**
-   * Audio graph input {@link OmpAudioNodeDef}'s
+   * Effects graph output effects ids
    */
-  sourceNodeIds: string[];
-
-  /**
-   * Audio graph output {@link OmpAudioNodeDef}'s
-   */
-  destinationNodeIds: string[];
+  destinationEffectIds: string[];
 }
+
+/**
+ * Connection definition for audio graph.
+ */
+export type OmpAudioEffectsGraphConnection =
+  | {
+      slot: Extract<OmpAudioEffectGraphSlot, 'router'>;
+      routingPath?: Partial<OmpAudioRoutingPath>;
+    }
+  | {slot: Extract<OmpAudioEffectGraphSlot, 'source'>}
+  | {slot: Extract<OmpAudioEffectGraphSlot, 'destination'>};

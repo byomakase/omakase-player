@@ -51,7 +51,7 @@ export interface AudioRouterApi extends Api {
    * @param effectsGraphDef
    * @param routingPath
    */
-  setAudioEffectsGraphs(effectsGraphDef: OmpAudioEffectsGraphDef, routingPath?: Partial<OmpAudioRoutingPath>): void;
+  setAudioEffectsGraphs(effectsGraphDef: OmpAudioEffectsGraphDef, routingPath?: Partial<OmpAudioRoutingPath>): Observable<void>;
 
   /**
    * Removes {@link OmpAudioEffectsGraph}'s from routing paths provided with {@link routingPath}. </br>

@@ -34,6 +34,7 @@ export class DomController {
     alerts: 'omakase-player-alerts',
     detachedBackground: 'omakase-detached-background',
     backgroundImage: 'omakase-background-image',
+    backgroundLogo: 'omakase-background-logo',
     audioTextMenu: 'omakase-audio-text-menu',
     audioTextToggle: 'omakase-audio-text-toggle',
     audioTextDropdown: 'omakase-audio-text-dropdown',
@@ -67,6 +68,8 @@ export class DomController {
     mediaChromePreviewWrapper: 'media-chrome-preview-wrapper',
     mediaChromeTextOn: 'media-chrome-text-on',
     mediaChromeTextOff: 'media-chrome-text-off',
+    mediaChromeHelp: 'media-chrome-help',
+    mediaControlBar: 'media-control-bar',
   };
 
   showElements(...element: Array<HTMLElement | undefined>): DomController {

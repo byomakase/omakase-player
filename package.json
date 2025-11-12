@@ -1,6 +1,6 @@
 {
     "name": "@byomakase/omakase-player",
-    "version": "0.22.1",
+    "version": "0.23.0",
     "description": "## Omakase Player - Open source JavaScript framework for building frame accurate video experiences",
     "author": "ByOmakase",
     "homepage": "https://player.byomakase.org",
@@ -36,7 +36,7 @@
         "axios": "1.12.2",
         "decimal.js": "10.4.3",
         "eventemitter3": "5.0.0",
-        "hls.js": "1.6.10",
+        "hls.js": "1.6.14",
         "konva": "8.3.14",
         "m3u8-parser": "^7.2.0",
         "media-captions": "1.0.4",
