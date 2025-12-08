@@ -25,10 +25,15 @@ import {
   DEFAULT_PLAYER_CHROMING,
   DefaultThemeControl,
   DefaultThemeFloatingControl,
-  EditorialControlBarPosition,
-  EditorialThemeFloatingControl,
+  OmakaseChroming,
+  OmakaseProgressBarPosition,
+  OmakaseThemeActionIcon,
+  OmakaseThemeControl,
+  OmakaseThemeFloatingControl,
+  OmakaseControlBarVisibility,
   PlayerChroming,
   PlayerChromingTheme,
+  StampThemeActionIcon,
   StampThemeFloatingControl,
   StampTimeFormat,
 } from './model';
@@ -81,6 +86,7 @@ export class PlayerChromingDomController extends DomController implements Player
   protected _mediaControllerElement!: MediaController;
   protected readonly _divPlayer: HTMLElement;
   protected _controlBar?: MediaControlBar;
+  protected _omakaseControlBar?: HTMLElement;
 
   protected _buttonFastRewind?: MediaChromeButton;
   protected _buttonRewind?: MediaChromeButton;
@@ -89,13 +95,16 @@ export class PlayerChromingDomController extends DomController implements Player
   protected _buttonAttach?: MediaChromeButton;
   protected _buttonDetach?: MediaChromeButton;
   protected _buttonPlay?: OmakasePlayButton;
+  protected _buttonCloseControlBar?: MediaChromeButton;
+  protected _buttonControlBarToggle?: MediaChromeButton;
 
   protected _timeRangeControl?: OmakaseTimeRange;
-  protected _volumeRangeControl?: OmakaseVolumeRange;
+  protected _volumeRangeControls?: OmakaseVolumeRange[];
   protected _currentTimecode?: OmakaseTimeDisplay;
   protected _previewTimecode?: OmakaseTimeDisplay;
+  protected _timeDuration?: OmakaseTimeDisplay;
   protected _previewThumbnail?: OmakasePreviewThumbnail;
-  protected _muteButton?: OmakaseMuteButton;
+  protected _muteButtons?: OmakaseMuteButton[];
   protected _textButton?: MediaChromeButton;
   protected _speedDropdown?: OmakaseDropdown;
   protected _audioDropdown?: OmakaseDropdown;
@@ -312,15 +321,18 @@ export class PlayerChromingDomController extends DomController implements Player
     this._buttonRewind = this.getShadowElementByClass<MediaChromeButton>(this._domClasses.mediaRewindButton);
     this._buttonForward = this.getShadowElementByClass<MediaChromeButton>(this._domClasses.mediaForwardButton);
     this._buttonFastForward = this.getShadowElementByClass<MediaChromeButton>(this._domClasses.mediaFastForwardButton);
+    this._buttonCloseControlBar = this.getShadowElementByClass<MediaChromeButton>(this._domClasses.mediaChromeClose);
+    this._buttonControlBarToggle = this.getShadowElementByClass<MediaChromeButton>(this._domClasses.mediaChromeControlBarToggle);
     this._buttonPlay = this.getShadowElementByClass<OmakasePlayButton>('omakase-player-play');
     this._timeRangeControl = this.getShadowElement<OmakaseTimeRange>('omakase-time-range');
-    this._volumeRangeControl = this.getShadowElement<OmakaseVolumeRange>('omakase-volume-range');
-    this._muteButton = this.getShadowElement<OmakaseMuteButton>('omakase-mute-button');
+    this._volumeRangeControls = this.getShadowElements<OmakaseVolumeRange>('omakase-volume-range');
+    this._muteButtons = this.getShadowElements<OmakaseMuteButton>('omakase-mute-button');
     this._markerBar = this.getShadowElement<OmakaseMarkerBar>('omakase-marker-bar');
     this._audioVisualization = this.getShadowElement<OmakaseAudioVisualization>('omakase-audio-visualization');
     this._textButton = this.getShadowElementByClass<MediaChromeButton>(this._domClasses.mediaChromeTextOn);
     this._currentTimecode = this.getShadowElementByClass<OmakaseTimeDisplay>(this._domClasses.mediaChromeCurrentTimecode);
     this._previewTimecode = this.getShadowElementByClass<OmakaseTimeDisplay>(this._domClasses.mediaChromePreviewTimecode);
+    this._timeDuration = this.getShadowElementByClass<OmakaseTimeDisplay>(this._domClasses.mediaChromeTimeDuration);
     this._previewThumbnail = this.getShadowElementByClass<OmakasePreviewThumbnail>(this._domClasses.mediaChromePreviewThumbnail);
     this._buttonBitc = this.getShadowElementByClass<MediaChromeButton>(this._domClasses.mediaChromeBitcDisabled);
     this._divTimecode = this.getShadowElementByClass<OmakaseTimeDisplay>(this._domClasses.timecodeContainer);
@@ -337,6 +349,7 @@ export class PlayerChromingDomController extends DomController implements Player
     this._captions = this.getShadowElementByClass<HTMLElement>(this._domClasses.captions);
     this._sectionTopRight = this.getShadowElementByClass<HTMLElement>(this._domClasses.sectionTopRight);
     this._controlBar = this.getShadowElementByClass<MediaControlBar>(this._domClasses.mediaControlBar);
+    this._omakaseControlBar = this.getShadowElementByClass<HTMLElement>(this._domClasses.omakaseControlBar);
     this._previewWrapper = this.getShadowElementByClass<HTMLElement>(this._domClasses.mediaChromePreviewWrapper);
     this._buttonHelp = this.getShadowElementByClass<MediaChromeButton>('omakase-player-help-toggle');
     this._divHelpMenu = this.getShadowElementByClass<HTMLElement>(this._domClasses.helpMenu);
@@ -401,12 +414,41 @@ export class PlayerChromingDomController extends DomController implements Player
       if (!this.playerChroming.themeConfig?.controlBar?.includes(AudioThemeControl.PlaybackRate) && this._speedDropdown) {
         this._speedDropdown.style.display = 'none';
       }
-    } else if (this.playerChroming.theme === PlayerChromingTheme.Editorial) {
+    } else if (this.playerChroming.theme === PlayerChromingTheme.Omakase) {
+      if (this.playerChroming.themeConfig?.controlBarVisibility === OmakaseControlBarVisibility.Disabled) {
+        this._mediaControllerElement.classList.remove('with-control-bar');
+      } else {
+        this._mediaControllerElement.classList.add('with-control-bar');
+      }
       if (this._controlBar) {
-        if (this.playerChroming.themeConfig?.controlBarPosition === EditorialControlBarPosition.UnderVideo) {
+        if (this.playerChroming.themeConfig?.progressBarPosition === OmakaseProgressBarPosition.UnderVideo) {
           this._controlBar.classList.add('control-bar-offset');
         } else {
           this._controlBar.classList.remove('control-bar-offset');
+        }
+      }
+      if (this._omakaseControlBar) {
+        if (this.playerChroming.themeConfig?.controlBarVisibility === OmakaseControlBarVisibility.AlwaysOn) {
+          this._omakaseControlBar.setAttribute('noautohide', '');
+        } else {
+          this._omakaseControlBar.removeAttribute('noautohide');
+        }
+        if (this.playerChroming.themeConfig?.controlBarVisibility === OmakaseControlBarVisibility.Disabled) {
+          this.hideElements(this._omakaseControlBar);
+        } else {
+          this.showElements(this._omakaseControlBar);
+        }
+      }
+      if (this._buttonControlBarToggle) {
+        if (this.playerChroming.themeConfig?.controlBarVisibility === OmakaseControlBarVisibility.AlwaysOn) {
+          this._buttonControlBarToggle.classList.remove('control-bar-enabled', 'control-bar-disabled');
+          this._buttonControlBarToggle.classList.add('control-bar-always-on');
+        } else if (this.playerChroming.themeConfig?.controlBarVisibility === OmakaseControlBarVisibility.Enabled) {
+          this._buttonControlBarToggle.classList.remove('control-bar-always-on', 'control-bar-disabled');
+          this._buttonControlBarToggle.classList.add('control-bar-enabled');
+        } else {
+          this._buttonControlBarToggle.classList.remove('control-bar-enabled', 'control-bar-always-on');
+          this._buttonControlBarToggle.classList.add('control-bar-disabled');
         }
       }
     }
@@ -578,19 +620,22 @@ export class PlayerChromingDomController extends DomController implements Player
             </div>
         </media-control-bar>`;
     } else if (this._config.playerChroming.theme === PlayerChromingTheme.Stamp) {
-      return `<div slot="top-chrome" ${this._config.playerChroming.themeConfig?.alwaysOnFloatingControls?.includes(StampThemeFloatingControl.AudioToggle) ? 'noautohide' : ''}>
+      return `
+        <div class="omakase-action-icons ${this._domClasses.sectionTopRight}" ${this._config.playerChroming.themeConfig?.alwaysOnFloatingControls?.includes(StampThemeFloatingControl.ActionIcons) ? 'noautohide' : ''}>
             ${
-              this._config.playerChroming.themeConfig?.floatingControls?.includes(StampThemeFloatingControl.AudioToggle)
+              this._config.playerChroming.themeConfig?.floatingControls?.includes(StampThemeFloatingControl.ActionIcons) &&
+              this._config.playerChroming.themeConfig?.actionIcons?.includes(StampThemeActionIcon.AudioToggle)
                 ? `<omakase-mute-button class="shadow">
                     <div slot="off" class="stamp-audio-toggle stamp-audio-off"></div>
+                    <div slot="low" class="stamp-audio-toggle stamp-audio-on"></div>
+                    <div slot="medium" class="stamp-audio-toggle stamp-audio-on"></div>
                     <div slot="high" class="stamp-audio-toggle stamp-audio-on"></div>
                   </omakase-mute-button>`
                 : ''
             }
-        </div>
-        <div class="${this._domClasses.sectionTopRight}" ${this._config.playerChroming.themeConfig?.alwaysOnFloatingControls?.includes(StampThemeFloatingControl.Fullscreen) ? 'noautohide' : ''}>
             ${
-              this._config.playerChroming.themeConfig?.floatingControls?.includes(StampThemeFloatingControl.Fullscreen)
+              this._config.playerChroming.themeConfig?.floatingControls?.includes(StampThemeFloatingControl.ActionIcons) &&
+              this._config.playerChroming.themeConfig?.actionIcons?.includes(StampThemeActionIcon.Fullscreen)
                 ? `<omakase-fullscreen-button class="${this._domClasses.mediaChromeButton} omakase-player-fullscreen shadow">
                       <span slot="enter" class="${this._domClasses.mediaChromeFullscreenEnter}"></span>
                       <span slot="exit" class="${this._domClasses.mediaChromeFullscreenExit}"></span>
@@ -611,7 +656,9 @@ export class PlayerChromingDomController extends DomController implements Player
             </div>
             <div slot="centered-chrome" class="omakase-overlay-buttons-wrapper" noautohide>
                 <div class="omakase-overlay-buttons">
-                    <div class="${this._domClasses.buttonOverlayLoading} omakase-video-overlay-button shadow d-none"></div>
+                    <div class="omakase-loading-wrapper shadow">
+                        <div class="${this._domClasses.buttonOverlayLoading} omakase-video-overlay-button d-none"></div>
+                    </div>
                     <div class="${this._domClasses.buttonOverlayError} omakase-video-overlay-button shadow d-none"></div>
                 </div>
             </div>`
@@ -624,7 +671,7 @@ export class PlayerChromingDomController extends DomController implements Player
               } class="${this._domClasses.timecodeWrapper} omakase-timecode-format-${this._config.playerChroming.themeConfig?.timeFormat === 'TIMECODE' ? 'timecode' : 'standard'} omakase-timecode-${
                 this._config.playerChroming.themeConfig?.floatingControls?.includes(StampThemeFloatingControl.ProgressBar) ? 'with' : 'without'
               }-progress-bar">
-                <omakase-time-display class="${this._domClasses.mediaChromeCurrentTimecode}" showduration="true" format="${this._config.playerChroming.themeConfig?.timeFormat === 'TIMECODE' ? 'timecode' : 'standard'}" ${this._config.playerChroming.themeConfig.timeFormat === 'COUNTDOWN_TIMER' ? 'countdown ' : ''}></omakase-time-display>
+                <omakase-time-display class="${this._domClasses.mediaChromeCurrentTimecode}" showduration format="${this._config.playerChroming.themeConfig?.timeFormat === 'TIMECODE' ? 'timecode' : 'standard'}" ${this._config.playerChroming.themeConfig.timeFormat === 'COUNTDOWN_TIMER' ? 'countdown ' : ''}></omakase-time-display>
             </div>`
             : ''
         }
@@ -638,11 +685,12 @@ export class PlayerChromingDomController extends DomController implements Player
             : ''
         }
         </media-control-bar>`;
-    } else if (this._config.playerChroming.theme === PlayerChromingTheme.Editorial) {
+    } else if (this._config.playerChroming.theme === PlayerChromingTheme.Omakase) {
       return `
-        <div class="${this._domClasses.sectionTopRight}">
+        <div class="omakase-action-icons ${this._domClasses.sectionTopRight}" ${this._config.playerChroming.themeConfig?.alwaysOnFloatingControls?.includes(OmakaseThemeFloatingControl.ActionIcons) ? 'noautohide' : ''}>
           ${
-            this._config.playerChroming.themeConfig?.floatingControls?.includes(EditorialThemeFloatingControl.HelpMenu)
+            this._config.playerChroming.themeConfig?.floatingControls?.includes(OmakaseThemeFloatingControl.ActionIcons) &&
+            this._config.playerChroming?.themeConfig?.actionIcons?.includes(OmakaseThemeActionIcon.HelpMenu)
               ? `<div class="${this._domClasses.help}">
                   <media-chrome-button class="${this._domClasses.mediaChromeButton} omakase-player-help-toggle shadow">
                     <span class="${this._domClasses.mediaChromeHelp}"></span>
@@ -654,7 +702,8 @@ export class PlayerChromingDomController extends DomController implements Player
               : ''
           }
           ${
-            this._config.playerChroming.themeConfig?.floatingControls?.includes(EditorialThemeFloatingControl.Fullscreen)
+            this._config.playerChroming.themeConfig?.floatingControls?.includes(OmakaseThemeFloatingControl.ActionIcons) &&
+            this._config.playerChroming?.themeConfig?.actionIcons?.includes(OmakaseThemeActionIcon.Fullscreen)
               ? `<omakase-fullscreen-button class="${this._domClasses.mediaChromeButton} omakase-player-fullscreen shadow">
                   <span slot="enter" class="${this._domClasses.mediaChromeFullscreenEnter}"></span>
                   <span slot="exit" class="${this._domClasses.mediaChromeFullscreenExit}"></span>
@@ -662,27 +711,42 @@ export class PlayerChromingDomController extends DomController implements Player
               : ''
           }
           ${
-            this._config.playerChroming.themeConfig?.floatingControls?.includes(EditorialThemeFloatingControl.AudioToggle)
-              ? `<omakase-mute-button class="${this._domClasses.mediaChromeButton} shadow">
-                  <div slot="off" class="editorial-audio-toggle editorial-audio-off"></div>
-                  <div slot="high" class="editorial-audio-toggle editorial-audio-on"></div>
-                </omakase-mute-button>`
+            this._config.playerChroming.themeConfig?.floatingControls?.includes(OmakaseThemeFloatingControl.ActionIcons) &&
+            this._config.playerChroming?.themeConfig?.actionIcons?.includes(OmakaseThemeActionIcon.ControlBarToggle)
+              ? `<media-chrome-button class="${this._domClasses.mediaChromeButton} omakase-player-control-bar-toggle shadow">
+                  <span class="${this._domClasses.mediaChromeControlBarToggle} control-bar-enabled"></span>
+                </media-chrome-button>`
+              : ''
+          }
+          ${
+            this._config.playerChroming.themeConfig?.floatingControls?.includes(OmakaseThemeFloatingControl.ActionIcons) &&
+            (this._config.playerChroming?.themeConfig?.actionIcons?.includes(OmakaseThemeActionIcon.AudioToggle) ||
+              this._config.playerChroming.themeConfig?.actionIcons?.includes(OmakaseThemeActionIcon.Volume))
+              ? `<div class="volume-container">
+                    ${this._config.playerChroming?.themeConfig?.actionIcons?.includes(OmakaseThemeActionIcon.Volume) ? `<omakase-volume-range></omakase-volume-range>` : ''}
+                    <omakase-mute-button class="${this._domClasses.mediaChromeButton} shadow">
+                      <div slot="off" class="omakase-audio-toggle omakase-audio-off"></div>
+                      <div slot="low" class="omakase-audio-toggle omakase-audio-on"></div>
+                      <div slot="medium" class="omakase-audio-toggle omakase-audio-on"></div>
+                      <div slot="high" class="omakase-audio-toggle omakase-audio-on"></div>
+                    </omakase-mute-button>
+                </div>`
               : ''
           }
           <slot name="top-right"></slot>
         </div>
         ${
-          this._config.playerChroming.themeConfig?.floatingControls?.includes(EditorialThemeFloatingControl.Time)
+          this._config.playerChroming.themeConfig?.floatingControls?.includes(OmakaseThemeFloatingControl.Time)
             ? `<div ${
-                this._config.playerChroming.themeConfig?.alwaysOnFloatingControls?.includes(EditorialThemeFloatingControl.Time) ? 'noautohide' : ''
+                this._config.playerChroming.themeConfig?.alwaysOnFloatingControls?.includes(OmakaseThemeFloatingControl.Time) ? 'noautohide' : ''
               } class="${this._domClasses.timecodeWrapper} omakase-timecode-format-${this._config.playerChroming.themeConfig?.timeFormat === 'TIMECODE' ? 'timecode' : 'standard'}">
-                  <omakase-time-display class="${this._domClasses.mediaChromeCurrentTimecode}" showduration="true" format="${this._config.playerChroming.themeConfig?.timeFormat === 'TIMECODE' ? 'timecode' : 'standard'}"></omakase-time-display>
+                  <omakase-time-display class="${this._domClasses.mediaChromeCurrentTimecode}" showduration format="${this._config.playerChroming.themeConfig?.timeFormat === 'TIMECODE' ? 'timecode' : 'standard'}"></omakase-time-display>
               </div>`
             : ''
         }
         ${
-          this._config.playerChroming.themeConfig?.floatingControls?.includes(EditorialThemeFloatingControl.PlaybackControls)
-            ? `<div slot="centered-chrome" class="omakase-overlay-buttons-wrapper" ${this._config.playerChroming.themeConfig?.alwaysOnFloatingControls?.includes(EditorialThemeFloatingControl.PlaybackControls) ? 'noautohide' : ''}>
+          this._config.playerChroming.themeConfig?.floatingControls?.includes(OmakaseThemeFloatingControl.PlaybackControls)
+            ? `<div slot="centered-chrome" class="omakase-overlay-buttons-wrapper" ${this._config.playerChroming.themeConfig?.alwaysOnFloatingControls?.includes(OmakaseThemeFloatingControl.PlaybackControls) ? 'noautohide' : ''}>
                 <div class="omakase-overlay-buttons">
                     <div class="${this._domClasses.buttonOverlayAttach} omakase-video-overlay-button shadow"></div>
                     <div class="${this._domClasses.buttonOverlayPlay} omakase-video-overlay-button shadow d-none"></div>
@@ -699,12 +763,12 @@ export class PlayerChromingDomController extends DomController implements Player
             : ''
         }
         <media-control-bar 
-          class="${this._domClasses.mediaControlBar} ${this._config.playerChroming.themeConfig?.controlBarPosition === EditorialControlBarPosition.UnderVideo ? 'control-bar-offset' : ''}" 
-          ${this._config.playerChroming.themeConfig?.alwaysOnFloatingControls?.includes(EditorialThemeFloatingControl.ProgressBar) ? 'noautohide' : ''}>
-            <omakase-marker-bar editorial></omakase-marker-bar>
+          class="${this._domClasses.mediaControlBar} ${this._config.playerChroming.themeConfig?.progressBarPosition === OmakaseProgressBarPosition.UnderVideo ? 'control-bar-offset' : ''}" 
+          ${this._config.playerChroming.themeConfig?.alwaysOnFloatingControls?.includes(OmakaseThemeFloatingControl.ProgressBar) ? 'noautohide' : ''}>
+            <omakase-marker-bar omakase></omakase-marker-bar>
             ${
-              this._config.playerChroming.themeConfig?.floatingControls?.includes(EditorialThemeFloatingControl.ProgressBar)
-                ? `<omakase-time-range editorial>
+              this._config.playerChroming.themeConfig?.floatingControls?.includes(OmakaseThemeFloatingControl.ProgressBar)
+                ? `<omakase-time-range omakase>
                     <div slot="preview" class="${this._domClasses.mediaChromePreviewWrapper}">
                       <omakase-preview-thumbnail class="${this._domClasses.mediaChromePreviewThumbnail}"></omakase-preview-thumbnail>
                       <omakase-time-display format="timecode" class="${this._domClasses.mediaChromePreviewTimecode}"></omakase-time-display>
@@ -713,6 +777,77 @@ export class PlayerChromingDomController extends DomController implements Player
                 : ''
             }
         </media-control-bar>
+        <div class="${this._domClasses.omakaseControlBar}" ${this._config.playerChroming.themeConfig?.controlBarVisibility === OmakaseControlBarVisibility.AlwaysOn ? 'noautohide' : ''}>
+          <div class="omakase-control-bar-upper">
+            ${
+              this._config.playerChroming.themeConfig?.playbackRates
+                ? `<omakase-dropdown  id="speed-dropdown-${this._config.playerHTMLElementId}" alignment="center">
+                      <omakase-dropdown-list id="speed-dropdown-list-${this._config.playerHTMLElementId}" title="SPEED" width="76">
+                      ${this._config.playerChroming.themeConfig.playbackRates
+                        .map((rate) => {
+                          if (rate === 1) return `<omakase-dropdown-option selected value="${rate}">${rate}x</omakase-dropdown-option>`;
+                          else return `<omakase-dropdown-option value="${rate}">${rate}x</omakase-dropdown-option>`;
+                        })
+                        .join('\n')}
+                      </omakase-dropdown-list>
+                  </omakase-dropdown>`
+                : ''
+            }
+            ${this.createAudioTextDropdownDom('bottom')}
+            <div class="start-container">
+              <div class="volume-container ${this.getControlBarClass(OmakaseThemeControl.Volume)}">
+                  <omakase-mute-button class="${this._domClasses.mediaChromeButton} omakase-player-mute">
+                  <span slot="high" class="${this._domClasses.mediaChromeAudioHigh}"></span>
+                  <span slot="medium" class="${this._domClasses.mediaChromeAudioMedium}"></span>
+                  <span slot="low" class="${this._domClasses.mediaChromeAudioLow}"></span>
+                  <span slot="off" class="${this._domClasses.mediaChromeAudioMute}"></span>
+                  </omakase-mute-button>
+                  <omakase-volume-range></omakase-volume-range>
+              </div>
+              <omakase-dropdown-toggle class="omakase-player-playback-rate-toggle ${this.getControlBarClass(OmakaseThemeControl.PlaybackRate)}" dropdown="speed-dropdown-${this._config.playerHTMLElementId}"></omakase-dropdown-toggle>
+            </div>
+            <div class="center-container">
+              <media-chrome-button class="${this.getControlBarClass(OmakaseThemeControl.TenFramesBackward)} ${this._domClasses.mediaChromeButton} omakase-player-ten-frames-backwards">
+                  <span class="${this._domClasses.mediaFastRewindButton}"></span>
+                  <media-tooltip>Rewind by 10 frames</media-tooltip>
+              </media-chrome-button>
+              <media-chrome-button class="${this.getControlBarClass(OmakaseThemeControl.FrameBackward)} ${this._domClasses.mediaChromeButton} omakase-player-frame-backwards">
+                  <span class="${this._domClasses.mediaRewindButton}"></span>
+                  <media-tooltip>Rewind to previous frame</media-tooltip>
+              </media-chrome-button>
+              <omakase-play-button class="${this.getControlBarClass(OmakaseThemeControl.Play)} ${this._domClasses.mediaChromeButton} omakase-player-play">
+                  <span slot="play" class="${this._domClasses.mediaChromePlay}"></span>
+                  <span slot="pause" class="${this._domClasses.mediaChromePause}"></span>
+              </omakase-play-button>
+              <media-chrome-button class="${this.getControlBarClass(OmakaseThemeControl.FrameForward)} ${this._domClasses.mediaChromeButton} omakase-player-frame-forward">
+                  <span class="${this._domClasses.mediaForwardButton}"></span>
+                  <media-tooltip>Fast forward to next frame</media-tooltip>
+              </media-chrome-button>
+              <media-chrome-button class="${this.getControlBarClass(OmakaseThemeControl.TenFramesForward)} ${this._domClasses.mediaChromeButton} omakase-player-ten-frames-forward">
+                  <span class="${this._domClasses.mediaFastForwardButton}"></span>
+                  <media-tooltip>Fast forward by 10 frames</media-tooltip>
+              </media-chrome-button>
+            </div>
+            <div class="end-container">
+              <slot name="end-container"></slot>
+              <omakase-dropdown-toggle id="audio-dropdown-toggle-${this._config.playerHTMLElementId}" dropdown="audio-dropdown-${this._config.playerHTMLElementId}" class="${this.getControlBarClass(OmakaseThemeControl.Trackselector)} ${this._domClasses.mediaChromeButton} omakase-player-trackselector">
+                  <span class="${this._domClasses.mediaChromeTrackselector}"></span>
+                  <media-tooltip>Select track</media-tooltip>
+              </omakase-dropdown-toggle>
+              <omakase-fullscreen-button class="${this.getControlBarClass(OmakaseThemeControl.Fullscreen)} ${this._domClasses.mediaChromeButton} omakase-player-fullscreen">
+                  <span slot="enter" class="${this._domClasses.mediaChromeFullscreenEnter}"></span>
+                  <span slot="exit" class="${this._domClasses.mediaChromeFullscreenExit}"></span>
+              </omakase-fullscreen-button>
+              <media-chrome-button class="${this.getControlBarClass(OmakaseThemeControl.Close)} ${this._domClasses.mediaChromeButton} omakase-player-close">
+                  <span class="${this._domClasses.mediaChromeClose}"></span>
+                  <media-tooltip>Select track</media-tooltip>
+              </media-chrome-button>
+            </div>
+          </div>
+          <div class="omakase-control-bar-lower">
+            <omakase-time-display withduration format="${this._config.playerChroming.themeConfig?.timeFormat === 'TIMECODE' ? 'timecode' : 'standard'}" class="${this._domClasses.mediaChromeTimeDuration}"></omakase-time-display>
+          </div>
+        </div>
         `;
     } else {
       return '';
@@ -721,7 +856,7 @@ export class PlayerChromingDomController extends DomController implements Player
 
   private createAudioTextDropdownDom = (placement: 'top' | 'bottom') => {
     return `
-    <omakase-dropdown class="${this._domClasses.audioTextDropdown} ${this._domClasses.audioTextDropdown}-${placement}" ${this._config.playerChroming.theme === 'DEFAULT' && this._config.playerChroming.themeConfig?.trackSelectorAutoClose === false ? 'floating ' : ''} id="audio-dropdown-${this._config.playerHTMLElementId}" style="display:none;${placement === 'top' ? 'right:20px' : ''}">
+    <omakase-dropdown class="${this._domClasses.audioTextDropdown} ${this._domClasses.audioTextDropdown}-${placement}" ${this._config.playerChroming.theme === 'DEFAULT' && this._config.playerChroming.themeConfig?.trackSelectorAutoClose === false ? 'floating ' : ''} id="audio-dropdown-${this._config.playerHTMLElementId}" style="display:none;${placement === 'top' ? `right:${this.getAudioTextRightOffset()}` : ''}">
         ${
           this._config.playerChroming.theme !== PlayerChromingTheme.Audio
             ? `
@@ -736,11 +871,15 @@ export class PlayerChromingDomController extends DomController implements Player
   private alignAudioTextDropdown(alignment: 'left' | 'right') {
     if (alignment === 'right') {
       this._audioDropdown!.style.removeProperty('left');
-      this._audioDropdown!.style.right = '20px';
+      this._audioDropdown!.style.right = this.getAudioTextRightOffset();
     } else {
       this._audioDropdown!.style.removeProperty('right');
       this._audioDropdown!.style.left = this._audioDropdownToggle!.offsetLeft + 'px';
     }
+  }
+
+  private getAudioTextRightOffset() {
+    return this._config.playerChroming.theme === PlayerChromingTheme.Omakase ? '-1px' : '20px';
   }
 
   private getVisibilityClass() {
@@ -761,6 +900,10 @@ export class PlayerChromingDomController extends DomController implements Player
 
   getShadowElement<T>(querySelector: string): T {
     return this._themeElement.shadowRoot?.querySelector(querySelector) as T;
+  }
+
+  getShadowElements<T>(querySelector: string): T[] | undefined {
+    return this._themeElement.shadowRoot?.querySelectorAll(querySelector) as T[] | undefined;
   }
 
   getShadowElementByClass<T>(className: string): T {
@@ -802,6 +945,10 @@ export class PlayerChromingDomController extends DomController implements Player
     if (this._previewTimecode) {
       this._previewTimecode.video = this._videoController;
       this._previewTimecode.timeRange = this._timeRangeControl!;
+    }
+
+    if (this._timeDuration) {
+      this._timeDuration.video = this._videoController;
     }
 
     if (this._previewThumbnail) {
@@ -921,12 +1068,16 @@ export class PlayerChromingDomController extends DomController implements Player
       });
     }
 
-    if (this._volumeRangeControl) {
-      this._volumeRangeControl.videoController = this._videoController;
+    if (this._volumeRangeControls) {
+      for (const control of this._volumeRangeControls) {
+        control.videoController = this._videoController;
+      }
     }
 
-    if (this._muteButton) {
-      this._muteButton.videoController = this._videoController;
+    if (this._muteButtons) {
+      for (const button of this._muteButtons) {
+        button.videoController = this._videoController;
+      }
     }
     if (this._textButton) {
       fromEvent<MouseEvent>(this._textButton, 'click')
@@ -1080,10 +1231,11 @@ export class PlayerChromingDomController extends DomController implements Player
       merge(this._videoController.onSubtitlesLoaded$, this._videoController.onSubtitlesCreate$, this._videoController.onSubtitlesRemove$)
         .pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$))
         .subscribe({
-          next: () => {
+          next: (event) => {
             const textOptions: OmakaseDropdownListItem[] = this._videoController.getSubtitlesTracks().map((track) => ({
               value: track.id,
               label: track.label,
+              active: event?.currentTrack?.id === track.id,
             }));
             if (this._config.playerChroming.theme === PlayerChromingTheme.Audio) {
               textOptions.unshift({
@@ -1137,10 +1289,40 @@ export class PlayerChromingDomController extends DomController implements Player
         }
       });
       this._videoController.onSubtitlesHide$.pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$)).subscribe(() => {
-        this._textDropdownList?.selectedOption$.next(undefined);
-        this.hideCaptions();
+        if (this._captionsRenderer) {
+          this.hideCaptions();
+        }
       });
     }
+
+    if (this._buttonCloseControlBar) {
+      fromEvent<MouseEvent>(this._buttonCloseControlBar, 'click')
+        .pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$))
+        .subscribe({
+          next: (event) => {
+            (this._config.playerChroming as OmakaseChroming).themeConfig!.controlBarVisibility = OmakaseControlBarVisibility.Disabled;
+            this.updateControlBar();
+          },
+        });
+    }
+
+    if (this._buttonControlBarToggle) {
+      fromEvent<MouseEvent>(this._buttonControlBarToggle, 'click')
+        .pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$))
+        .subscribe({
+          next: (event) => {
+            if ((this._config.playerChroming as OmakaseChroming).themeConfig!.controlBarVisibility === OmakaseControlBarVisibility.Disabled) {
+              (this._config.playerChroming as OmakaseChroming).themeConfig!.controlBarVisibility = OmakaseControlBarVisibility.AlwaysOn;
+            } else if ((this._config.playerChroming as OmakaseChroming).themeConfig!.controlBarVisibility === OmakaseControlBarVisibility.AlwaysOn) {
+              (this._config.playerChroming as OmakaseChroming).themeConfig!.controlBarVisibility = OmakaseControlBarVisibility.Enabled;
+            } else {
+              (this._config.playerChroming as OmakaseChroming).themeConfig!.controlBarVisibility = OmakaseControlBarVisibility.Disabled;
+            }
+            this.updateControlBar();
+          },
+        });
+    }
+
     this._videoController.onVideoLoading$
       .pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$))
       .pipe(filter((p) => this._videoController.getVideoWindowPlaybackState() === 'attached'))
@@ -1200,7 +1382,7 @@ export class PlayerChromingDomController extends DomController implements Player
   }
 
   hideStampOverlay() {
-    this.hideElements(this._muteButton, this._controlBar, this._timecodeWrapper, this._sectionTopRight);
+    this.hideElements(...(this._muteButtons ?? []), this._controlBar, this._timecodeWrapper, this._sectionTopRight);
   }
 
   destroy() {

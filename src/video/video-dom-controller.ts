@@ -279,7 +279,7 @@ export class VideoDomController extends DomController implements VideoDomControl
   }
 
   private arePlaybackButtonEventsHandled(): boolean {
-    return this._config.playerChroming.theme === 'STAMP' || this._config.playerChroming.theme === 'EDITORIAL';
+    return this._config.playerChroming.theme === PlayerChromingTheme.Stamp || this._config.playerChroming.theme === PlayerChromingTheme.Omakase;
   }
 
   isFullscreen(): boolean {

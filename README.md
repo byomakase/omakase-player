@@ -45,7 +45,7 @@ let omakasePlayer = new omakase.OmakasePlayer({
 });
 ```
 
-Once player is initialized we can load hls video stream by providing stream URL and stream frame rate:
+Once player is initialized we can load hls video stream by providing stream URL and optionally stream frame rate:
 
 ```javascript
 omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8').subscribe({
@@ -505,6 +505,112 @@ Usage example:
   })
 
 ```
+
+### Audio Effects
+
+Omakase Player supports applying audio effects on both main and sidecar audio tracks. Effects are added using `OmpAudioEffectDef` interface that Omakase Player instantiates into corresponding specific `OmpAudioEffect` and includes it into audio chain. To use effects not provided by Omakase Player, you need to register the factory functions that will convert effect definitions to concrete effect objects. User never creates specific effects, only their definitions.
+
+Omakase Player supports three predefined effect chain slots: `source`, `router` and `destination` in different audio chain locations. These slots are independent and can host audio effect chains simultaneously. Each audio track has independent slots.
+
+The audio chains samples for main media and one audio sidecar are shown in the image below:
+
+![audio chain](./docs/audio-effect-chain.png)
+
+Adding effects to `router` slot can be further granulated with routing path that can select specific connections and apply effects on specified connections only. 
+
+Usage example:
+
+```js
+
+let mainEchoEffectDef = DefaultOmpAudioEffectsGraphDef.create(
+  OmpGainEffect.createDef('gain1', 1).outputTo({effectId: 'delay1'}),
+  OmpDelayEffect.createDef('delay1', 0.2).outputTo('feedbackGain', 'gain2'),
+  OmpGainEffect.createDef('feedbackGain', 0.5).outputTo('delay1'),
+  OmpGainEffect.createDef('gain2', 1)
+  );
+
+let sidecarBalanceEffectDef = DefaultOmpAudioEffectsGraphDef.create(
+  OmpGainEffect.createDef('gain', 1)
+  );
+
+// create echo effect graph on the main audio track at source slot
+omakasePlayer.audio.setMainAudioEffectsGraphs(mainEchoEffectDef, {slot: 'source'})
+
+// create sidecar audio router
+omakasePlayer.audio.createSidecarAudioRouter('sidecar-1').subscribe(() => {
+  // creates echo effect graph on the sidecar audio track at router slot on all routing paths
+  omakasePlayer.audio.setSidecarAudioEffectsGraph('sidecar-1', sidecarBalanceEffectDef, {slot: 'router'})
+})
+```
+
+Omakase Player supports changing effects parameters once the effects are created.
+
+Usage example:
+
+```js
+
+// changes gain parameter of gain effect with id "gain" on routing paths terminating on output 0 inside the router slot
+omakasePlayer.audio.setSidecarAudioEffectsParams(
+  "sidecar-1",
+  new OmpAudioEffectGainParam(0.8),
+  { slot: "router", routingPath: { output: 0 } },
+  { id: "gain" },
+);
+
+// changes gain parameter of gain effect with id "gain" on routing paths terminating on output 1 inside the router slot
+omakasePlayer.audio.setSidecarAudioEffectsParams(
+  "sidecar-1",
+  new OmpAudioEffectGainParam(1.2),
+  { slot: "router", routingPath: { output: 1 } },
+  { id: "gain" },
+);
+
+```
+
+#### Included audio effects
+
+While Omakase Player supports custom audio effects as long as they conform to `OmpAudioEffect` interface, Omakase Player provides some audio effects to make more common use cases (for example audio balancing) easier.
+
+
+##### OmpGainEffect
+
+OmpGainEffect implements gain effect. Supported parameters are the same as web audio's [GainNode](https://webaudio.github.io/web-audio-api/#GainNode). 
+
+To make usage easier Omakase Player provides `OmpAudioEffectGainParam` wrapper around the gain parameter. 
+To change gain effect parameter use either `omakasePlayer.audio.setMainAudioEffectsParams` or `omakasePlayer.audio.setSidecarAudioEffectsParams` depending on where the gain effect is located. 
+
+To create effect definition use `OmpGainEffect.createDef` static method.
+
+Code sample:
+
+```js
+let graphDef = DefaultOmpAudioEffectsGraphDef.create(
+  OmpGainEffect.createDef('gain', 0.5)
+)
+
+omakasePlayer.audio.setMainAudioEffectsGraphs(graphDef, {slot: 'source'})
+```
+
+##### OmpDelayEffect
+
+OmpDelayEffect implements delay effect. Supported parameters are the same as web audio's [DelayNode](https://webaudio.github.io/web-audio-api/#DelayNode). 
+
+To make usage easier Omakase Player provides `OmpAudioEffectDelayTimeParam` wrapper around the delayTime parameter. 
+To change delay effect parameter use either `omakasePlayer.audio.setMainAudioEffectsParams` or `omakasePlayer.audio.setSidecarAudioEffectsParams` depending on where the delay effect is located. 
+
+To create effect definition use `OmpDelayEffect.createDef` static method.
+
+Code sample:
+
+```js
+let graphDef = DefaultOmpAudioEffectsGraphDef.create(
+  OmpDelayEffect.createDef('delay', 0.2)
+)
+
+omakasePlayer.audio.setMainAudioEffectsGraphs(graphDef, {slot: 'destination'})
+```
+
+
 
 ## Styling
 

@@ -206,7 +206,7 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
     const circleDiv = document.createElement('div');
     circleDiv.style.width = this._container!.offsetHeight / 2 + 'px';
     circleDiv.style.left = `-${this._container!.offsetHeight / 4}px`;
-    if (this.hasAttribute('editorial')) {
+    if (this.hasAttribute('omakase')) {
       circleDiv.style.height = this._container!.offsetHeight + 'px';
     } else {
       circleDiv.style.height = this._container!.offsetHeight / 2 + 'px';
@@ -223,7 +223,7 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
     const selectedDiv = document.createElement('div');
     selectedDiv.style.height = this._container!.offsetHeight + 'px';
     selectedDiv.style.backgroundColor = marker.style.color;
-    if (this.hasAttribute('editorial')) {
+    if (this.hasAttribute('omakase')) {
       selectedDiv.style.left = circleDiv.style.left;
       selectedDiv.style.width = circleDiv.style.width;
     }
@@ -267,7 +267,7 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
   private addPeriodMarker(marker: PeriodMarker) {
     const markerContainer = document.createElement('div');
     const rectangleDiv = document.createElement('div');
-    if (this.getAttribute('editorial') !== null) {
+    if (this.getAttribute('omakase') !== null) {
       rectangleDiv.style.height = this._container!.offsetHeight + 'px';
     } else {
       rectangleDiv.style.height = this._container!.offsetHeight / 2 + 'px';
@@ -442,7 +442,7 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
         if (circleDiv) {
           circleDiv.style.width = this._container!.offsetHeight / 2 + 'px';
           circleDiv.style.left = `-${this._container!.offsetHeight / 4}px`;
-          if (this.hasAttribute('editorial')) {
+          if (this.hasAttribute('omakase')) {
             circleDiv.style.height = this._container!.offsetHeight + 'px';
           } else {
             circleDiv.style.height = this._container!.offsetHeight / 2 + 'px';
@@ -454,7 +454,7 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
         }
         if (selectedDiv) {
           selectedDiv.style.height = this._container!.offsetHeight + 'px';
-          if (this.hasAttribute('editorial') && circleDiv) {
+          if (this.hasAttribute('omakase') && circleDiv) {
             selectedDiv.style.left = circleDiv.style.left;
             selectedDiv.style.width = circleDiv.style.width;
           }
@@ -465,7 +465,7 @@ export class OmakaseMarkerTrack extends HTMLElement implements MarkerTrackApi {
         const endLine = markerElement.querySelector('.omakase-period-marker-end-line') as HTMLDivElement | null;
         const selectedDiv = markerElement.querySelector('.omakase-period-marker-selected-area') as HTMLDivElement | null;
         if (rectangleDiv) {
-          if (this.getAttribute('editorial') !== null) {
+          if (this.getAttribute('omakase') !== null) {
             rectangleDiv.style.height = this._container!.offsetHeight + 'px';
           } else {
             rectangleDiv.style.height = this._container!.offsetHeight / 2 + 'px';

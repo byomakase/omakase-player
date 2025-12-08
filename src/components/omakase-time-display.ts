@@ -45,8 +45,11 @@ export class OmakaseTimeDisplay extends HTMLElement {
   }
 
   getDisplayTime(time: number, isFirstFrame: boolean): string {
-    const displayTime = isFirstFrame && this.getAttribute('showduration') ? this._video!.getDuration() : this.getAttribute('countdown') !== null ? this._video!.getDuration() - time : time;
-    return this.getAttribute('format') === 'timecode' ? this._video!.formatToTimecode(displayTime) : this.formatToSeconds(displayTime);
+    const displayTime = isFirstFrame && this.hasAttribute('showduration') ? this._video!.getDuration() : this.getAttribute('countdown') !== null ? this._video!.getDuration() - time : time;
+    let displayString = this.getAttribute('format') === 'timecode' ? this._video!.formatToTimecode(displayTime) : this.formatToSeconds(displayTime);
+    if (this.hasAttribute('withduration'))
+      displayString += ` / ${this.getAttribute('format') === 'timecode' ? this._video!.formatToTimecode(this._video!.getDuration()) : this.formatToSeconds(this._video!.getDuration())}`;
+    return displayString;
   }
 
   connectedCallback() {

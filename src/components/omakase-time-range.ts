@@ -8,6 +8,7 @@ import {TimeRangeMarkerTrackApi, TimeRangeMarkerTrackVttLoadOptions} from '../ap
 import {MarkerVttFile} from '../vtt';
 import {VttAdapter} from '../common/vtt-adapter';
 import {MarkerUtil} from '../timeline/marker/marker-util';
+import {MediaUIAttributes} from 'media-chrome/dist/constants';
 
 const calcTimeFromRangeValue = (el: any, value: number = el.range.valueAsNumber): number => {
   const startTime = Number.isFinite(el.mediaSeekableStart) ? el.mediaSeekableStart : 0;
@@ -94,7 +95,7 @@ export class OmakaseTimeRange extends MediaTimeRange implements TimeRangeMarkerT
     this._previewBox = this.shadowRoot!.querySelector('[part~="preview-box"]')!;
     const markerTrackContainer = this.shadowRoot!.querySelector('#appearance')!;
     this._markerTrack = document.createElement('div');
-    this.classList.remove('has-markers');
+    this.updateClasses();
     this._markerTrack.id = 'markers';
     markerTrackContainer.appendChild(this._markerTrack);
     const rangeElement = this.shadowRoot!.querySelector('#range') as HTMLElement;
@@ -105,7 +106,7 @@ export class OmakaseTimeRange extends MediaTimeRange implements TimeRangeMarkerT
           if (
             event.clientX >= markerElement.getBoundingClientRect().x &&
             event.clientX < markerElement.getBoundingClientRect().x + markerElement.getBoundingClientRect().width &&
-            (this.getAttribute('editorial') === null ||
+            (this.getAttribute('omakase') === null ||
               (event.clientY >= markerElement.getBoundingClientRect().y && event.clientY < markerElement.getBoundingClientRect().y + markerElement.getBoundingClientRect().height))
           ) {
             if (!markerElement.classList.contains('focused')) {
@@ -169,13 +170,24 @@ export class OmakaseTimeRange extends MediaTimeRange implements TimeRangeMarkerT
     }
   }
 
+  override attributeChangedCallback(attrName: string, oldValue: string | null, newValue: string | null): void {
+    if (attrName === MediaUIAttributes.MEDIA_BUFFERED && newValue) {
+      const bufferingStart = newValue.split(':')[0];
+      if (parseFloat(bufferingStart) > 0 && parseFloat(bufferingStart) < 0.1) {
+        newValue = newValue.replace(bufferingStart, '0');
+        this.setAttribute(MediaUIAttributes.MEDIA_BUFFERED, newValue);
+      }
+    }
+    super.attributeChangedCallback(attrName, oldValue, newValue);
+  }
+
   getMarkers(): MarkerApi[] {
     return this._markers;
   }
 
   addMarker(marker: MarkerApi): MarkerApi {
     this._markers.push(marker);
-    this.classList.add('has-markers');
+    this.updateClasses();
     this.addMarkerElement(marker);
     this.onMarkerCreate$.next({marker});
     (marker as MomentMarker).onChange$.pipe(takeUntil(this._destroyed$)).subscribe((event) => {
@@ -192,9 +204,7 @@ export class OmakaseTimeRange extends MediaTimeRange implements TimeRangeMarkerT
       this._markerTrack.querySelector(`#${markerElementPrefix}-${id}`)?.remove();
       this.onMarkerDelete$.next({marker});
     }
-    if (!this._markers.length) {
-      this.classList.remove('has-markers');
-    }
+    this.updateClasses();
   }
 
   updateMarker(id: string, data: Partial<MarkerApi>): void {
@@ -224,7 +234,7 @@ export class OmakaseTimeRange extends MediaTimeRange implements TimeRangeMarkerT
   removeAllMarkers(): void {
     this._markers = [];
     this._markerTrack.innerHTML = '';
-    this.classList.remove('has-markers');
+    this.updateClasses();
   }
 
   loadVtt(vttUrl: string, options?: TimeRangeMarkerTrackVttLoadOptions): Observable<MarkerVttFile | undefined> {
@@ -291,6 +301,23 @@ export class OmakaseTimeRange extends MediaTimeRange implements TimeRangeMarkerT
       const markerSize = (100 * (markerEnd - markerStart)) / mediaDuration;
       markerElement.style.width = `${markerSize}%`;
       markerElement.style.left = `${markerPosition}%`;
+    }
+  }
+
+  private updateClasses() {
+    const hasMarkers = !!this._markers.length;
+    const hasMarkerClass = 'has-markers';
+    const parentControlBar = this.closest('media-control-bar');
+    if (hasMarkers) {
+      this.classList.add(hasMarkerClass);
+      if (parentControlBar) {
+        parentControlBar.classList.add(hasMarkerClass);
+      }
+    } else {
+      this.classList.remove(hasMarkerClass);
+      if (parentControlBar) {
+        parentControlBar.classList.remove(hasMarkerClass);
+      }
     }
   }
 }

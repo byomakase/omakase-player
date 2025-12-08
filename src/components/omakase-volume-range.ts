@@ -28,6 +28,7 @@ export class OmakaseVolumeRange extends MediaChromeRange {
         this._videoController.setAudioOutputVolume(parseFloat(this.range.value));
       }
     });
+    (this.shadowRoot!.querySelector('#progress') as HTMLDivElement).style.borderRadius = `var(--media-range-progress-border-radius, 0)`;
   }
 
   setVolume(value: number) {

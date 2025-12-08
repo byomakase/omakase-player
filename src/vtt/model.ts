@@ -18,6 +18,7 @@ export interface VttFileParsed {
   valid: any;
   note?: string;
   cues: VttCueParsed[];
+  errors: any[];
 }
 
 export interface VttCueParsed {

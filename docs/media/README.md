@@ -164,8 +164,9 @@ The following attributes are supported in the `themeConfig` object for the `STAM
 
 | Field | Description | Type | Updatable | Comment |
 |-------|-------------|------|-----------|---------|
-| `floatingControls` | Specifies list of enabled floating controls | Constrained values: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`, `PLAYBACK_CONTROLS`, `FULLSCREEN` | No | Default: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`, `PLAYBACK_CONTROLS`
-| `alwaysOnFloatingControls`   | Specifies floating control that will stay always visible | Constrained values: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`, `PLAYBACK_CONTROLS`, `FULLSCREEN` | No | Default: `PROGRESS_BAR`, `AUDIO_TOGGLE`, `TIME`
+| `floatingControls` | Specifies list of enabled floating controls | Constrained values: `PROGRESS_BAR`, `TIME`, `PLAYBACK_CONTROLS`, `ACTION_ICONS` | No | Default: `PROGRESS_BAR`, `ACTION_ICONS`, `TIME`, `PLAYBACK_CONTROLS`
+| `alwaysOnFloatingControls`   | Specifies floating control that will stay always visible | Constrained values: `PROGRESS_BAR`, `TIME`, `PLAYBACK_CONTROLS`, `ACTION_ICONS` | No | Default: `PROGRESS_BAR`, `TIME`, `ACTION_ICONS`
+| `actionIcons`   | Specifies list of enabled action icons | Constrained values: `FULLSCREEN`, `AUDIO_TOGGLE` | No | Default: `AUDIO_TOGGLE`
 | `stampScale` | Specifies how the video will fill the container | Constrained values: `FILL`, `FIT` | Yes | Default: `FIT`
 | `timeFormat`       | Specifies mode of time floating component | Constrained values: `TIMECODE`, `COUNTDOWN_TIMER`, `MEDIA_TIME` | Yes | Default: `MEDIA_TIME`
 | `htmlTemplateId`   | Id of the template used for customization slots | `string` | No |
@@ -190,14 +191,17 @@ The following attributes are supported in the `visualizationConfig` object for t
 | `strokeColor` | Specifies the border color of the bars | string | No | Default: `#9968BF`
 | `fillColors` | Specifies the fill gradient colors of the bars | string[] | No | Default: [`#F79433`, `#88B840`, `#CC6984`, `#662D91`]
 
-The following attributes are supported in the `themeConfig` object for the `EDITORIAL` theme:
+The following attributes are supported in the `themeConfig` object for the `OMAKASE` theme:
 
 | Field | Description | Type | Updatable | Comment |
 |-------|-------------|------|-----------|---------|
-| `floatingControls` | Specifies list of enabled floating controls | Constrained values: `PROGRESS_BAR`, `TIME`, `PLAYBACK_CONTROLS`, `HELP_MENU`, `AUDIO_TOGGLE`, `FULLSCREEN` | No | Default: all controls
-| `alwaysOnFloatingControls`   | Specifies floating control that will stay always visible | Constrained values: `PROGRESS_BAR`, `TIME`, `PLAYBACK_CONTROLS` | No | Default: `TIME`
+| `floatingControls` | Specifies list of enabled floating controls | Constrained values: `PROGRESS_BAR`, `TIME`, `PLAYBACK_CONTROLS`, `ACTION_ICONS` | No | Default: all controls
+| `alwaysOnFloatingControls`   | Specifies floating control that will stay always visible | Constrained values: `PROGRESS_BAR`, `TIME`, `PLAYBACK_CONTROLS`, `ACTION_ICONS` | No | Default: `TIME`
+| `actionIcons`   | Specifies list of enabled action icons | Constrained values: `HELP_MENU`, `FULLSCREEN`, `AUDIO_TOGGLE`, `VOLUME`, `CONTROL_BAR_TOGGLE` | No | Default: `HELP_MENU`, `FULLSCREEN`, `AUDIO_TOGGLE`
+| `controlBar` | Specifies list of enabled controls in control bar | Constrained values: `PLAY`, `FRAME_FORWARD`, `TEN_FRAMES_FORWARD`, `FRAME_BACKWARD`, `TEN_FRAMES_BACKWARD`, `FULLSCREEN`, `VOLUME`, `TRACKSELECTOR`, `PLAYBACK_RATE`, `CLOSE`, `TIME` | Yes | Default: all controls
 | `timeFormat`       | Specifies mode of time floating component | Constrained values: `TIMECODE`, `MEDIA_TIME` | Yes | Default: `TIMECODE`
-| `controlBarPosition` | Specifies the position of the control bar relative to the video | Constrained values: `OVER_VIDEO`, `UNDER_VIDEO` | Yes | Default: `OVER_VIDEO` |
+| `progressBarPosition` | Specifies the position of the control bar relative to the video | Constrained values: `OVER_VIDEO`, `UNDER_VIDEO` | Yes | Default: `OVER_VIDEO` |
+| `playbackRates` | Sets the available playback rates in menu | `number[]` | No | Default: `[0.25,0.5,0.75,1,2,4,8]`
 | `htmlTemplateId`   | Id of the template used for customization slots | `string` | No |
 
 ## Default Theme
@@ -270,17 +274,17 @@ let omakasePlayer = new OmakasePlayer({
 
 ---
 
-## Editorial Theme
+## Omakase Theme
 
-Editorial theme is a theme with few controls in the player, geared towards scenarios in which more complex controls are implemented outside of the player (i.e. in some form of toolbar)
+Omakase theme is a theme with few controls in the player, geared towards scenarios in which more complex controls are implemented outside of the player (i.e. in some form of toolbar)
 
 ```js
 let omakasePlayer = new OmakasePlayer({
   playerChroming: {
-    theme: PlayerChromingTheme.Editorial,
+    theme: PlayerChromingTheme.Omakase,
     themeConfig: {
-      alwaysOnFloatingControls: [EditorialThemeFloatingControl.PlaybackControls, EditorialThemeFloatingControl.Time],
-      timeFormat: EditorialTimeFormat.Timecode,
+      alwaysOnFloatingControls: [OmakaseThemeFloatingControl.PlaybackControls, OmakaseThemeFloatingControl.Time],
+      timeFormat: OmakaseTimeFormat.Timecode,
     }
   },
 });
@@ -341,9 +345,9 @@ The CSS structure of the `STAMP` theme is shown below:
 
 ![Omakase Player CSS structure](./stamp-theme-diagram.svg)
 
-The CSS structure of the `EDITORIAL` theme is shown below:
+The CSS structure of the `OMAKASE` theme is shown below:
 
-![Omakase Player CSS structure](./editorial-theme-diagram.svg)
+![Omakase Player CSS structure](./omakase-theme-diagram.svg)
 
 Media Chrome components and Omakase components based on Media Chrome are easy to style with CSS variables. For the list of CSS variables, refer to the [Media Chrome styling reference](https://www.media-chrome.org/docs/en/reference/styling).
 
@@ -378,13 +382,22 @@ You can insert your own custom HTML into specified areas of certain themes. The 
 
 ![Custom slots in default theme](./chroming-default-slots.png)
 
-The available slots for the `STAMP` and `EDITORIAL` themes are:
+The available slots for the `STAMP` theme are:
 
 | Slot                     | Position                                                                                                 |
 |--------------------------|----------------------------------------------------------------------------------------------------------|
 | `top-right`              | Top right corner of the player, under the help/mute/unmute button (1)   |
 
 ![Custom slots in stamp theme](./chroming-stamp-slots.png)
+
+The available slots for the `OMAKASE` theme are:
+
+| Slot                     | Position                                                                                                 |
+|--------------------------|----------------------------------------------------------------------------------------------------------|
+| `top-right`              | Top right corner of the player, under the help/mute/unmute button (1)   |
+| `end-container`          | Right side of the control bar, before the audio/text selection dropdown toggle (2) |
+
+![Custom slots in stamp theme](./chroming-omakase-slots.png)
 
 Here is an example of adding a custom dropdown to the `DEFAULT` theme using custom slots:
 

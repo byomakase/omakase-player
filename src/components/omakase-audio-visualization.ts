@@ -10,32 +10,42 @@ export class OmakaseAudioVisualization extends HTMLElement {
   private _destroyed$ = new Subject<void>();
   private _silenceBreaker$ = new Subject<void>();
 
-  protected _barCount = 7;
-  protected _maxHistoryCount = 4;
+  protected _viewboxWidth = 400;
+  protected _viewboxHeight = 200;
+  protected _barCount = 15;
+  protected _initialBars = [0.25, 0.17, 0.33, 0.5, 0.67, 0.33, 0.5, 0.33, 0.2, 0.3, 0.45, 0.3];
+  protected _maxHistoryCount = 5;
   protected _sampleTime = 50;
   protected _maxHeight = 0.25;
+  protected _smoothingFactor = 0.8;
+  protected _dbRangeMin = -46;
+  protected _dbRangeMax = 3;
   protected _fillColors = this.getAttribute('fill')?.split(' ') ?? DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG.visualizationConfig.fillColors;
   protected _strokeColor = this.getAttribute('stroke') ?? DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG.visualizationConfig.strokeColor;
 
   connectedCallback() {
-    this.innerHTML = `<svg width="100%" height="70%" viewBox="0 0 200 200">
+    const initialArray = [];
+    let svg = `<svg width="100%" height="70%" viewBox="0 0 ${this._viewboxWidth} ${this._viewboxHeight}">
         <defs>
-          <linearGradient id="paint0_linear_2090_635" x1="41" y1="41" x2="159" y2="159" gradientUnits="userSpaceOnUse">
+          <linearGradient id="paint0_linear_2090_635" x1="0" y1="0" x2="${this._viewboxWidth}" y2="${this._viewboxHeight}" gradientUnits="userSpaceOnUse">
             ${this._fillColors.map((color, index) => `<stop offset="${index / (this._fillColors.length - 1)}" stop-color="${color}"/>`)}
           </linearGradient>
-        </defs>
-        <rect id="bar1" class="bar" x="16"  y="75" width="12" height="50" rx="6" fill="url(#paint0_linear_2090_635)" stroke="${this._strokeColor}"/>
-        <rect id="bar2" class="bar" x="39"  y="66" width="12" height="67" rx="6" fill="url(#paint0_linear_2090_635)" stroke="${this._strokeColor}"/>
-        <rect id="bar3" class="bar" x="66"  y="33" width="12" height="133" rx="6" fill="url(#paint0_linear_2090_635)" stroke="${this._strokeColor}"/>
-        <rect id="bar4" class="bar" x="94"  y="50" width="12" height="100" rx="6" fill="url(#paint0_linear_2090_635)" stroke="${this._strokeColor}"/>
-        <rect id="bar5" class="bar" x="122" y="83" width="12" height="33"  rx="6" fill="url(#paint0_linear_2090_635)" stroke="${this._strokeColor}"/>
-        <rect id="bar6" class="bar" x="150" y="58" width="12" height="89"  rx="6" fill="url(#paint0_linear_2090_635)" stroke="${this._strokeColor}"/>
-        <rect id="bar7" class="bar" x="178" y="75" width="12" height="50"  rx="6" fill="url(#paint0_linear_2090_635)" stroke="${this._strokeColor}"/>
-      </svg>`;
+        </defs>`;
+    for (let i = 1; i <= this._barCount; i++) {
+      const value = this._initialBars[(i - 1) % this._initialBars.length];
+      initialArray.push(value);
+      svg += `<rect id="bar${i}" class="bar" x="${i * (this._viewboxWidth / (this._barCount + 1))}"  y="${(this._viewboxHeight - value * this._viewboxHeight) / 2}" width="12" height="${value * this._viewboxHeight}" rx="6" fill="url(#paint0_linear_2090_635)" stroke="${this._strokeColor}"/>`;
+    }
+    svg += `</svg>`;
+    this.innerHTML = svg;
 
-    const svg = this.getElementsByTagName(`svg`)[0] as SVGElement;
+    const svgElement = this.getElementsByTagName(`svg`)[0] as SVGElement;
     for (let i = 0; i < this._barCount; i++) {
-      this._barElements.push(svg.childNodes[3 + 2 * i] as SVGRectElement);
+      this._barElements.push(svgElement.childNodes[2 + i] as SVGRectElement);
+    }
+
+    for (let i = 0; i < this._maxHistoryCount; i++) {
+      this._historyArray.push(initialArray);
     }
   }
 
@@ -47,7 +57,7 @@ export class OmakaseAudioVisualization extends HTMLElement {
     videoController.createMainAudioPeakProcessor().subscribe((peakProcessorMessage$) => {
       peakProcessorMessage$.pipe(takeUntil(this._destroyed$)).subscribe((message) => {
         const peaks: number[] = (message.data as any).peaks;
-        this.addPeakValue(peaks.reduce((sum, peak) => sum + peak / peaks.length, 0));
+        this.addPeakValue(Math.max(...peaks));
       });
       videoController.onVideoTimeChange$.pipe(sampleTime(this._sampleTime), takeUntil(this._destroyed$)).subscribe(() => {
         this.draw();
@@ -73,7 +83,9 @@ export class OmakaseAudioVisualization extends HTMLElement {
     if (this._peakArray.length >= this._barCount) {
       this._peakArray.shift();
     }
-    this._peakArray.push(value);
+    while (this._peakArray.length < this._barCount) {
+      this._peakArray.push(value);
+    }
   }
 
   private draw() {
@@ -81,20 +93,17 @@ export class OmakaseAudioVisualization extends HTMLElement {
 
     for (let i = 0; i < this._peakArray.length; i++) {
       const value = this._peakArray[i];
-      let maxValue = 0;
 
-      maxValue = value;
-      for (const historyItem of this._historyArray) {
-        maxValue = Math.max(maxValue, historyItem[i]);
-      }
+      const historyAverage = this._historyArray.reduce((sum, array) => sum + array[i], 0) / this._historyArray.length;
+      const smoothedValue = this.getScaledValue((1 - this._smoothingFactor) * value + this._smoothingFactor * historyAverage);
 
-      if (maxValue > 0) {
+      if (smoothedValue > 0) {
         nonZeroValue = true;
       }
 
-      if (this._barElements[i] && !isNaN(maxValue)) {
-        this._barElements[i].setAttribute('height', (maxValue * 200).toString());
-        this._barElements[i].setAttribute('y', ((1 - maxValue) * 100).toString());
+      if (this._barElements[i] && !isNaN(smoothedValue)) {
+        this._barElements[i].setAttribute('height', Math.max(smoothedValue * this._viewboxHeight, 1).toString());
+        this._barElements[i].setAttribute('y', (Math.min((1 - smoothedValue) * this._viewboxHeight, this._viewboxHeight - 1) / 2).toString());
       }
     }
 
@@ -106,5 +115,10 @@ export class OmakaseAudioVisualization extends HTMLElement {
     if (!nonZeroValue) {
       this._silenceBreaker$.next();
     }
+  }
+
+  private getScaledValue(input: number): number {
+    const dbValue = (Math.log(input) * 20) / Math.log(10);
+    return 1 - Math.min(Math.max((this._dbRangeMax - dbValue) / (this._dbRangeMax - this._dbRangeMin), 0), 1);
   }
 }

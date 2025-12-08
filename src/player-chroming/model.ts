@@ -20,13 +20,19 @@ export enum PlayerChromingTheme {
   Chromeless = 'CHROMELESS',
   Custom = 'CUSTOM',
   Audio = 'AUDIO',
-  Editorial = 'EDITORIAL',
+  Omakase = 'OMAKASE',
 }
 
 export enum ControlBarVisibility {
   Enabled = 'ENABLED',
   Disabled = 'DISABLED',
   FullscreenOnly = 'FULLSCREEN_ONLY',
+}
+
+export enum OmakaseControlBarVisibility {
+  Enabled = 'ENABLED',
+  Disabled = 'DISABLED',
+  AlwaysOn = 'ALWAYS_ON',
 }
 
 export enum DefaultThemeControl {
@@ -62,9 +68,13 @@ export enum DefaultThemeFloatingControl {
 
 export enum StampThemeFloatingControl {
   ProgressBar = 'PROGRESS_BAR',
-  AudioToggle = 'AUDIO_TOGGLE',
   Time = 'TIME',
   PlaybackControls = 'PLAYBACK_CONTROLS',
+  ActionIcons = 'ACTION_ICONS',
+}
+
+export enum StampThemeActionIcon {
+  AudioToggle = 'AUDIO_TOGGLE',
   Fullscreen = 'FULLSCREEN',
 }
 
@@ -73,13 +83,34 @@ export enum AudioThemeFloatingControl {
   HelpMenu = 'HELP_MENU',
 }
 
-export enum EditorialThemeFloatingControl {
+export enum OmakaseThemeControl {
+  Play = 'PLAY',
+  FrameForward = 'FRAME_FORWARD',
+  TenFramesForward = 'TEN_FRAMES_FORWARD',
+  FrameBackward = 'FRAME_BACKWARD',
+  TenFramesBackward = 'TEN_FRAMES_BACKWARD',
+  Fullscreen = 'FULLSCREEN',
+  Volume = 'VOLUME',
+  Trackselector = 'TRACKSELECTOR',
+  PlaybackRate = 'PLAYBACK_RATE',
+  Detach = 'DETACH',
+  Time = 'TIME',
+  Close = 'CLOSE',
+}
+
+export enum OmakaseThemeFloatingControl {
   ProgressBar = 'PROGRESS_BAR',
   Time = 'TIME',
   PlaybackControls = 'PLAYBACK_CONTROLS',
+  ActionIcons = 'ACTION_ICONS',
+}
+
+export enum OmakaseThemeActionIcon {
   HelpMenu = 'HELP_MENU',
-  AudioToggle = 'AUDIO_TOGGLE',
   Fullscreen = 'FULLSCREEN',
+  AudioToggle = 'AUDIO_TOGGLE',
+  Volume = 'VOLUME',
+  ControlBarToggle = 'CONTROL_BAR_TOGGLE',
 }
 
 export enum StampThemeScale {
@@ -93,7 +124,7 @@ export enum StampTimeFormat {
   MediaTime = 'MEDIA_TIME',
 }
 
-export enum EditorialTimeFormat {
+export enum OmakaseTimeFormat {
   Timecode = 'TIMECODE',
   MediaTime = 'MEDIA_TIME',
 }
@@ -113,7 +144,7 @@ export enum FullscreenChroming {
   Disabled = 'DISABLED',
 }
 
-export enum EditorialControlBarPosition {
+export enum OmakaseProgressBarPosition {
   OverVideo = 'OVER_VIDEO',
   UnderVideo = 'UNDER_VIDEO',
 }
@@ -222,6 +253,11 @@ export interface StampThemeConfig {
   alwaysOnFloatingControls: StampThemeFloatingControl[];
 
   /**
+   * Specifies list of enabled action icons
+   */
+  actionIcons: StampThemeActionIcon[];
+
+  /**
    * Specifies how the video will fill the container
    */
   stampScale: StampThemeScale;
@@ -291,25 +327,46 @@ export interface AudioThemeConfig {
   htmlTemplateId?: string;
 }
 
-export interface EditorialThemeConfig {
+export interface OmakaseThemeConfig {
   /**
-   * Specifies list of enabled floating controls
+   * Specifies the list of enabled floating controls
    */
-  floatingControls: EditorialThemeFloatingControl[];
+  floatingControls: OmakaseThemeFloatingControl[];
 
   /**
-   * Specifies list of floating controls that are shown when the video is playing
+   * Specifies the list of floating controls that are shown when the video is playing
    */
-  alwaysOnFloatingControls: EditorialThemeFloatingControl[];
+  alwaysOnFloatingControls: OmakaseThemeFloatingControl[];
+
+  /**
+   * Specifies the list of enabled action icons
+   */
+  actionIcons: OmakaseThemeActionIcon[];
+
   /**
    * Specifies which time format will be used in the timer control
    */
-  timeFormat: EditorialTimeFormat;
+  timeFormat: OmakaseTimeFormat;
+
+  /**
+   * Specifies controls visibility
+   */
+  controlBarVisibility: OmakaseControlBarVisibility;
+
+  /**
+   * Specifies list of enabled controls in control bar
+   */
+  controlBar: OmakaseThemeControl[];
 
   /**
    * Specifies control bar position
    */
-  controlBarPosition: EditorialControlBarPosition;
+  progressBarPosition: OmakaseProgressBarPosition;
+
+  /**
+   * Sets the available playback rates in menu
+   */
+  playbackRates: number[];
 
   /**
    * Id of the custom web component used for Player chroming
@@ -325,13 +382,13 @@ export interface AudioChroming extends BasePlayerChroming<PlayerChromingTheme.Au
   themeConfig?: Partial<AudioThemeConfig>;
 }
 
-export interface EditorialChroming extends BasePlayerChroming<PlayerChromingTheme.Editorial> {
-  themeConfig?: Partial<EditorialThemeConfig>;
+export interface OmakaseChroming extends BasePlayerChroming<PlayerChromingTheme.Omakase> {
+  themeConfig?: Partial<OmakaseThemeConfig>;
 }
 
 export interface ChromelessChroming extends BasePlayerChroming<PlayerChromingTheme.Chromeless> {}
 
-export type PlayerChroming = DefaultChroming | StampChroming | CustomChroming | ChromelessChroming | AudioChroming | EditorialChroming;
+export type PlayerChroming = DefaultChroming | StampChroming | CustomChroming | ChromelessChroming | AudioChroming | OmakaseChroming;
 
 export const DEFAULT_PLAYER_CHROMING_CONFIG: DefaultThemeConfig = {
   controlBarVisibility: ControlBarVisibility.Enabled,
@@ -359,8 +416,9 @@ export const DEFAULT_PLAYER_CHROMING_CONFIG: DefaultThemeConfig = {
 export const DEFAULT_STAMP_PLAYER_CHROMING_CONFIG: StampThemeConfig = {
   stampScale: StampThemeScale.Fit,
   timeFormat: StampTimeFormat.MediaTime,
-  floatingControls: [StampThemeFloatingControl.ProgressBar, StampThemeFloatingControl.AudioToggle, StampThemeFloatingControl.Time, StampThemeFloatingControl.PlaybackControls],
-  alwaysOnFloatingControls: [StampThemeFloatingControl.ProgressBar, StampThemeFloatingControl.AudioToggle, StampThemeFloatingControl.Time],
+  floatingControls: [StampThemeFloatingControl.ProgressBar, StampThemeFloatingControl.ActionIcons, StampThemeFloatingControl.Time, StampThemeFloatingControl.PlaybackControls],
+  alwaysOnFloatingControls: [StampThemeFloatingControl.ProgressBar, StampThemeFloatingControl.ActionIcons, StampThemeFloatingControl.Time],
+  actionIcons: [StampThemeActionIcon.AudioToggle],
 };
 
 export const DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG: AudioThemeConfig = {
@@ -376,18 +434,28 @@ export const DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG: AudioThemeConfig = {
   },
 };
 
-export const DEFAULT_EDITORIAL_PLAYER_CHROMING_CONFIG: EditorialThemeConfig = {
-  timeFormat: EditorialTimeFormat.Timecode,
-  controlBarPosition: EditorialControlBarPosition.OverVideo,
-  floatingControls: [
-    EditorialThemeFloatingControl.PlaybackControls,
-    EditorialThemeFloatingControl.ProgressBar,
-    EditorialThemeFloatingControl.Time,
-    EditorialThemeFloatingControl.HelpMenu,
-    EditorialThemeFloatingControl.Fullscreen,
-    EditorialThemeFloatingControl.AudioToggle,
+export const DEFAULT_OMAKASE_PLAYER_CHROMING_CONFIG: OmakaseThemeConfig = {
+  timeFormat: OmakaseTimeFormat.Timecode,
+  progressBarPosition: OmakaseProgressBarPosition.OverVideo,
+  controlBarVisibility: OmakaseControlBarVisibility.Enabled,
+  controlBar: [
+    OmakaseThemeControl.Play,
+    OmakaseThemeControl.FrameBackward,
+    OmakaseThemeControl.TenFramesBackward,
+    OmakaseThemeControl.FrameForward,
+    OmakaseThemeControl.TenFramesForward,
+    OmakaseThemeControl.Volume,
+    OmakaseThemeControl.PlaybackRate,
+    OmakaseThemeControl.Trackselector,
+    OmakaseThemeControl.Fullscreen,
+    OmakaseThemeControl.Detach,
+    OmakaseThemeControl.Close,
+    OmakaseThemeControl.Time,
   ],
-  alwaysOnFloatingControls: [EditorialThemeFloatingControl.Time, EditorialThemeFloatingControl.ProgressBar],
+  floatingControls: [OmakaseThemeFloatingControl.PlaybackControls, OmakaseThemeFloatingControl.ProgressBar, OmakaseThemeFloatingControl.Time, OmakaseThemeFloatingControl.ActionIcons],
+  alwaysOnFloatingControls: [OmakaseThemeFloatingControl.Time, OmakaseThemeFloatingControl.ProgressBar],
+  actionIcons: [OmakaseThemeActionIcon.HelpMenu, OmakaseThemeActionIcon.AudioToggle, OmakaseThemeActionIcon.Fullscreen],
+  playbackRates: [0.25, 0.5, 0.75, 1, 2, 4, 8],
 };
 
 export const DEFAULT_PLAYER_CHROMING: DefaultChroming = {

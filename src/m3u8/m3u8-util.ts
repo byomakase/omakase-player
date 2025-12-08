@@ -22,8 +22,9 @@ import {UrlUtil} from '../util/url-util';
 import {httpGet} from '../http';
 import {VttFileParsed} from '../vtt';
 import {AuthConfig, AuthenticationData} from '../common/authentication';
+import {OmpError} from '../types';
 
-const webvttParseOptions = {strict: true, meta: true};
+const webvttParseOptions = {strict: false, meta: true};
 
 export class M3u8Util {
   static fetchVttSegmentedConcat(m3u8Url: string, authentication?: AuthenticationData): Observable<string | undefined> {
@@ -64,10 +65,16 @@ export class M3u8Util {
         return vttTexts[0];
       } else {
         let first: VttFileParsed = webvtt.parse(vttTexts[0], webvttParseOptions);
+        if (first.errors.length) {
+          console.error(`Errors found while parsing vtt file: ${first.errors}`);
+        }
         vttTexts
           .filter((p, index) => index !== 0)
           .forEach((vttText, index) => {
             let vttFileParsed: VttFileParsed = webvtt.parse(vttText, webvttParseOptions);
+            if (vttFileParsed.errors.length) {
+              throw new OmpError(`Errors found while parsing vtt file: ${vttFileParsed.errors}`);
+            }
             first.cues = first.cues.concat(vttFileParsed.cues);
           });
         return webvtt.compile(first);

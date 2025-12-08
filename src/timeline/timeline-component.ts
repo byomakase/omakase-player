@@ -312,6 +312,7 @@ export interface ImageButtonConfig extends TimelineNodeConfig<ImageButtonStyle>,
 export class ImageButton extends BaseTimelineNode<ImageButtonConfig, ImageButtonStyle> {
   protected _konvaImage?: Konva.Image;
   protected _loadImageQueue = new Subject<ImageButtonImageConfig>();
+  protected _currentImageConfig?: ImageButtonImageConfig;
 
   constructor(config: ConfigWithOptionalStyle<ImageButtonConfig>) {
     super({
@@ -346,6 +347,7 @@ export class ImageButton extends BaseTimelineNode<ImageButtonConfig, ImageButton
           });
 
           this._group.add(this._konvaImage);
+          this._currentImageConfig = imageButtonImageConfig;
 
           nextCompleteObserver(observer, {
             src: imageButtonImageConfig.src,
@@ -356,6 +358,7 @@ export class ImageButton extends BaseTimelineNode<ImageButtonConfig, ImageButton
         error: (err) => {
           if (this._konvaImage) {
             this._konvaImage.destroy();
+            this._currentImageConfig = undefined;
           }
           console.error(err);
           nextCompleteObserver(observer);
@@ -370,5 +373,17 @@ export class ImageButton extends BaseTimelineNode<ImageButtonConfig, ImageButton
    */
   setImage(config: ImageButtonImageConfig) {
     this._loadImageQueue.next(config);
+  }
+
+  /**
+   * Gets current image config
+   * @returns ImageButtonImageConfig
+   */
+  getImage() {
+    if (this._currentImageConfig) {
+      return {...this._currentImageConfig};
+    } else {
+      return undefined;
+    }
   }
 }

@@ -43,16 +43,17 @@ import {MarkerTrackConfig} from './video/model';
 import {
   AudioChroming,
   DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG,
-  DEFAULT_EDITORIAL_PLAYER_CHROMING_CONFIG,
+  DEFAULT_OMAKASE_PLAYER_CHROMING_CONFIG,
   DEFAULT_PLAYER_CHROMING_CONFIG,
   DEFAULT_STAMP_PLAYER_CHROMING_CONFIG,
   DefaultChroming,
-  EditorialChroming,
+  OmakaseChroming,
   FullscreenChroming,
   PlayerChroming,
   PlayerChromingTheme,
   StampChroming,
   WatermarkVisibility,
+  DEFAULT_PLAYER_CHROMING,
 } from './player-chroming/model';
 import {TimeRangeMarkerTrackApi} from './api/time-range-marker-track-api';
 import {AuthConfig, AuthenticationData} from './common/authentication';
@@ -136,10 +137,7 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
     };
 
     if (!config?.playerChroming) {
-      this._config.playerChroming = {
-        theme: PlayerChromingTheme.Default,
-        fullscreenChroming: FullscreenChroming.Enabled,
-      };
+      this._config.playerChroming = DEFAULT_PLAYER_CHROMING;
     }
 
     if (this._config.playerChroming?.theme === PlayerChromingTheme.Default) {
@@ -164,13 +162,16 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
           ...(config?.playerChroming as AudioChroming)?.themeConfig?.visualizationConfig,
         },
       };
-    } else if (this._config.playerChroming?.theme === PlayerChromingTheme.Editorial) {
+    } else if (this._config.playerChroming?.theme === PlayerChromingTheme.Omakase) {
       this._config.playerChroming.themeConfig = {
-        ...DEFAULT_EDITORIAL_PLAYER_CHROMING_CONFIG,
-        ...(config?.playerChroming as EditorialChroming)?.themeConfig,
+        ...DEFAULT_OMAKASE_PLAYER_CHROMING_CONFIG,
+        ...(config?.playerChroming as OmakaseChroming)?.themeConfig,
       };
     } else if (this._config.playerChroming?.theme === PlayerChromingTheme.Chromeless) {
       this._config.playerChroming.fullscreenChroming = config?.playerChroming?.fullscreenChroming ?? FullscreenChroming.Disabled;
+    } else {
+      console.log('Provided chroming theme is not recognized. Fallback to default chroming theme.');
+      this._config.playerChroming = DEFAULT_PLAYER_CHROMING;
     }
 
     OmakasePlayer.instance = this;

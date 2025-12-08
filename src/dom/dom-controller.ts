@@ -63,13 +63,18 @@ export class DomController {
     mediaChromeAudio: 'media-chrome-audio',
     mediaChromeBitcTooltip: 'media-chrome-bitc-tooltip',
     mediaChromeCurrentTimecode: 'media-chrome-current-timecode',
+    mediaChromeTimeDuration: 'media-chrome-time-duration',
     mediaChromePreviewTimecode: 'media-chrome-preview-timecode',
     mediaChromePreviewThumbnail: 'media-chrome-preview-thumbnail',
     mediaChromePreviewWrapper: 'media-chrome-preview-wrapper',
     mediaChromeTextOn: 'media-chrome-text-on',
     mediaChromeTextOff: 'media-chrome-text-off',
     mediaChromeHelp: 'media-chrome-help',
+    mediaChromeTrackselector: 'media-chrome-trackselector',
+    mediaChromeControlBarToggle: 'media-chrome-control-bar-toggle',
+    mediaChromeClose: 'media-chrome-close',
     mediaControlBar: 'media-control-bar',
+    omakaseControlBar: 'omakase-control-bar',
   };
 
   showElements(...element: Array<HTMLElement | undefined>): DomController {

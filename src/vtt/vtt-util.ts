@@ -17,15 +17,19 @@
 // @ts-ignore
 import webvtt from 'node-webvtt';
 import {BlobUtil} from '../util/blob-util';
-import {OmakaseVttCueExtension, VttCueExtensionRow} from '../types';
+import {OmakaseVttCueExtension, OmpError, VttCueExtensionRow} from '../types';
 import {StringUtil} from '../util/string-util';
 import {OmakaseWebVttExtensionVersion, VttCueParsed, VttFileParsed} from './index';
 
-const webvttParseOptions = {strict: true, meta: true};
+const webvttParseOptions = {strict: false, meta: true};
 
 export class VttUtil {
   static parseVtt(vttText: string): VttFileParsed {
     let vttFileParsed: VttFileParsed = webvtt.parse(vttText, webvttParseOptions);
+
+    if (vttFileParsed.errors.length) {
+      throw new OmpError(`Errors found while parsing vtt file: ${vttFileParsed.errors}`);
+    }
 
     const noteMatch = vttText.match(/WEBVTT\s*([\s\S]*?)NOTE\s*([\s\S]*?)(?=\n\s*\n)/);
     vttFileParsed.note = noteMatch ? noteMatch[2] : void 0;

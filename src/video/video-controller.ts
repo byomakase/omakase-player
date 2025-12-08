@@ -2302,6 +2302,13 @@ export class VideoController implements VideoControllerApi {
           next: (value) => {
             // console.debug('Created subtitles track', subtitlesVttTrack);
             nextCompleteObserver(observer, value);
+            if (subtitlesVttTrack.default) {
+              let prevDefaultTrack = Array.from(this._subtitlesTracks.values()).find((track) => track.default && track.id !== subtitlesVttTrack.id);
+              if (prevDefaultTrack) {
+                prevDefaultTrack.default = false;
+              }
+              this.showSubtitlesTrack(subtitlesVttTrack.id);
+            }
           },
           error: (error) => {
             console.error(error);

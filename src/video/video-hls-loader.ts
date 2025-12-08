@@ -332,7 +332,7 @@ export class VideoHlsLoader extends BaseVideoLoader {
         .pipe(take(1))
         .subscribe(([mediaAttached, manifestParsed, fragParsingInitSegment]) => {
           if (hasInitSegment) {
-            let preloadedLevel = this._hls!.levels.find((p, index) => p.details && p.details.fragments && p.details.fragments[0])
+            let preloadedLevel = this._hls!.levels.find((p, index) => p.details && p.details.fragments && p.details.fragments[0]);
             if (preloadedLevel) {
               MediaMetadataResolver.getMediaMetadata(preloadedLevel.details!.fragments[0].url, ['firstVideoTrackInitSegmentTime']).subscribe({
                 next: (mediaMetadata) => {
@@ -459,16 +459,18 @@ export class VideoHlsLoader extends BaseVideoLoader {
                         id: CryptoUtil.uuid(),
                         kind: 'subtitles',
                         hidden: true,
-                        default: false,
+                        default: result.mediaPlaylist.default,
                         embedded: true,
                         contentDigest: result.webvttTextDigest,
                         src: VttUtil.createWebvttBlob(result.webvttText!),
                         language: result.mediaPlaylist.lang ? result.mediaPlaylist.lang : 'n/a',
                         label: result.mediaPlaylist.name ? result.mediaPlaylist.name : 'n/a',
                       }));
+                      let activeSubtitleTrack: SubtitlesVttTrack | undefined = embeddedSubtitlesTracks.find((track) => track.default);
+                      embeddedSubtitlesTracks.filter((track) => track.id !== activeSubtitleTrack?.id).forEach((track) => (track.default = false));
                       this.onSubtitlesLoaded$.next({
                         tracks: embeddedSubtitlesTracks,
-                        currentTrack: void 0,
+                        currentTrack: activeSubtitleTrack,
                       });
                     },
                     error: (err) => {
@@ -763,6 +765,12 @@ export class VideoHlsLoader extends BaseVideoLoader {
       if (hlsSubtitleTrackController.asyncPollTrackChange) {
         hlsSubtitleTrackController.asyncPollTrackChange = () => {
           // overriden to prevent HLS polling & toggling already shown / hidden subtitles
+        };
+      }
+
+      if (!this._hlsConfig.subtitleDisplay) {
+        hlsSubtitleTrackController.toggleTrackModes = () => {
+          // overriden to prevent HLS reacting to event listeners on tracks
         };
       }
     }
