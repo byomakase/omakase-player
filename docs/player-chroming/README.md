@@ -145,9 +145,11 @@ The following attributes are supported in the `themeConfig` object for the `DEFA
 |-------|-------------|------|-----------|---------|
 | `controlBarVisibility`   | Specifies controls visibility | Constrained values: `DISABLED`, `ENABLED`, `FULLSCREEN_ONLY` | Yes | Default is `ENABLED`
 | `controlBar` | Specifies list of enabled controls in control bar | Constrained values: `PLAY`, `FRAME_FORWARD`, `TEN_FRAMES_FORWARD`, `FRAME_BACKWARD`, `TEN_FRAMES_BACKWARD`, `BITC`, `FULLSCREEN`, `CAPTIONS`, `VOLUME`, `SCRUBBER`, `TRACKSELECTOR`, `PLAYBACK_RATE`, `DETACH` | Yes | Default: all controls
-| `floatingControls`       | Specifies list of enabled floating controls | `TRACKSELECTOR`, `HELP_MENU`, `PLAYBACK_CONTROLS` | No | Default: `HELP_MENU`, `PLAYBACK_CONTROLS`
+| `floatingControls`       | Specifies list of enabled floating controls | `TRACKSELECTOR`, `HELP_MENU`, `PLAYBACK_CONTROLS`, `TIME` | No | Default: `HELP_MENU`, `PLAYBACK_CONTROLS`
+| `alwaysOnFloatingControls`       | Specifies list of enabled floating controls | `TIME` | No | Default: No controls
 | `playbackRates` | Sets the available playback rates in menu | `number[]` | No | Default: `[0.25,0.5,0.75,1,2,4,8]`
 | `trackSelectorAutoClose` | If `false`, track selection menu will keep open until explicitly closed. If `true` it will close on track selection or when clicking outside of the menu | `boolean` | No | Default: `true`
+| `timeFormat`       | Specifies mode of time floating component | Constrained values: `TIMECODE`, `COUNTDOWN_TIMER`, `MEDIA_TIME` | Yes | Default: `TIMECODE`
 | `htmlTemplateId`   | Id of the template used for customization slots | `string` | No
 
 ---
@@ -157,6 +159,16 @@ The following attributes are supported in the `themeConfig` object for the `CUST
 | Field  | Description | Type | Updatable | Comment |
 |--------|-------------|------|-----------|---------|
 | `htmlTemplateId` | Id of the custom template used for player chroming | `string` | No | Required
+
+---
+
+The following attributes are supported in the `themeConfig` object for the `CHROMELESS` theme:
+
+| Field  | Description | Type | Updatable | Comment |
+|--------|-------------|------|-----------|---------|
+| `timeFormat`       | Specifies mode of time floating component | Constrained values: `TIMECODE`, `COUNTDOWN_TIMER`, `MEDIA_TIME` | Yes | Default: `TIMECODE`
+| `floatingControls` | Specifies list of enabled floating controls | Constrained values: `TIME` | No | Default: No controls
+| `alwaysOnFloatingControls`   | Specifies floating control that will stay always visible | Constrained values: `TIME` | No | Default: No controls
 
 ---
 
@@ -176,12 +188,13 @@ The following attributes are supported in the `themeConfig` object for the `AUDI
 | Field | Description | Type | Updatable | Comment |
 |-------|-------------|------|-----------|---------|
 | `controlBarVisibility` | Specifies controls visibility | Constrained values: `DISABLED`, `ENABLED`| Yes | Default: `ENABLED`
-| `controlBar` | Specifies list of enabled controls in control bar | Constrained values: `PLAY`, `BITC`, `CAPTIONS`, `VOLUME`, `SCRUBBER`, `TRACKSELECTOR`, `PLAYBACK_RATE` | Yes | Default: all controls
+| `controlBar` | Specifies list of enabled controls in control bar | Constrained values: `PLAY`, `TIME`, `CAPTIONS`, `VOLUME`, `SCRUBBER`, `TRACKSELECTOR`, `PLAYBACK_RATE` | Yes | Default: all controls
 | `floatingControls` | Specifies list of enabled floating controls | `HELP_MENU`, `PLAYBACK_CONTROLS` | No | Default: all controls
 | `playbackRates` | Sets the available playback rates in menu | `number[]` | No | Default: `[0.5,0.75,1,2]`
 | `playerSize` | Audio player size | Constrained values: `FULL`, `COMPACT`| Yes | Default: `FULL`
 | `visualization` | Audio player visualization | Constrained values: `ENABLED`, `DISABLED`| No | Default: `DISABLED`
 | `visualizationConfig` | Audio player visualization configuration | `object` | No | Described in table below
+| `timeFormat`       | Specifies mode of time floating component | Constrained values: `TIMECODE`, `COUNTDOWN_TIMER`, `MEDIA_TIME` | Yes | Default: `TIMECODE`
 | `htmlTemplateId`   | Id of the template used for customization slots | `string` | No |
 
 The following attributes are supported in the `visualizationConfig` object for the `AUDIO` theme with `visualization` set to `ENABLED`:
@@ -198,7 +211,7 @@ The following attributes are supported in the `themeConfig` object for the `OMAK
 | `floatingControls` | Specifies list of enabled floating controls | Constrained values: `PROGRESS_BAR`, `TIME`, `PLAYBACK_CONTROLS`, `ACTION_ICONS` | No | Default: all controls
 | `alwaysOnFloatingControls`   | Specifies floating control that will stay always visible | Constrained values: `PROGRESS_BAR`, `TIME`, `PLAYBACK_CONTROLS`, `ACTION_ICONS` | No | Default: `TIME`
 | `actionIcons`   | Specifies list of enabled action icons | Constrained values: `HELP_MENU`, `FULLSCREEN`, `AUDIO_TOGGLE`, `VOLUME`, `CONTROL_BAR_TOGGLE` | No | Default: `HELP_MENU`, `FULLSCREEN`, `AUDIO_TOGGLE`
-| `controlBar` | Specifies list of enabled controls in control bar | Constrained values: `PLAY`, `FRAME_FORWARD`, `TEN_FRAMES_FORWARD`, `FRAME_BACKWARD`, `TEN_FRAMES_BACKWARD`, `FULLSCREEN`, `VOLUME`, `TRACKSELECTOR`, `PLAYBACK_RATE`, `CLOSE`, `TIME` | Yes | Default: all controls
+| `controlBar` | Specifies list of enabled controls in control bar | Constrained values: `PLAY`, `FRAME_FORWARD`, `TEN_FRAMES_FORWARD`, `FRAME_BACKWARD`, `TEN_FRAMES_BACKWARD`, `FULLSCREEN`, `VOLUME`, `TRACKSELECTOR`, `PLAYBACK_RATE`, `DETACH`, `CLOSE`, `TIME` | Yes | Default: all controls
 | `timeFormat`       | Specifies mode of time floating component | Constrained values: `TIMECODE`, `MEDIA_TIME` | Yes | Default: `TIMECODE`
 | `progressBarPosition` | Specifies the position of the control bar relative to the video | Constrained values: `OVER_VIDEO`, `UNDER_VIDEO` | Yes | Default: `OVER_VIDEO` |
 | `playbackRates` | Sets the available playback rates in menu | `number[]` | No | Default: `[0.25,0.5,0.75,1,2,4,8]`

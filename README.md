@@ -108,7 +108,7 @@ let omakasePlayer = new OmakasePlayer({
 */
 ```
 
-More information about Player Chroming customization and specific theme configurations is available in [Player Chroming](docs/player-chroming/README.md) manual.
+More information about Player Chroming customization and specific theme configurations is available in [Player Chroming](https://github.com/byomakase/omakase-player/tree/main/docs/player-chroming/README.md) manual.
 
 ## Video API
 

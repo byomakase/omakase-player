@@ -139,7 +139,7 @@ media-controller {
   position: absolute;
   right: 2.5%;
   top: calc(2.5% + var(--icon-size, var(--icon-size-default)) * 1.5);
-  z-index: 1;
+  z-index: 2;
 }
 
 .omakase-help {
@@ -796,6 +796,14 @@ media-controller {
 
     .media-chrome-fullscreen-exit {
       background-image: url(/images/omakase-fullscreen-exit.svg);
+    }
+
+    .media-chrome-detach {
+      background-image: url(/images/omakase-detach.svg);
+    }
+
+    .media-chrome-attach {
+      background-image: url(/images/omakase-attach.svg);
     }
 
     .media-chrome-control-bar-toggle {

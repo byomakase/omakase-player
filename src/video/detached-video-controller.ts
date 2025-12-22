@@ -256,7 +256,7 @@ export class DetachedVideoController implements VideoControllerApi {
 
     destroyer(this._handshakeChannel, this._messageChannel);
 
-    OmakasePlayer.instance.alerts.error(`Connection to host window lost`);
+    OmakasePlayer.instance.chroming.alerts.error(`Connection to host window lost`);
 
     let closeCountdown = 10;
     let alert: Alert;
@@ -268,13 +268,13 @@ export class DetachedVideoController implements VideoControllerApi {
           try {
             WindowUtil.close();
           } catch (e) {
-            OmakasePlayer.instance.alerts.warn(`Connection lost. Please close this window.`);
+            OmakasePlayer.instance.chroming.alerts.warn(`Connection lost. Please close this window.`);
           }
         } else {
           if (alert) {
-            OmakasePlayer.instance.alerts.dismiss(alert.id);
+            OmakasePlayer.instance.chroming.alerts.dismiss(alert.id);
           }
-          alert = OmakasePlayer.instance.alerts.warn(`Closing in ${closeCountdown - value}`);
+          alert = OmakasePlayer.instance.chroming.alerts.warn(`Closing in ${closeCountdown - value}`);
         }
       },
     });
@@ -603,7 +603,7 @@ export class DetachedVideoController implements VideoControllerApi {
               catchError((error) => {
                 console.error(error);
                 if (this.isPermissionsCheck(error)) {
-                  OmakasePlayer.instance.alerts.info(`Please initate playback in this window`, {
+                  OmakasePlayer.instance.chroming.alerts.info(`Please initate playback in this window`, {
                     autodismiss: true,
                     duration: 3000,
                   });
@@ -696,7 +696,7 @@ export class DetachedVideoController implements VideoControllerApi {
               catchError((error) => {
                 console.error(error);
                 if (this.isPermissionsCheck(error)) {
-                  OmakasePlayer.instance.alerts.info(`Please initate toggle fullscreen action in this window`, {
+                  OmakasePlayer.instance.chroming.alerts.info(`Please initate toggle fullscreen action in this window`, {
                     autodismiss: true,
                     duration: 3000,
                   });
@@ -717,7 +717,7 @@ export class DetachedVideoController implements VideoControllerApi {
               catchError((error) => {
                 console.error(error);
                 if (this.isPermissionsCheck(error)) {
-                  OmakasePlayer.instance.alerts.info(`Please initate playback in this window`, {
+                  OmakasePlayer.instance.chroming.alerts.info(`Please initate playback in this window`, {
                     autodismiss: true,
                     duration: 3000,
                   });

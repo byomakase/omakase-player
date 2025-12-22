@@ -155,6 +155,10 @@ export class VideoDomController extends DomController implements VideoDomControl
     // });
   }
 
+  get playerChromingDomController() {
+    return this._playerChromingDomController;
+  }
+
   updateChromingTemplate(playerChroming: PlayerChroming) {
     this._config.playerChroming = playerChroming;
     this._playerChromingDomController.playerChroming = playerChroming;

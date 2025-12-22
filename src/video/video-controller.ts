@@ -2655,7 +2655,7 @@ export class VideoController implements VideoControllerApi {
 
             this._mainAudioNode!.channelCount = this._mainAudioRouter.inputsNumber;
 
-            this._sourceSlot.outputNode.disconnect(this._audioOutputNode);
+            this._sourceSlot.outputNode.disconnect(this._destinationSlot.inputNode);
             this._mainAudioRouter.connectSource(this._sourceSlot.outputNode);
 
             this._emitMainAudioChange();

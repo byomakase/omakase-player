@@ -57,13 +57,14 @@ export enum AudioThemeControl {
   PlaybackRate = 'PLAYBACK_RATE',
   Trackselector = 'TRACKSELECTOR',
   Scrubber = 'SCRUBBER',
-  Bitc = 'BITC',
+  Time = 'TIME',
 }
 
 export enum DefaultThemeFloatingControl {
   Trackselector = 'TRACKSELECTOR',
   HelpMenu = 'HELP_MENU',
   PlaybackControls = 'PLAYBACK_CONTROLS',
+  Time = 'TIME',
 }
 
 export enum StampThemeFloatingControl {
@@ -81,6 +82,10 @@ export enum StampThemeActionIcon {
 export enum AudioThemeFloatingControl {
   PlaybackControls = 'PLAYBACK_CONTROLS',
   HelpMenu = 'HELP_MENU',
+}
+
+export enum ChromelessThemeFloatingControl {
+  Time = 'TIME',
 }
 
 export enum OmakaseThemeControl {
@@ -118,14 +123,9 @@ export enum StampThemeScale {
   Fit = 'FIT',
 }
 
-export enum StampTimeFormat {
+export enum TimeFormat {
   Timecode = 'TIMECODE',
   CountdownTimer = 'COUNTDOWN_TIMER',
-  MediaTime = 'MEDIA_TIME',
-}
-
-export enum OmakaseTimeFormat {
-  Timecode = 'TIMECODE',
   MediaTime = 'MEDIA_TIME',
 }
 
@@ -210,6 +210,11 @@ export interface DefaultThemeConfig {
   floatingControls: DefaultThemeFloatingControl[];
 
   /**
+   * Specifies list of enabled floating controls
+   */
+  alwaysOnFloatingControls: DefaultThemeFloatingControl[];
+
+  /**
    * Sets the available playback rates in menu
    */
   playbackRates: number[];
@@ -219,6 +224,11 @@ export interface DefaultThemeConfig {
    * If true it will close on track selection or when clicking outside of the menu
    */
   trackSelectorAutoClose: boolean;
+
+  /**
+   * Specifies which time format will be used in the timer control
+   */
+  timeFormat: TimeFormat;
 
   /**
    * Id of the custom web component used for Player chroming
@@ -265,7 +275,7 @@ export interface StampThemeConfig {
   /**
    * Specifies which time format will be used in the timer control
    */
-  timeFormat: StampTimeFormat;
+  timeFormat: TimeFormat;
 
   /**
    * Id of the custom web component used for Player chroming
@@ -322,6 +332,11 @@ export interface AudioThemeConfig {
   visualizationConfig: AudioVisualizationConfig;
 
   /**
+   * Specifies which time format will be used in the timer control
+   */
+  timeFormat: TimeFormat;
+
+  /**
    * Id of the custom web component used for Player chroming
    */
   htmlTemplateId?: string;
@@ -346,7 +361,7 @@ export interface OmakaseThemeConfig {
   /**
    * Specifies which time format will be used in the timer control
    */
-  timeFormat: OmakaseTimeFormat;
+  timeFormat: TimeFormat;
 
   /**
    * Specifies controls visibility
@@ -374,6 +389,23 @@ export interface OmakaseThemeConfig {
   htmlTemplateId?: string;
 }
 
+export interface ChromelessThemeConfig {
+  /**
+   * Specifies which time format will be used in the timer control
+   */
+  timeFormat: TimeFormat;
+
+  /**
+   * Specifies the list of enabled floating controls
+   */
+  floatingControls: ChromelessThemeFloatingControl[];
+
+  /**
+   * Specifies the list of floating controls that are shown when the video is playing
+   */
+  alwaysOnFloatingControls: ChromelessThemeFloatingControl[];
+}
+
 export interface StampChroming extends BasePlayerChroming<PlayerChromingTheme.Stamp> {
   themeConfig?: Partial<StampThemeConfig>;
 }
@@ -386,7 +418,9 @@ export interface OmakaseChroming extends BasePlayerChroming<PlayerChromingTheme.
   themeConfig?: Partial<OmakaseThemeConfig>;
 }
 
-export interface ChromelessChroming extends BasePlayerChroming<PlayerChromingTheme.Chromeless> {}
+export interface ChromelessChroming extends BasePlayerChroming<PlayerChromingTheme.Chromeless> {
+  themeConfig?: Partial<ChromelessThemeConfig>;
+}
 
 export type PlayerChroming = DefaultChroming | StampChroming | CustomChroming | ChromelessChroming | AudioChroming | OmakaseChroming;
 
@@ -409,13 +443,15 @@ export const DEFAULT_PLAYER_CHROMING_CONFIG: DefaultThemeConfig = {
     DefaultThemeControl.PlaybackRate,
   ],
   floatingControls: [DefaultThemeFloatingControl.HelpMenu, DefaultThemeFloatingControl.PlaybackControls],
+  alwaysOnFloatingControls: [],
   playbackRates: [0.25, 0.5, 0.75, 1, 2, 4, 8],
   trackSelectorAutoClose: true,
+  timeFormat: TimeFormat.Timecode,
 };
 
 export const DEFAULT_STAMP_PLAYER_CHROMING_CONFIG: StampThemeConfig = {
   stampScale: StampThemeScale.Fit,
-  timeFormat: StampTimeFormat.MediaTime,
+  timeFormat: TimeFormat.MediaTime,
   floatingControls: [StampThemeFloatingControl.ProgressBar, StampThemeFloatingControl.ActionIcons, StampThemeFloatingControl.Time, StampThemeFloatingControl.PlaybackControls],
   alwaysOnFloatingControls: [StampThemeFloatingControl.ProgressBar, StampThemeFloatingControl.ActionIcons, StampThemeFloatingControl.Time],
   actionIcons: [StampThemeActionIcon.AudioToggle],
@@ -423,7 +459,7 @@ export const DEFAULT_STAMP_PLAYER_CHROMING_CONFIG: StampThemeConfig = {
 
 export const DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG: AudioThemeConfig = {
   controlBarVisibility: ControlBarVisibility.Enabled,
-  controlBar: [AudioThemeControl.Play, AudioThemeControl.Volume, AudioThemeControl.PlaybackRate, AudioThemeControl.Trackselector, AudioThemeControl.Scrubber, AudioThemeControl.Bitc],
+  controlBar: [AudioThemeControl.Play, AudioThemeControl.Volume, AudioThemeControl.PlaybackRate, AudioThemeControl.Trackselector, AudioThemeControl.Scrubber, AudioThemeControl.Time],
   floatingControls: [AudioThemeFloatingControl.PlaybackControls, AudioThemeFloatingControl.HelpMenu],
   playbackRates: [0.5, 0.75, 1, 2],
   playerSize: AudioPlayerSize.Full,
@@ -432,10 +468,11 @@ export const DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG: AudioThemeConfig = {
     strokeColor: '#9968BF',
     fillColors: ['#F79433', '#88B840', '#CC6984', '#662D91'],
   },
+  timeFormat: TimeFormat.Timecode,
 };
 
 export const DEFAULT_OMAKASE_PLAYER_CHROMING_CONFIG: OmakaseThemeConfig = {
-  timeFormat: OmakaseTimeFormat.Timecode,
+  timeFormat: TimeFormat.Timecode,
   progressBarPosition: OmakaseProgressBarPosition.OverVideo,
   controlBarVisibility: OmakaseControlBarVisibility.Enabled,
   controlBar: [
@@ -456,6 +493,12 @@ export const DEFAULT_OMAKASE_PLAYER_CHROMING_CONFIG: OmakaseThemeConfig = {
   alwaysOnFloatingControls: [OmakaseThemeFloatingControl.Time, OmakaseThemeFloatingControl.ProgressBar],
   actionIcons: [OmakaseThemeActionIcon.HelpMenu, OmakaseThemeActionIcon.AudioToggle, OmakaseThemeActionIcon.Fullscreen],
   playbackRates: [0.25, 0.5, 0.75, 1, 2, 4, 8],
+};
+
+export const DEFAULT_CHROMELESS_PLAYER_CHROMING_CONFIG: ChromelessThemeConfig = {
+  timeFormat: TimeFormat.Timecode,
+  floatingControls: [],
+  alwaysOnFloatingControls: [],
 };
 
 export const DEFAULT_PLAYER_CHROMING: DefaultChroming = {

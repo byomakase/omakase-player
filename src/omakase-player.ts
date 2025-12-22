@@ -39,7 +39,6 @@ import {VIDEO_CONTROLLER_CONFIG_DEFAULT, VideoControllerConfig} from './video/vi
 import {OmpHlsConfig} from './video/video-hls-loader';
 import {RouterVisualization, RouterVisualizationConfig} from './router-visualization/router-visualization';
 import {removeEmptyValues} from './util/object-util';
-import {MarkerTrackConfig} from './video/model';
 import {
   AudioChroming,
   DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG,
@@ -54,10 +53,13 @@ import {
   StampChroming,
   WatermarkVisibility,
   DEFAULT_PLAYER_CHROMING,
+  DEFAULT_CHROMELESS_PLAYER_CHROMING_CONFIG,
+  ChromelessChroming,
 } from './player-chroming/model';
-import {TimeRangeMarkerTrackApi} from './api/time-range-marker-track-api';
 import {AuthConfig, AuthenticationData} from './common/authentication';
 import {ConfigAdapter} from './common/config-adapter';
+import {PlayerChromingController} from './player-chroming/player-chroming-controller';
+import {ChromingApi} from './api/chroming-api';
 
 export interface OmakasePlayerConfig {
   playerHTMLElementId?: string;
@@ -125,6 +127,7 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
   private _videoController: VideoControllerApi;
   private _audioController: AudioController;
   private _subtitlesController: SubtitlesController;
+  private _chromingController: PlayerChromingController;
 
   private _timeline?: Timeline;
 
@@ -168,6 +171,10 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
         ...(config?.playerChroming as OmakaseChroming)?.themeConfig,
       };
     } else if (this._config.playerChroming?.theme === PlayerChromingTheme.Chromeless) {
+      this._config.playerChroming.themeConfig = {
+        ...DEFAULT_CHROMELESS_PLAYER_CHROMING_CONFIG,
+        ...(config?.playerChroming as ChromelessChroming)?.themeConfig,
+      };
       this._config.playerChroming.fullscreenChroming = config?.playerChroming?.fullscreenChroming ?? FullscreenChroming.Disabled;
     } else {
       console.log('Provided chroming theme is not recognized. Fallback to default chroming theme.');
@@ -217,6 +224,8 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
       );
     }
 
+    this._chromingController = new PlayerChromingController(this._videoController, this._videoDomController, this._alertsController);
+
     this._videoDomController.attachVideoController(this._videoController);
 
     this._audioController = new AudioController(this._videoController);
@@ -241,18 +250,6 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
 
   setAuthentication(authentication: AuthenticationData) {
     AuthConfig.authentication = authentication;
-  }
-
-  setThumbnailVttUrl(thumbnailVttUrl: string) {
-    this._videoController.loadThumbnailVttUrl(thumbnailVttUrl);
-  }
-
-  setWatermark(watermark: string) {
-    this._videoDomController.setWatermark(watermark);
-  }
-
-  getPlayerChromingElement<T>(querySelector: string): T {
-    return this._videoDomController.getPlayerChromingElement(querySelector);
   }
 
   loadVideo(videoSourceUrl: string, options?: VideoLoadOptions): Observable<Video> {
@@ -297,23 +294,6 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
     });
   }
 
-  createMarkerTrack(config: MarkerTrackConfig): Observable<MarkerTrackApi> {
-    return new Observable<MarkerTrackApi>((observer) => {
-      const markerTrack = this._videoDomController.createMarkerTrack(config);
-
-      if (config.vttUrl) {
-        markerTrack.onVttLoaded$.pipe(takeUntil(this._destroyed$)).subscribe(() => {
-          nextCompleteObserver(observer, markerTrack);
-        });
-      } else {
-        // timeout is here to make sure the marker track element is created in the dom
-        setTimeout(() => {
-          nextCompleteObserver(observer, markerTrack);
-        });
-      }
-    });
-  }
-
   initializeRouterVisualization(config: RouterVisualizationConfig): RouterVisualizationApi {
     return new RouterVisualization(config, this._videoController);
   }
@@ -334,12 +314,8 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
     return this._subtitlesController;
   }
 
-  get alerts(): AlertsApi {
-    return this._alertsController;
-  }
-
-  get progressMarkerTrack(): TimeRangeMarkerTrackApi | undefined {
-    return this._videoDomController.getProgressMarkerTrack();
+  get chroming(): ChromingApi {
+    return this._chromingController;
   }
 
   get config(): OmakasePlayerConfig {
@@ -353,10 +329,10 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
   destroy() {
     BlobUtil.revokeAll();
 
-    destroyer(this._timeline, this._subtitlesController, this._audioController, this._videoController, this._videoDomController);
+    destroyer(this._timeline, this._subtitlesController, this._audioController, this._videoController, this._chromingController, this._videoDomController);
 
     nextCompleteSubject(this._destroyed$);
 
-    nullifier(this._timeline, this._videoController, this._audioController, this._subtitlesController);
+    nullifier(this._timeline, this._videoController, this._audioController, this._subtitlesController, this._chromingController);
   }
 }

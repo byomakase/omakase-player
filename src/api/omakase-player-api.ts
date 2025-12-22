@@ -28,11 +28,10 @@ import {MarkerListApi} from './marker-list-api';
 import {ConfigWithOptionalStyle} from '../layout';
 import {RouterVisualizationConfig} from '../router-visualization/router-visualization';
 import {RouterVisualizationApi} from './router-visualization-api';
-import {MarkerTrackApi} from './marker-track-api';
-import {MarkerTrackConfig} from '../video/model';
 import {TimeRangeMarkerTrackApi} from './time-range-marker-track-api';
 import {AuthenticationData} from '../common/authentication';
 import {OmakasePlayerConfig} from '../omakase-player';
+import {ChromingApi} from './chroming-api';
 
 export interface OmakasePlayerApi extends Api {
   /**
@@ -62,12 +61,6 @@ export interface OmakasePlayerApi extends Api {
   createMarkerList(config: MarkerListConfig): Observable<MarkerListApi>;
 
   /**
-   * Creates Marker Track
-   * @param config Marker Track configuration
-   */
-  createMarkerTrack(config: MarkerTrackConfig): Observable<MarkerTrackApi>;
-
-  /**
    * Initializes Router Visualization component
    * @param config Router Visualization configuration
    */
@@ -78,24 +71,6 @@ export interface OmakasePlayerApi extends Api {
    * @param authentication Basic authentication, Bearer token authentication or custom authentication function
    */
   setAuthentication(authentication: AuthenticationData): void;
-
-  /**
-   * Set thumbnail vtt url for player chroming thumbnail preview
-   * @param thumbnailVttUrl Thumbnail Vtt Url
-   */
-  setThumbnailVttUrl(thumbnailVttUrl: string): void;
-
-  /**
-   * Set watermark text or svg for player chroming
-   * @param watermark Watermark text or svg
-   */
-  setWatermark(watermark: string): void;
-
-  /**
-   * Get
-   * @param querySelector HTML query selector
-   */
-  getPlayerChromingElement<T>(querySelector: string): T;
 
   /**
    * @returns Timeline API
@@ -118,14 +93,9 @@ export interface OmakasePlayerApi extends Api {
   get subtitles(): SubtitlesApi;
 
   /**
-   * @returns Alerts API
+   * @returns Chroming API
    */
-  get alerts(): AlertsApi;
-
-  /**
-   * @returns TimeRangeMarkerTrackApi
-   */
-  get progressMarkerTrack(): TimeRangeMarkerTrackApi | undefined;
+  get chroming(): ChromingApi;
 
   /**
    * @returns OmakasePlayerConfig

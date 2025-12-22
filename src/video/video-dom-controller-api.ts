@@ -21,8 +21,11 @@ import {VideoControllerApi} from './video-controller-api';
 import {MarkerTrackApi} from '../api';
 import {TimeRangeMarkerTrackApi} from './../api/time-range-marker-track-api';
 import {PlayerChroming} from '../player-chroming';
+import {PlayerChromingDomControllerApi} from '../player-chroming/player-chroming-dom-controller-api';
 
 export interface VideoDomControllerApi extends Destroyable {
+  get playerChromingDomController(): PlayerChromingDomControllerApi;
+
   attachVideoController(videoController: VideoControllerApi): void;
 
   onFullscreenChange$: Observable<VideoFullscreenChangeEvent>;
