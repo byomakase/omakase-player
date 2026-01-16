@@ -68,5 +68,7 @@ export interface VideoDomControllerApi extends Destroyable {
 
   isCompactAudioTheme(): boolean;
 
+  useMediaCaptions(): boolean;
+
   updateChromingTemplate(playerChroming: PlayerChroming): void;
 }

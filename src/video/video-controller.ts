@@ -2327,23 +2327,29 @@ export class VideoController implements VideoControllerApi {
     return new Observable<SubtitlesVttTrack>((observer) => {
       this._removeSubtitlesTrack(subtitlesVttTrack.id);
 
-      this._videoDomController.appendHTMLTrackElement(subtitlesVttTrack).subscribe({
-        next: (element) => {
-          if (element) {
-            this._subtitlesTracks.set(subtitlesVttTrack.id, subtitlesVttTrack);
-            this.onSubtitlesCreate$.next(this.createSubtitlesEvent());
-            // console.debug('Created subtitles track, track appended to DOM', subtitlesVttTrack);
-            nextCompleteObserver(observer, subtitlesVttTrack);
-          } else {
-            let message = `Failed to create subtitles track, appending to DOM failed for ${JSON.stringify(subtitlesVttTrack)}`;
-            console.debug(message);
-            errorCompleteObserver(observer, message);
-          }
-        },
-        error: (error) => {
-          errorCompleteObserver(observer, error);
-        },
-      });
+      if (this._videoDomController.useMediaCaptions()) {
+        this._subtitlesTracks.set(subtitlesVttTrack.id, subtitlesVttTrack);
+        this.onSubtitlesCreate$.next(this.createSubtitlesEvent());
+        nextCompleteObserver(observer, subtitlesVttTrack);
+      } else {
+        this._videoDomController.appendHTMLTrackElement(subtitlesVttTrack).subscribe({
+          next: (element) => {
+            if (element) {
+              this._subtitlesTracks.set(subtitlesVttTrack.id, subtitlesVttTrack);
+              this.onSubtitlesCreate$.next(this.createSubtitlesEvent());
+              // console.debug('Created subtitles track, track appended to DOM', subtitlesVttTrack);
+              nextCompleteObserver(observer, subtitlesVttTrack);
+            } else {
+              let message = `Failed to create subtitles track, appending to DOM failed for ${JSON.stringify(subtitlesVttTrack)}`;
+              console.debug(message);
+              errorCompleteObserver(observer, message);
+            }
+          },
+          error: (error) => {
+            errorCompleteObserver(observer, error);
+          },
+        });
+      }
     });
   }
 
@@ -2406,16 +2412,24 @@ export class VideoController implements VideoControllerApi {
         }
 
         let subtitlesVttTrack = this._subtitlesTracks.get(id);
+
         if (subtitlesVttTrack) {
-          let textTrack = this._videoDomController.getTextTrackById(subtitlesVttTrack.id);
-
-          if (textTrack) {
-            textTrack.mode = 'showing';
+          if (this._videoDomController.useMediaCaptions()) {
             subtitlesVttTrack.hidden = false;
-
             this._activeSubtitlesTrack = subtitlesVttTrack;
 
             this.onSubtitlesShow$.next(this.createSubtitlesEvent());
+          } else {
+            let textTrack = this._videoDomController.getTextTrackById(subtitlesVttTrack.id);
+
+            if (textTrack) {
+              textTrack.mode = 'showing';
+              subtitlesVttTrack.hidden = false;
+
+              this._activeSubtitlesTrack = subtitlesVttTrack;
+
+              this.onSubtitlesShow$.next(this.createSubtitlesEvent());
+            }
           }
         } else {
           console.debug(`Cannot show subtitle track: ${id}. Subtitle track not found.`);
@@ -2430,12 +2444,17 @@ export class VideoController implements VideoControllerApi {
       if (this.isVideoLoaded()) {
         let track = this._subtitlesTracks.get(id);
         if (track) {
-          let domTextTrack = this._videoDomController.getTextTrackById(track.id);
-          if (domTextTrack) {
-            domTextTrack.mode = 'hidden';
+          if (this._videoDomController.useMediaCaptions()) {
             track.hidden = true;
-
             this.onSubtitlesHide$.next(this.createSubtitlesEvent());
+          } else {
+            let domTextTrack = this._videoDomController.getTextTrackById(track.id);
+            if (domTextTrack) {
+              domTextTrack.mode = 'hidden';
+              track.hidden = true;
+
+              this.onSubtitlesHide$.next(this.createSubtitlesEvent());
+            }
           }
         }
       }

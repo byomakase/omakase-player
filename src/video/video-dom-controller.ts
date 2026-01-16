@@ -818,6 +818,10 @@ export class VideoDomController extends DomController implements VideoDomControl
     return this._config.playerChroming.theme === PlayerChromingTheme.Audio && this._config.playerChroming.themeConfig?.playerSize === AudioPlayerSize.Compact;
   }
 
+  useMediaCaptions() {
+    return this._config.playerChroming.theme === PlayerChromingTheme.Audio || this._config.playerChroming.theme === PlayerChromingTheme.Stamp;
+  }
+
   destroy() {
     if (this._divPlayer) {
       this._divPlayer.replaceChildren();

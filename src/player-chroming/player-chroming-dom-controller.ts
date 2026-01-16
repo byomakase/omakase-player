@@ -47,7 +47,7 @@ import {OmakaseDropdown} from '../components/omakase-dropdown';
 import {OmakaseDropdownList, OmakaseDropdownListItem} from '../components/omakase-dropdown-list';
 import {OmakaseDropdownToggle} from '../components/omakase-dropdown-toggle';
 import {VideoControllerApi} from '../video';
-import {filter, fromEvent, merge, Subject, takeUntil} from 'rxjs';
+import {filter, from, fromEvent, merge, Subject, takeUntil} from 'rxjs';
 import {nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {AuthConfig} from '../common/authentication';
 import {VttLoadOptions} from '../api/vtt-aware-api';
@@ -137,6 +137,7 @@ export class PlayerChromingDomController extends DomController implements Player
 
   protected _videoController!: VideoControllerApi;
   protected _videoEventBreaker$: Subject<void> = new Subject();
+  protected _subtitleEventBreaker$: Subject<void> = new Subject();
 
   protected _destroyed$ = new Subject<void>();
 
@@ -419,6 +420,13 @@ export class PlayerChromingDomController extends DomController implements Player
         this._speedDropdown.style.display = 'none';
       }
     } else if (this.playerChroming.theme === PlayerChromingTheme.Omakase) {
+      for (const control of Object.values(OmakaseThemeControl)) {
+        if (this.playerChroming.themeConfig?.controlBar?.includes(control)) {
+          this.showElements(this.getShadowElementByClass(this.getControlBarClass(control)));
+        } else {
+          this.hideElements(this.getShadowElementByClass(this.getControlBarClass(control)));
+        }
+      }
       if (this.playerChroming.themeConfig?.controlBarVisibility === OmakaseControlBarVisibility.Disabled) {
         this._mediaControllerElement.classList.remove('with-control-bar');
       } else {
@@ -1244,16 +1252,15 @@ export class PlayerChromingDomController extends DomController implements Player
     }
 
     if (this._captionsRenderer) {
-      this._videoController.onSubtitlesShow$.pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$)).subscribe((event) => {
-        if (event.currentTrack) {
-          this.showCaptions(event.currentTrack);
-        } else {
-          this.hideCaptions();
-        }
-      });
-      this._videoController.onSubtitlesHide$.pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$)).subscribe(() => {
-        this.hideCaptions();
-      });
+      merge(this._videoController.onSubtitlesShow$, this._videoController.onSubtitlesHide$)
+        .pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$))
+        .subscribe((event) => {
+          if (event.currentTrack && !event.currentTrack.hidden) {
+            this.showCaptions(event.currentTrack);
+          } else {
+            this.hideCaptions();
+          }
+        });
       this._videoController.onVideoTimeChange$.pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$)).subscribe((event) => {
         this._captionsRenderer!.currentTime = event.currentTime;
       });
@@ -1318,11 +1325,6 @@ export class PlayerChromingDomController extends DomController implements Player
             value: event.currentTrack!.id,
             label: event.currentTrack!.label,
           });
-        }
-      });
-      this._videoController.onSubtitlesHide$.pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$)).subscribe(() => {
-        if (this._captionsRenderer) {
-          this.hideCaptions();
         }
       });
     }
@@ -1473,13 +1475,21 @@ export class PlayerChromingDomController extends DomController implements Player
   }
 
   private showCaptions(track: SubtitlesVttTrack) {
-    parseResponse(fetch(track.src)).then(({regions, cues}) => {
-      this._captionsRenderer!.changeTrack({regions, cues});
-      this._mediaControllerElement.classList.add('with-captions');
-    });
+    from(parseResponse(fetch(track.src)))
+      .pipe(takeUntil(this._subtitleEventBreaker$))
+      .subscribe({
+        next: ({regions, cues}) => {
+          this._captionsRenderer!.changeTrack({regions, cues});
+          this._mediaControllerElement.classList.add('with-captions');
+        },
+        error: (err) => {
+          console.error(err);
+        },
+      });
   }
 
   private hideCaptions() {
+    this._subtitleEventBreaker$.next();
     this._captionsRenderer!.changeTrack({regions: [], cues: []});
     this._mediaControllerElement.classList.remove('with-captions');
   }
