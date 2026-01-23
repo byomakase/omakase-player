@@ -939,13 +939,13 @@ export class DetachableVideoController extends SwitchableVideoController {
       })
     );
 
-    // in case audio track activation is required - we have to activate it first, then consolidate router connections
-    // in case audio track activation is not required - we only have to consolidate router connections
+    // in case audio track activation is required - we have to activate it first, then load sidecar tracks and consolidate router connections
+    // in case audio track activation is not required - we only have to load sidecar tracks and consolidate router connections
 
     if (state.activeAudioTrack) {
       afterVideoLoad(
         new Observable((observer) => {
-          concat(audioTrackActivation$, routerConnectionsConsolidation$, activateInterleavedAudioEffects$).subscribe({
+          concat(audioTrackActivation$, sidecarAudioActivation$, routerConnectionsConsolidation$, activateInterleavedAudioEffects$).subscribe({
             complete: () => {
               nextCompleteObserver(observer);
             },
@@ -958,7 +958,7 @@ export class DetachableVideoController extends SwitchableVideoController {
     } else {
       afterVideoLoad(
         new Observable((observer) => {
-          concat(routerConnectionsConsolidation$, activateInterleavedAudioEffects$).subscribe({
+          concat(sidecarAudioActivation$, routerConnectionsConsolidation$, activateInterleavedAudioEffects$).subscribe({
             complete: () => {
               nextCompleteObserver(observer);
             },
@@ -1034,85 +1034,84 @@ export class DetachableVideoController extends SwitchableVideoController {
         })
       )
     );
-    afterVideoLoad(
-      describedObservable(
-        `Sidecar audio tracks`,
-        new Observable((observer) => {
-          // could be optimized
-          this.removeAllSidecarAudioTracks().subscribe({
-            next: () => {
-              if (state.sidecarAudioStates && state.sidecarAudioStates.length > 0) {
-                let os$ = state.sidecarAudioStates.map((sidecarAudioState) => {
-                  return new Observable((sidecarAudioObserver) => {
-                    this.createSidecarAudioTrack(sidecarAudioState.audioTrack).subscribe({
-                      next: (sidecarAudioTrack) => {
-                        (['source', 'destination'] as OmpAudioEffectGraphSlot[]).forEach((slot) => this.removeSidecarAudioEffectsGraphs(sidecarAudioState.audioTrack.id, {slot: slot}));
-                        sidecarAudioState.interleavedAudioEffects.forEach((effect) => {
-                          this.setSidecarAudioEffectsGraph(sidecarAudioState.audioTrack.id, effect.effectsGraphDef, effect.effectsGraphConnection);
-                        });
-                        let o1$ = sidecarAudioState.audioRouterState
-                          ? this.createSidecarAudioRouter(sidecarAudioState.audioTrack.id, sidecarAudioState.audioRouterState.inputsNumber, sidecarAudioState.audioRouterState.outputsNumber)
-                          : of(true);
-                        let o2$ = sidecarAudioState.audioPeakProcessorState
-                          ? this.createSidecarAudioPeakProcessor(sidecarAudioState.audioTrack.id, sidecarAudioState.audioPeakProcessorState.audioMeterStandard)
-                          : of(true);
-                        forkJoin([o1$, o2$]).subscribe({
-                          next: () => {
-                            // we will not wait for this to finish, just execute
 
-                            if (sidecarAudioState.audioRouterState) {
-                              // remove all existing graphs
-                              this.removeSidecarAudioEffectsGraphs(sidecarAudioState.audioTrack.id, {slot: 'router'});
+    let sidecarAudioActivation$ = describedObservable(
+      `Sidecar audio tracks`,
+      new Observable((observer) => {
+        // could be optimized
+        this.removeAllSidecarAudioTracks().subscribe({
+          next: () => {
+            if (state.sidecarAudioStates && state.sidecarAudioStates.length > 0) {
+              let os$ = state.sidecarAudioStates.map((sidecarAudioState) => {
+                return new Observable((sidecarAudioObserver) => {
+                  this.createSidecarAudioTrack(sidecarAudioState.audioTrack).subscribe({
+                    next: (sidecarAudioTrack) => {
+                      (['source', 'destination'] as OmpAudioEffectGraphSlot[]).forEach((slot) => this.removeSidecarAudioEffectsGraphs(sidecarAudioState.audioTrack.id, {slot: slot}));
+                      sidecarAudioState.interleavedAudioEffects.forEach((effect) => {
+                        this.setSidecarAudioEffectsGraph(sidecarAudioState.audioTrack.id, effect.effectsGraphDef, effect.effectsGraphConnection);
+                      });
+                      let o1$ = sidecarAudioState.audioRouterState
+                        ? this.createSidecarAudioRouter(sidecarAudioState.audioTrack.id, sidecarAudioState.audioRouterState.inputsNumber, sidecarAudioState.audioRouterState.outputsNumber)
+                        : of(true);
+                      let o2$ = sidecarAudioState.audioPeakProcessorState
+                        ? this.createSidecarAudioPeakProcessor(sidecarAudioState.audioTrack.id, sidecarAudioState.audioPeakProcessorState.audioMeterStandard)
+                        : of(true);
+                      forkJoin([o1$, o2$]).subscribe({
+                        next: () => {
+                          // we will not wait for this to finish, just execute
 
-                              sidecarAudioState.audioRouterState.routingRoutes.forEach((routingRoute) => {
-                                if (routingRoute.audioEffectsGraph) {
-                                  this.setSidecarAudioEffectsGraph(sidecarAudioState.audioTrack.id, routingRoute.audioEffectsGraph, {slot: 'router', routingPath: routingRoute.path});
-                                }
-                              });
+                          if (sidecarAudioState.audioRouterState) {
+                            // remove all existing graphs
+                            this.removeSidecarAudioEffectsGraphs(sidecarAudioState.audioTrack.id, {slot: 'router'});
 
-                              let sidecarAudioSoloedInputState = state.sidecarAudioInputSoloMuteStates.find((inputState) => inputState.audioTrack.id === sidecarAudioState.audioTrack.id);
-                              if (sidecarAudioSoloedInputState?.audioRouterInputSoloMuteState?.soloed) {
-                                this.updateSidecarAudioRouterConnections(sidecarAudioSoloedInputState.audioTrack.id, [
-                                  ...sidecarAudioSoloedInputState.audioRouterInputSoloMuteState.inputSoloedConnections,
-                                  ...sidecarAudioSoloedInputState.audioRouterInputSoloMuteState.unsoloConnections,
-                                ]);
-                                this.toggleSidecarAudioRouterSolo(sidecarAudioSoloedInputState.audioTrack.id, {input: sidecarAudioSoloedInputState.audioRouterInputSoloMuteState.inputNumber});
-                              } else {
-                                this.updateSidecarAudioRouterConnections(
-                                  sidecarAudioState.audioTrack.id,
-                                  sidecarAudioState.audioRouterState.routingRoutes.map((p) => p.connection)
-                                );
+                            sidecarAudioState.audioRouterState.routingRoutes.forEach((routingRoute) => {
+                              if (routingRoute.audioEffectsGraph) {
+                                this.setSidecarAudioEffectsGraph(sidecarAudioState.audioTrack.id, routingRoute.audioEffectsGraph, {slot: 'router', routingPath: routingRoute.path});
                               }
+                            });
 
-                              this.setSidecarAudioRouterInitialRoutingConnections(sidecarAudioState.audioTrack.id, sidecarAudioState.audioRouterState.initialRoutingConnections);
-                              this.setSidecarVolume(sidecarAudioState.volume, [sidecarAudioState.audioTrack.id]);
-                              this.setSidecarMuted(sidecarAudioState.muted, [sidecarAudioState.audioTrack.id]);
+                            let sidecarAudioSoloedInputState = state.sidecarAudioInputSoloMuteStates.find((inputState) => inputState.audioTrack.id === sidecarAudioState.audioTrack.id);
+                            if (sidecarAudioSoloedInputState?.audioRouterInputSoloMuteState?.soloed) {
+                              this.updateSidecarAudioRouterConnections(sidecarAudioSoloedInputState.audioTrack.id, [
+                                ...sidecarAudioSoloedInputState.audioRouterInputSoloMuteState.inputSoloedConnections,
+                                ...sidecarAudioSoloedInputState.audioRouterInputSoloMuteState.unsoloConnections,
+                              ]);
+                              this.toggleSidecarAudioRouterSolo(sidecarAudioSoloedInputState.audioTrack.id, {input: sidecarAudioSoloedInputState.audioRouterInputSoloMuteState.inputNumber});
+                            } else {
+                              this.updateSidecarAudioRouterConnections(
+                                sidecarAudioState.audioTrack.id,
+                                sidecarAudioState.audioRouterState.routingRoutes.map((p) => p.connection)
+                              );
                             }
 
-                            nextCompleteObserver(sidecarAudioObserver);
-                          },
-                        });
-                      },
-                      error: (error) => {
-                        console.error(error);
-                        nextCompleteObserver(sidecarAudioObserver);
-                      },
-                    });
+                            this.setSidecarAudioRouterInitialRoutingConnections(sidecarAudioState.audioTrack.id, sidecarAudioState.audioRouterState.initialRoutingConnections);
+                            this.setSidecarVolume(sidecarAudioState.volume, [sidecarAudioState.audioTrack.id]);
+                            this.setSidecarMuted(sidecarAudioState.muted, [sidecarAudioState.audioTrack.id]);
+                          }
+
+                          nextCompleteObserver(sidecarAudioObserver);
+                        },
+                      });
+                    },
+                    error: (error) => {
+                      console.error(error);
+                      nextCompleteObserver(sidecarAudioObserver);
+                    },
                   });
                 });
+              });
 
-                forkJoin(os$).subscribe({
-                  next: () => {
-                    nextCompleteObserver(observer);
-                  },
-                });
-              } else {
-                nextCompleteObserver(observer);
-              }
-            },
-          });
-        })
-      )
+              forkJoin(os$).subscribe({
+                next: () => {
+                  nextCompleteObserver(observer);
+                },
+              });
+            } else {
+              nextCompleteObserver(observer);
+            }
+          },
+        });
+      })
     );
 
     afterVideoLoad(

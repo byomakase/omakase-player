@@ -16,10 +16,10 @@
 
 import {Observable} from 'rxjs';
 import {Destroyable, OmakaseTextTrack, VideoFullscreenChangeEvent, VideoSafeZoneChangeEvent} from '../types';
-import {MarkerTrackConfig, VideoSafeZone} from './model';
+import {VideoKeyframe, VideoKeyframeOptions, MarkerTrackConfig, VideoSafeZone} from './model';
 import {VideoControllerApi} from './video-controller-api';
 import {MarkerTrackApi} from '../api';
-import {TimeRangeMarkerTrackApi} from './../api/time-range-marker-track-api';
+import {TimeRangeMarkerTrackApi} from '../api/time-range-marker-track-api';
 import {PlayerChroming} from '../player-chroming';
 import {PlayerChromingDomControllerApi} from '../player-chroming/player-chroming-dom-controller-api';
 
@@ -71,4 +71,6 @@ export interface VideoDomControllerApi extends Destroyable {
   useMediaCaptions(): boolean;
 
   updateChromingTemplate(playerChroming: PlayerChroming): void;
+
+  extractVideoKeyframe(options?: VideoKeyframeOptions): Observable<VideoKeyframe>;
 }

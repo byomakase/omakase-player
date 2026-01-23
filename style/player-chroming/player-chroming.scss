@@ -43,6 +43,7 @@
   top: 2.5%;
   line-height: var(--timecode-font-size, var(--timecode-font-size-default));
   font-size: var(--timecode-font-size, var(--timecode-font-size-default));
+  font-family: var(--timecode-font-family, 'Nunito Sans');
   color: rgba(255, 255, 255, 0.9);
 }
 
@@ -323,6 +324,12 @@ media-controller {
 
       &.omakase-timecode-format-standard {
         min-width: 45px;
+        &.omakase-timecode-long {
+          min-width: 60px;
+          + .omakase-captions {
+            margin-right: 70px;
+          }
+        }
         + .omakase-captions {
           margin-right: 55px;
         }
@@ -1018,14 +1025,10 @@ media-controller {
       background-color: rgba(0, 0, 0, 0.8);
       color: white;
       height: 37px;
-      min-width: 90px;
+      padding: 0 15px;
       text-align: center;
       font-size: 22px;
       font-family: var(--timecode-font-family, 'Nunito Sans'), 'Consolas', monospace;
-
-      &.omakase-timecode-format-timecode {
-        width: 170px;
-      }
 
       omakase-time-display {
         line-height: 37px;
@@ -1755,12 +1758,8 @@ media-controller {
       }
       .omakase-timecode-wrapper {
         height: 32px;
-        min-width: 70px;
+        padding: 0 10px;
         font-size: 18px;
-
-        &.omakase-timecode-format-timecode {
-          width: 140px;
-        }
 
         omakase-time-display {
           line-height: 32px;
@@ -2001,6 +2000,12 @@ media-controller {
         min-width: 130px;
         &.omakase-timecode-format-standard {
           min-width: 65px;
+          &.omakase-timecode-long {
+            min-width: 85px;
+            + .omakase-captions {
+              margin-right: 105px;
+            }
+          }
           + .omakase-captions {
             margin-right: 85px;
           }
@@ -2089,14 +2094,10 @@ media-controller {
         left: 16px;
         top: 20px;
         height: 40px;
-        width: 100px;
+        padding: 0 20px;
         text-align: center;
         font-size: 25px;
         font-family: var(--timecode-font-family, 'Nunito Sans'), 'Consolas', monospace;
-
-        &.omakase-timecode-format-timecode {
-          width: 190px;
-        }
 
         omakase-time-display {
           line-height: 40px;
@@ -2268,6 +2269,12 @@ media-controller {
         min-width: 175px;
         &.omakase-timecode-format-standard {
           min-width: 90px;
+          &.omakase-timecode-long {
+            min-width: 120px;
+            + .omakase-captions {
+              margin-right: 145px;
+            }
+          }
           + .omakase-captions {
             margin-right: 115px;
           }
@@ -2417,14 +2424,10 @@ media-controller {
         left: 16px;
         top: 20px;
         height: 53px;
-        width: 140px;
+        padding: 0 25px;
         text-align: center;
         font-size: 36px;
         font-family: var(--timecode-font-family, 'Nunito Sans'), 'Consolas', monospace;
-
-        &.omakase-timecode-format-timecode {
-          width: 275px;
-        }
 
         omakase-time-display {
           line-height: 53px;
@@ -2568,6 +2571,12 @@ media-controller {
         min-width: 250px;
         &.omakase-timecode-format-standard {
           min-width: 120px;
+          &.omakase-timecode-long {
+            min-width: 155px;
+            + .omakase-captions {
+              margin-right: 180px;
+            }
+          }
           + .omakase-captions {
             margin-right: 145px;
           }

@@ -68,7 +68,7 @@ import {
 } from '../types';
 import {
   AudioMeterStandard,
-  BufferedTimespan,
+  BufferedTimespan, VideoKeyframe, VideoKeyframeOptions,
   MediaElementPlaybackState,
   OmpAudioRouterState,
   OmpAudioRoutingConnection,
@@ -1213,6 +1213,14 @@ export class DetachedVideoController implements VideoControllerApi {
           sendResponseHook(this._videoController.loadBlackVideo());
         },
       });
+
+    this._messageChannel!.createRequestResponseStream('VideoControllerApi.extractVideoKeyframe')
+      .pipe(takeUntil(this._messageChannelBreaker$))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._videoController.extractVideoKeyframe(request[0]));
+        },
+      });
   }
 
   private isPermissionsCheck(error: any): boolean {
@@ -1960,5 +1968,9 @@ export class DetachedVideoController implements VideoControllerApi {
 
   registerAudioEffect(effectType: string, effectFactory: OmpAudioEffectFactory): void {
     return this._videoController.registerAudioEffect(effectType, effectFactory);
+  }
+
+  extractVideoKeyframe(options?: VideoKeyframeOptions): Observable<VideoKeyframe> {
+    return this._videoController.extractVideoKeyframe(options);
   }
 }

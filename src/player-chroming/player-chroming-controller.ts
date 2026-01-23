@@ -6,9 +6,8 @@ import {MarkerTrackConfig, VideoSafeZone} from '../video/model';
 import {VideoDomControllerApi} from '../video/video-dom-controller-api';
 import {PlayerChromingTheme} from './model';
 import {PlayerChromingDomControllerApi} from './player-chroming-dom-controller-api';
-import {nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
-import {HelpMenuGroup, VideoHelpMenuChangeEvent} from '../types';
-import {nullifier} from '../util/destroy-util';
+import {nextCompleteObserver, nextCompleteSubject} from '../util/rxjs-util';
+import {HelpMenuGroup} from '../types';
 import {VideoControllerApi} from '../video';
 
 export class PlayerChromingController implements ChromingApi {

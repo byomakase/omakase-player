@@ -69,7 +69,7 @@ import {TypedOmpBroadcastChannel} from '../common/omp-broadcast-channel';
 import {MessageChannelActionsMap} from './channel-types';
 import {fromPromise} from 'rxjs/internal/observable/innerFrom';
 import {
-  BufferedTimespan,
+  BufferedTimespan, VideoKeyframe, VideoKeyframeOptions,
   OmpAudioRouterState,
   OmpAudioRoutingInputType,
   OmpMainAudioInputSoloMuteState,
@@ -1052,5 +1052,9 @@ export class RemoteVideoController implements VideoControllerApi {
 
   registerAudioEffect(effectType: string, effectFactory: OmpAudioEffectFactory): void {
     throw new OmpVideoWindowPlaybackError('Method cannot be used in detached mode');
+  }
+
+  extractVideoKeyframe(options?: VideoKeyframeOptions): Observable<VideoKeyframe> {
+    return fromPromise(firstValueFrom(this._messageChannel.sendAndObserveResponse('VideoControllerApi.extractVideoKeyframe', [options])));
   }
 }

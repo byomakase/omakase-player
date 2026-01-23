@@ -443,7 +443,7 @@ export const DEFAULT_PLAYER_CHROMING_CONFIG: DefaultThemeConfig = {
     DefaultThemeControl.PlaybackRate,
   ],
   floatingControls: [DefaultThemeFloatingControl.HelpMenu, DefaultThemeFloatingControl.PlaybackControls],
-  alwaysOnFloatingControls: [],
+  alwaysOnFloatingControls: [DefaultThemeFloatingControl.Time],
   playbackRates: [0.25, 0.5, 0.75, 1, 2, 4, 8],
   trackSelectorAutoClose: true,
   timeFormat: TimeFormat.Timecode,
@@ -498,7 +498,7 @@ export const DEFAULT_OMAKASE_PLAYER_CHROMING_CONFIG: OmakaseThemeConfig = {
 export const DEFAULT_CHROMELESS_PLAYER_CHROMING_CONFIG: ChromelessThemeConfig = {
   timeFormat: TimeFormat.Timecode,
   floatingControls: [],
-  alwaysOnFloatingControls: [],
+  alwaysOnFloatingControls: [ChromelessThemeFloatingControl.Time],
 };
 
 export const DEFAULT_PLAYER_CHROMING: DefaultChroming = {

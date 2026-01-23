@@ -275,7 +275,7 @@ If detached video mode is used we should always use `onNamedEvent$`$ observable 
 
 ```javascript
 // adds safe zone 10% from all player edges
-omakasePlayer.video.addSafeZone({
+omakasePlayer.chroming.addSafeZone({
   topRightBottomLeftPercent: [10, 10, 10, 10]
 })
 
@@ -1270,6 +1270,7 @@ Production artefacts that need to be published to NPM are created in `/dist` fol
 - Safari browser doesn't support Main audio routing and Main audio VU Meter for HLS streams. This constraint can be bypassed by loading the Main audio as a Sidecar track using `exportMainAudioTrackToSidecar` method.
 
 ## Breaking changes
+- New ```chroming``` API is introduced so chroming related API methods are migrated to this new API
 
 - As of version 0.16.1-SNAPSHOT.1745311857, frame rate was made optional and moved to video loading options. This changes the ``videoLoad`` function signature.
 

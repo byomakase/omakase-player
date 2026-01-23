@@ -61,10 +61,12 @@ export class OmakaseTimeDisplay extends HTMLElement {
   }
 
   private formatToSeconds(time: number): string {
-    const mins = Math.floor(time / 60);
+    const hrs = Math.floor(time / 3600);
+    const mins = Math.floor(time / 60) % 60;
     const secs = Math.floor(time % 60);
+    const paddedHrs = String(hrs).padStart(2, '0');
     const paddedMins = String(mins).padStart(2, '0');
     const paddedSecs = String(secs).padStart(2, '0');
-    return `${paddedMins}:${paddedSecs}`;
+    return this._video!.getDuration() >= 3600 ? `${paddedHrs}:${paddedMins}:${paddedSecs}` : `${paddedMins}:${paddedSecs}`;
   }
 }

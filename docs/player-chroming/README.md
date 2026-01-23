@@ -146,7 +146,7 @@ The following attributes are supported in the `themeConfig` object for the `DEFA
 | `controlBarVisibility`   | Specifies controls visibility | Constrained values: `DISABLED`, `ENABLED`, `FULLSCREEN_ONLY` | Yes | Default is `ENABLED`
 | `controlBar` | Specifies list of enabled controls in control bar | Constrained values: `PLAY`, `FRAME_FORWARD`, `TEN_FRAMES_FORWARD`, `FRAME_BACKWARD`, `TEN_FRAMES_BACKWARD`, `BITC`, `FULLSCREEN`, `CAPTIONS`, `VOLUME`, `SCRUBBER`, `TRACKSELECTOR`, `PLAYBACK_RATE`, `DETACH` | Yes | Default: all controls
 | `floatingControls`       | Specifies list of enabled floating controls | `TRACKSELECTOR`, `HELP_MENU`, `PLAYBACK_CONTROLS`, `TIME` | No | Default: `HELP_MENU`, `PLAYBACK_CONTROLS`
-| `alwaysOnFloatingControls`       | Specifies list of enabled floating controls | `TIME` | No | Default: No controls
+| `alwaysOnFloatingControls`       | Specifies list of enabled floating controls | `TRACKSELECTOR`, `HELP_MENU`, `PLAYBACK_CONTROLS`, `TIME` | No | Default: `TIME`
 | `playbackRates` | Sets the available playback rates in menu | `number[]` | No | Default: `[0.25,0.5,0.75,1,2,4,8]`
 | `trackSelectorAutoClose` | If `false`, track selection menu will keep open until explicitly closed. If `true` it will close on track selection or when clicking outside of the menu | `boolean` | No | Default: `true`
 | `timeFormat`       | Specifies mode of time floating component | Constrained values: `TIMECODE`, `COUNTDOWN_TIMER`, `MEDIA_TIME` | Yes | Default: `TIMECODE`
@@ -168,7 +168,7 @@ The following attributes are supported in the `themeConfig` object for the `CHRO
 |--------|-------------|------|-----------|---------|
 | `timeFormat`       | Specifies mode of time floating component | Constrained values: `TIMECODE`, `COUNTDOWN_TIMER`, `MEDIA_TIME` | Yes | Default: `TIMECODE`
 | `floatingControls` | Specifies list of enabled floating controls | Constrained values: `TIME` | No | Default: No controls
-| `alwaysOnFloatingControls`   | Specifies floating control that will stay always visible | Constrained values: `TIME` | No | Default: No controls
+| `alwaysOnFloatingControls`   | Specifies floating control that will stay always visible | Constrained values: `TIME` | No | Default: `TIME`
 
 ---
 
@@ -441,7 +441,7 @@ let omakasePlayer = new OmakasePlayer({
 ```
 
 ```javascript
-omakasePlayer.getPlayerChromingElement<OmakaseDropdownList>('.quality-dropdown-list').selectedOption$.subscribe((option) => {
+omakasePlayer.chroming.getPlayerChromingElement<OmakaseDropdownList>('.quality-dropdown-list').selectedOption$.subscribe((option) => {
   if (option) {
     omakasePlayer.loadVideo(`https://my-server.com/myvideo-${option.value}.m3u8`)
   }

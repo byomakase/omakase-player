@@ -176,7 +176,7 @@ export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
         ...(config?.playerChroming as ChromelessChroming)?.themeConfig,
       };
       this._config.playerChroming.fullscreenChroming = config?.playerChroming?.fullscreenChroming ?? FullscreenChroming.Disabled;
-    } else {
+    } else if (this._config.playerChroming?.theme !== PlayerChromingTheme.Custom) {
       console.log('Provided chroming theme is not recognized. Fallback to default chroming theme.');
       this._config.playerChroming = DEFAULT_PLAYER_CHROMING;
     }

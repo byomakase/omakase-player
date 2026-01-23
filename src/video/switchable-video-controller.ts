@@ -78,7 +78,10 @@ import {destroyer} from '../util/destroy-util';
 import {OmpAudioRouter} from './audio-router';
 import {SidecarAudioApi} from '../api/sidecar-audio-api';
 import {OmpAudioEffectFactory, OmpAudioEffectFilter, OmpAudioEffectParam, OmpAudioEffectsGraphDef} from '../audio';
-import {OmpAudioRoutingInputType, OmpMainAudioInputSoloMuteState, OmpSidecarAudioInputSoloMuteState, VideoLoadOptionsInternal} from './model';
+import {
+  VideoKeyframe,
+  VideoKeyframeOptions,
+  OmpAudioRoutingInputType, OmpMainAudioInputSoloMuteState, OmpSidecarAudioInputSoloMuteState, VideoLoadOptionsInternal} from './model';
 import {OmpAudioEffectsGraphConnection} from '../audio/model';
 
 /**
@@ -971,5 +974,9 @@ export class SwitchableVideoController implements VideoControllerApi {
 
   registerAudioEffect(effectType: string, effectFactory: OmpAudioEffectFactory): void {
     return this._videoController.registerAudioEffect(effectType, effectFactory);
+  }
+
+  extractVideoKeyframe(options?: VideoKeyframeOptions): Observable<VideoKeyframe> {
+    return this._videoController.extractVideoKeyframe(options);
   }
 }

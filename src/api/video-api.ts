@@ -33,12 +33,12 @@ import {
   VideoSeekedEvent,
   VideoSeekingEvent,
   VideoTimeChangeEvent,
-  VolumeChangeEvent,
   VideoWindowPlaybackStateChangeEvent,
+  VolumeChangeEvent,
 } from '../types';
 import Hls from 'hls.js';
-import {Video, VideoLoadOptions} from '../video';
-import {VideoSafeZone, VideoWindowPlaybackState} from '../video';
+import {Video, VideoLoadOptions, VideoSafeZone, VideoWindowPlaybackState} from '../video';
+import {VideoKeyframe, VideoKeyframeOptions} from '../video/model';
 
 export interface VideoApi extends Api {
   /**
@@ -392,7 +392,7 @@ export interface VideoApi extends Api {
    * Updates loaded audio track. Updateable properties are: {@link OmpAudioTrack.label}, {@link OmpAudioTrack.language}. Other changes will be ignored.
    * @param audioTrack
    */
-  updateAudioTrack(audioTrack: OmpAudioTrack): Observable<void>
+  updateAudioTrack(audioTrack: OmpAudioTrack): Observable<void>;
 
   /**
    * Sets main audio active (unmuted)
@@ -510,4 +510,10 @@ export interface VideoApi extends Api {
    * Loads black MP4 video
    */
   loadBlackVideo(): Observable<Video>;
+
+  /**
+   * Extracts video frame from current playhead position
+   * @param options
+   */
+  extractVideoKeyframe(options?: VideoKeyframeOptions): Observable<VideoKeyframe>;
 }

@@ -213,6 +213,7 @@ export type MessageChannelActionsMap = OmpBroadcastChannelActionsMap<{
   'VideoControllerApi.updateActiveNamedEventStreams': ExtractMethodTypes<VideoControllerApi, 'updateActiveNamedEventStreams'>;
   'VideoControllerApi.getActiveNamedEventStreams': ExtractMethodTypes<VideoControllerApi, 'getActiveNamedEventStreams'>;
   'VideoControllerApi.loadBlackVideo': ExtractMethodTypes<VideoControllerApi, 'loadBlackVideo'>;
+  'VideoControllerApi.extractVideoKeyframe': ExtractMethodTypes<VideoControllerApi, 'extractVideoKeyframe'>;
 
   // sent from DetachedVideoController to RemoteVideoController
   'VideoControllerApi.attachVideoWindow': ExtractMethodTypes<VideoControllerApi, 'attachVideoWindow'>;

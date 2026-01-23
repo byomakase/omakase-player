@@ -15,13 +15,13 @@
  */
 
 import {Fullscreen} from '../dom/fullscreen';
-import {filter, fromEvent, Observable, race, Subject, take, takeUntil} from 'rxjs';
-import {OmakaseTextTrack, VideoFullscreenChangeEvent, VideoHelpMenuChangeEvent, VideoSafeZoneChangeEvent} from '../types';
+import {BehaviorSubject, filter, fromEvent, Observable, pipe, race, Subject, take, takeUntil} from 'rxjs';
+import {OmakaseTextTrack, OmpError, VideoFullscreenChangeEvent, VideoHelpMenuChangeEvent, VideoSafeZoneChangeEvent} from '../types';
 import {errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {VideoControllerApi} from './video-controller-api';
 import {nullifier} from '../util/destroy-util';
 import {DomUtil} from '../util/dom-util';
-import {MarkerTrackConfig, VideoSafeZone} from './model';
+import {VideoKeyframe, VideoKeyframeOptions, MarkerTrackConfig, VideoSafeZone} from './model';
 import {isNullOrUndefined} from '../util/object-util';
 import {CryptoUtil} from '../util/crypto-util';
 import {VideoDomControllerApi} from './video-dom-controller-api';
@@ -39,6 +39,7 @@ import {PlayerChromingDomController} from '../player-chroming/player-chroming-do
 import {PlayerChromingDomControllerApi} from '../player-chroming/player-chroming-dom-controller-api';
 import {DomController} from '../dom/dom-controller';
 import {OmakaseAudioVisualization} from '../components';
+import {BlobUtil} from '../util/blob-util';
 
 export interface VideoDomControllerConfig {
   playerHTMLElementId: string;
@@ -820,6 +821,48 @@ export class VideoDomController extends DomController implements VideoDomControl
 
   useMediaCaptions() {
     return this._config.playerChroming.theme === PlayerChromingTheme.Audio || this._config.playerChroming.theme === PlayerChromingTheme.Stamp;
+  }
+
+  extractVideoKeyframe(options: VideoKeyframeOptions = {type: 'jpeg'}): Observable<VideoKeyframe> {
+    return new Observable<VideoKeyframe>((observer) => {
+      let canvasElem: HTMLCanvasElement | undefined = DomUtil.createElement<'canvas'>('canvas');
+      let canvasCtx = canvasElem!.getContext('2d');
+      if (!canvasCtx) {
+        throw new OmpError('Unable to extract video frame');
+      }
+
+      let width = this._videoElement.videoWidth;
+      let height = this._videoElement.videoHeight;
+      canvasElem.width = width;
+      canvasElem.height = height;
+
+      canvasCtx.drawImage(this._videoElement, 0, 0, width, height);
+
+      let destroyCanvas = () => {
+        if (canvasCtx) {
+          canvasCtx.clearRect(0, 0, width, height);
+          canvasCtx = null;
+        }
+        canvasElem!.width = 0;
+        canvasElem!.height = 0;
+        canvasElem = void 0;
+      };
+
+      canvasElem.toBlob(
+        (blob) => {
+          if (!blob) {
+            throw new OmpError('Current video frame could not be extracted because it is empty');
+          }
+
+          let videoKeyframe = {src: BlobUtil.createObjectURL(blob)};
+          nextCompleteObserver(observer, videoKeyframe);
+
+          destroyCanvas();
+        },
+        `image/${options.type}`,
+        1
+      );
+    });
   }
 
   destroy() {

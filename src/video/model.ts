@@ -21,6 +21,7 @@ import {MarkerApi} from '../api';
 import {OmpAudioEffectsGraphConnection} from '../audio/model';
 
 export type VideoProtocol = 'hls' | 'native' | 'audio';
+export type VideoKeyframeType = 'png' | 'jpeg';
 
 export interface Video {
   sourceUrl: string;
@@ -428,4 +429,12 @@ export interface MainAudioEffects {
 export interface AudioEffectBundle {
   effectsGraphDef: OmpAudioEffectsGraphDef;
   effectsGraphConnection: OmpAudioEffectsGraphConnection;
+}
+
+export interface VideoKeyframeOptions {
+  type?: VideoKeyframeType;
+}
+
+export interface VideoKeyframe {
+  src: string;
 }

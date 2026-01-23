@@ -1402,6 +1402,12 @@ export class PlayerChromingDomController extends DomController implements Player
         ) {
           this.showElements(this._sectionTopRight);
         }
+
+        if (videoLoaded && this._timecodeWrapper && this._videoController.getDuration() >= 3600) {
+          this._timecodeWrapper.classList.add('omakase-timecode-long');
+        } else if (this._timecodeWrapper) {
+          this._timecodeWrapper.classList.remove('omakase-timecode-long');
+        }
       },
     });
   }

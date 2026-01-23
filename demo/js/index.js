@@ -405,7 +405,7 @@ function initializeOmakaseTimeline() {
           if (activeAlertType === 'vttComments') {
             activeAlertType = null;
             if (commentAlertId) {
-              omakasePlayer.alerts.dismiss(commentAlertId);
+              omakasePlayer.chroming.alerts.dismiss(commentAlertId);
             }
             if (commentSubscription) {
               commentSubscription.unsubscribe();
@@ -562,7 +562,7 @@ function initializeOmakaseTimeline() {
             if (activeAlertType === 'vttComments') {
               commentButton.setImage(imageConfigInactive);
               if (commentAlertId) {
-                omakasePlayer.alerts.dismiss(commentAlertId);
+                omakasePlayer.chroming.alerts.dismiss(commentAlertId);
                 commentAlertId = null;
               }
               if (commentSubscription) {
@@ -1990,9 +1990,9 @@ function subscribeToComments(poiLane) {
     if (event.action === 'entry') {
       const commentText = event.cue.text.replace(':COMMENT=', '');
       if (commentAlertId) {
-        omakasePlayer.alerts.update(commentAlertId, commentText);
+        omakasePlayer.chroming.alerts.update(commentAlertId, commentText);
       } else {
-        const alert = omakasePlayer.alerts.info(commentText);
+        const alert = omakasePlayer.chroming.alerts.info(commentText);
         commentAlertId = alert.id;
       }
     }
@@ -2002,7 +2002,7 @@ function subscribeToComments(poiLane) {
 function subscribeToMeasurements(bitrateLane) {
   return bitrateLane.onVideoCueEvent$.subscribe((event) => {
     if (event.action === 'entry') {
-      omakasePlayer.alerts.warn(`Bitrate: ${event.cue.value}`, {autodismiss: true, duration: 2500});
+      omakasePlayer.chroming.alerts.warn(`Bitrate: ${event.cue.value}`, {autodismiss: true, duration: 2500});
     }
   });
 }

@@ -102,6 +102,8 @@ import {
   AudioEffectBundle,
   AudioMeterStandard,
   BufferedTimespan,
+  VideoKeyframe,
+  VideoKeyframeOptions,
   MediaElementPlaybackState,
   OmpAudioRouterState,
   OmpAudioRoutingConnection,
@@ -3100,6 +3102,20 @@ export class VideoController implements VideoControllerApi {
     return this.loadVideo(this._blackMp4Url, {
       frameRate: 30,
       protocol: 'native',
+    });
+  }
+
+  extractVideoKeyframe(options?: VideoKeyframeOptions): Observable<VideoKeyframe> {
+    return passiveObservable((observer) => {
+      if (this.isVideoLoaded()) {
+        this._videoDomController.extractVideoKeyframe(options).subscribe({
+          next: (VideoKeyframe) => {
+            nextCompleteObserver(observer, VideoKeyframe);
+          },
+        });
+      } else {
+        errorCompleteObserver(observer, 'Failed to extract current video frame, video not loaded');
+      }
     });
   }
 
