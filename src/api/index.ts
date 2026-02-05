@@ -20,6 +20,7 @@ export * from './video-api';
 export * from './audio-api';
 export * from './subtitles-api';
 export * from './alerts-api';
+export * from './chroming-api';
 
 export * from './timeline-api';
 export * from './timeline-lane-api';

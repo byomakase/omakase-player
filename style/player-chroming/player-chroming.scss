@@ -62,9 +62,9 @@
 }
 
 media-controller {
-  &.media-chrome-disabled > *:not(video, slot, .omakase-video-controls, omakase-dropdown, .omakase-background-image),
-  &.omakase-player-detached > *:not(video, slot, .omakase-video-controls, omakase-dropdown, .omakase-background-image),
-  &.media-chrome-fullscreen-only:not(.omakase-player-fullscreen) > *:not(video, slot, .omakase-video-controls, omakase-dropdown, .omakase-background-image) {
+  &.media-chrome-disabled > *:not(video, slot, .omakase-video-controls, omakase-dropdown, .omakase-background-image, .timecode-container),
+  &.omakase-player-detached > *:not(video, slot, .omakase-video-controls, omakase-dropdown, .omakase-background-image, .timecode-container),
+  &.media-chrome-fullscreen-only:not(.omakase-player-fullscreen) > *:not(video, slot, .omakase-video-controls, omakase-dropdown, .omakase-background-image, .timecode-container) {
     display: none;
   }
 
