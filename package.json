@@ -1,6 +1,6 @@
 {
     "name": "@byomakase/omakase-player",
-    "version": "0.25.2",
+    "version": "0.25.3",
     "description": "## Omakase Player - Open source JavaScript framework for building frame accurate video experiences",
     "author": "ByOmakase",
     "homepage": "https://player.byomakase.org",
@@ -56,7 +56,7 @@
         "sass": "^1.59.2",
         "typescript": "^4.9.5",
         "vite": "^7.3.1",
-        "vite-plugin-dts": "^2.0.2"
+        "vite-plugin-dts": "^2.3.0"
     },
     "publishConfig": {
         "registry": "https://registry.npmjs.org"

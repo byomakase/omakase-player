@@ -1280,7 +1280,7 @@ export class PlayerChromingDomController extends DomController implements Player
               textOptions.unshift({
                 value: '',
                 label: 'Off',
-                active: true,
+                active: !event?.currentTrack,
               });
             }
             this._textDropdownList!.setOptions(textOptions);
@@ -1309,12 +1309,10 @@ export class PlayerChromingDomController extends DomController implements Player
       this._textDropdownList.selectedOption$.pipe(takeUntil(this._videoEventBreaker$), takeUntil(this._destroyed$)).subscribe({
         next: (textOption) => {
           if (textOption) {
-            if (textOption.value !== this._videoController.getActiveSubtitlesTrack()?.id) {
-              if (textOption.value) {
-                this._videoController.showSubtitlesTrack(textOption.value);
-              } else if (this._videoController.getActiveSubtitlesTrack()) {
-                this._videoController.hideSubtitlesTrack(this._videoController.getActiveSubtitlesTrack()!.id);
-              }
+            if (textOption.value) {
+              this._videoController.showSubtitlesTrack(textOption.value);
+            } else if (this._videoController.getActiveSubtitlesTrack()) {
+              this._videoController.hideSubtitlesTrack(this._videoController.getActiveSubtitlesTrack()!.id);
             }
           }
         },

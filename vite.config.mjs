@@ -48,6 +48,7 @@ export default defineConfig({
       name: 'OmakasePlayer',
       // the proper extensions will be added
       fileName: (format, entryName) => `omakase-player.${format}.js`,
+      cssFileName: 'style'
     },
     rollupOptions: {
       // make sure to externalize deps that shouldn't be bundled into your library
