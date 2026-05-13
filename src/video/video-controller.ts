@@ -378,6 +378,12 @@ export class VideoController implements VideoControllerApi {
    */
   protected _audioContextResumeBreaker$ = new Subject<void>();
 
+  /**
+   * Cancels unfinished keyframe extraction if a new one was triggered
+   * @protected
+   */
+  protected _extractVideoKeyframeBreaker$ = new Subject();
+
   protected _destroyed$ = new Subject<void>();
 
   constructor(config: Partial<VideoControllerConfig>, videoDomController: VideoDomControllerApi) {
@@ -3106,17 +3112,43 @@ export class VideoController implements VideoControllerApi {
   }
 
   extractVideoKeyframe(options?: VideoKeyframeOptions): Observable<VideoKeyframe> {
+    nextCompleteSubject(this._extractVideoKeyframeBreaker$);
+    this._extractVideoKeyframeBreaker$ = new Subject();
+
     return passiveObservable((observer) => {
+      let extract = () => {
+        this._extractVideoKeyframe(options)
+          .pipe(takeUntil(this._extractVideoKeyframeBreaker$))
+          .pipe(takeUntil(this._destroyed$))
+          .subscribe({
+            next: (videoKeyframe) => {
+              nextCompleteObserver(observer, videoKeyframe);
+            },
+          });
+      };
+
       if (this.isVideoLoaded()) {
-        this._videoDomController.extractVideoKeyframe(options).subscribe({
-          next: (VideoKeyframe) => {
-            nextCompleteObserver(observer, VideoKeyframe);
-          },
-        });
+        if (this.isSeeking()) {
+          this.onSeeked$
+            .pipe(take(1))
+            .pipe(takeUntil(this._extractVideoKeyframeBreaker$))
+            .pipe(takeUntil(this._destroyed$))
+            .subscribe({
+              next: () => {
+                extract();
+              },
+            });
+        } else {
+          extract();
+        }
       } else {
         errorCompleteObserver(observer, 'Failed to extract current video frame, video not loaded');
       }
     });
+  }
+
+  protected _extractVideoKeyframe(options?: VideoKeyframeOptions): Observable<VideoKeyframe> {
+    return this._videoDomController.extractVideoKeyframe(options);
   }
 
   getSidecarAudios(): SidecarAudioApi[] {
@@ -3760,6 +3792,7 @@ export class VideoController implements VideoControllerApi {
 
     destroyer(this._videoLoader);
 
+    nextCompleteSubject(this._extractVideoKeyframeBreaker$);
     nextCompleteSubject(this._destroyed$);
 
     nullifier(
