@@ -15,7 +15,7 @@
  */
 
 import {combineLatest, first, fromEvent, Observable, Subject, take, takeUntil} from 'rxjs';
-import {Video, VideoLoadOptions} from './model';
+import {NativeDrmConfig, NativeDrmFairplayConfig, NativeDrmWidevineConfig, Video, VideoLoadOptions} from './model';
 import {BaseVideoLoader} from './video-loader';
 import {errorCompleteObserver, nextCompleteObserver, nextCompleteSubject, passiveObservable} from '../util/rxjs-util';
 import {z} from 'zod';
@@ -68,6 +68,8 @@ export class VideoNativeLoader extends BaseVideoLoader {
         channels: number;
       }>();
 
+      let drmReady$ = new Subject<boolean>();
+
       combineLatest([videoLoadedData$, videoLoadedMetadata$, mediaMetadata$])
         .pipe(takeUntil(this._destroyed$))
         .pipe(take(1))
@@ -102,8 +104,25 @@ export class VideoNativeLoader extends BaseVideoLoader {
         }
       })
 
-      videoLoad$
-        .subscribe((videoLoadEvent) => {
+      if (options?.drm) {
+        this.setupEme(videoElement, options.drm, sourceUrl).then(
+          () => {
+            console.debug('EME setup complete, keys usable');
+            nextCompleteSubject(drmReady$, true);
+          },
+          (error) => {
+            console.error('EME setup failed', error);
+            errorCompleteObserver(observer, error);
+          }
+        );
+      } else {
+        nextCompleteSubject(drmReady$, false);
+      }
+
+      combineLatest([videoLoad$, drmReady$])
+        .pipe(takeUntil(this._destroyed$))
+        .pipe(take(1))
+        .subscribe(([ videoLoadEvent, isDrm]) => {
           let duration: number;
           if (options && options.duration !== void 0) {
             duration = z.coerce.number().parse(options.duration);
@@ -130,7 +149,7 @@ export class VideoNativeLoader extends BaseVideoLoader {
             totalFrames: FrameRateUtil.totalFramesNumber(duration, frameRate),
             frameDuration: FrameRateUtil.frameDuration(frameRate),
             audioOnly: isAudioOnly,
-            drm: false,
+            drm: isDrm,
             initSegmentTimeOffset: videoLoadEvent.initSegmentTimeOffset,
           };
 
@@ -176,6 +195,193 @@ export class VideoNativeLoader extends BaseVideoLoader {
       videoElement.src = sourceUrl;
       videoElement.load();
     });
+  }
+
+  private async setupEme(videoElement: HTMLVideoElement, drmConfig: NativeDrmConfig, sourceUrl: string): Promise<void> {
+    const isFairplay = !!drmConfig.fairplay;
+    const isWidevine = !!drmConfig.widevine;
+
+    if (!isFairplay && !isWidevine) {
+      throw new Error('NativeDrmConfig must specify either fairplay or widevine configuration');
+    }
+
+    if (isFairplay) {
+      return this.setupFairplay(videoElement, drmConfig.fairplay!, sourceUrl);
+    } else {
+      return this.setupWidevine(videoElement, drmConfig.widevine!);
+    }
+  }
+
+  private async setupFairplay(videoElement: HTMLVideoElement, config: NativeDrmFairplayConfig, sourceUrl: string): Promise<void> {
+    const certResponse = await fetch(config.serverCertificateUrl);
+    if (!certResponse.ok) {
+      throw new Error(`Failed to fetch FairPlay server certificate: ${certResponse.status}`);
+    }
+    const serverCertificate = new Uint8Array(await certResponse.arrayBuffer());
+
+    const keySystemConfig: MediaKeySystemConfiguration[] = [{
+      initDataTypes: ['sinf', 'skd'],
+      videoCapabilities: [{contentType: 'video/mp4'}],
+      audioCapabilities: [{contentType: 'audio/mp4'}],
+      distinctiveIdentifier: 'not-allowed' as MediaKeysRequirement,
+      persistentState: 'not-allowed' as MediaKeysRequirement,
+      sessionTypes: ['temporary'],
+    }];
+
+    const keySystemAccess = await navigator.requestMediaKeySystemAccess('com.apple.fps', keySystemConfig);
+    const mediaKeys = await keySystemAccess.createMediaKeys();
+    await mediaKeys.setServerCertificate(serverCertificate);
+    await videoElement.setMediaKeys(mediaKeys);
+
+    return new Promise<void>((resolve, reject) => {
+      let resolved = false;
+
+      const onEncrypted = async (event: Event) => {
+        try {
+          const encryptedEvent = event as MediaEncryptedEvent;
+          const initData = encryptedEvent.initData;
+          if (!initData) {
+            throw new Error('No init data in encrypted event');
+          }
+
+          const session = mediaKeys.createSession();
+
+          session.addEventListener('message', async (evt: Event) => {
+            try {
+              const messageEvent = evt as MediaKeyMessageEvent;
+              const license = await this.fetchLicense(
+                config.licenseUrl,
+                messageEvent.message,
+                config.licenseRequestHeaders
+              );
+              await session.update(license);
+            } catch (err) {
+              if (!resolved) {
+                resolved = true;
+                reject(err);
+              }
+            }
+          });
+
+          session.addEventListener('keystatuseschange', () => {
+            session.keyStatuses.forEach((status: MediaKeyStatus) => {
+              if (status === 'usable') {
+                if (!resolved) {
+                  resolved = true;
+                  resolve();
+                }
+              }
+            });
+          });
+
+          await session.generateRequest(encryptedEvent.initDataType || 'sinf', initData);
+        } catch (err) {
+          if (!resolved) {
+            resolved = true;
+            reject(err);
+          }
+        }
+      };
+
+      videoElement.addEventListener('encrypted', onEncrypted, {once: true});
+    });
+  }
+
+  private async setupWidevine(videoElement: HTMLVideoElement, config: NativeDrmWidevineConfig): Promise<void> {
+    const keySystemConfig: MediaKeySystemConfiguration[] = [{
+      initDataTypes: ['cenc'],
+      videoCapabilities: [{contentType: 'video/mp4; codecs="avc1.42E01E"'}],
+      audioCapabilities: [{contentType: 'audio/mp4; codecs="mp4a.40.2"'}],
+      distinctiveIdentifier: 'optional' as MediaKeysRequirement,
+      persistentState: 'optional' as MediaKeysRequirement,
+      sessionTypes: ['temporary'],
+    }];
+
+    const keySystemAccess = await navigator.requestMediaKeySystemAccess('com.widevine.alpha', keySystemConfig);
+    const mediaKeys = await keySystemAccess.createMediaKeys();
+
+    if (config.serverCertificateUrl) {
+      const certResponse = await fetch(config.serverCertificateUrl);
+      if (!certResponse.ok) {
+        throw new Error(`Failed to fetch Widevine server certificate: ${certResponse.status}`);
+      }
+      const serverCertificate = new Uint8Array(await certResponse.arrayBuffer());
+      await mediaKeys.setServerCertificate(serverCertificate);
+    }
+
+    await videoElement.setMediaKeys(mediaKeys);
+
+    return new Promise<void>((resolve, reject) => {
+      let resolved = false;
+
+      const onEncrypted = async (event: Event) => {
+        try {
+          const encryptedEvent = event as MediaEncryptedEvent;
+          const initData = encryptedEvent.initData;
+          if (!initData) {
+            throw new Error('No init data in encrypted event');
+          }
+
+          const session = mediaKeys.createSession();
+
+          session.addEventListener('message', async (evt: Event) => {
+            try {
+              const messageEvent = evt as MediaKeyMessageEvent;
+              const license = await this.fetchLicense(
+                config.licenseUrl,
+                messageEvent.message,
+                config.licenseRequestHeaders
+              );
+              await session.update(license);
+            } catch (err) {
+              if (!resolved) {
+                resolved = true;
+                reject(err);
+              }
+            }
+          });
+
+          session.addEventListener('keystatuseschange', () => {
+            session.keyStatuses.forEach((status: MediaKeyStatus) => {
+              if (status === 'usable') {
+                if (!resolved) {
+                  resolved = true;
+                  resolve();
+                }
+              }
+            });
+          });
+
+          await session.generateRequest(encryptedEvent.initDataType || 'cenc', initData);
+        } catch (err) {
+          if (!resolved) {
+            resolved = true;
+            reject(err);
+          }
+        }
+      };
+
+      videoElement.addEventListener('encrypted', onEncrypted, {once: true});
+    });
+  }
+
+  private async fetchLicense(licenseUrl: string, message: ArrayBuffer, headers?: Record<string, string>): Promise<ArrayBuffer> {
+    const requestHeaders: Record<string, string> = {
+      'Content-Type': 'application/octet-stream',
+      ...headers,
+    };
+
+    const response = await fetch(licenseUrl, {
+      method: 'POST',
+      headers: requestHeaders,
+      body: message,
+    });
+
+    if (!response.ok) {
+      throw new Error(`License request failed: ${response.status} ${response.statusText}`);
+    }
+
+    return response.arrayBuffer();
   }
 
   override setActiveAudioTrack(ompAudioTrackId: string): Observable<void> {

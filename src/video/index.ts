@@ -39,6 +39,9 @@ export type {
   OmpAudioRoutingConnection,
   OmpAudioRoutingPath,
   OmpAudioRoutingRoute,
+  NativeDrmConfig,
+  NativeDrmFairplayConfig,
+  NativeDrmWidevineConfig,
 } from './model';
 export type {VideoControllerApi} from './video-controller-api';
 export {MediaElementPlayback} from './media-element-playback';
