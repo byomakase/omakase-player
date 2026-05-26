@@ -55,6 +55,46 @@ omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8').subscribe({
 })
 ```
 
+### Native DRM (EME)
+
+For browsers with native HLS support (e.g. Safari), Omakase Player supports EME-based DRM playback via the `VideoNativeLoader`. Pass a `drm` configuration in `VideoLoadOptions` to enable FairPlay or Widevine key exchange without hls.js:
+
+```javascript
+// FairPlay (Safari native HLS)
+omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8', {
+  drm: {
+    fairplay: {
+      licenseUrl: 'https://drm.example.com/license',
+      serverCertificateUrl: 'https://drm.example.com/certificate',
+      licenseRequestHeaders: {
+        'x-playback-rights-authorization': 'Bearer <token>'
+      }
+    }
+  }
+}).subscribe({
+  next: (video) => {
+    console.log(`DRM video loaded. DRM active: ${video.drm}`)
+  }
+})
+
+// Widevine (native MSE path)
+omakasePlayer.loadVideo('https://my-server.com/myvideo.m3u8', {
+  drm: {
+    widevine: {
+      licenseUrl: 'https://drm.example.com/license',
+      serverCertificateUrl: 'https://drm.example.com/widevine-cert', // optional
+      licenseRequestHeaders: {
+        'Authorization': 'Bearer <token>'
+      }
+    }
+  }
+}).subscribe({
+  next: (video) => {
+    console.log(`DRM video loaded. DRM active: ${video.drm}`)
+  }
+})
+```
+
 Player chroming can be configured with the `playerChroming` property. This property allows selection of a chroming theme, watermark, thumbnail url or selection function and other theme-specific configuration. Some code examples are shown below:
 
 ```javascript
@@ -1256,6 +1296,12 @@ npm install ci
 npm run dev
 ```
 
+## Testing
+
+```bash
+npm run test
+```
+
 ## Production build
 
 ```bash
@@ -1268,6 +1314,7 @@ Production artefacts that need to be published to NPM are created in `/dist` fol
 ## Known limitations
 
 - Safari browser doesn't support Main audio routing and Main audio VU Meter for HLS streams. This constraint can be bypassed by loading the Main audio as a Sidecar track using `exportMainAudioTrackToSidecar` method.
+- Native DRM (EME) via `VideoNativeLoader` requires the browser to support the target key system (`com.apple.fps` for FairPlay on Safari, `com.widevine.alpha` for Widevine). For HLS streams on non-Safari browsers, use hls.js with its built-in EME support via `hlsConfig.emeEnabled`.
 
 ## Breaking changes
 - New ```chroming``` API is introduced so chroming related API methods are migrated to this new API

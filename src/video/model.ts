@@ -121,6 +121,12 @@ export interface VideoLoadOptions {
    * Arbitrary key-value data provided on video load. Can be used to storevalues such as DRM tokens.
    */
   data?: Record<string, any>;
+
+  /**
+   * Native DRM configuration for EME-based playback (FairPlay/Widevine) without hls.js.
+   * Used by VideoNativeLoader when the browser supports native HLS with CDM.
+   */
+  drm?: NativeDrmConfig;
 }
 
 /**
@@ -429,6 +435,23 @@ export interface MainAudioEffects {
 export interface AudioEffectBundle {
   effectsGraphDef: OmpAudioEffectsGraphDef;
   effectsGraphConnection: OmpAudioEffectsGraphConnection;
+}
+
+export interface NativeDrmFairplayConfig {
+  licenseUrl: string;
+  serverCertificateUrl: string;
+  licenseRequestHeaders?: Record<string, string>;
+}
+
+export interface NativeDrmWidevineConfig {
+  licenseUrl: string;
+  serverCertificateUrl?: string;
+  licenseRequestHeaders?: Record<string, string>;
+}
+
+export interface NativeDrmConfig {
+  fairplay?: NativeDrmFairplayConfig;
+  widevine?: NativeDrmWidevineConfig;
 }
 
 export interface VideoKeyframeOptions {
