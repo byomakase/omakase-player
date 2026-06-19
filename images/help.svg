@@ -1,57 +1,16 @@
-<!--
-  - Copyright 2024 ByOmakase, LLC (https://byomakase.org)
-  -
-  - Licensed under the Apache License, Version 2.0 (the "License");
-  - you may not use this file except in compliance with the License.
-  - You may obtain a copy of the License at
-  -
-  -     http://www.apache.org/licenses/LICENSE-2.0
-  -
-  - Unless required by applicable law or agreed to in writing, software
-  - distributed under the License is distributed on an "AS IS" BASIS,
-  - WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  - See the License for the specific language governing permissions and
-  - limitations under the License.
-  -->
-
 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
-  <g filter="url(#filter0_d_2266_66)">
+  <g>
     <path
       d="M15.6299 16.0901C14.9399 16.0901 14.3899 16.6601 14.3899 17.3501C14.3899 18.0401 14.9299 18.6101 15.6299 18.6101C16.3299 18.6101 16.8899 18.0201 16.8899 17.3501C16.8899 16.6601 16.3199 16.0901 15.6299 16.0901Z"
       fill="white" />
     <path
       d="M15.8401 6.56005C13.6301 6.56005 12.6201 7.87005 12.6201 8.75005C12.6201 9.39005 13.1601 9.68005 13.6001 9.68005C14.4801 9.68005 14.1201 8.42005 15.7901 8.42005C16.6101 8.42005 17.2601 8.78005 17.2601 9.53005C17.2601 10.41 16.3501 10.92 15.8101 11.38C15.3401 11.79 14.7201 12.46 14.7201 13.86C14.7201 14.71 14.9501 14.95 15.6201 14.95C16.4201 14.95 16.5801 14.59 16.5801 14.28C16.5801 13.43 16.6001 12.94 17.5001 12.24C17.9401 11.9 19.3301 10.79 19.3301 9.25005C19.3301 7.71005 17.9401 6.55005 15.8501 6.55005L15.8401 6.56005Z"
       fill="white" />
-    <g filter="url(#filter1_d_2266_66)">
+    <g>
       <path
         d="M16 0C9.37 0 4 5.37 4 12V23.06C4 23.58 4.42 24 4.94 24H16C22.63 24 28 18.63 28 12C28 5.37 22.63 0 16 0ZM16 22.12H5.88V12C5.88 6.4 10.4 1.88 16 1.88C21.6 1.88 26.12 6.41 26.12 12C26.12 17.59 21.59 22.12 16 22.12Z"
         fill="white" />
     </g>
   </g>
-  <defs>
-    <filter id="filter0_d_2266_66" x="0" y="0" width="32" height="32" filterUnits="userSpaceOnUse"
-      color-interpolation-filters="sRGB">
-      <feFlood flood-opacity="0" result="BackgroundImageFix" />
-      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0"
-        result="hardAlpha" />
-      <feOffset dy="4" />
-      <feGaussianBlur stdDeviation="2" />
-      <feComposite in2="hardAlpha" operator="out" />
-      <feColorMatrix type="matrix" values="0 0 0 0 0.4 0 0 0 0 0.4 0 0 0 0 0.4 0 0 0 0.15 0" />
-      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_2266_66" />
-      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_2266_66" result="shape" />
-    </filter>
-    <filter id="filter1_d_2266_66" x="0" y="0" width="32" height="32" filterUnits="userSpaceOnUse"
-      color-interpolation-filters="sRGB">
-      <feFlood flood-opacity="0" result="BackgroundImageFix" />
-      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0"
-        result="hardAlpha" />
-      <feOffset dy="4" />
-      <feGaussianBlur stdDeviation="2" />
-      <feComposite in2="hardAlpha" operator="out" />
-      <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.75 0" />
-      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_2266_66" />
-      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_2266_66" result="shape" />
-    </filter>
-  </defs>
+
 </svg>

@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,84 +14,98 @@
  * limitations under the License.
  */
 
-import {firstValueFrom, Observable, Observer, Subject, Subscriber, TeardownLogic} from 'rxjs';
+import {BehaviorSubject, defer, firstValueFrom, Observable, type Observer, Subject, Subscriber, tap, type TeardownLogic} from 'rxjs';
 import {fromPromise} from 'rxjs/internal/observable/innerFrom';
 
 export function passiveObservable<T = void>(subscribe: (this: Observable<T>, subscriber: Subscriber<T>) => TeardownLogic): Observable<T> {
   return fromPromise<T>(firstValueFrom<T>(new Observable<T>(subscribe))) as Observable<T>;
 }
 
-export function simplePassiveObservable<T = void>(value?: T): Observable<T> {
-  return passiveObservable((observer) => nextCompleteObserver(observer, value as T));
+export function emptyPassiveObservable(): Observable<void> {
+  return passiveObservable((observer) => nextCompleteObserver(observer));
 }
 
-export function nextCompleteObserver<T>(observer: Observer<T>, value?: T) {
-  if (observer) {
-    observer.next(value as T);
+export function emptyObservable(): Observable<void> {
+  return new Observable<void>((observer) => nextCompleteObserver(observer));
+}
+
+export function wrapObservable(o1: Observable<any>): Observable<void> {
+  return new Observable((observer) => {
+    o1.subscribe({
+      next: () => {
+        nextCompleteObserver(observer);
+      },
+      error: (err) => {
+        errorCompleteObserver(observer, err);
+      },
+    });
+  });
+}
+
+export function completeObserver<T>(observer: Observer<T>): void {
+  try {
     observer.complete();
+  } catch (e) {
+    // nop
+    // console.debug(e);
+  }
+}
+
+export function nextCompleteObserver<T>(observer: Observer<T>, ...[value]: undefined extends T ? [value?: T] : [value: T]): void {
+  if (observer) {
+    // value is present if T doesn't include undefined; otherwise it may be omitted
+    observer.next(value as T);
+    completeObserver(observer);
   }
 }
 
 export function errorCompleteObserver(observer: Observer<any>, error: any) {
   if (observer) {
     observer.error(error);
-    observer.complete();
+    completeObserver(observer);
   }
 }
 
-export function errorCompleteSubject(subject: Subject<any>, error: any) {
-  if (subject) {
-    subject.error(error);
-    subject.complete();
-  }
-}
+export function freeObserver(observer: Observer<any>): void {
+  completeObserver(observer);
 
-export function nextCompleteSubject<T>(subject: Subject<T>, value?: T) {
-  if (subject) {
-    subject.next(value as T);
-    subject.complete();
-  } else {
-    //console.debug('subject is undefined or null')
-  }
-}
-
-export function completeSubject(subject: Subject<any>) {
-  if (subject) {
-    if (subject.closed) {
-      //console.debug('subject is already closed')
-    } else {
-      subject.complete();
+  if (observer instanceof Subject || observer instanceof BehaviorSubject) {
+    try {
+      observer.unsubscribe();
+    } catch (e) {
+      console.debug(e);
     }
-  } else {
-    //console.debug('subject is undefined or null')
   }
 }
 
-export function completeSubjects(...subjects: Subject<any>[]) {
-  subjects.forEach((subject) => {
-    completeSubject(subject);
+export function measuredObservable(
+  source$: Observable<any>,
+  hooks: {
+    onStart: (start: number) => void;
+    onEnd: (start: number, end: number) => void;
+  }
+): Observable<any> {
+  return defer(() => {
+    const start = performance.now();
+    hooks.onStart(start);
+    return source$.pipe(
+      tap({
+        finalize: () => {
+          const end = performance.now();
+          hooks.onEnd(start, end);
+        }
+      })
+    );
   });
 }
 
-export function unsubscribeSubjects(...subjects: Subject<any>[]) {
-  subjects.forEach((subject) => {
-    unsubscribeSubject(subject);
+export function describedObservable(title: string, source$: Observable<any>, space = 0): Observable<any> {
+  return measuredObservable(source$, {
+    onStart: (start) => {
+      console.debug(`${space > 0 ? ' '.repeat(space) : ''}┌── ${title} :: START`);
+    },
+    onEnd: (start, end) => {
+      console.debug(`${space > 0 ? ' '.repeat(space) : ''}└── ${title} :: END ${(end - start).toFixed(2)}ms`);
+    },
   });
-}
-
-export function completeUnsubscribeSubjects(...subjects: Subject<any>[]) {
-  completeSubjects(...subjects);
-  unsubscribeSubjects(...subjects);
-}
-
-export function unsubscribeSubject(subject: Subject<any>) {
-  if (subject) {
-    if (subject.closed) {
-      //console.debug('subject is closed')
-    } else {
-      subject.unsubscribe();
-    }
-  } else {
-    //console.debug('subject is undefined or null')
-  }
 }

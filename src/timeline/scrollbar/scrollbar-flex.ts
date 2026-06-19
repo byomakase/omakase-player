@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 
-import {KonvaComponentFlexContentNode} from '../../layout/konva-component-flex';
-import {ScrollableHorizontally, Scrollbar} from './scrollbar';
-import {Layout} from '../../layout/flex-node';
-import {KonvaFlexItem} from '../../layout/konva-flex';
-import {FlexGroupConfig} from '../../layout/flex-group';
-import {Timeline} from '../timeline';
-import {Subject, takeUntil} from 'rxjs';
-import {nextCompleteSubject} from '../../util/rxjs-util';
+import {filter, takeUntil} from 'rxjs';
+import type {Layout} from '../layout/flex-node';
+import {type ScrollableHorizontally, Scrollbar, ScrollbarEventType} from './scrollbar';
+import {KonvaComponentFlexContentNode2} from '../layout/konva-component-flex';
+import {KonvaFlexItem} from '../layout/konva-flex';
+import type {FlexGroupConfig} from '../layout/flex-group';
+import {TimelineEventType} from '../timeline-api';
+import type {TimelineImpl} from '../timeline';
+import {ObserverBreaker} from '../../common/observer-breaker';
 
-export class ScrollbarFlexContentNode extends KonvaComponentFlexContentNode<Scrollbar> {
+export class ScrollbarFlexContentNode extends KonvaComponentFlexContentNode2<Scrollbar> {
   private _scrollableHorizontally: ScrollableHorizontally;
 
   constructor(component: Scrollbar, scrollableHorizontally: ScrollableHorizontally) {
@@ -44,45 +45,47 @@ export class ScrollbarFlexItem extends KonvaFlexItem<ScrollbarFlexContentNode> {
 }
 
 export class TimelineScrollbar extends ScrollbarFlexItem {
-  private _timeline: Timeline;
+  private _timeline: TimelineImpl;
   private _scrollbar: Scrollbar;
 
   private _timelineZoomInProgress = false;
 
-  private _destroyed$ = new Subject<void>();
+  protected _destroyBreaker = new ObserverBreaker();
 
-  constructor(config: FlexGroupConfig, scrollbar: Scrollbar, timeline: Timeline) {
+  constructor(config: FlexGroupConfig, scrollbar: Scrollbar, timeline: TimelineImpl) {
     super(config, scrollbar, timeline);
 
     this._timeline = timeline;
     this._scrollbar = scrollbar;
 
-    this._timeline.onScroll$.pipe(takeUntil(this._destroyed$)).subscribe({
-      next: (event) => {
+    this._timeline.onEvent$
+      .pipe(filter((p) => p.type === TimelineEventType.TIMELINE_SCROLL))
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe((event) => {
         if (!this._timelineZoomInProgress) {
           this._scrollbar.updateScrollHandle(this._timeline);
         }
-      },
-    });
+      });
 
-    this._scrollbar.onScroll$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._scrollbar.onEvent$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe({
       next: (event) => {
-        this._timeline.scrollHorizontallyToPercent(this._scrollbar.getScrollHandlePercent());
-      },
-    });
-
-    this._scrollbar.onZoom$.pipe(takeUntil(this._destroyed$)).subscribe({
-      next: (event) => {
-        this._timelineZoomInProgress = true;
-        this._timeline.zoomTo(event.zoomPercent, event.zoomFocus);
-        this._timeline.scrollHorizontallyToPercent(this._scrollbar.getScrollHandlePercent());
-        this._timelineZoomInProgress = false;
+        switch (event.type) {
+          case ScrollbarEventType.SCROLLBAR_SCROLL:
+            this._timeline.scrollHorizontallyToPercent(this._scrollbar.getScrollHandlePercent());
+            break;
+          case ScrollbarEventType.SCROLLBAR_ZOOM:
+            this._timelineZoomInProgress = true;
+            this._timeline.zoomTo(event.data.zoomPercent, event.data.zoomFocus);
+            this._timeline.scrollHorizontallyToPercent(this._scrollbar.getScrollHandlePercent());
+            this._timelineZoomInProgress = false;
+            break;
+        }
       },
     });
   }
 
   override destroy() {
     super.destroy();
-    nextCompleteSubject(this._destroyed$);
+    this._destroyBreaker.destroy();
   }
 }

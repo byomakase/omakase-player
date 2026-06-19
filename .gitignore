@@ -17,10 +17,18 @@ logs
 results
 tmp
 
+# Documentation
+docs/**
+!docs/static
+!docs/static/**
+
 # Cache
 
 # Dependency directory
 node_modules
+
+# Library token
+.npmrc
 
 # Editors
 .idea
@@ -62,3 +70,5 @@ Thumbs.db
 /.parcel-cache/
 /package/
 /infrastructure/templates/packaged.*
+
+.claude

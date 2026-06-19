@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,22 @@
  * limitations under the License.
  */
 
-import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle} from '../layout/konva-component';
 import Konva from 'konva';
-import {positionTopLeft} from '../constants';
-import {OnMeasurementsChange, Position} from '../common';
-import {Timeline} from './timeline';
-import {BehaviorSubject, combineLatest, filter, merge, Subject, takeUntil} from 'rxjs';
-import {BufferedTimespan, MediaElementPlaybackState, VideoControllerApi} from '../video';
-import {KonvaFactory} from '../konva/konva-factory';
+import {BehaviorSubject, filter, Subject, takeUntil} from 'rxjs';
 import {WindowUtil} from '../util/window-util';
-import {KonvaUtil} from '../util/konva-util';
-import {nextCompleteSubject} from '../util/rxjs-util';
-import {isNullOrUndefined} from '../util/object-util';
-import {PlayheadMoveEvent} from '../types';
+import type {OnMeasurementsChange, Position} from './model';
+import {BaseKonvaComponent, type ComponentConfig, type ConfigWithOptionalStyle} from './layout/konva-component';
+import type {MediaElementPlaybackState} from '../common/media-element-playback';
+import {TimelineEventType} from './timeline-api';
+import {TIMELINE} from '../constants';
+import {KonvaFactory} from './konva/konva-factory';
+import {isNullOrUndefined} from '../util/util-functions';
+import type {BufferedTimeRange} from '../dom/dom-media-element';
+import {KonvaUtil} from './konva/konva-util';
+import type {TimelineImpl} from './timeline';
+import {type PlayerApi, PlayerEventType} from '../player';
+import {MediaTemporalFormat} from '../common';
+import {ObserverBreaker} from '../common/observer-breaker';
 
 export interface PlayheadState {
   dragging: boolean;
@@ -69,6 +72,10 @@ export interface PlayheadConfig extends ComponentConfig<PlayheadStyle> {
   dragScrollMaxSpeedAfterPx: number;
 }
 
+export interface PlayheadMoveEvent {
+  timecode: string;
+}
+
 const configDefault: PlayheadConfig = {
   minScrollSpeedPx: 2,
   maxScrollSpeedPx: 100,
@@ -105,8 +112,8 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
   public readonly onMove$: Subject<PlayheadMoveEvent> = new Subject<PlayheadMoveEvent>();
   public readonly onStateChange$: Subject<PlayheadState>;
 
-  protected _timeline: Timeline;
-  protected _videoController: VideoControllerApi;
+  protected _timeline: TimelineImpl;
+  protected _player: PlayerApi;
   protected _playbackState?: MediaElementPlaybackState;
 
   protected _state: PlayheadState = {
@@ -116,7 +123,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     positionBeforeDrag: undefined,
   };
 
-  protected _dragBreaker$ = new Subject<void>();
+  protected _dragBreaker = new ObserverBreaker();
 
   protected _group: Konva.Group;
   protected _bgRect: Konva.Rect;
@@ -132,9 +139,9 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
   protected _bufferedGroup: Konva.Group;
 
   protected readonly _animationFrameCallback$: Subject<number | undefined> = new BehaviorSubject<number | undefined>(void 0);
-  protected _requestAnimationFrameId?: number;
+  protected _requestAnimationFrameId: number | undefined;
 
-  constructor(config: Partial<ConfigWithOptionalStyle<PlayheadConfig>>, timeline: Timeline, videoController: VideoControllerApi) {
+  constructor(config: Partial<ConfigWithOptionalStyle<PlayheadConfig>>, timeline: TimelineImpl, player: PlayerApi) {
     super({
       ...configDefault,
       ...config,
@@ -147,16 +154,16 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     this.onStateChange$ = new BehaviorSubject(this._state);
 
     this._timeline = timeline;
-    this._videoController = videoController;
-    this._playbackState = this._videoController.getPlaybackState();
+    this._player = player;
+    this._playbackState = this._player.playerSession.playback;
 
     this._group = new Konva.Group({
-      ...positionTopLeft,
+      ...TIMELINE.positionTopLeft,
       listening: true,
     });
 
     this._bgRect = KonvaFactory.createRect({
-      ...positionTopLeft,
+      ...TIMELINE.positionTopLeft,
       height: this.style.scrubberHeight,
       fill: this.style.backgroundFill,
       opacity: this.style.backgroundOpacity,
@@ -164,7 +171,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     });
 
     this._playProgressBgRect = KonvaFactory.createRect({
-      ...positionTopLeft,
+      ...TIMELINE.positionTopLeft,
       height: this.style.scrubberHeight,
       fill: this.style.playProgressFill,
       opacity: this.style.playProgressOpacity,
@@ -172,7 +179,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     });
 
     this._playheadGroup = KonvaFactory.createGroup({
-      ...positionTopLeft,
+      ...TIMELINE.positionTopLeft,
       visible: this.style.visible,
       listening: true,
       draggable: true,
@@ -200,7 +207,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
       fontSize: this.style.textFontSize,
       fontFamily: this._timeline.style.textFontFamily,
       fill: this.style.textFill,
-      ...positionTopLeft,
+      ...TIMELINE.positionTopLeft,
       text: ``,
       listening: false,
     });
@@ -209,7 +216,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     this._playheadGroup.add(this._timecodeLabel);
 
     this._bufferedGroup = new Konva.Group({
-      ...positionTopLeft,
+      ...TIMELINE.positionTopLeft,
       listening: false,
     });
 
@@ -222,49 +229,40 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
 
     this._group.add(this._playheadGroup);
 
-    merge(this._timeline.onZoom$, this._timeline.onScroll$)
-      .pipe(takeUntil(this._destroyed$))
-      .subscribe({
-        next: (event) => {
-          this.settleLayout();
-        },
+    this._timeline.onEvent$
+      .pipe(filter((p) => p.type === TimelineEventType.TIMELINE_ZOOM || p.type === TimelineEventType.TIMELINE_SCROLL))
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe((event) => {
+        this.settleLayout();
       });
 
-    this._videoController.onVideoLoading$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._player.onEvent$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe({
       next: (event) => {
-        this._group.visible(false);
-      },
-    });
-
-    this._videoController.onVideoLoaded$
-      .pipe(takeUntil(this._destroyed$))
-      .pipe(filter((p) => !!p))
-      .subscribe({
-        next: (event) => {
-          this.doPlayProgress();
-          this.doBufferingProgress();
-          this._group.visible(true);
-        },
-      });
-
-    this._videoController.onVideoTimeChange$.pipe(takeUntil(this._destroyed$)).subscribe({
-      next: (event) => {
-        this.doPlayProgress();
-      },
-    });
-
-    combineLatest([this._videoController.onSeeking$, this._videoController.onSeeked$])
-      .pipe(takeUntil(this._destroyed$))
-      .subscribe({
-        next: (event) => {
-          this.doPlayProgress();
-          this.doBufferingProgress();
-        },
-      });
-
-    this._videoController.onBuffering$.pipe(takeUntil(this._destroyed$)).subscribe({
-      next: (event) => {
-        this.doBufferingProgress();
+        switch (event.type) {
+          case PlayerEventType.PLAYER_MAIN_MEDIA_LOADING:
+            this._group.visible(false);
+            break;
+          case PlayerEventType.PLAYER_MAIN_MEDIA_LOADED:
+            this.doPlayProgress();
+            this._group.visible(true);
+            break;
+          case PlayerEventType.PLAYER_PLAYBACK_PROGRESS:
+            this.doPlayProgress();
+            break;
+          case PlayerEventType.PLAYER_SEEKING:
+          case PlayerEventType.PLAYER_SEEKED:
+            this.doPlayProgress();
+            break;
+          case PlayerEventType.PLAYER_BUFFERING:
+            this.doBufferingProgress(event.data.bufferedTimeRanges);
+            break;
+          case PlayerEventType.PLAYER_PLAYBACK_CHANGE:
+            this._playbackState = event.data.playerPlayback;
+            this.updateState({
+              seeking: this._playbackState.seeking,
+            });
+            break;
+        }
       },
     });
 
@@ -279,7 +277,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     });
 
     this._playheadGroup.on('dragstart', (event) => {
-      if (!this._videoController.isVideoLoaded()) {
+      if (!this._player.isMainMediaLoaded) {
         event.target.stopDrag();
         return;
       }
@@ -297,26 +295,19 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     });
 
     this._playheadGroup.on('dragend', (event) => {
-      if (!this._videoController.isVideoLoaded()) {
+      if (!this._player.isMainMediaLoaded) {
         return;
       }
 
-      let time = this._timeline.timelinePositionToTime(this._playheadGroup.getPosition().x);
-      this._videoController.seekToTime(time).subscribe({
+      let seconds = this._timeline.timelinePositionToTime(this._playheadGroup.getPosition().x);
+      this._player.seekTo(seconds).subscribe({
         next: () => {
           this.dragEnd();
         },
       });
     });
 
-    this._videoController.onPlaybackState$.pipe(takeUntil(this._destroyed$)).subscribe((state) => {
-      this._playbackState = state;
-      this.updateState({
-        seeking: this._playbackState.seeking,
-      });
-    });
-
-    this._styleAdapter.onChange$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this._styleAdapter.onChange$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe({
       next: (style) => {
         this._playheadSymbol.setAttrs({
           fill: this._state.dragging ? this.style.draggingFill : this.style.fill,
@@ -333,7 +324,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
       },
     });
 
-    this.onStateChange$.pipe(takeUntil(this._destroyed$)).subscribe({
+    this.onStateChange$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe({
       next: (state) => {
         WindowUtil.cursor(this._state.dragging ? 'ew-resize' : 'default');
         this.style = {}; // trigger style update
@@ -343,7 +334,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     this._animationFrameCallback$
       .pipe(
         filter((p) => !isNullOrUndefined(p)),
-        takeUntil(this._destroyed$)
+        takeUntil(this._destroyBreaker.observer)
       )
       .subscribe((time) => {
         if (!this._state.dragmove) {
@@ -359,8 +350,8 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
       positionBeforeDrag: this._playheadGroup.getPosition(),
     });
 
-    this._dragBreaker$ = new Subject();
-    this._dragBreaker$.pipe(takeUntil(this._destroyed$)).subscribe(() => {
+    this._dragBreaker.break();
+    this._dragBreaker.observer.pipe(takeUntil(this._destroyBreaker.observer)).subscribe(() => {
       this.stopAnimationFrameLoop();
     });
     this.startAnimationFrameLoop();
@@ -390,7 +381,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
   }
 
   dragEnd() {
-    nextCompleteSubject(this._dragBreaker$);
+    this._dragBreaker.break();
     this.updateState({
       dragging: false,
     });
@@ -545,11 +536,11 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     });
 
     this.doPlayProgress();
-    this.doBufferingProgress();
+    this.doBufferingProgress(this._player.playerSession.playback.bufferedTimeRanges);
   }
 
   private doPlayProgress() {
-    if (!this._videoController.isVideoLoaded()) {
+    if (!this._player.isMainMediaLoaded) {
       return;
     }
 
@@ -557,7 +548,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
       return;
     }
 
-    let x = this._timeline.timeToTimelinePosition(this._videoController.getCurrentTime());
+    let x = this._timeline.timeToTimelinePosition(this._player.getCurrentTime());
     this._playProgressBgRect.width(x);
     this._playheadGroup.x(x);
 
@@ -565,7 +556,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
   }
 
   private settleTimecode(playheadPosition: number) {
-    let text = this._state.dragging ? this._timeline.timelinePositionToTimecode(playheadPosition) : this._videoController.getCurrentTimecode();
+    let text = this._state.dragging ? this._timeline.timelinePositionToTimecode(playheadPosition) : this._player.getCurrentTime(MediaTemporalFormat.TIMECODE);
 
     let textRect = this._timecodeText.getSelfRect();
     let textHalfWidth = textRect.width / 2;
@@ -582,24 +573,22 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     this._timecodeLabel.x(labelPosition);
   }
 
-  private doBufferingProgress() {
-    if (!this._videoController.isVideoLoaded()) {
+  private doBufferingProgress(bufferedTimeRanges: BufferedTimeRange[]) {
+    if (!this._player.isMainMediaLoaded) {
       return;
     }
 
-    let bufferedTimespans = this._videoController.getBufferedTimespans();
-
-    if (bufferedTimespans && bufferedTimespans.length > 0) {
+    if (bufferedTimeRanges && bufferedTimeRanges.length > 0) {
       if (this._bufferedGroup.hasChildren()) {
-        let numOfBuffers = bufferedTimespans.length;
+        let numOfBuffers = bufferedTimeRanges.length;
         let previousNumOfBuffers = this._bufferedGroup.getChildren().length;
 
         if (numOfBuffers === previousNumOfBuffers) {
           // move and resize buffers
           this._bufferedGroup.getChildren().forEach((bufferedRect, i) => {
-            let bufferedTimespan = bufferedTimespans[i];
-            let startX = this._timeline.timeToTimelinePosition(bufferedTimespan.start);
-            let endX = this._timeline.timeToTimelinePosition(bufferedTimespan.end);
+            let bufferedTimeRange = bufferedTimeRanges[i]!;
+            let startX = this._timeline.timeToTimelinePosition(bufferedTimeRange.start);
+            let endX = this._timeline.timeToTimelinePosition(bufferedTimeRange.end);
             bufferedRect.setAttrs({
               x: startX,
               width: endX - startX,
@@ -608,16 +597,16 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
         } else {
           // remove old and recreate
           this._bufferedGroup.getChildren().forEach((child) => child.destroy());
-          this.createBuffers(bufferedTimespans);
+          this.createBuffers(bufferedTimeRanges);
         }
       } else {
-        this.createBuffers(bufferedTimespans);
+        this.createBuffers(bufferedTimeRanges);
       }
     }
   }
 
-  private createBuffers(bufferedTimespans: BufferedTimespan[]) {
-    bufferedTimespans.forEach((bufferedTimespan) => {
+  private createBuffers(bufferedTimeRanges: BufferedTimeRange[]) {
+    bufferedTimeRanges.forEach((bufferedTimespan) => {
       let startX = this._timeline.timeToTimelinePosition(bufferedTimespan.start);
       let endX = this._timeline.timeToTimelinePosition(bufferedTimespan.end);
 

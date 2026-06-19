@@ -1,20 +1,12 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-  - Copyright 2024 ByOmakase, LLC (https://byomakase.org)
-  -
-  - Licensed under the Apache License, Version 2.0 (the "License");
-  - you may not use this file except in compliance with the License.
-  - You may obtain a copy of the License at
-  -
-  -     http://www.apache.org/licenses/LICENSE-2.0
-  -
-  - Unless required by applicable law or agreed to in writing, software
-  - distributed under the License is distributed on an "AS IS" BASIS,
-  - WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  - See the License for the specific language governing permissions and
-  - limitations under the License.
-  -->
-
-<!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M20.865 18.6225L12.9825 4.2975C12.78 3.9375 12.4125 3.72 12 3.72C11.5875 3.72 11.2125 3.9375 11.0175 4.2975L3.1425 18.6225C2.955 18.975 2.955 19.38 3.1575 19.725C3.36 20.07 3.72 20.28 4.125 20.28H19.8825C20.2875 20.28 20.6475 20.0775 20.85 19.725C21.0525 19.38 21.06 18.975 20.865 18.6225ZM11.82 9.495C11.88 9.495 11.94 9.48 12 9.48C12.5175 9.48 12.975 9.8475 13.065 10.3725C13.0875 10.4925 13.08 10.6125 13.065 10.725L12.3525 14.94C12.3225 15.1125 12.1725 15.24 12 15.24H11.94C11.7825 15.2175 11.67 15.09 11.6475 14.9475L10.935 10.7325C10.8375 10.1475 11.235 9.6 11.82 9.5025V9.495ZM12 18.12C11.4075 18.12 10.92 17.6325 10.92 17.04C10.92 16.4475 11.4075 15.96 12 15.96C12.5925 15.96 13.08 16.4475 13.08 17.04C13.08 17.6325 12.5925 18.12 12 18.12Z" fill="#ff0000"/>
+  <g clip-path="url(#clip0_3547_139)">
+    <path
+      d="M17.67 3.5H6.32C4.49 3.5 3 4.94 3 6.74V14.36C3 16.14 4.49 17.6 6.32 17.6H8.53L11.13 20.16C11.6 20.62 12.36 20.62 12.82 20.16L15.42 17.6H17.69C19.51 17.6 21.01 16.15 21.01 14.36V6.74C21.01 4.96 19.52 3.5 17.69 3.5H17.68H17.67ZM15.46 13.02C15.58 13.14 15.65 13.3 15.65 13.47C15.65 13.67 15.54 13.83 15.47 13.92C15.21 14.16 14.79 14.16 14.55 13.92L11.96 11.4L9.35 13.95C9.35 13.95 9.24 14.04 9.16 14.07C9.07 14.1 9 14.11 8.88 14.11C8.73 14.11 8.58 14.04 8.47 13.92C8.4 13.84 8.36 13.77 8.33 13.71C8.29 13.61 8.28 13.54 8.29 13.45C8.29 13.26 8.4 13.1 8.48 13.01L11.07 10.5L8.48 7.98C8.37 7.87 8.31 7.74 8.29 7.57C8.29 7.5 8.29 7.41 8.31 7.34C8.34 7.26 8.38 7.18 8.42 7.14C8.53 7.01 8.69 6.94 8.82 6.92H8.94C9.15 6.92 9.31 7.03 9.4 7.11L11.98 9.63L14.62 7.11C14.67 7.06 14.75 7.01 14.83 6.97C14.99 6.9 15.18 6.9 15.34 6.97C15.42 7 15.49 7.05 15.55 7.11C15.67 7.23 15.73 7.37 15.73 7.55C15.73 7.73 15.67 7.87 15.54 8L12.9 10.52L15.48 13.06H15.46V13.02Z"
+      fill="#FF5656" />
+  </g>
+  <defs>
+    <clipPath id="clip0_3547_139">
+      <rect width="24" height="24" fill="white" />
+    </clipPath>
+  </defs>
 </svg>

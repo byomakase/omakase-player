@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-import {forkJoin, from, map, Observable, of, switchMap, tap} from 'rxjs';
+import {catchError, forkJoin, from, map, Observable, of, switchMap, tap} from 'rxjs';
 import {ALL_FORMATS, Input, UrlSource} from 'mediabunny';
-import {formatAuthenticationHeaders} from '../http';
-import {FrameRateUtil} from '../util/frame-rate-util';
 import {errorCompleteObserver, nextCompleteObserver} from '../util/rxjs-util';
+import {AuthConfig} from '../common/authentication';
 
 export interface MediaMetadata {
   firstVideoTrackFrameRate?: number | undefined;
   firstVideoTrackInitSegmentTime?: number | undefined;
   firstAudioTrackChannelsNumber?: number | undefined;
+  firstAudioTrackAudioCodec?: string | undefined;
 }
 
 export class MediaMetadataResolver {
@@ -34,9 +34,7 @@ export class MediaMetadataResolver {
   private static getMediaMetadataWithMediabunny<K extends keyof MediaMetadata>(src: string, keys: K[]): Observable<Pick<MediaMetadata, K>> {
     let input = new Input({
       source: new UrlSource(src, {
-        requestInit: {
-          headers: formatAuthenticationHeaders(src),
-        },
+        requestInit: AuthConfig.createRequestInit(src, AuthConfig.authentication),
       }),
       formats: ALL_FORMATS,
     });
@@ -59,7 +57,7 @@ export class MediaMetadataResolver {
           from(input.getVideoTracks())
             .pipe(
               switchMap((videoTracks) => {
-                if (videoTracks && videoTracks.length > 0) {
+                if (videoTracks && videoTracks[0]) {
                   let firstVideoTrack = videoTracks[0];
                   return from(firstVideoTrack.getFirstTimestamp());
                 } else {
@@ -72,6 +70,12 @@ export class MediaMetadataResolver {
                 mediaMetadataResult.firstVideoTrackInitSegmentTime = initSegmentTime;
               })
             )
+            .pipe(
+              catchError((err) => {
+                // console.debug('Error getting first video track init segment:', err);
+                return of(undefined);
+              })
+            )
         );
       }
 
@@ -80,14 +84,9 @@ export class MediaMetadataResolver {
           from(input.getVideoTracks())
             .pipe(
               switchMap((videoTracks) => {
-                if (videoTracks && videoTracks.length > 0) {
+                if (videoTracks && videoTracks[0]) {
                   let firstVideoTrack = videoTracks[0];
-                  return from(firstVideoTrack.computePacketStats()).pipe(
-                    map((packetStats) => {
-                      let frameRate = FrameRateUtil.resolveFrameRate(packetStats.averagePacketRate);
-                      return frameRate;
-                    })
-                  );
+                  return from(firstVideoTrack.computePacketStats()).pipe(map((packetStats) => packetStats.averagePacketRate));
                 } else {
                   return of(void 0);
                 }
@@ -98,6 +97,12 @@ export class MediaMetadataResolver {
                 mediaMetadataResult.firstVideoTrackFrameRate = frameRate;
               })
             )
+            .pipe(
+              catchError((err) => {
+                // console.debug('Error getting first video track frame rate:', err);
+                return of(undefined);
+              })
+            )
         );
       }
 
@@ -106,7 +111,7 @@ export class MediaMetadataResolver {
           from(input.getAudioTracks())
             .pipe(
               map((audioTracks) => {
-                if (audioTracks && audioTracks.length > 0) {
+                if (audioTracks && audioTracks[0]) {
                   return audioTracks[0].numberOfChannels;
                 } else {
                   return void 0;
@@ -116,6 +121,40 @@ export class MediaMetadataResolver {
             .pipe(
               tap((channelsNumber) => {
                 mediaMetadataResult.firstAudioTrackChannelsNumber = channelsNumber;
+              })
+            )
+            .pipe(
+              catchError((err) => {
+                // console.debug('Error getting first audio track channels number:', err);
+                return of(undefined);
+              })
+            )
+        );
+      }
+
+      if (keys.find((p) => p === 'firstAudioTrackAudioCodec')) {
+        addObservable(
+          from(input.getAudioTracks())
+            .pipe(
+              map((audioTracks) => {
+                if (audioTracks && audioTracks[0]) {
+                  return audioTracks[0].codec;
+                } else {
+                  return void 0;
+                }
+              })
+            )
+            .pipe(
+              tap((audioCodec) => {
+                if (audioCodec) {
+                  mediaMetadataResult.firstAudioTrackAudioCodec = audioCodec;
+                }
+              })
+            )
+            .pipe(
+              catchError((err) => {
+                // console.debug('Error getting first audio track codec:', err);
+                return of(undefined);
               })
             )
         );

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,10 +19,10 @@ import webvtt from 'node-webvtt';
 import {forkJoin, from, map, Observable, of, switchMap} from 'rxjs';
 import {M3u8File} from './m3u8-file';
 import {UrlUtil} from '../util/url-util';
-import {httpGet} from '../http';
-import {VttFileParsed} from '../vtt';
-import {AuthConfig, AuthenticationData} from '../common/authentication';
 import {OmpError} from '../types';
+import {AuthConfig, type AuthenticationData} from '../common';
+import {httpGetText} from '../http';
+import type {ParsedVttFile} from '../vtt';
 
 const webvttParseOptions = {strict: false, meta: true};
 
@@ -48,14 +48,9 @@ export class M3u8Util {
   }
 
   static fetchSegmentedConcat(urls: string[], authentication?: AuthenticationData): Observable<string | undefined> {
-    let vttTexts$ = urls.map((url) => {
-      return from(httpGet<string>(url, AuthConfig.createAxiosRequestConfig(url, authentication))).pipe(map((result) => result.data));
-    });
-    return forkJoin(vttTexts$).pipe(
-      map((vttTexts) => {
-        return this.concatSegmented(vttTexts);
-      })
-    );
+    const vttTexts$ = urls.map((url) => from(httpGetText(url, AuthConfig.createRequestInit(url, authentication))));
+
+    return forkJoin(vttTexts$).pipe(map((vttTexts) => this.concatSegmented(vttTexts)));
   }
 
   static concatSegmented(vttTexts: string[]): string | undefined {
@@ -64,14 +59,14 @@ export class M3u8Util {
         // nothing to concat, just return first one
         return vttTexts[0];
       } else {
-        let first: VttFileParsed = webvtt.parse(vttTexts[0], webvttParseOptions);
+        let first: ParsedVttFile = webvtt.parse(vttTexts[0], webvttParseOptions);
         if (first.errors.length) {
           console.error(`Errors found while parsing vtt file: ${first.errors}`);
         }
         vttTexts
           .filter((p, index) => index !== 0)
           .forEach((vttText, index) => {
-            let vttFileParsed: VttFileParsed = webvtt.parse(vttText, webvttParseOptions);
+            let vttFileParsed: ParsedVttFile = webvtt.parse(vttText, webvttParseOptions);
             if (vttFileParsed.errors.length) {
               throw new OmpError(`Errors found while parsing vtt file: ${vttFileParsed.errors}`);
             }

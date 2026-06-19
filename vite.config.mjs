@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,38 +17,32 @@
 import {resolve} from 'path';
 import {defineConfig} from 'vite';
 import dtsPlugin from 'vite-plugin-dts';
-import {exec} from 'node:child_process';
-
-function styleUpdatePlugin() {
-  return {
-    name: 'style-update',
-    handleHotUpdate({file}) {
-      if (file.endsWith('player-chroming.scss')) {
-        exec('npm run build:style', (err, stdout, stderr) => {
-          if (err) {
-            console.error(stderr);
-          } else {
-            console.log(stdout);
-          }
-        });
-      }
-    },
-  };
-}
+import {nodePolyfills} from 'vite-plugin-node-polyfills';
+import {styleUpdatePlugin} from './vite.chroming-style.config.mjs';
 
 export default defineConfig({
-  plugins: [dtsPlugin(), styleUpdatePlugin()],
+  plugins: [
+    dtsPlugin({
+      rollupTypes: true,
+      copyDtsFiles: false,
+      entryRoot: 'src',
+    }),
+    styleUpdatePlugin(),
+    // imsc/subtitle-converter
+    nodePolyfills({
+      include: ['stream', 'util', 'timers'],
+    }),
+  ],
   build: {
     minify: true,
     sourcemap: true,
     lib: {
       // Could also be a dictionary or array of multiple entry points
       entry: resolve(__dirname, 'src/index.ts'),
-      formats: ['es', 'cjs', 'umd'],
+      formats: ['es'],
       name: 'OmakasePlayer',
       // the proper extensions will be added
       fileName: (format, entryName) => `omakase-player.${format}.js`,
-      cssFileName: 'style'
     },
     rollupOptions: {
       // make sure to externalize deps that shouldn't be bundled into your library

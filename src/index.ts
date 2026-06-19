@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,25 +14,25 @@
  * limitations under the License.
  */
 
-export * from './api';
-export * from './common';
-export * from './layout';
+export * from './media';
+export * from './player';
+export * from './repository';
+export * from './session';
+export * from './source';
 export * from './types';
-export * from './vtt';
-
-export * from './tools';
-
-// TODO consolidate in next major version
-export * from './timeline/marker';
-export * from './timeline';
-// TODO consolidate in next major version
-
-export * from './audio';
-export * from './video';
-
-// export type {VideoProtocol, OmakasePlayerConfig} from './omakase-player';
 export * from './omakase-player';
-
+export * from './common';
+export * from './audio';
+export * from './text';
+export * from './router-visualization';
+export * from './chroming';
+export * from './chroming/components';
+export * from './tools';
+export * from './track';
+export type {OmakasePlayerApi, OmakasePlayerDetachedApi} from './omakase-player-api';
+export * from './omakase-player-detached';
+export * from './timeline';
 export * from './marker-list';
-export * from './player-chroming';
-export * from './components';
+export * from './ui';
+export * from './omp-provider';
+export * from './vu-meter';

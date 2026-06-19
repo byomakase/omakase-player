@@ -1,0 +1,340 @@
+/*
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+omakase-vu-meter {
+  --font-size: var(--omakase-vu-meter-font-size, 12px);
+  --padding: var(--omakase-vu-meter-padding, 5px);
+  --background-color: var(--omakase-vu-meter-background-color, transparent);
+  --label-background-color: var(--omakase-vu-meter-label-background-color, transparent);
+  --label-color: var(--omakase-vu-meter-label-color, #333);
+  --label-gap: var(--omakase-vu-meter-label-gap, 5px);
+  --label-width: var(--omakase-vu-meter-label-width, 20px);
+  --label-height: var(--omakase-vu-meter-label-height, 20px);
+  --bar-size: var(--omakase-vu-meter-bar-size, 16px);
+  --bar-gap: var(--omakase-vu-meter-bar-gap, 5px);
+  --bars-padding: var(--omakase-vu-meter-bars-padding, 0px);
+  --scale-color: var(--omakase-vu-meter-scale-color, #333);
+  --scale-background-color: var(--omakase-vu-meter-scale-background-color, transparent);
+  --scale-padding: var(--omakase-vu-meter-scale-padding, 0px);
+  --scale-size: var(--omakase-vu-meter-scale-size, 16px);
+  --scale-gap: var(--omakase-vu-meter-scale-gap, 4px);
+  --scale-margin: var(--omakase-vu-meter-scale-margin, 5px);
+  --scale-thickness: var(--omakase-vu-meter-scale-thickness, 1px);
+  --scale-label-width: var(--omakase-vu-meter-scale-label-width, 20px);
+  --transition: var(--omakase-vu-meter-transition, 0.2s);
+
+  display: flex;
+  justify-content: space-between;
+  position: relative;
+  background-color: var(--background-color);
+  padding: var(--padding);
+  font-family: 'Lato';
+  font-size: var(--font-size);
+  gap: var(--scale-margin);
+
+  &.horizontal {
+    flex-direction: column;
+    width: calc(100% - 2 * var(--padding));
+
+    .omakase-vu-meter-bar-region {
+      flex-direction: column;
+      padding: var(--bars-padding) 0;
+    }
+
+    .omakase-vu-meter-channel {
+      flex-direction: row-reverse;
+    }
+
+    .omakase-vu-meter-bar-container {
+      height: var(--bar-size);
+      width: 100%;
+
+      .omakase-vu-meter-bar {
+        height: var(--bar-size);
+        width: 100%;
+      }
+    }
+
+    .omakase-vu-meter-bar-label-container {
+      height: var(--bar-size);
+    }
+
+    .omakase-vu-meter-bar-label {
+      width: var(--label-width);
+      transform: translate(0, min(0px, calc(0.5 * (var(--bar-size) - var(--font-size)))));
+      text-align: right;
+      line-height: max(var(--bar-size), var(--font-size));
+    }
+
+    &.omakase-vu-meter-theme-led {
+      .omakase-vu-meter-scale-labels,
+      .omakase-vu-meter-scale {
+        width: calc(100% - var(--bar-segment-size));
+        margin-left: calc(0.5 * var(--bar-segment-size));
+      }
+
+      &.with-labels {
+        .omakase-vu-meter-scale-labels,
+        .omakase-vu-meter-scale {
+          width: calc(100% - var(--label-width) - var(--label-gap) - var(--bar-segment-size));
+          margin-left: calc(var(--label-width) + var(--label-gap) + calc(0.5 * var(--bar-segment-size)));
+        }
+      }
+    }
+
+    &.with-labels {
+      .omakase-vu-meter-scale-labels,
+      .omakase-vu-meter-scale {
+        width: calc(100% - var(--label-width) - var(--label-gap));
+        margin-left: calc(var(--label-width) + var(--label-gap));
+      }
+
+      &::before {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        top: 0;
+        width: calc(var(--padding) + var(--label-width) + 0.5 * var(--label-gap));
+        background: var(--label-background-color);
+      }
+    }
+
+    .omakase-vu-meter-scale-container {
+      flex-direction: column-reverse;
+      padding: var(--scale-padding) 0;
+      position: relative;
+
+      &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: calc(-1 * var(--padding));
+        left: calc(-1 * var(--padding));
+        right: calc(-1 * var(--padding));
+        background: var(--scale-background-color);
+      }
+    }
+
+    .omakase-vu-meter-scale-labels {
+      height: var(--font-size);
+      width: 100%;
+
+      .omakase-vu-meter-scale-label {
+        text-align: center;
+        transform: translate(-50%, 0);
+      }
+    }
+
+    .omakase-vu-meter-scale {
+      height: var(--scale-size);
+      width: 100%;
+
+      .omakase-vu-meter-scale-division {
+        width: var(--scale-thickness);
+        height: var(--scale-size);
+        transform: translate(-50%, 0);
+      }
+
+      .omakase-vu-meter-scale-subdivision {
+        width: calc(0.5 * var(--scale-thickness));
+        height: calc(0.5 * var(--scale-size));
+        transform: translate(-50%, 0);
+      }
+    }
+  }
+
+  &.vertical {
+    flex-direction: row;
+    height: calc(100% - 2 * var(--padding));
+
+    &.omakase-vu-meter-scale-nordic {
+      --scale-label-width: var(--omakase-vu-meter-scale-label-width, 30px);
+    }
+
+    &.omakase-vu-meter-theme-led {
+      &.with-labels {
+        .omakase-vu-meter-scale-labels,
+        .omakase-vu-meter-scale {
+          height: calc(100% - var(--label-height) - var(--label-gap) - var(--bar-segment-size));
+          margin-top: calc(0.5 * var(--bar-segment-size));
+        }
+      }
+
+      .omakase-vu-meter-scale-labels,
+      .omakase-vu-meter-scale {
+        height: calc(100% - var(--bar-segment-size));
+        margin-top: calc(0.5 * var(--bar-segment-size));
+      }
+    }
+
+    &.with-labels {
+      .omakase-vu-meter-scale-labels,
+      .omakase-vu-meter-scale {
+        height: calc(100% - var(--label-height) - var(--label-gap));
+      }
+
+      .omakase-vu-meter-bar-container {
+        flex: 1;
+      }
+
+      &::before {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: calc(var(--padding) + var(--label-height));
+        background: var(--label-background-color);
+      }
+    }
+
+    .omakase-vu-meter-scale-container {
+      padding: 0 var(--scale-padding);
+      position: relative;
+
+      &::before {
+        content: '';
+        position: absolute;
+        top: calc(-1 * var(--padding));
+        bottom: calc(-1 * var(--padding));
+        left: calc(-1 * var(--padding));
+        right: 0;
+        background: var(--scale-background-color);
+      }
+    }
+
+    .omakase-vu-meter-scale-labels {
+      height: 100%;
+      text-align: right;
+      width: var(--scale-label-width);
+
+      .omakase-vu-meter-scale-label {
+        transform: translate(0, 50%);
+      }
+    }
+
+    .omakase-vu-meter-scale {
+      height: 100%;
+      width: var(--scale-size);
+
+      .omakase-vu-meter-scale-division {
+        height: var(--scale-thickness);
+        width: var(--scale-size);
+        transform: translate(0, 50%);
+      }
+
+      .omakase-vu-meter-scale-subdivision {
+        height: calc(0.5 * var(--scale-thickness));
+        width: calc(0.5 * var(--scale-size));
+        transform: translate(0, 50%);
+      }
+    }
+
+    .omakase-vu-meter-bar-region {
+      padding: 0 var(--bars-padding);
+    }
+
+    .omakase-vu-meter-bar-container {
+      width: var(--bar-size);
+      height: 100%;
+
+      svg rect {
+        transition: fill var(--transition);
+      }
+
+      .omakase-vu-meter-bar {
+        width: var(--bar-size);
+        height: 100%;
+      }
+    }
+
+    .omakase-vu-meter-channel {
+      height: 100%;
+      flex-direction: column;
+    }
+
+    .omakase-vu-meter-bar-label {
+      position: absolute;
+      line-height: var(--label-height);
+      height: var(--label-height);
+      left: 50%;
+      transform: translateX(-50%);
+      white-space: nowrap;
+    }
+  }
+
+  .omakase-vu-meter-bar-container {
+    flex-grow: 1;
+    margin: auto;
+    position: relative;
+
+    .omakase-vu-meter-bar {
+      transition: clip-path var(--transition);
+      position: absolute;
+    }
+  }
+
+  .omakase-vu-meter-bar-label-container {
+    position: relative;
+    height: var(--label-height);
+  }
+
+  .omakase-vu-meter-bar-label {
+    color: var(--label-color);
+  }
+
+  .omakase-vu-meter-bar-region {
+    display: flex;
+    justify-content: space-between;
+    flex-grow: 1;
+    gap: var(--bar-gap);
+  }
+
+  .omakase-vu-meter-channel {
+    display: flex;
+    gap: var(--label-gap);
+  }
+
+  .omakase-vu-meter-scale-container {
+    background-color: var(--scale-background-color);
+    display: flex;
+    gap: var(--scale-gap);
+  }
+
+  .omakase-vu-meter-scale-labels {
+    position: relative;
+    color: var(--scale-color);
+
+    .omakase-vu-meter-scale-label {
+      line-height: var(--font-size);
+      height: var(--font-size);
+      width: var(--scale-label-width);
+      position: absolute;
+    }
+  }
+
+  .omakase-vu-meter-scale {
+    position: relative;
+    color: var(--scale-color);
+
+    .omakase-vu-meter-scale-division,
+    .omakase-vu-meter-scale-subdivision {
+      position: absolute;
+      background-color: var(--scale-color);
+    }
+  }
+}

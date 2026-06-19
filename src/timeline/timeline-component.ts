@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,16 +15,15 @@
  */
 
 import {concatMap, filter, Observable, Subject, takeUntil} from 'rxjs';
-import {ClickEvent, MouseEnterEvent, MouseLeaveEvent} from '../types';
-import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle, KonvaComponent} from '../layout/konva-component';
 import Konva from 'konva';
-import {OnMeasurementsChange} from '../common';
-import {konvaUnlistener} from '../util/konva-util';
-import {WindowUtil} from '../util/window-util';
-import {ImageUtil} from '../util/image-util';
-import {KonvaFactory} from '../konva/konva-factory';
-import {isNullOrUndefined} from '../util/object-util';
 import {nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
+import {BaseKonvaComponent, type ComponentConfig, type ConfigWithOptionalStyle, type KonvaComponent} from './layout/konva-component';
+import type {ClickEvent, MouseEnterEvent, MouseLeaveEvent, OnMeasurementsChange} from './model';
+import {KonvaFactory} from './konva/konva-factory';
+import {WindowUtil} from '../util/window-util';
+import {konvaUnlistener} from './konva/konva-util';
+import {isNullOrUndefined} from '../util/util-functions';
+import {ImageUtil} from './konva/image-util';
 
 export interface TimelineNodeStyle {
   backgroundFill?: string;
@@ -36,33 +35,39 @@ export interface TimelineNodeConfig<S extends TimelineNodeStyle> extends Compone
   /**
    * If set to true node listens to events
    */
-  listening?: boolean;
+  listening?: boolean | undefined;
 }
+
+export enum TimelineNodeEventType {
+  TIMELINE_NODE_CLICK = 'TIMELINE_NODE_CLICK',
+  TIMELINE_NODE_MOUSE_ENTER = 'TIMELINE_NODE_MOUSE_ENTER',
+  TIMELINE_NODE_MOUSE_LEAVE = 'TIMELINE_NODE_MOUSE_LEAVE',
+}
+
+export interface TimelineNodeEventData {}
+
+export type TimelineNodeEventTypeDataMap = {
+  [TimelineNodeEventType.TIMELINE_NODE_CLICK]: ClickEvent;
+  [TimelineNodeEventType.TIMELINE_NODE_MOUSE_ENTER]: MouseEnterEvent;
+  [TimelineNodeEventType.TIMELINE_NODE_MOUSE_LEAVE]: MouseLeaveEvent;
+};
+
+export type TimelineNodeEvent = {
+  [K in TimelineNodeEventType]: {
+    type: K;
+    data: TimelineNodeEventTypeDataMap[K];
+  };
+}[keyof TimelineNodeEventTypeDataMap];
 
 /**
  * Custom component that can be added to Timeline
  */
 export interface TimelineNode extends KonvaComponent<TimelineNodeConfig<TimelineNodeStyle>, TimelineNodeStyle, Konva.Group>, OnMeasurementsChange {
-  /**
-   * Fires on mouse click
-   */
-  onClick$: Observable<ClickEvent>;
-
-  /**
-   * Fires on mouse enter
-   */
-  onMouseEnter$: Observable<MouseEnterEvent>;
-
-  /**
-   * Fires on mouse leave
-   */
-  onMouseLeave$: Observable<MouseLeaveEvent>;
+  onEvent$: Observable<TimelineNodeEvent>;
 }
 
 export abstract class BaseTimelineNode<C extends TimelineNodeConfig<S>, S extends TimelineNodeStyle> extends BaseKonvaComponent<C, S, Konva.Group> implements TimelineNode {
-  public readonly onClick$: Subject<ClickEvent> = new Subject<ClickEvent>();
-  public readonly onMouseEnter$: Subject<MouseEnterEvent> = new Subject<MouseEnterEvent>();
-  public readonly onMouseLeave$: Subject<MouseLeaveEvent> = new Subject<MouseLeaveEvent>();
+  private readonly _onEvent$: Subject<TimelineNodeEvent> = new Subject<TimelineNodeEvent>();
 
   protected _group: Konva.Group;
   protected _bgRect: Konva.Rect;
@@ -85,24 +90,33 @@ export abstract class BaseTimelineNode<C extends TimelineNodeConfig<S>, S extend
 
     if (this.config.listening) {
       this._group.on('click', (event) => {
-        this.onClick$.next({
-          mouseEvent: event.evt,
-          cancelableEvent: event,
-        });
+        this._onEvent$.next({
+          type: TimelineNodeEventType.TIMELINE_NODE_CLICK,
+          data: {
+            mouseEvent: event.evt,
+            cancelableEvent: event,
+          }
+        })
       });
 
       this._group.on('mouseenter', (event) => {
-        this.onMouseEnter$.next({
-          mouseEvent: event.evt,
-          cancelableEvent: event,
-        });
+        this._onEvent$.next({
+          type: TimelineNodeEventType.TIMELINE_NODE_MOUSE_ENTER,
+          data: {
+            mouseEvent: event.evt,
+            cancelableEvent: event,
+          }
+        })
       });
 
       this._group.on('mouseleave', (event) => {
-        this.onMouseLeave$.next({
-          mouseEvent: event.evt,
-          cancelableEvent: event,
-        });
+        this._onEvent$.next({
+          type: TimelineNodeEventType.TIMELINE_NODE_MOUSE_LEAVE,
+          data: {
+            mouseEvent: event.evt,
+            cancelableEvent: event,
+          }
+        })
       });
 
       this._group.on('mouseover', (event) => {
@@ -116,12 +130,16 @@ export abstract class BaseTimelineNode<C extends TimelineNodeConfig<S>, S extend
 
     this._styleAdapter.onChange$
       .pipe(
-        takeUntil(this._destroyed$),
+        takeUntil(this._destroyBreaker.observer),
         filter((p) => !!p)
       )
       .subscribe((styles) => {
         this.onStyleChange();
       });
+  }
+
+  get onEvent$(): Observable<TimelineNodeEvent> {
+    return this._onEvent$.asObservable();
   }
 
   onMeasurementsChange(): void {
@@ -133,11 +151,13 @@ export abstract class BaseTimelineNode<C extends TimelineNodeConfig<S>, S extend
   }
 
   protected onStyleChange() {
-    this._bgRect.setAttrs({
-      fill: this.style.backgroundFill,
-      opacity: this.style.backgroundOpacity,
-      cornerRadius: this.style.backgroundBorderRadius,
-    });
+    this._bgRect.setAttrs(
+      KonvaFactory.filterUndefined({
+        fill: this.style.backgroundFill,
+        opacity: this.style.backgroundOpacity,
+        cornerRadius: this.style.backgroundBorderRadius,
+      })
+    );
   }
 
   override destroy() {
@@ -148,25 +168,25 @@ export abstract class BaseTimelineNode<C extends TimelineNodeConfig<S>, S extend
 }
 
 export interface TextLabelStyle extends TimelineNodeStyle {
-  fontSize?: number;
-  fontFamily?: string;
-  fontStyle?: string;
-  fill?: string;
-  align?: 'left' | 'right' | 'center';
-  verticalAlign?: 'top' | 'middle' | 'bottom';
-  wrap?: 'word' | 'char' | 'none';
-  padding?: number;
-  offsetX?: number;
-  offsetY?: number;
-  opacity?: number;
-  textAreaStretch?: boolean;
+  fontSize?: number | undefined;
+  fontFamily?: string | undefined;
+  fontStyle?: string | undefined;
+  fill?: string | undefined;
+  align?: 'left' | 'right' | 'center' | undefined;
+  verticalAlign?: 'top' | 'middle' | 'bottom' | undefined;
+  wrap?: 'word' | 'char' | 'none' | undefined;
+  padding?: number | undefined;
+  offsetX?: number | undefined;
+  offsetY?: number | undefined;
+  opacity?: number | undefined;
+  textAreaStretch?: boolean | undefined;
 }
 
 export interface TextLabelConfig extends TimelineNodeConfig<TextLabelStyle> {
   /**
    * Text to display
    */
-  text?: string;
+  text?: string | undefined;
 }
 
 /**
@@ -184,7 +204,7 @@ export class TextLabel extends BaseTimelineNode<TextLabelConfig, TextLabelStyle>
       },
     });
 
-    this._konvaText = new Konva.Text({
+    this._konvaText = KonvaFactory.createText({
       text: this.config.text,
       fontSize: this.style.fontSize,
       fontFamily: this.style.fontFamily,
@@ -241,19 +261,21 @@ export class TextLabel extends BaseTimelineNode<TextLabelConfig, TextLabelStyle>
   protected override onStyleChange() {
     super.onStyleChange();
 
-    this._konvaText.setAttrs({
-      fontSize: this.style.fontSize,
-      fontFamily: this.style.fontFamily,
-      fontStyle: this.style.fontStyle,
-      fill: this.style.fill,
-      align: this.style.align,
-      verticalAlign: this.style.verticalAlign,
-      wrap: this.style.wrap,
-      padding: this.style.padding,
-      offsetX: this.style.offsetX,
-      offsetY: this.style.offsetY,
-      opacity: this.style.opacity,
-    });
+    this._konvaText.setAttrs(
+      KonvaFactory.filterUndefined({
+        fontSize: this.style.fontSize,
+        fontFamily: this.style.fontFamily,
+        fontStyle: this.style.fontStyle,
+        fill: this.style.fill,
+        align: this.style.align,
+        verticalAlign: this.style.verticalAlign,
+        wrap: this.style.wrap,
+        padding: this.style.padding,
+        offsetX: this.style.offsetX,
+        offsetY: this.style.offsetY,
+        opacity: this.style.opacity,
+      })
+    );
   }
 
   /**
@@ -312,7 +334,7 @@ export interface ImageButtonConfig extends TimelineNodeConfig<ImageButtonStyle>,
 export class ImageButton extends BaseTimelineNode<ImageButtonConfig, ImageButtonStyle> {
   protected _konvaImage?: Konva.Image;
   protected _loadImageQueue = new Subject<ImageButtonImageConfig>();
-  protected _currentImageConfig?: ImageButtonImageConfig;
+  protected _currentImageConfig?: ImageButtonImageConfig | undefined;
 
   constructor(config: ConfigWithOptionalStyle<ImageButtonConfig>) {
     super({
@@ -324,7 +346,7 @@ export class ImageButton extends BaseTimelineNode<ImageButtonConfig, ImageButton
     });
 
     this._loadImageQueue
-      .pipe(takeUntil(this._destroyed$))
+      .pipe(takeUntil(this._destroyBreaker.observer))
       .pipe(concatMap((config) => this.loadImage(config)))
       .subscribe();
 
@@ -341,9 +363,11 @@ export class ImageButton extends BaseTimelineNode<ImageButtonConfig, ImageButton
 
           this._konvaImage = image;
 
+          let imageSize = ImageUtil.getHTMLImageElementSize(image);
           this._konvaImage.setAttrs({
-            width: imageButtonImageConfig.width ? imageButtonImageConfig.width : image.getAttrs().image.naturalWidth,
-            height: imageButtonImageConfig.height ? imageButtonImageConfig.height : image.getAttrs().image.naturalHeight,
+            image: image.image(),
+            width: imageButtonImageConfig.width ? imageButtonImageConfig.width : imageSize.naturalWidth,
+            height: imageButtonImageConfig.height ? imageButtonImageConfig.height : imageSize.naturalHeight,
           });
 
           this._group.add(this._konvaImage);
@@ -358,7 +382,7 @@ export class ImageButton extends BaseTimelineNode<ImageButtonConfig, ImageButton
         error: (err) => {
           if (this._konvaImage) {
             this._konvaImage.destroy();
-            this._currentImageConfig = undefined;
+            this._currentImageConfig = void 0;
           }
           console.error(err);
           nextCompleteObserver(observer);

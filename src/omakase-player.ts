@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,325 +14,506 @@
  * limitations under the License.
  */
 
-import {Timeline, TimelineConfig} from './timeline';
-import {forkJoin, Observable, Subject, takeUntil} from 'rxjs';
-import {AlertsApi, AudioApi, MarkerListApi, MarkerTrackApi, OmakasePlayerApi, RouterVisualizationApi, SubtitlesApi, TimelineApi, VideoApi} from './api';
-import {SubtitlesController} from './subtitles/subtitles-controller';
-import {Destroyable} from './types';
-import {AudioController} from './audio/audio-controller';
-// we need to include styles in compilation process, thus import them
+import {ObserverBreaker} from './common/observer-breaker';
+import {type MainMedia, type MainMediaLoadOptions, ThumbnailTrack} from './media';
+import {BehaviorSubject, combineLatest, concat, filter, Observable, takeUntil} from 'rxjs';
+import {Player, type PlayerApi, type PlayerConfig, type PlayerDetachedApi, type PlayerInternalApi} from './player';
+import {type PrefixKeys} from './types/ts-types';
+import {type AlertsApi, type SessionApi, SessionEventType, type SessionState, SessionStore} from './session';
+import {AuthConfig, type AuthenticationData, WindowPlaybackMode} from './common';
+import {PLAYER_LOCAL_CONFIG_DEFAULT} from './player/player-local';
+import {errorCompleteObserver, nextCompleteObserver, passiveObservable} from './util/rxjs-util';
+import {RemoteNodeEventType} from './remoting/remote-node';
+import {WindowUtil} from './util/window-util';
+// @ts-ignore
 import './../style/omakase-player.scss';
-import {nextCompleteObserver, nextCompleteSubject} from './util/rxjs-util';
-import {Video, VideoController, VideoControllerApi, VideoLoadOptions} from './video';
-import {destroyer, nullifier} from './util/destroy-util';
-import {YogaProvider} from './common/yoga-provider';
-import {AlertsController} from './alerts/alerts-controller';
-import {BlobUtil} from './util/blob-util';
-import {DetachableVideoController} from './video/detachable-video-controller';
-import {VTT_DOWNSAMPLE_CONFIG_DEFAULT} from './timeline/timeline-lane';
-import {VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT, VideoDomController} from './video/video-dom-controller';
-import {VideoDomControllerApi} from './video/video-dom-controller-api';
-import {DetachedVideoController} from './video/detached-video-controller';
-import {ConfigWithOptionalStyle} from './layout';
-import {MarkerList, MarkerListConfig} from './marker-list/marker-list';
-import {VIDEO_CONTROLLER_CONFIG_DEFAULT, VideoControllerConfig} from './video/video-controller';
-import {OmpHlsConfig} from './video/video-hls-loader';
-import {RouterVisualization, RouterVisualizationConfig} from './router-visualization/router-visualization';
-import {removeEmptyValues} from './util/object-util';
-import {
-  AudioChroming,
-  DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG,
-  DEFAULT_OMAKASE_PLAYER_CHROMING_CONFIG,
-  DEFAULT_PLAYER_CHROMING_CONFIG,
-  DEFAULT_STAMP_PLAYER_CHROMING_CONFIG,
-  DefaultChroming,
-  OmakaseChroming,
-  FullscreenChroming,
-  PlayerChroming,
-  PlayerChromingTheme,
-  StampChroming,
-  WatermarkVisibility,
-  DEFAULT_PLAYER_CHROMING,
-  DEFAULT_CHROMELESS_PLAYER_CHROMING_CONFIG,
-  ChromelessChroming,
-} from './player-chroming/model';
-import {AuthConfig, AuthenticationData} from './common/authentication';
-import {ConfigAdapter} from './common/config-adapter';
-import {PlayerChromingController} from './player-chroming/player-chroming-controller';
-import {ChromingApi} from './api/chroming-api';
+import type {OmakasePlayerApi} from './omakase-player-api';
+import {Chroming} from './chroming/chroming';
+import {type ChromingApi, type ChromingDetachedApi, type ChromingInternalApi, DEFAULT_PLAYER_CHROMING, type PlayerChromingConfig} from './chroming';
+import type {OmakaseTrackApi} from './track';
+import {BaseOmakasePlayer} from './base-omakase-player';
+import {HostRemoteNode} from './remoting/host-remote-node';
+import {StringUtil} from './util/string-util';
+import {REMOTING} from './constants';
+import {OmakaseTools, type OmakaseToolsApi} from './tools/omakase-tools-api';
+import {prefixKeys} from './util/util-functions';
+import type {ConfigAndStyle, TimelineApi, TimelineConfig, TimelineStyle} from './timeline';
+import {TimelineImpl} from './timeline';
+import {YogaProvider} from './timeline/layout/yoga-provider';
+import {type UiApi} from './ui';
+import {OmpProvider} from './omp-provider';
+import type {OmakaseTrackApiImpl} from './track/omakase-track';
 
-export interface OmakasePlayerConfig {
-  playerHTMLElementId?: string;
-  crossorigin?: 'anonymous' | 'use-credentials';
+export type OmakasePlayerConfig = {
+  authentication?: AuthenticationData | undefined;
 
-  /**
-   * HLS configuration
-   */
-  hlsConfig?: Partial<OmpHlsConfig>;
+  detachedBroadcastChannelId?: string | undefined;
+  detachWindowUrlFn?: (mainMedia: MainMedia) => string;
+  detachWindowFeatures?: string | undefined;
+} & PrefixKeys<PlayerConfig, 'player'> &
+  PrefixKeys<PlayerChromingConfig, 'chroming'>;
 
-  vttDownsamplePeriod?: number;
+const _configDefault: OmakasePlayerConfig = {
+  detachedBroadcastChannelId: REMOTING.detachedBroadcastChannelId,
 
-  /**
-   *  Is this OmakasePlayer instance a detached player instance. Property is set on detached player.
-   */
-  detachedPlayer?: boolean;
+  ...prefixKeys(PLAYER_LOCAL_CONFIG_DEFAULT, 'player'),
 
-  /**
-   * Is PIP (picture-in-picture) disabled
-   */
-  disablePictureInPicture?: boolean;
-
-  /**
-   *  Function that will return URL where detached player resides. Property is set on non-detached (local) player side.
-   */
-  detachedPlayerUrlFn?: (video: Video, videoLoadOptions?: VideoLoadOptions) => string;
-
-  /**
-   *  Authentication data for HLS.js, VTT and thumbnail image requests
-   */
-  authentication?: AuthenticationData;
-
-  /**
-   *  Custom video player click handler
-   */
-  playerClickHandler?: () => void;
-
-  audioPlayMode?: VideoControllerConfig['audioPlayMode'];
-
-  /**
-   * Player chroming configuration
-   */
-  playerChroming?: PlayerChroming;
-}
-
-const configDefault: OmakasePlayerConfig = {
-  playerHTMLElementId: VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT.playerHTMLElementId,
-  crossorigin: VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT.crossorigin,
-  hlsConfig: VIDEO_CONTROLLER_CONFIG_DEFAULT.hlsConfig,
-  detachedPlayer: VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT.detachedPlayer,
-  disablePictureInPicture: VIDEO_DOM_CONTROLLER_CONFIG_DEFAULT.disablePictureInPicture,
-  audioPlayMode: VIDEO_CONTROLLER_CONFIG_DEFAULT.audioPlayMode,
+  chromingTheme: DEFAULT_PLAYER_CHROMING.theme,
+  chromingFullscreenChroming: DEFAULT_PLAYER_CHROMING.fullscreenChroming,
 };
 
-export class OmakasePlayer implements OmakasePlayerApi, Destroyable {
-  public static instance: OmakasePlayerApi;
+export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi {
+  private _config: OmakasePlayerConfig;
 
-  protected readonly _configAdapter: ConfigAdapter;
+  private readonly _ompProvider = new OmpProvider();
+  private readonly _session: SessionStore;
 
-  private readonly _config: OmakasePlayerConfig;
+  private _player: Player;
+  private _playerDetached?: PlayerDetachedApi | undefined;
 
-  private readonly _videoDomController: VideoDomControllerApi;
-  private readonly _alertsController: AlertsApi;
+  private _chroming: Chroming;
+  private _chromingDetached?: ChromingDetachedApi | undefined;
 
-  private _videoController: VideoControllerApi;
-  private _audioController: AudioController;
-  private _subtitlesController: SubtitlesController;
-  private _chromingController: PlayerChromingController;
+  private _omakaseTrack: OmakaseTrackApiImpl;
 
-  private _timeline?: Timeline;
+  private _remoteNode: HostRemoteNode | undefined;
+  private _playerDetachedWindow: WindowProxy | undefined;
 
-  private _destroyed$ = new Subject<void>();
+  private _timelines: Map<TimelineApi['id'], TimelineApi> = new Map();
+
+  private _detachingBreaker = new ObserverBreaker();
+  private _detachedBreaker = new ObserverBreaker();
+  private _attachingBreaker = new ObserverBreaker();
 
   constructor(config?: Partial<OmakasePlayerConfig>) {
+    super();
     this._config = {
-      ...configDefault,
-      ...(config ? config : {}),
-    };
-
-    if (!config?.playerChroming) {
-      this._config.playerChroming = DEFAULT_PLAYER_CHROMING;
-    }
-
-    if (this._config.playerChroming?.theme === PlayerChromingTheme.Default) {
-      this._config.playerChroming.themeConfig = {
-        ...DEFAULT_PLAYER_CHROMING_CONFIG,
-        ...(config?.playerChroming as DefaultChroming)?.themeConfig,
-      };
-      this._config.playerChroming.fullscreenChroming = config?.playerChroming?.fullscreenChroming ?? FullscreenChroming.Enabled;
-    } else if (this._config.playerChroming?.theme === PlayerChromingTheme.Stamp) {
-      this._config.playerChroming.themeConfig = {
-        ...DEFAULT_STAMP_PLAYER_CHROMING_CONFIG,
-        ...(config?.playerChroming as StampChroming)?.themeConfig,
-      };
-      this._config.playerChroming.fullscreenChroming = config?.playerChroming?.fullscreenChroming ?? FullscreenChroming.Disabled;
-      this._config.playerChroming.watermarkVisibility = config?.playerChroming?.watermarkVisibility ?? WatermarkVisibility.AutoHide;
-    } else if (this._config.playerChroming?.theme === PlayerChromingTheme.Audio) {
-      this._config.playerChroming.themeConfig = {
-        ...DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG,
-        ...(config?.playerChroming as AudioChroming)?.themeConfig,
-        visualizationConfig: {
-          ...DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG.visualizationConfig,
-          ...(config?.playerChroming as AudioChroming)?.themeConfig?.visualizationConfig,
-        },
-      };
-    } else if (this._config.playerChroming?.theme === PlayerChromingTheme.Omakase) {
-      this._config.playerChroming.themeConfig = {
-        ...DEFAULT_OMAKASE_PLAYER_CHROMING_CONFIG,
-        ...(config?.playerChroming as OmakaseChroming)?.themeConfig,
-      };
-    } else if (this._config.playerChroming?.theme === PlayerChromingTheme.Chromeless) {
-      this._config.playerChroming.themeConfig = {
-        ...DEFAULT_CHROMELESS_PLAYER_CHROMING_CONFIG,
-        ...(config?.playerChroming as ChromelessChroming)?.themeConfig,
-      };
-      this._config.playerChroming.fullscreenChroming = config?.playerChroming?.fullscreenChroming ?? FullscreenChroming.Disabled;
-    } else if (this._config.playerChroming?.theme !== PlayerChromingTheme.Custom) {
-      console.log('Provided chroming theme is not recognized. Fallback to default chroming theme.');
-      this._config.playerChroming = DEFAULT_PLAYER_CHROMING;
-    }
-
-    OmakasePlayer.instance = this;
+      ..._configDefault,
+      ...config,
+    } as OmakasePlayerConfig;
 
     AuthConfig.authentication = this._config.authentication;
 
-    if (config?.vttDownsamplePeriod) {
-      VTT_DOWNSAMPLE_CONFIG_DEFAULT.downsamplePeriod = config.vttDownsamplePeriod;
+    this._session = this._ompProvider.sessionStore;
+
+    this._session.update({
+      isDetachable: !!this._config.detachWindowUrlFn,
+    });
+
+    this._player = new Player(this._ompProvider, {
+      htmlElementId: this._config.playerHtmlElementId,
+      audioMode: this._config.playerAudioMode,
+      textMode: this._config.playerTextMode,
+      textMainTracksHandler: this._config.playerTextMainTracksHandler,
+      ...(this._config.playerControllerConfig ? {controllerConfig: this._config.playerControllerConfig} : {}),
+    });
+    this._chroming = new Chroming(this._ompProvider, {
+      playerHtmlElementId: this._config.playerHtmlElementId,
+      playerDetachable: this._session.state.isDetachable,
+      theme: this._config.chromingTheme,
+      themeConfig: this._config.chromingThemeConfig,
+      watermark: this._config.chromingWatermark,
+      watermarkVisibility: this._config.chromingWatermarkVisibility,
+      fullscreenChroming: this._config.chromingFullscreenChroming,
+      styleUrl: this._config.chromingStyleUrl,
+      requestDetachFn: () => {
+        this._session.requestWindowPlaybackModeChange(WindowPlaybackMode.DETACHED);
+      },
+      requestAttachFn: () => {
+        this._session.requestWindowPlaybackModeChange(WindowPlaybackMode.ATTACHED);
+      },
+    });
+    this._player.setChromingInternal(this._chroming.chromingLocal);
+    this._chroming.setPlayerInternal(this._player.playerLocal);
+    this._ompProvider.omakaseTrack.setPlayerInternal(this._player.playerLocal);
+
+    this._omakaseTrack = this._ompProvider.omakaseTrack;
+
+    this._session.onEvent$
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .pipe(filter((p) => p.type === SessionEventType.SESSION_WINDOW_PLAYBACK_UPDATED))
+      .subscribe((event) => {
+        switch (event.data.windowPlayback.mode) {
+          case WindowPlaybackMode.ATTACHING:
+            this._chroming.prepareDomForAttaching();
+            this._chroming.chromingLocal.domController.showLoading();
+            break;
+          case WindowPlaybackMode.ATTACHED:
+            this._chroming.chromingLocal.domController.showLoaded();
+            this._chroming.chromingLocal.domController.setAttachDetachButtonEnabled(event.data.windowPlayback.canDetach);
+            break;
+          case WindowPlaybackMode.DETACHING:
+            this._chroming.prepareDomForDetaching();
+            break;
+        }
+      });
+
+    this._session.onEvent$
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .pipe(filter((p) => p.type === SessionEventType.SESSION_WINDOW_PLAYBACK_MODE_CHANGE_REQUEST))
+      .subscribe((event) => {
+        switch (event.data.mode) {
+          case WindowPlaybackMode.ATTACHED:
+            this.attachPlayer();
+            break;
+          case WindowPlaybackMode.DETACHED:
+            this.detachPlayer();
+            break;
+        }
+      });
+  }
+
+  loadMainMedia(url: string, loadOptions?: MainMediaLoadOptions): Observable<MainMedia> {
+    return this._player.loadMainMedia(url, loadOptions);
+  }
+
+  detachPlayer(): Observable<void> {
+    // start detaching process
+    let sessionState = this._session.state;
+
+    if (!sessionState.windowPlayback.canDetach) {
+      throw new Error(`Cannot detach.`);
     }
 
-    this._alertsController = new AlertsController(this._config.playerHTMLElementId!);
-
-    this._videoDomController = new VideoDomController(
-      removeEmptyValues({
-        playerHTMLElementId: this._config.playerHTMLElementId,
-        crossorigin: this._config.crossorigin,
-        detachedPlayer: this._config.detachedPlayer,
-        disablePictureInPicture: this._config.disablePictureInPicture,
-        playerChroming: this._config.playerChroming,
-        playerClickHandler: this._config.playerClickHandler,
-      })
-    );
-
-    let createLocalVideoController = () => {
-      return new VideoController(
-        {
-          hlsConfig: this._config.hlsConfig,
-          audioPlayMode: this._config.audioPlayMode,
-        },
-        this._videoDomController
-      );
-    };
-
-    if (this._config.detachedPlayer) {
-      this._videoController = new DetachedVideoController(createLocalVideoController());
-    } else {
-      this._videoController = new DetachableVideoController(
-        {
-          detachedPlayerUrlFn: this._config.detachedPlayerUrlFn,
-          thumbnailVttUrl: this._config.playerChroming?.thumbnailUrl,
-        },
-        createLocalVideoController()
-      );
+    if (!this._player.mainMedia) {
+      throw new Error(`Main media not loaded in local player, cannot detach`);
     }
 
-    this._chromingController = new PlayerChromingController(this._videoController, this._videoDomController, this._alertsController);
+    if (StringUtil.isEmpty(this._config.detachedBroadcastChannelId)) {
+      throw new Error(`Cannot detach, broadcast channel id is not defined.`);
+    }
 
-    this._videoDomController.attachVideoController(this._videoController);
+    let mainMedia = this._player.mainMedia;
 
-    this._audioController = new AudioController(this._videoController);
-    this._subtitlesController = new SubtitlesController(this._videoController);
-
-    this._configAdapter = new ConfigAdapter(this._config);
-
-    this._configAdapter.onWatermarkChange$.pipe(takeUntil(this._destroyed$)).subscribe((watermark) => {
-      this._videoDomController.setWatermark(watermark ?? '');
-    });
-
-    this._configAdapter.onThumbnailUrlChange$.pipe(takeUntil(this._destroyed$)).subscribe((thumbnailUrl) => {
-      if (thumbnailUrl) {
-        this._videoDomController.loadThumbnailVtt(thumbnailUrl);
-      }
-    });
-
-    this._configAdapter.onThemeConfigChange$.pipe(takeUntil(this._destroyed$)).subscribe((config) => {
-      this._videoDomController.updateChromingTemplate(config.playerChroming!);
-    });
-  }
-
-  setAuthentication(authentication: AuthenticationData) {
-    AuthConfig.authentication = authentication;
-  }
-
-  loadVideo(videoSourceUrl: string, options?: VideoLoadOptions): Observable<Video> {
-    return this._videoController.loadVideo(videoSourceUrl, options);
-  }
-
-  createTimeline(config: Partial<ConfigWithOptionalStyle<TimelineConfig>>): Observable<TimelineApi> {
-    return new Observable<Timeline>((observer) => {
-      let yogaLayoutReady$ = new Subject<void>();
-
-      forkJoin([yogaLayoutReady$])
-        .pipe(takeUntil(this._destroyed$))
-        .subscribe(() => {
-          this._timeline = new Timeline(config, this._videoController);
-          nextCompleteObserver(observer, this._timeline);
-        });
-
-      // initalize yoga-layout
-      YogaProvider.instance()
-        .init()
-        .pipe(takeUntil(this._destroyed$))
-        .subscribe(() => {
-          nextCompleteSubject(yogaLayoutReady$);
-        });
-    });
-  }
-
-  createMarkerList(config: MarkerListConfig): Observable<MarkerListApi> {
-    return new Observable<MarkerList>((observer) => {
-      const markerList = new MarkerList(config, this._videoController);
-
-      if (config.vttUrl) {
-        markerList.onVttLoaded$.pipe(takeUntil(this._destroyed$)).subscribe(() => {
-          nextCompleteObserver(observer, markerList);
+    let prepare = new Observable((observer) => {
+      if (sessionState.player.playback.playing) {
+        this._player.pause().subscribe(() => {
+          nextCompleteObserver(observer);
         });
       } else {
-        // timeout is here to make sure the marker list element is created in the dom
-        setTimeout(() => {
-          nextCompleteObserver(observer, markerList);
-        });
+        nextCompleteObserver(observer);
       }
+    });
+
+    return passiveObservable((observer) => {
+      let connectFailure = () => {
+        this._session.updateWindowPlaybackMode(WindowPlaybackMode.FAILURE);
+        this.attachPlayer();
+      };
+
+      let detachingFailure = () => {
+        this._session.updateWindowPlaybackMode(WindowPlaybackMode.FAILURE);
+        this.tryDisconnectDetached();
+      };
+
+      prepare.subscribe(() => {
+        this._detachingBreaker.break();
+        this._session.updateWindowPlaybackMode(WindowPlaybackMode.DETACHING);
+
+        let remoteNode = new HostRemoteNode(this._config.detachedBroadcastChannelId!, this._ompProvider);
+        this._remoteNode = remoteNode;
+
+        let remoteNodeConnected = () => {
+          this._player.clearPlayerSession();
+
+          let playerDetached = remoteNode.getProxyByName('PlayerDetached');
+          let chromingDetached = remoteNode.getProxyByName('ChromingDetached');
+
+          this.restoreSession(sessionState, playerDetached, chromingDetached)
+            .pipe(takeUntil(this._detachingBreaker.observer))
+            .pipe(takeUntil(this._destroyBreaker.observer))
+            .subscribe({
+              next: () => {
+                this._playerDetached = playerDetached;
+                this._player.wireDetached(playerDetached);
+
+                this._chromingDetached = chromingDetached;
+                this._chroming.wireDetached(chromingDetached);
+
+                remoteNode.onEvent$
+                  .pipe(takeUntil(this._detachedBreaker.observer))
+                  .pipe(takeUntil(this._destroyBreaker.observer))
+                  .subscribe((event) => {
+                    switch (event.type) {
+                      case RemoteNodeEventType.REMOTE_NODE_DISCONNECTED:
+                        this.attachPlayer();
+                        break;
+                    }
+                  });
+
+                this._detachingBreaker.break();
+
+                this._session.updateWindowPlaybackMode(WindowPlaybackMode.DETACHED);
+                nextCompleteObserver(observer);
+              },
+              error: (err) => {
+                console.error(err);
+                detachingFailure();
+
+                this._detachingBreaker.break();
+
+                errorCompleteObserver(observer, err);
+              },
+            });
+        };
+
+        remoteNode.onEvent$
+          .pipe(takeUntil(this._detachingBreaker.observer))
+          .pipe(takeUntil(this._destroyBreaker.observer))
+          .pipe(
+            filter((p) => p.type === RemoteNodeEventType.REMOTE_NODE_CONNECTED || p.type === RemoteNodeEventType.REMOTE_NODE_DISCONNECTED || p.type === RemoteNodeEventType.REMOTE_NODE_CONNECT_FAILURE)
+          )
+          .subscribe((event) => {
+            switch (event.type) {
+              case RemoteNodeEventType.REMOTE_NODE_CONNECTED:
+                remoteNodeConnected();
+                break;
+              case RemoteNodeEventType.REMOTE_NODE_DISCONNECTED:
+                console.debug(`Remote node disconnected`);
+                connectFailure();
+                break;
+              case RemoteNodeEventType.REMOTE_NODE_CONNECT_FAILURE:
+                console.debug(`Remote node connect failure`);
+                connectFailure();
+                errorCompleteObserver(observer, event.data.error);
+                break;
+            }
+          });
+
+        remoteNode.listenForConnections();
+
+        this.openPlayerDetachedWindow(mainMedia);
+      });
     });
   }
 
-  initializeRouterVisualization(config: RouterVisualizationConfig): RouterVisualizationApi {
-    return new RouterVisualization(config, this._videoController);
+  protected tryDisconnectDetached() {
+    if (this._playerDetached) {
+      this._detachedBreaker.break();
+      this._playerDetached?.destroy();
+      this._remoteNode?.destroy();
+      this.tryClosePlayerDetachedWindow();
+
+      this._playerDetached = void 0;
+    }
   }
 
-  get timeline(): TimelineApi | undefined {
-    return this._timeline;
+  protected openPlayerDetachedWindow(mainMedia: MainMedia): void {
+    if (this._config.detachWindowUrlFn) {
+      let url = this._config.detachWindowUrlFn(mainMedia);
+      this._playerDetachedWindow = WindowUtil.open(url, '_blank', this._config.detachWindowFeatures);
+      if (!this._playerDetachedWindow) {
+        console.debug(`Detached window was not available immediately after detaching`);
+      }
+    } else {
+      throw new Error(`Cannot detach, provide detachWindowUrlFn`);
+    }
   }
 
-  get video(): VideoApi {
-    return this._videoController;
+  protected tryClosePlayerDetachedWindow(): Observable<void> {
+    return passiveObservable((observer) => {
+      if (this._playerDetachedWindow) {
+        try {
+          this._playerDetachedWindow.close();
+        } catch (e) {
+          console.debug(e);
+        }
+      } else {
+        // console.debug(`Window reference not found. Please close it manually.`);
+      }
+      // return immediately, this will enable closing window ASAP
+      nextCompleteObserver(observer);
+    });
   }
 
-  get audio(): AudioApi {
-    return this._audioController;
+  attachPlayer(): Observable<void> {
+    let sessionState = this._session.state;
+
+    if (!sessionState.windowPlayback.canAttach) {
+      throw new Error(`Cannot attach.`);
+    }
+
+    let prepare = new Observable((observer) => {
+      if (sessionState.player.playback.playing) {
+        try {
+          this._player.pause();
+          nextCompleteObserver(observer);
+        } catch (err) {
+          console.error(err);
+          nextCompleteObserver(observer);
+        }
+      } else {
+        nextCompleteObserver(observer);
+      }
+    });
+
+    return passiveObservable((observer) => {
+      prepare.subscribe(() => {
+        this._attachingBreaker.break();
+        this._session.updateWindowPlaybackMode(WindowPlaybackMode.ATTACHING);
+        this.tryDisconnectDetached();
+
+        let attachingFailure = () => {
+          this._session.updateWindowPlaybackMode(WindowPlaybackMode.FAILURE);
+        };
+
+        let completeAttaching = () => {
+          this._attachingBreaker.break();
+        };
+
+        this.restoreSession(sessionState, this._player.playerLocal, this._chroming.chromingLocal)
+          .pipe(takeUntil(this._attachingBreaker.observer))
+          .subscribe({
+            next: (event) => {
+              this._player.wireLocal();
+              this._session.updateWindowPlaybackMode(WindowPlaybackMode.ATTACHED);
+
+              completeAttaching();
+              nextCompleteObserver(observer);
+            },
+            error: (err) => {
+              console.error(err);
+              attachingFailure();
+              completeAttaching();
+              errorCompleteObserver(observer, err);
+            },
+          });
+      });
+    });
   }
 
-  get subtitles(): SubtitlesApi {
-    return this._subtitlesController;
+  protected restoreSession(sessionState: SessionState, player: PlayerInternalApi, chroming: ChromingInternalApi): Observable<void> {
+    return new Observable((observer) => {
+      let player$ = new Observable((observer) => {
+        player.restorePlayerSession(sessionState.player).subscribe({
+          next: () => {
+            nextCompleteObserver(observer);
+          },
+        });
+      });
+
+      let chroming$ = new Observable((observer) => {
+        chroming.restoreChromingSession(sessionState.chroming).subscribe({
+          next: () => {
+            nextCompleteObserver(observer);
+          },
+        });
+      });
+
+      concat(player$, chroming$)
+        .pipe(takeUntil(this._detachingBreaker.observer))
+        .pipe(takeUntil(this._destroyBreaker.observer))
+        .subscribe({
+          complete: () => {
+            nextCompleteObserver(observer);
+          },
+        });
+    });
+  }
+
+  protected isAttached(): boolean {
+    return this._session.state.windowPlayback.mode === WindowPlaybackMode.ATTACHED;
+  }
+
+  protected isDetached(): boolean {
+    return this._session.state.windowPlayback.mode === WindowPlaybackMode.DETACHED;
+  }
+
+  protected isFailure(): boolean {
+    return this._session.state.windowPlayback.mode === WindowPlaybackMode.FAILURE;
+  }
+
+  setAuthentication(authentication: AuthenticationData): Observable<void> {
+    return passiveObservable((observer) => {
+      AuthConfig.authentication = authentication;
+      nextCompleteObserver(observer);
+    });
+  }
+
+  get player(): PlayerApi {
+    return this._player;
   }
 
   get chroming(): ChromingApi {
-    return this._chromingController;
+    return this._chroming;
   }
 
-  get config(): OmakasePlayerConfig {
-    return this._configAdapter.config;
+  get session(): SessionApi {
+    return this._session;
   }
 
-  set config(config: Partial<OmakasePlayerConfig>) {
-    this._configAdapter.config = config;
+  get track(): OmakaseTrackApi {
+    return this._omakaseTrack;
   }
 
-  destroy() {
-    BlobUtil.revokeAll();
+  get tools(): OmakaseToolsApi {
+    return OmakaseTools.instance;
+  }
 
-    destroyer(this._timeline, this._subtitlesController, this._audioController, this._videoController, this._chromingController, this._videoDomController);
+  get alerts(): AlertsApi {
+    return this._ompProvider.alertsManager;
+  }
 
-    nextCompleteSubject(this._destroyed$);
+  get timeline(): TimelineApi | undefined {
+    return this.getTimeline();
+  }
 
-    nullifier(this._timeline, this._videoController, this._audioController, this._subtitlesController, this._chromingController);
+  get ui(): UiApi {
+    return this._ompProvider.ui;
+  }
+
+  createTimeline(configAndStyle?: ConfigAndStyle<TimelineConfig, TimelineStyle>): Observable<TimelineApi> {
+    return passiveObservable((observer) => {
+      let yogaLayoutReady$ = new BehaviorSubject<boolean>(false);
+
+      // initialize yoga-layout
+      YogaProvider.instance()
+        .init()
+        .pipe(takeUntil(this._destroyBreaker.observer))
+        .subscribe(() => {
+          yogaLayoutReady$.next(true);
+        });
+
+      combineLatest([yogaLayoutReady$.pipe(filter((p) => p))])
+        .pipe(takeUntil(this._destroyBreaker.observer))
+        .subscribe(() => {
+          [...this._timelines.values()].forEach((p) => {
+            p.destroy();
+            this._timelines.delete(p.id);
+          });
+
+          let timeline = new TimelineImpl(this._player, this._ompProvider, configAndStyle);
+
+          this._timelines.set(timeline.id, timeline);
+          nextCompleteObserver(observer, timeline);
+        });
+    });
+  }
+
+  getTimeline(id?: TimelineApi['id']): TimelineApi | undefined {
+    if (id) {
+      return this._timelines.get(id);
+    } else {
+      return [...this._timelines.values()][0] ?? undefined;
+    }
+  }
+
+  destroy(): void {
+    super.destroy();
+
+    this._attachingBreaker.destroy();
+    this._detachingBreaker.destroy();
+    this._detachedBreaker.destroy();
+
+    this._player.destroy();
+    this.tryDisconnectDetached();
+
+    this._chroming.destroy();
+    this._chromingDetached?.destroy();
+
+    this._timelines.forEach((timeline) => timeline.destroy());
+    this._timelines.clear();
+
+    this._ompProvider.destroy();
   }
 }

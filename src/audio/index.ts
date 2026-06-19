@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-export type {OmpAudioEffectsGraphDef, OmpAudioEffectConnectionDef, OmpAudioEffectDef} from './model';
-export {OmpAudioNodeUtil, OmpAudioNodeParam, OmpAudioNodeValueParam} from './omp-web-audio';
-// export type {OmpAudioGraph} from './omp-web-audio';
+
+export {type AudioHandlerApi, type AudioHandlerEvent, type AudioHandlerEventData, AudioHandlerEventType, type AudioHandlerState} from './audio-handler';
 export * from './audio-effects';
+export * from './audio-router';
+export * from './audio-peak-processor';

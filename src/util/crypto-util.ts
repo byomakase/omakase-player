@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,19 @@
  * limitations under the License.
  */
 
-import {StringUtil} from './string-util';
-import {map, Observable} from 'rxjs';
+import {map, type Observable} from 'rxjs';
 import {fromPromise} from 'rxjs/internal/observable/innerFrom';
+import {StringUtil} from './string-util';
 
 export class CryptoUtil {
   public static uuid(): string {
     return crypto.randomUUID();
+  }
+
+  public static fastId(): string {
+    const arr = new Uint32Array(4);
+    crypto.getRandomValues(arr);
+    return Array.from(arr, (n) => n.toString(16)).join('-');
   }
 
   public static digest(text: string): Observable<string> {

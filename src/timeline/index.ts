@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,20 @@
  * limitations under the License.
  */
 
+export * from './timeline-style';
 export type {TimelineLaneStyle, TimelineLaneConfig, TimelineLaneComponentConfig} from './timeline-lane';
 export type {TextLabelStyle} from './timeline-component';
 export * from './timeline-component';
 export * from './scrubber';
 export * from './marker';
-export * from './subtitles';
 export * from './thumbnail';
-export * from './audio-track';
-export * from './chart';
 export * from './scrollbar';
-export * from './label';
 export * from './timeline';
+export * from './timecode';
+export * from './timeline-api';
+export * from './timeline-lane-api';
+export type {Position, Dimension, RectMeasurement, Horizontals, Verticals} from './model';
+export * from './label';
+export * from './track-lane';
+export * from './observation';
+export * from './text';

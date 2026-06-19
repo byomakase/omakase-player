@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+import type {Destroyable} from './capabilities';
 
 export class BrowserProvider {
   private static _instance: BrowserProvider;
@@ -37,7 +39,7 @@ export class BrowserProvider {
     this._isSafari = /Safari/i.test(this._userAgent) && !this.isChrome && !this.isAndroid && !this.isEdge;
   }
 
-  public static instance(): BrowserProvider {
+  public static get instance(): BrowserProvider {
     if (!BrowserProvider._instance) {
       BrowserProvider._instance = new BrowserProvider();
     }

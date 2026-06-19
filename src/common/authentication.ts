@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,28 +14,34 @@
  * limitations under the License.
  */
 
-import {AxiosRequestConfig} from 'axios';
-
+/** Authentication data for HTTP Basic auth. */
 export interface BasicAuthenticationData {
   type: 'basic';
+  /** Basic auth username. */
   username: string;
+  /** Basic auth password. */
   password: string;
 }
 
+/** Authentication data for Bearer token auth. */
 export interface BearerAuthenticationData {
   type: 'bearer';
+  /** Bearer token included in the `Authorization` header. */
   token: string;
 }
 
+/** Authentication data with a custom header factory. */
 export interface CustomAuthenticationData {
   type: 'custom';
-  headers: (url: string) => {headers: {[header: string]: string}};
+  /** Returns request headers to apply for the given URL. */
+  headers: (url: string) => {headers: Record<string, string>};
 }
 
+/** Union of all supported authentication strategies. */
 export type AuthenticationData = BasicAuthenticationData | BearerAuthenticationData | CustomAuthenticationData;
 
 export class AuthConfig {
-  static _authentication?: AuthenticationData;
+  static _authentication?: AuthenticationData | undefined;
 
   static set authentication(authentication: AuthenticationData | undefined) {
     this._authentication = authentication;
@@ -45,26 +51,33 @@ export class AuthConfig {
     return this._authentication;
   }
 
-  static createAxiosRequestConfig(url: string, authentication?: AuthenticationData): AxiosRequestConfig {
-    if (authentication) {
-      if (authentication.type === 'basic') {
-        const token = btoa(`${(authentication as BasicAuthenticationData).username}:${(authentication as BasicAuthenticationData).password}`);
-        return {
-          headers: {
-            Authorization: `Basic ${token}`,
-          },
-        };
-      } else if (authentication.type === 'bearer') {
-        return {
-          headers: {
-            Authorization: `Bearer ${(authentication as BearerAuthenticationData).token}`,
-          },
-        };
-      } else {
-        return (authentication as CustomAuthenticationData).headers(url);
-      }
-    } else {
+  /**
+   * Creates a fetch-compatible RequestInit object
+   */
+  static createRequestInit(url: string, authentication?: AuthenticationData): RequestInit {
+    if (!authentication) {
       return {};
     }
+
+    if (authentication.type === 'basic') {
+      const token = btoa(`${authentication.username}:${authentication.password}`);
+
+      return {
+        headers: {
+          Authorization: `Basic ${token}`,
+        },
+      };
+    }
+
+    if (authentication.type === 'bearer') {
+      return {
+        headers: {
+          Authorization: `Bearer ${authentication.token}`,
+        },
+      };
+    }
+
+    // custom headers
+    return authentication.headers(url);
   }
 }

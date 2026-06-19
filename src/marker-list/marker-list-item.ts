@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,54 +14,65 @@
  * limitations under the License.
  */
 
-import {MarkerApi, MarkerStyle, MarkerTimeObservation} from '../api';
-import {MarkerAwareApi} from '../api/marker-aware-api';
-import {MomentObservation, PeriodObservation} from '../types';
-import {CryptoUtil} from '../util/crypto-util';
+import {type MarkerState, type MarkerTrack, type MarkerType, TimedItemTemporalType, TimedItemTemporalUtil} from '../media';
 import Decimal from 'decimal.js';
+import {type StyledElement, type UiApi} from '../ui';
+import type {MarkerOnMarkerListStyle} from './marker-list';
 
-export class MarkerListItem implements MarkerApi {
-  readonly id: string;
-  private _source: MarkerAwareApi;
-  private _name?: string;
-  private _thumbnail?: string;
-  private _timeObservation: PeriodObservation | MomentObservation;
-  private _data?: Record<string, any>;
-  private _style: MarkerStyle;
-  private _editable: boolean;
+export class MarkerListItem {
+  private readonly _markerId: string;
+  private _label: string;
+  private _thumbnailUrl?: string | undefined;
+  private _start?: string | undefined;
+  private _end?: string | undefined;
+  private _data?: Record<string, any> | undefined;
+  private _track: MarkerTrack;
+  private _markerType: MarkerType;
+  private _styledElement: StyledElement<MarkerOnMarkerListStyle>;
+  private _ui: UiApi;
 
-  constructor(initData: Partial<MarkerApi> = {}, source: MarkerAwareApi) {
-    this.id = initData.id ?? CryptoUtil.uuid();
-    this._style = initData.style ?? {color: '#000'};
-    this._name = initData.name;
-    this._timeObservation = initData.timeObservation ?? {};
-    this._data = initData.data;
-    this._source = source;
-    this._editable = initData.editable ?? true;
+  constructor(marker: MarkerState, track: MarkerTrack, ui: UiApi) {
+    this._markerId = marker.id;
+    this._label = marker.label ?? '';
+    this._markerType = marker.markerType;
+    if (marker.temporal.type === TimedItemTemporalType.MOMENT) {
+      this._start = marker.temporal.time;
+    } else {
+      this._start = TimedItemTemporalUtil.extractStartTime(marker.temporal)?.toString();
+      this._end = TimedItemTemporalUtil.extractEndTime(marker.temporal)?.toString();
+    }
+    this._data = marker.data;
+    this._track = track;
+    this._ui = ui;
+    this._styledElement = {
+      id: marker.id,
+      parent: {
+        id: this._track!.id,
+        classes: [this._ui.resolveStyleClass('MarkerOnMarkerList')],
+        parent: {
+          classes: [this._ui!.resolveStyleClass('MarkerTrack')],
+          parent: {
+            classes: [this._ui!.resolveStyleClass('Marker')],
+          },
+        },
+      },
+    };
   }
 
-  get name(): string | undefined {
-    return this._name;
+  get markerId(): string {
+    return this._markerId;
   }
 
-  set name(name: string | undefined) {
-    this._name = name;
+  get track(): MarkerTrack {
+    return this._track;
   }
 
-  get style(): MarkerStyle {
-    return this._style;
+  get label(): string | undefined {
+    return this._label;
   }
 
-  set style(style: MarkerStyle) {
-    this._style = style;
-  }
-
-  get timeObservation(): MarkerTimeObservation {
-    return this._timeObservation;
-  }
-
-  set timeObservation(timeObservation: MarkerTimeObservation) {
-    this._timeObservation = timeObservation;
+  set label(label: string | undefined) {
+    this._label = label ?? '';
   }
 
   get data(): Record<string, any> | undefined {
@@ -72,24 +83,36 @@ export class MarkerListItem implements MarkerApi {
     this._data = data;
   }
 
-  get source(): MarkerAwareApi {
-    return this._source;
+  get thumbnailUrl(): string | undefined {
+    return this._thumbnailUrl;
   }
 
-  get thumbnail(): string | undefined {
-    return this._thumbnail;
+  set thumbnailUrl(thumbnail: string | undefined) {
+    this._thumbnailUrl = thumbnail;
   }
 
-  set thumbnail(thumbnail: string | undefined) {
-    this._thumbnail = thumbnail;
+  get start(): string | undefined {
+    return this._start;
   }
 
-  get start(): number | undefined {
-    return (this.timeObservation as PeriodObservation).start ?? (this.timeObservation as MomentObservation).time;
+  get numStart(): number | undefined {
+    return this._start !== undefined ? Decimal(this._start).toNumber() : undefined;
   }
 
-  get end(): number | undefined {
-    return (this.timeObservation as PeriodObservation).end ?? undefined;
+  set start(start: string | undefined) {
+    this._start = start?.toString();
+  }
+
+  get end(): string | undefined {
+    return this._end;
+  }
+
+  get numEnd(): number | undefined {
+    return this._end !== undefined ? Decimal(this._end).toNumber() : undefined;
+  }
+
+  set end(end: number | undefined) {
+    this._end = end?.toString();
   }
 
   get duration(): number | undefined {
@@ -100,11 +123,19 @@ export class MarkerListItem implements MarkerApi {
     }
   }
 
-  get editable(): boolean {
-    return this._editable;
+  get markerType(): MarkerType {
+    return this._markerType;
   }
 
-  set editable(editable: boolean) {
-    this.editable = editable;
+  get styledElement(): StyledElement {
+    return this._styledElement;
+  }
+
+  get style(): MarkerOnMarkerListStyle {
+    return this._ui.resolveStyle(this._styledElement) as MarkerOnMarkerListStyle;
+  }
+
+  get state(): MarkerState {
+    return this.track.getTimedItem(this._markerId)!.state;
   }
 }

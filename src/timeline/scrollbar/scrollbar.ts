@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,20 @@
  * limitations under the License.
  */
 
-import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle} from '../../layout/konva-component';
 import Konva from 'konva';
 import Decimal from 'decimal.js';
-import {HasRectMeasurement, Horizontals, OnMeasurementsChange, RectMeasurement} from '../../common/measurement';
-import {animate} from '../../util/animation-util';
-import {ScrollbarScrollEvent, ScrollbarZoomEvent} from '../../types';
-import {positionTopLeft} from '../../constants';
 import {WindowUtil} from '../../util/window-util';
 import {filter, Observable, of, Subject, takeUntil} from 'rxjs';
-import {KonvaFactory} from '../../konva/konva-factory';
+import type {HasRectMeasurement, Horizontals, OnMeasurementsChange, RectMeasurement} from '../model';
+import {BaseKonvaComponent2} from '../layout/konva-component';
+import type {ConfigAndStyle} from '../timeline-api';
+import {omitKeys} from '../../util/object-util';
+import {KonvaFactory} from '../konva/konva-factory';
+import {TIMELINE} from '../../constants';
+import  {type OmpProvider} from '../../omp-provider';
+import {affectsStyledElement, type StyledElementWithId, Ui} from '../../ui';
+import {animate} from '../animation-util';
+import {CryptoUtil} from '../../util/crypto-util';
 
 export interface ScrollableHorizontally {
   scrollHorizontallyToPercent(percent: number): void;
@@ -42,7 +46,7 @@ export interface ScrollbarStyle {
   handleOpacity: number;
 }
 
-export interface ScrollbarConfig extends ComponentConfig<ScrollbarStyle> {
+export interface ScrollbarConfig {
   x: number;
   y: number;
   width: number;
@@ -58,19 +62,49 @@ const configDefault: ScrollbarConfig = {
   zoomMax: 2000,
   scrollStepNumberOfDivisions: 10,
   scrollEasingDuration: 100,
-  style: {
-    height: 20,
-    backgroundFill: '#000000',
-    backgroundFillOpacity: 0.3,
-    handleBarFill: '#01a6f0',
-    handleBarOpacity: 1,
-    handleOpacity: 1,
-  },
 };
 
-export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyle, Konva.Group> implements OnMeasurementsChange, HasRectMeasurement {
-  public readonly onScroll$: Subject<ScrollbarScrollEvent> = new Subject<ScrollbarScrollEvent>();
-  public readonly onZoom$: Subject<ScrollbarZoomEvent> = new Subject<ScrollbarZoomEvent>();
+export const SCROLLBAR_STYLE_DEFAULT: ScrollbarStyle = {
+  height: 20,
+  backgroundFill: '#000000',
+  backgroundFillOpacity: 0.3,
+  handleBarFill: '#01a6f0',
+  handleBarOpacity: 1,
+  handleOpacity: 1,
+};
+
+export enum ScrollbarEventType {
+  SCROLLBAR_SCROLL = 'SCROLLBAR_SCROLL',
+  SCROLLBAR_ZOOM = 'SCROLLBAR_ZOOM',
+}
+
+export type ScrollbarEventTypeDataMap = {
+  [ScrollbarEventType.SCROLLBAR_SCROLL]: {
+    scrollPercent: number;
+  };
+  [ScrollbarEventType.SCROLLBAR_ZOOM]: {
+    zoomPercent: number;
+    zoomFocus: number;
+  };
+};
+
+export type ScrollbarEvent = {
+  [K in ScrollbarEventType]: {
+    type: K;
+    data: ScrollbarEventTypeDataMap[K];
+  };
+}[keyof ScrollbarEventTypeDataMap];
+
+export class Scrollbar extends BaseKonvaComponent2<Konva.Group> implements OnMeasurementsChange, HasRectMeasurement {
+  private readonly _onEvent$: Subject<ScrollbarEvent> = new Subject<ScrollbarEvent>();
+
+  protected _ui: Ui;
+
+  protected _config: ScrollbarConfig;
+  protected _providedStyle?: Partial<ScrollbarStyle> | undefined;
+  protected _styledElement: StyledElementWithId<ScrollbarStyle>;
+  protected _style: ScrollbarStyle;
+  protected _initialStyle?: ScrollbarStyle;
 
   private _group: Konva.Group;
   private _handleGroup: Konva.Group;
@@ -80,61 +114,82 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
   private _rightZoomHandle: Konva.Circle;
   private _minHandleBarWidth: number;
 
-  constructor(config: Partial<ConfigWithOptionalStyle<ScrollbarConfig>>) {
-    super({
+  constructor(ompProvider: OmpProvider, configAndStyle?: ConfigAndStyle<ScrollbarConfig, ScrollbarStyle>) {
+    super();
+
+    this._ui = ompProvider.ui;
+
+    this._config = {
       ...configDefault,
-      ...config,
-      style: {
-        ...configDefault.style,
-        ...config.style,
-      },
-    });
+      ...omitKeys(configAndStyle, 'style'),
+    };
+    this._providedStyle = configAndStyle?.style;
+
+    this._styledElement = {
+      id: CryptoUtil.uuid(),
+      classes: [this._ui.resolveStyleClass('Scrollbar')],
+    };
+    if (this._providedStyle) {
+      this.updateStyle(this._providedStyle)
+    }
+
+    this._style = this._ui.resolveStyle<ScrollbarStyle>(this._styledElement) as ScrollbarStyle;
+    this._initialStyle = {
+      ...this._style,
+    };
+
+    this._ui.onEvent$
+      .pipe(filter((event) => affectsStyledElement(event, this._styledElement!)))
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe((event) => {
+        this.handleStyleUpdate();
+      });
 
     this._group = KonvaFactory.createGroup({
-      x: this.config.x,
-      y: this.config.y,
-      width: this.config.width,
-      height: this.style.height,
+      x: this._config.x,
+      y: this._config.y,
+      width: this._config.width,
+      height: this._style.height,
     });
 
     this._bgRect = KonvaFactory.createRect({
-      ...positionTopLeft,
+      ...TIMELINE.positionTopLeft,
       width: this._group.width(),
-      height: this.style.height,
-      fill: this.style.backgroundFill,
-      opacity: this.style.backgroundFillOpacity,
+      height: this._style.height,
+      fill: this._style.backgroundFill,
+      opacity: this._style.backgroundFillOpacity,
     });
 
     this._handleGroup = KonvaFactory.createGroup({
-      ...positionTopLeft,
+      ...TIMELINE.positionTopLeft,
       width: this._group.width(),
-      height: this.style.height,
+      height: this._style.height,
     });
 
     this._handleBar = KonvaFactory.createRect({
-      ...positionTopLeft,
+      ...TIMELINE.positionTopLeft,
       width: this._handleGroup.width(),
-      height: this.style.height,
-      fill: this.style.handleBarFill,
-      opacity: this.style.handleBarOpacity,
+      height: this._style.height,
+      fill: this._style.handleBarFill,
+      opacity: this._style.handleBarOpacity,
       draggable: true,
     });
 
-    this._leftZoomHandle = new Konva.Circle({
-      ...positionTopLeft,
-      fill: this.style.handleBarFill,
-      radius: this.style.height / 2,
-      y: this.style.height / 2,
-      opacity: this.style.handleOpacity,
+    this._leftZoomHandle = KonvaFactory.createCircle({
+      ...TIMELINE.positionTopLeft,
+      fill: this._style.handleBarFill,
+      radius: this._style.height / 2,
+      y: this._style.height / 2,
+      opacity: this._style.handleOpacity,
       draggable: true,
     });
 
-    this._rightZoomHandle = new Konva.Circle({
-      ...positionTopLeft,
-      fill: this.style.handleBarFill,
-      radius: this.style.height / 2,
-      y: this.style.height / 2,
-      opacity: this.style.handleOpacity,
+    this._rightZoomHandle = KonvaFactory.createCircle({
+      ...TIMELINE.positionTopLeft,
+      fill: this._style.handleBarFill,
+      radius: this._style.height / 2,
+      y: this._style.height / 2,
+      opacity: this._style.handleOpacity,
       draggable: true,
     });
 
@@ -147,17 +202,11 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
     this._handleGroup.add(this._leftZoomHandle);
     this._handleGroup.add(this._rightZoomHandle);
 
-    this._styleAdapter.onChange$
-      .pipe(
-        takeUntil(this._destroyed$),
-        filter((p) => !!p)
-      )
-      .subscribe((style) => {
-        this.onStyleChange();
-      });
-
     this._group.on('click', (event) => {
-      this.clickScrollTo(this._group.getRelativePointerPosition().x).subscribe();
+      let rpp = this._group.getRelativePointerPosition();
+      if (rpp) {
+        this.clickScrollTo(rpp.x).subscribe();
+      }
     });
 
     this._handleBar.on('dragstart dragmove dragend', (event) => {
@@ -169,10 +218,16 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
       });
       this.syncLeftRightHandles();
 
-      if (this._handleBar.getRelativePointerPosition().x >= 0 && this._handleBar.getRelativePointerPosition().x <= this._handleBar.width()) {
-        this.onScroll$.next({
-          scrollPercent: this.getScrollHandlePercent(),
-        });
+      let rpp = this._handleBar.getRelativePointerPosition();
+      if (rpp) {
+        if (rpp.x >= 0 && rpp.x <= this._handleBar.width()) {
+          this._onEvent$.next({
+            type: ScrollbarEventType.SCROLLBAR_SCROLL,
+            data: {
+              scrollPercent: this.getScrollHandlePercent(),
+            },
+          });
+        }
       }
     });
 
@@ -231,16 +286,19 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
       let newX = constrainLeftHandleX(newPosition.x);
       this._leftZoomHandle.setAttrs({
         x: newX,
-        y: this.style.height / 2,
+        y: this._style.height / 2,
       });
       this._handleBar.setAttrs({
         x: newX,
         width: this._rightZoomHandle.x() - newX,
       });
 
-      this.onZoom$.next({
-        zoomPercent: this.getZoomPercent(),
-        zoomFocus: Math.round(new Decimal(this._rightZoomHandle.x()).mul(100).div(this._group.width()).toNumber()),
+      this._onEvent$.next({
+        type: ScrollbarEventType.SCROLLBAR_ZOOM,
+        data: {
+          zoomPercent: this.getZoomPercent(),
+          zoomFocus: Math.round(new Decimal(this._rightZoomHandle.x()).mul(100).div(this._group.width()).toNumber()),
+        },
       });
     });
 
@@ -260,14 +318,18 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
       let newX = constrainRightHandleX(newPosition.x);
       this._rightZoomHandle.setAttrs({
         x: newX,
-        y: this.style.height / 2,
+        y: this._style.height / 2,
       });
       this._handleBar.setAttrs({
         width: newX - this._leftZoomHandle.x(),
       });
-      this.onZoom$.next({
-        zoomPercent: this.getZoomPercent(),
-        zoomFocus: Math.round(new Decimal(this._leftZoomHandle.x()).mul(100).div(this._group.width()).toNumber()),
+
+      this._onEvent$.next({
+        type: ScrollbarEventType.SCROLLBAR_ZOOM,
+        data: {
+          zoomPercent: this.getZoomPercent(),
+          zoomFocus: Math.round(new Decimal(this._leftZoomHandle.x()).mul(100).div(this._group.width()).toNumber()),
+        },
       });
     });
 
@@ -282,6 +344,10 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
     this._minHandleBarWidth = this.calculateHandleBarWidthFromZoomRatioPercent();
   }
 
+  get onEvent$(): Observable<ScrollbarEvent> {
+    return this._onEvent$.asObservable();
+  }
+
   protected provideKonvaNode(): Konva.Group {
     return this._group;
   }
@@ -292,39 +358,37 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
     this._minHandleBarWidth = this.calculateHandleBarWidthFromZoomRatioPercent();
   }
 
-  onStyleChange() {
-    this._group.setAttrs({
-      height: this.style.height,
-    });
+  protected handleStyleUpdate(): void {
+    this._style = this._ui!.resolveStyle(this._styledElement) as ScrollbarStyle;
 
     this._bgRect.setAttrs({
-      height: this.style.height,
-      fill: this.style.backgroundFill,
-      opacity: this.style.backgroundFillOpacity,
+      height: this._style.height,
+      fill: this._style.backgroundFill,
+      opacity: this._style.backgroundFillOpacity,
     });
 
     this._handleGroup.setAttrs({
-      height: this.style.height,
+      height: this._style.height,
     });
 
     this._handleBar.setAttrs({
-      height: this.style.height,
-      fill: this.style.handleBarFill,
-      opacity: this.style.handleBarOpacity,
+      height: this._style.height,
+      fill: this._style.handleBarFill,
+      opacity: this._style.handleBarOpacity,
     });
 
     this._leftZoomHandle.setAttrs({
-      fill: this.style.handleBarFill,
-      radius: this.style.height / 2,
-      y: this.style.height / 2,
-      opacity: this.style.handleOpacity,
+      fill: this._style.handleBarFill,
+      radius: this._style.height / 2,
+      y: this._style.height / 2,
+      opacity: this._style.handleOpacity,
     });
 
     this._rightZoomHandle.setAttrs({
-      fill: this.style.handleBarFill,
-      radius: this.style.height / 2,
-      y: this.style.height / 2,
-      opacity: this.style.handleOpacity,
+      fill: this._style.handleBarFill,
+      radius: this._style.height / 2,
+      y: this._style.height / 2,
+      opacity: this._style.handleOpacity,
     });
   }
 
@@ -343,7 +407,7 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
   }
 
   private clickScrollTo(x: number): Observable<void> {
-    let scrollStep = this._group.width() / this.config.scrollStepNumberOfDivisions;
+    let scrollStep = this._group.width() / this._config.scrollStepNumberOfDivisions;
     if (x >= this._handleBar.x() && x <= this._handleBar.x() + this._handleBar.width()) {
       // clicked on scroll handle
       return of(void 0);
@@ -362,8 +426,11 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
   private scrollTo(x: number) {
     this._handleBar.x(this.getConstrainedHandleBarX(x));
     this.syncLeftRightHandles();
-    this.onScroll$.next({
-      scrollPercent: this.getScrollHandlePercent(),
+    this._onEvent$.next({
+      type: ScrollbarEventType.SCROLLBAR_SCROLL,
+      data: {
+        scrollPercent: this.getScrollHandlePercent(),
+      },
     });
   }
 
@@ -373,7 +440,7 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
       let newX = this.getConstrainedHandleBarX(x);
 
       animate({
-        duration: this.config.scrollEasingDuration,
+        duration: this._config.scrollEasingDuration,
         startValue: currentX,
         endValue: newX,
         onUpdateHandler: (frame, value) => {
@@ -388,7 +455,7 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
   }
 
   private calculateHandleBarWidthFromZoomRatioPercent(): number {
-    return this._group.width() > 0 ? new Decimal(this._group.width()).mul(100).div(this.config.zoomMax).toNumber() : 0;
+    return this._group.width() > 0 ? new Decimal(this._group.width()).mul(100).div(this._config.zoomMax).toNumber() : 0;
   }
 
   getZoomPercent(): number {
@@ -425,5 +492,14 @@ export class Scrollbar extends BaseKonvaComponent<ScrollbarConfig, ScrollbarStyl
       ...this._group.getPosition(),
       ...this._group.getSize(),
     };
+  }
+
+  updateStyle(style: Partial<ScrollbarStyle>) {
+    this._ui.updateStyleRule({
+      id: this._styledElement.id,
+      style: {
+        ...style,
+      },
+    });
   }
 }

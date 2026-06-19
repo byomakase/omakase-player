@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,30 +14,24 @@
  * limitations under the License.
  */
 
-import axios, {AxiosRequestConfig, AxiosResponse} from 'axios';
-import {AuthConfig, BasicAuthenticationData, BearerAuthenticationData, CustomAuthenticationData} from './common/authentication';
-
-export function httpGet<T>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-  return axios.get<T>(url, config);
+export async function httpGetText(url: string, requestInit?: RequestInit): Promise<string> {
+  const res = await fetch(url, {
+    method: 'GET',
+    ...requestInit,
+  });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} ${res.statusText} for ${url}`);
+  }
+  return await res.text();
 }
 
-export function formatAuthenticationHeaders(url: string): {[p: string]: string} | undefined {
-  let headers: {[p: string]: string} | undefined = void 0;
-  if (AuthConfig.authentication) {
-    if (AuthConfig.authentication.type === 'basic') {
-      const token = btoa(`${(AuthConfig.authentication as BasicAuthenticationData).username}:${(AuthConfig.authentication as BasicAuthenticationData)!.password}`);
-      headers = {
-        Authorization: `Basic ${token}`,
-      };
-    } else if (AuthConfig.authentication.type === 'bearer') {
-      headers = {
-        Authorization: `Bearer ${(AuthConfig.authentication as BearerAuthenticationData).token}`,
-      };
-    } else {
-      const authenticationData = (AuthConfig.authentication as CustomAuthenticationData).headers(url);
-      headers = authenticationData.headers;
-    }
+export async function httpGetArrayBuffer(url: string, requestInit?: RequestInit): Promise<ArrayBuffer> {
+  let res = await fetch(url, {
+    method: 'GET',
+    ...requestInit,
+  });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} ${res.statusText} for ${url}`);
   }
-
-  return headers;
+  return res.arrayBuffer();
 }

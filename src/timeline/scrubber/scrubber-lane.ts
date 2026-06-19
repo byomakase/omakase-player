@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,21 +15,21 @@
  */
 
 import Konva from 'konva';
-import {RectMeasurement} from '../../common';
-import {goldenRatio} from '../../constants';
 import Decimal from 'decimal.js';
-import {BaseTimelineLane, TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle} from '../timeline-lane';
-import {filter, Subject, takeUntil} from 'rxjs';
-import {ClickEvent, MouseEnterEvent, MouseLeaveEvent, MouseMoveEvent, MouseOutEvent, MouseOverEvent} from '../../types';
-import {completeUnsubscribeSubjects} from '../../util/rxjs-util';
-import {Timeline} from '../timeline';
-import {destroyer, nullifier} from '../../util/destroy-util';
-import {KonvaFactory} from '../../konva/konva-factory';
-import {VideoControllerApi} from '../../video';
-import {ScrubberLaneApi} from '../../api';
-import {konvaUnlistener} from '../../util/konva-util';
-
-export interface ScrubberLaneConfig extends TimelineLaneConfig<ScrubberLaneStyle> {}
+import {filter, Observable, Subject, takeUntil} from 'rxjs';
+import type {ClickEvent, MouseEnterEvent, MouseLeaveEvent, MouseMoveEvent, MouseOutEvent, MouseOverEvent, RectMeasurement} from '../model';
+import {type PlayerApi, PlayerEventType} from '../../player';
+import type {TimelineImpl} from '../timeline';
+import {KonvaFactory} from '../konva/konva-factory';
+import {BaseTimelineLane, TIMELINE_LANE_CONFIG_DEFAULT, type TimelineLaneConfig, type TimelineLaneStyle} from '../timeline-lane';
+import {konvaUnlistener} from '../konva/konva-util';
+import {nullifier} from '../../util/util-functions';
+import {freeObserver} from '../../util/rxjs-util';
+import {type ConfigAndStyle} from '../timeline-api';
+import {omitKeys} from '../../util/object-util';
+import type {TimelineLaneApi} from '../timeline-lane-api';
+import type {StyledElementWithId} from '../../ui';
+import type {OmpProvider} from '../../omp-provider';
 
 export interface ScrubberLaneStyle extends TimelineLaneStyle {
   tickDivisor: number;
@@ -42,23 +42,82 @@ export interface ScrubberLaneStyle extends TimelineLaneStyle {
   timecodeFill: string;
 }
 
+export interface ScrubberLaneConfig extends TimelineLaneConfig {}
+
 const configDefault: ScrubberLaneConfig = {
   ...TIMELINE_LANE_CONFIG_DEFAULT,
-  style: {
-    ...TIMELINE_LANE_CONFIG_DEFAULT.style,
-    height: 60,
-    tickDivisor: 5,
-    tickDivisionMinWidth: 18,
-    tickFill: '#0d0f05',
-    tickHeight: 12,
-    divisionTickHeight: 12 * goldenRatio,
-    timecodeShowFirst: true,
-    timecodeFontSize: 11,
-    timecodeFill: '#0d0f05',
-  },
 };
 
+// export enum ScrubberTrackLaneEventType {
+//   TIMELINE_SCRUBBER_TRACK_LANE__CLICK = 'TIMELINE_SCRUBBER_TRACK_LANE__CLICK',
+//   TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_ENTER = 'TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_ENTER',
+//   TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_OVER = 'TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_OVER',
+//   TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_MOVE = 'TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_MOVE',
+//   TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_OUT = 'TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_OUT',
+//   TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_LEAVE = 'TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_LEAVE',
+// }
+//
+// export interface ScrubberTrackLaneEventData {
+//
+// }
+//
+// export type ScrubberTrackLaneEventTypeDataMap = {
+//   [ScrubberTrackLaneEventType.TIMELINE_SCRUBBER_TRACK_LANE__CLICK]: ScrubberTrackLaneEventData;
+//   [ScrubberTrackLaneEventType.TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_ENTER]: ScrubberTrackLaneEventData;
+//   [ScrubberTrackLaneEventType.TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_OVER]: ScrubberTrackLaneEventData;
+//   [ScrubberTrackLaneEventType.TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_MOVE]: ScrubberTrackLaneEventData;
+//   [ScrubberTrackLaneEventType.TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_OUT]: ScrubberTrackLaneEventData;
+//   [ScrubberTrackLaneEventType.TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_LEAVE]: ScrubberTrackLaneEventData;
+// };
+//
+// export type ScrubberTrackLaneEvent = {
+//   [K in ScrubberTrackLaneEventType]: {
+//     type: K;
+//     data: ScrubberTrackLaneEventTypeDataMap[K];
+//   };
+// }[keyof ScrubberTrackLaneEventTypeDataMap];
+
+export interface ScrubberLaneApi extends TimelineLaneApi<ScrubberLaneStyle> {
+  /**
+   * Fires on click
+   * @readonly
+   */
+  onClick$: Observable<ClickEvent>;
+
+  /**
+   * Fires on mouse enter
+   * @readonly
+   */
+  onMouseEnter$: Observable<MouseEnterEvent>;
+
+  /**
+   * Fires on mouse over
+   * @readonly
+   */
+  onMouseOver$: Observable<MouseOverEvent>;
+
+  /**
+   * Fires on mouse move
+   * @readonly
+   */
+  onMouseMove$: Observable<MouseMoveEvent>;
+
+  /**
+   * Fires on mouse out
+   * @readonly
+   */
+  onMouseOut$: Observable<MouseOutEvent>;
+
+  /**
+   * Fires on mouse leave
+   * @readonly
+   */
+  onMouseLeave$: Observable<MouseLeaveEvent>;
+}
+
 export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberLaneStyle> implements ScrubberLaneApi {
+  // private readonly _onEvent$: Subject<ScrubberTrackLaneEvent> = new Subject<ScrubberTrackLaneEvent>();
+
   public readonly onClick$: Subject<ClickEvent> = new Subject<ClickEvent>();
   public readonly onMouseEnter$: Subject<MouseEnterEvent> = new Subject<MouseEnterEvent>();
   public readonly onMouseOver$: Subject<MouseOverEvent> = new Subject<MouseOverEvent>();
@@ -69,16 +128,31 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
   private _tickDivisionWidth?: number;
   private _tickTotalDivisions?: number;
 
-  private _timecodedGroup?: Konva.Group;
   private _timecodedEventCatcher?: Konva.Rect;
   private _ticksGroup?: Konva.Group;
 
-  constructor(config: TimelineLaneConfigDefaultsExcluded<ScrubberLaneConfig>) {
-    super(timelineLaneComposeConfig(configDefault, config));
+  constructor(configAndStyle?: ConfigAndStyle<ScrubberLaneConfig, ScrubberLaneStyle>) {
+    super({
+      ...configDefault,
+      ...omitKeys(configAndStyle, 'style'),
+    });
   }
 
-  override prepareForTimeline(timeline: Timeline, videoController: VideoControllerApi) {
-    super.prepareForTimeline(timeline, videoController);
+  protected createStyledElement(): StyledElementWithId<ScrubberLaneStyle> {
+    return {
+      id: this._id,
+      classes: [this._ui!.resolveStyleClass('ScrubberLane')],
+    };
+  }
+
+  /**
+   * @internal
+   * @param timeline
+   * @param player
+   * @param ompProvider
+   */
+  override prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider) {
+    super.prepareForTimeline(timeline, player, ompProvider);
 
     let timecodedRect = this.getTimecodedRect();
 
@@ -92,7 +166,7 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
 
     this._ticksGroup = KonvaFactory.createGroup({
       width: this._timecodedGroup.width(),
-      height: this._config.style.height,
+      height: this._style!.height,
     });
 
     this._timecodedGroup.add(this._timecodedEventCatcher);
@@ -135,22 +209,32 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
       });
     });
 
-    this._videoController!.onVideoLoaded$.pipe(filter((p) => !!p && !(p.isAttaching || p.isDetaching)))
-      .pipe(takeUntil(this._destroyed$))
-      .subscribe({
-        next: () => {
-          this.settleLayout();
-        },
+    this._player!.onEvent$.pipe(
+      filter(
+        (p) =>
+          p.type === PlayerEventType.PLAYER_MAIN_MEDIA_UNLOADING ||
+          p.type === PlayerEventType.PLAYER_MAIN_MEDIA_UNLOADED ||
+          p.type === PlayerEventType.PLAYER_MAIN_MEDIA_LOADING ||
+          p.type === PlayerEventType.PLAYER_SESSION_RESTORED ||
+          p.type === PlayerEventType.PLAYER_MAIN_MEDIA_LOADED
+      )
+    )
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe((event) => {
+        switch (event.type) {
+          case PlayerEventType.PLAYER_MAIN_MEDIA_UNLOADING:
+          case PlayerEventType.PLAYER_MAIN_MEDIA_UNLOADED:
+          case PlayerEventType.PLAYER_MAIN_MEDIA_LOADING:
+            this.clearContent();
+            break;
+          case PlayerEventType.PLAYER_SESSION_RESTORED:
+          case PlayerEventType.PLAYER_MAIN_MEDIA_LOADED:
+            this.settleLayout();
+            break;
+        }
       });
 
-    this._videoController!.onVideoLoading$.pipe(
-      filter((p) => !(p.isAttaching || p.isDetaching)),
-      takeUntil(this._destroyed$)
-    ).subscribe({
-      next: (event) => {
-        this.clearContent();
-      },
-    });
+    this._prepared.next(true);
   }
 
   protected settleLayout() {
@@ -168,19 +252,23 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
     this.refreshTimeDivisions();
   }
 
-  override onStyleChange() {
-    super.onStyleChange();
+  protected handleStyleUpdate() {
+    super.handleStyleUpdate();
+
     this.refreshTimeDivisions(true);
   }
 
   override destroy() {
     konvaUnlistener(this._timecodedGroup);
 
-    destroyer(this._timecodedGroup);
+    nullifier(this._player);
 
-    nullifier(this._videoController);
-
-    completeUnsubscribeSubjects(this.onClick$, this.onMouseOver$, this.onMouseMove$, this.onMouseOut$, this.onMouseLeave$);
+    freeObserver(this.onClick$);
+    freeObserver(this.onMouseEnter$);
+    freeObserver(this.onMouseOver$);
+    freeObserver(this.onMouseMove$);
+    freeObserver(this.onMouseOut$);
+    freeObserver(this.onMouseLeave$);
 
     super.destroy();
   }
@@ -190,12 +278,12 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
   }
 
   refreshTimeDivisions(forceCreate = false) {
-    if (!this._videoController?.isVideoLoaded() || !(this._timeline && this._timeline.onReady$.value)) {
+    if (!this._timeline) {
       return;
     }
 
-    let tickDivisor = this.style.tickDivisor;
-    let tickMinDivisionWidth = this.style.tickDivisionMinWidth;
+    let tickDivisor = this._style!.tickDivisor;
+    let tickMinDivisionWidth = this._style!.tickDivisionMinWidth;
     let timelineWidth = this._timeline.getTimecodedFloatingRect().width;
 
     let newDivisionWidth = this.resolveTimeDivisionWidth(timelineWidth, tickMinDivisionWidth, tickDivisor, tickDivisor);
@@ -220,13 +308,15 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
       let isLastTick = i === this._tickTotalDivisions;
       let isDivisionTick = i % tickDivisor === 0;
       let tickGroupX = i * this._tickDivisionWidth;
-      let lineHeight = isDivisionTick ? this.style.divisionTickHeight : this.style.tickHeight;
+      let lineHeight = isDivisionTick ? this._style!.divisionTickHeight : this._style!.tickHeight;
       let lineY = this._ticksGroup!.height() - lineHeight;
-      let textBottomY = this._ticksGroup!.height() - this.style.divisionTickHeight - textBottomPadding;
+      let textBottomY = this._ticksGroup!.height() - this._style!.divisionTickHeight - textBottomPadding;
 
       if (strategy === 'move') {
         let tickGroup = this._ticksGroup!.getChildren()[i];
-        tickGroup.x(tickGroupX);
+        if (tickGroup) {
+          tickGroup.x(tickGroupX);
+        }
       } else {
         let tickGroup = new Konva.Group({
           x: tickGroupX,
@@ -236,7 +326,7 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
         let lineX = 0;
         let line = new Konva.Line({
           points: [lineX, lineY, lineX, lineY + lineHeight],
-          stroke: this.style.tickFill,
+          stroke: this._style!.tickFill,
           strokeWidth: 1,
           listening: false,
         });
@@ -244,9 +334,9 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
         tickGroup.add(line);
 
         let text = new Konva.Text({
-          fontSize: this.style.timecodeFontSize,
+          fontSize: this._style!.timecodeFontSize,
           fontFamily: this._timeline.style.textFontFamily,
-          fill: this.style.timecodeFill,
+          fill: this._style!.timecodeFill,
           text: `${this._timeline.timelinePositionToTimecode(tickGroupX)}`,
           listening: false,
         });
@@ -260,7 +350,7 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
         });
 
         let showTimecode = isDivisionTick;
-        showTimecode = isFirstTick ? this.style.timecodeShowFirst : showTimecode;
+        showTimecode = isFirstTick ? this._style!.timecodeShowFirst : showTimecode;
 
         if (showTimecode) {
           tickGroup.add(text);

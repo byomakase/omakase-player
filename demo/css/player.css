@@ -22,6 +22,11 @@
 
 body {
   min-width: 1385px;
+  --omakase-vu-meter-label-background-color: white;
+  --omakase-vu-meter-background-color: #eeefee;
+  --omakase-vu-meter-padding: 10px;
+  --omakase-vu-meter-label-gap: 10px;
+  --omakase-vu-meter-bar-size: 18px;
 }
 
 .video {
@@ -38,15 +43,13 @@ body {
 
 .meter {
   width: 200px;
-  height: 394px;
+  height: 419px;
   float: left;
-  background-color: #eeefee;
 }
 
 .peak-meter {
   width: 200px;
-  height: 394px;
-  background-color: #eeefee;
+  height: 419px;
 }
 
 .vu-meter-labels {
@@ -109,13 +112,10 @@ body {
   color: #235067;
 }
 
-#marker_predefined_marker .marker-remove {
-  display: none;
-}
-
 .marker-image {
   float: left;
   cursor: pointer;
+  min-width: 85px;
 }
 
 .marker-details {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,3 +40,31 @@ export type SelectNonRequired<T> = {
 };
 
 export type UnwrapObservable<T> = T extends Observable<infer U> ? U : T;
+
+// export type ExtractType<T, K extends keyof T> = T[K];
+
+export type ExtractReturnType<T, K extends keyof T> = T[K] extends (...args: any[]) => infer R ? R : never;
+
+export type ExtractParameterTypes<T, K extends keyof T> = T[K] extends (...args: infer A) => any ? A : never;
+
+export type ObjectEntries<T> = {
+  [K in keyof T]-?: [K, T[K]];
+}[keyof T][];
+
+export type PrefixKeys<T, P extends string> = {
+  [K in keyof T as `${P}${Capitalize<string & K>}`]: T[K];
+};
+
+export function prefixKeys<T extends object, P extends string>(obj: T, prefix: P): PrefixKeys<T, P> {
+  return Object.fromEntries(
+    Object.entries(obj).map(([key, value]) => [`${prefix}${key.charAt(0).toUpperCase()}${key.slice(1)}`, value])
+  ) as PrefixKeys<T, P>;
+}
+
+export type DeepPartial<T> = {
+  [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
+};
+
+// type OptionalKeys<T> = { [K in keyof T]-?: {} extends Pick<T, K> ? K : never }[keyof T];
+
+export type PartialWithUndefined<T> = { [K in keyof T]?: T[K] | undefined };

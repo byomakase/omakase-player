@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,94 +14,139 @@
  * limitations under the License.
  */
 
-import {BaseTimelineLane, TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle} from '../timeline-lane';
-import {KonvaFlexGroup, KonvaFlexItem} from '../../layout/konva-flex';
-import {Timeline} from '../timeline';
-import {Scrollbar} from './scrollbar';
-import {filter, takeUntil} from 'rxjs';
-import {KonvaFactory} from '../../konva/konva-factory';
+import {BaseTimelineLane, TIMELINE_LANE_CONFIG_DEFAULT, type TimelineLaneConfig, type TimelineLaneStyle} from '../timeline-lane';
+import {KonvaFlexGroup, KonvaFlexItem} from '../layout/konva-flex';
+import {Scrollbar, ScrollbarEventType, type ScrollbarStyle} from './scrollbar';
 import Konva from 'konva';
-import {FlexSpacingBuilder} from '../../layout/flex-node';
-import {KonvaComponentFlexContentNode} from '../../layout/konva-component-flex';
-import {VideoControllerApi} from '../../video';
-
-export interface ScrollbarLaneConfig extends TimelineLaneConfig<ScrollbarLaneStyle> {}
+import {type ConfigAndStyle, TimelineEventType} from '../timeline-api';
+import {omitKeys, removeEmptyValues} from '../../util/object-util';
+import {KonvaFactory} from '../konva/konva-factory';
+import {type TimelineImpl} from '../timeline';
+import {type PlayerApi, PlayerEventType} from '../../player';
+import {type OmpProvider} from '../../omp-provider';
+import {KonvaComponentFlexContentNode2} from '../layout/konva-component-flex';
+import {type FlexJustifyContent, FlexSpacingBuilder} from '../layout/flex-node';
+import {filter, takeUntil} from 'rxjs';
+import type {Color, StyledElementWithId} from '../../ui';
+import {TIMELINE_LANE_STYLE_DEFAULT} from '../timeline-style';
+import {isNullOrUndefined} from '../../util/util-functions';
 
 export interface ScrollbarLaneStyle extends TimelineLaneStyle {
-  scrollbarWidth?: number;
-  scrollbarHeight?: number;
-  scrollbarBackgroundFill?: string;
-  scrollbarBackgroundFillOpacity?: number;
-  scrollbarHandleBarFill?: string;
-  scrollbarHandleBarOpacity?: number;
-  scrollbarHandleOpacity?: number;
+  scrollbarWidth: number | string;
+  scrollbarHeight: number | undefined;
+  scrollbarBackgroundFill: Color;
+  scrollbarBackgroundFillOpacity: number;
+  scrollbarHandleBarFill: Color;
+  scrollbarHandleBarOpacity: number;
+  scrollbarHandleOpacity: number;
+  scrollbarJustify: 'start' | 'center' | 'end';
 }
+
+export interface ScrollbarLaneConfig extends TimelineLaneConfig {}
 
 const configDefault: ScrollbarLaneConfig = {
   ...TIMELINE_LANE_CONFIG_DEFAULT,
-  style: {
-    ...TIMELINE_LANE_CONFIG_DEFAULT.style,
-    height: 40,
-    scrollbarHeight: 15,
-    scrollbarBackgroundFill: '#000000',
-    scrollbarBackgroundFillOpacity: 0.3,
-    scrollbarHandleBarFill: '#01a6f0',
-    scrollbarHandleBarOpacity: 1,
-    scrollbarHandleOpacity: 1,
-  },
+};
+
+export const TIMELINE_SCROLLBAR_LANE_STYLE_DEFAULT: ScrollbarLaneStyle = {
+  ...TIMELINE_LANE_STYLE_DEFAULT,
+  height: 40,
+  scrollbarHeight: void 0,
+  scrollbarWidth: '100%',
+  scrollbarBackgroundFill: '#000000',
+  scrollbarBackgroundFillOpacity: 0.3,
+  scrollbarHandleBarFill: '#f700ff',
+  scrollbarHandleBarOpacity: 1,
+  scrollbarHandleOpacity: 1,
+  scrollbarJustify: 'center',
 };
 
 export class ScrollbarLane extends BaseTimelineLane<ScrollbarLaneConfig, ScrollbarLaneStyle> {
   protected _contentGroup?: Konva.Group;
   protected _contentFlexGroup?: KonvaFlexGroup;
+  protected _scrollbarFlexItem?: KonvaFlexItem<KonvaComponentFlexContentNode2<Scrollbar>>;
+
   protected _scrollbar?: Scrollbar;
 
   private _timelineZoomInProgress = false;
 
-  constructor(config: TimelineLaneConfigDefaultsExcluded<ScrollbarLaneConfig>) {
-    super(timelineLaneComposeConfig(configDefault, config));
+  constructor(configAndStyle?: ConfigAndStyle<ScrollbarLaneConfig, ScrollbarLaneStyle>) {
+    super(
+      {
+        ...configDefault,
+        ...omitKeys(configAndStyle, 'style'),
+      },
+      configAndStyle?.style
+    );
 
     this._contentGroup = KonvaFactory.createGroup();
   }
 
-  override prepareForTimeline(timeline: Timeline, videoController: VideoControllerApi) {
-    super.prepareForTimeline(timeline, videoController);
+  protected createStyledElement(): StyledElementWithId<ScrollbarLaneStyle> {
+    return {
+      id: this._id,
+      classes: [this._ui!.resolveStyleClass('TimelineLane'), this._ui!.resolveStyleClass('ScrollbarLane')],
+    };
+  }
+
+  /**
+   * @internal
+   * @param timeline
+   * @param player
+   * @param ompProvider
+   */
+  override prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider) {
+    super.prepareForTimeline(timeline, player, ompProvider);
 
     let timecodedContainerDimension = this._timeline!.getTimecodedContainerDimension();
 
+    let resolveJustify = (): FlexJustifyContent => {
+      if (this._style?.scrollbarJustify === 'start') {
+        return 'JUSTIFY_FLEX_START';
+      } else if (this._style?.scrollbarJustify === 'end') {
+        return 'JUSTIFY_FLEX_END';
+      } else {
+        return 'JUSTIFY_CENTER';
+      }
+    };
+
     this._contentFlexGroup = KonvaFlexGroup.of({
       konvaNode: KonvaFactory.createGroup(),
+      // konvaBgNode: KonvaFactory.createRect({
+      //   fill: 'red',
+      // }),
       width: timecodedContainerDimension.width,
-      height: this._config.minimized ? 0 : this._config.style.height,
-      flexDirection: 'FLEX_DIRECTION_ROW_REVERSE',
-      alignItems: 'ALIGN_CENTER',
+      height: this._config.minimized ? 0 : this._style?.height,
+      flexDirection: 'FLEX_DIRECTION_ROW',
+      alignItems: 'ALIGN_CENTER', // items are aligned at the center of the cross axis
+      justifyContent: resolveJustify(),
     });
 
     this._timeline!.addToTimecodedStaticContent(this._contentFlexGroup.contentNode.konvaNode);
 
-    this._scrollbar = new Scrollbar({
-      style: {
-        height: this.style.scrollbarHeight,
-        backgroundFill: this.style.scrollbarBackgroundFill,
-        backgroundFillOpacity: this.style.scrollbarBackgroundFillOpacity,
-        handleBarFill: this.style.scrollbarHandleBarFill,
-        handleBarOpacity: this.style.scrollbarHandleBarOpacity,
-        handleOpacity: this.style.scrollbarHandleOpacity,
-      },
+    this._scrollbar = new Scrollbar(ompProvider, {
+      style: removeEmptyValues({
+        height: this.resolveScrollbarHeight(),
+        backgroundFill: this._style?.scrollbarBackgroundFill,
+        backgroundFillOpacity: this._style?.scrollbarBackgroundFillOpacity,
+        handleBarFill: this._style?.scrollbarHandleBarFill,
+        handleBarOpacity: this._style?.scrollbarHandleBarOpacity,
+        handleOpacity: this._style?.scrollbarHandleOpacity,
+      }) as Partial<ScrollbarLaneStyle>,
     });
 
-    let scrollbarFlexItem = new KonvaFlexItem(
+    this._scrollbarFlexItem = new KonvaFlexItem(
       {
-        ...(this.style.scrollbarWidth
+        ...(this._style?.scrollbarWidth
           ? {
-              width: this.style.scrollbarWidth,
+              width: this._style.scrollbarWidth,
             }
           : {
               flexGrow: 1,
             }),
-        height: this.style.scrollbarHeight,
+        height: this._style?.scrollbarHeight,
       },
-      new KonvaComponentFlexContentNode(this._scrollbar)
+      new KonvaComponentFlexContentNode2(this._scrollbar)
     );
 
     // clipping when minimized
@@ -111,47 +156,80 @@ export class ScrollbarLane extends BaseTimelineLane<ScrollbarLaneConfig, Scrollb
       ctx.rect(-padding, 0, layout.width + 2 * padding, layout.height);
     });
 
-    this._contentFlexGroup.addChild(scrollbarFlexItem);
+    this._contentFlexGroup.addChild(this._scrollbarFlexItem);
 
-    this._videoController!.onVideoLoaded$.pipe(
-      filter((p) => !!p),
-      takeUntil(this._destroyed$)
-    ).subscribe((event) => {
-      this._scrollbar!.updateScrollHandle(this._timeline!);
-    });
+    player.onEvent$
+      .pipe(filter((p) => p.type === PlayerEventType.PLAYER_MAIN_MEDIA_LOADED || p.type === PlayerEventType.PLAYER_MAIN_MEDIA_UPDATED))
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe((event) => {
+        this._scrollbar!.updateScrollHandle(this._timeline!);
+      });
 
-    this._timeline!.onScroll$.pipe(takeUntil(this._destroyed$)).subscribe({
-      next: (event) => {
+    this._timeline!.onEvent$.pipe(filter((p) => p.type === TimelineEventType.TIMELINE_SCROLL))
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe((event) => {
         if (!this._timelineZoomInProgress) {
           this._scrollbar!.updateScrollHandle(this._timeline!);
         }
-      },
+      });
+
+    this._scrollbar.onEvent$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe((event) => {
+      switch (event.type) {
+        case ScrollbarEventType.SCROLLBAR_SCROLL:
+          this._timeline!.scrollHorizontallyToPercent(this._scrollbar!.getScrollHandlePercent());
+          break;
+        case ScrollbarEventType.SCROLLBAR_ZOOM:
+          this._timelineZoomInProgress = true;
+          this._timeline!.zoomTo(event.data.zoomPercent, event.data.zoomFocus);
+          this._timeline!.scrollHorizontallyToPercent(this._scrollbar!.getScrollHandlePercent());
+          this._timelineZoomInProgress = false;
+          break;
+      }
     });
 
-    this._scrollbar.onScroll$.pipe(takeUntil(this._destroyed$)).subscribe({
-      next: (event) => {
-        this._timeline!.scrollHorizontallyToPercent(this._scrollbar!.getScrollHandlePercent());
-      },
-    });
+    this._prepared.next(true);
+  }
 
-    this._scrollbar.onZoom$.pipe(takeUntil(this._destroyed$)).subscribe({
-      next: (event) => {
-        this._timelineZoomInProgress = true;
-        this._timeline!.zoomTo(event.zoomPercent, event.zoomFocus);
-        this._timeline!.scrollHorizontallyToPercent(this._scrollbar!.getScrollHandlePercent());
-        this._timelineZoomInProgress = false;
-      },
-    });
+  protected handleStyleUpdate() {
+    super.handleStyleUpdate();
+
+    if (this._style?.scrollbarWidth) {
+      this._scrollbarFlexItem?.setWidth(this._style?.scrollbarWidth)
+    }
+
+    if (this._style?.scrollbarHeight) {
+      this._scrollbarFlexItem?.setHeight(this._style?.scrollbarHeight)
+    }
+
+    this._scrollbar?.updateStyle(removeEmptyValues({
+      height: this.resolveScrollbarHeight(),
+      backgroundFill: this._style?.scrollbarBackgroundFill,
+      backgroundFillOpacity: this._style?.scrollbarBackgroundFillOpacity,
+      handleBarFill: this._style?.scrollbarHandleBarFill,
+      handleBarOpacity: this._style?.scrollbarHandleBarOpacity,
+      handleOpacity: this._style?.scrollbarHandleOpacity,
+    } as Partial<ScrollbarStyle>))
+
+    this._scrollbar?.updateScrollHandle(this._timeline!)
+  }
+
+  private resolveScrollbarHeight() {
+    let timecodedRect = this.getTimecodedRect();
+    return isNullOrUndefined(this._style?.scrollbarHeight) ? timecodedRect.height : this._style?.scrollbarHeight;
   }
 
   protected settleLayout() {
     let timecodedContainerDimension = this._timeline!.getTimecodedContainerDimension();
     let timecodedRect = this.getTimecodedRect();
 
-    this._contentFlexGroup!.setDimensionAndPositions(timecodedContainerDimension.width, timecodedRect.height, FlexSpacingBuilder.instance().topRightBottomLeft([timecodedRect.y, 0, 0, 0]).build());
+    this._contentFlexGroup!.setDimensionAndPositions(timecodedContainerDimension.width, timecodedRect.height, FlexSpacingBuilder.create().topRightBottomLeft([timecodedRect.y, 0, 0, 0]).build());
     if (!this._timelineZoomInProgress) {
       this._scrollbar!.updateScrollHandle(this._timeline!);
     }
+  }
+
+  get scrollbar(): Scrollbar | undefined {
+    return this._scrollbar;
   }
 
   override destroy() {

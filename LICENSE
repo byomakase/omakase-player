@@ -194,9 +194,6 @@
     ____________________________________________________
 
     Omakase Player uses following opensource projects:
-      axios <https://github.com/axios/axios>
-        Available under MIT license
-      <https://github.com/axios/axios/blob/v1.x/LICENSE>
 
       decimal.js <https://github.com/MikeMcl/decimal.js/blob/master/LICENCE.md>
         Available under MIT license

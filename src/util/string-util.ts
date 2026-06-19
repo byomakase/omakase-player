@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,5 +33,9 @@ export class StringUtil {
   public static toArrayBuffer(str: string): ArrayBuffer {
     const encoder = new TextEncoder();
     return encoder.encode(str).buffer;
+  }
+
+  public static toDashCase(s: string): string {
+    return s.replace(/([A-Z])/g, '-$1').replace(/^-/, '').toLowerCase();
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 
 import {StringUtil} from '../util/string-util';
+import {WindowPlaybackMode} from '../common/window-playback';
 
 export class OmpError extends Error {
   constructor(message: string, name?: string) {
@@ -23,20 +24,14 @@ export class OmpError extends Error {
   }
 }
 
-export class OmpBroadcastChannelError extends OmpError {
-  constructor(message: string) {
-    super(message, 'OmpBroadcastChannelError');
+export class UnsupportedMethodInDetachedError extends OmpError {
+  constructor() {
+    super(`Method is not supported in ${WindowPlaybackMode.DETACHED} mode`, 'UnsupportedMethodInDetachedError');
   }
 }
 
-export class OmpBroadcastChannelTimeoutError extends OmpError {
-  constructor(message: string) {
-    super(message, 'OmpBroadcastChannelTimeoutError');
-  }
-}
-
-export class OmpVideoWindowPlaybackError extends OmpError {
-  constructor(message: string) {
-    super(message, 'OmpVideoWindowPlaybackError');
+export class MessageChannelClosedError extends OmpError {
+  constructor(topic: string) {
+    super(`Message channel closed ${topic}`, 'MessageChannelClosedError');
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,4 @@
  * limitations under the License.
  */
 
-export * from './common';
 export * from './error';
-export * from './events';
-export * from './model';
-export * from './track';
-export * from './chart';
-export * from './ts-types';
-
-export type {SubtitlesVttTrackCreateType, OmpAudioTrackCreateType} from './track';

@@ -20,12 +20,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Omakase Player demo</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@0.25.1/dist/style.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@1.0.0/dist/omakase-player.css" />
     <link rel="stylesheet" href="css/player.css" />
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@0.25.1/dist/omakase-player.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@byomakase/vu-meter@1.0.1-SNAPSHOT.1740512209/dist/vu-meter.umd.min.js"></script>
-    <script src="js/index.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "hls.js": "https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.mjs",
+          "@byomakase/omakase-player": "https://cdn.jsdelivr.net/npm/@byomakase/omakase-player@1.0.0/dist/omakase-player.es.js"
+        }
+      }
+    </script>
+    <script type="module" src="js/index.js"></script>
   </head>
 
   <body>
@@ -69,16 +74,6 @@
       </div>
       <div id="meter" class="meter">
         <div id="peak-meter" class="peak-meter"></div>
-        <div id="vu-meter-labels" class="vu-meter-labels">
-          <span class="vu-label">L</span>
-          <span class="vu-label">R</span>
-          <span id="vu-label-surround" class="vu-label-surround">
-            <span class="vu-label">C</span>
-            <span class="vu-label">LFE</span>
-            <span class="vu-label">Ls</span>
-            <span class="vu-label">Rs</span>
-          </span>
-        </div>
       </div>
       <div class="content-right">
         <ul id="tabs" class="tabs">

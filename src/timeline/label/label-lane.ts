@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,20 @@
  * limitations under the License.
  */
 
-import {BaseTimelineLane, TIMELINE_LANE_CONFIG_DEFAULT, timelineLaneComposeConfig, TimelineLaneConfig, TimelineLaneConfigDefaultsExcluded, TimelineLaneStyle} from '../timeline-lane';
-import {KonvaFlexGroup, KonvaFlexItem} from '../../layout/konva-flex';
-import {Timeline} from '../timeline';
+import {type PlayerApi} from '../../player';
+import type {TimelineImpl} from '../timeline';
+import {KonvaFactory} from '../konva/konva-factory';
+import {BaseTimelineLane, TIMELINE_LANE_CONFIG_DEFAULT, type TimelineLaneConfig, type TimelineLaneStyle} from '../timeline-lane';
+import {KonvaFlexGroup, KonvaFlexItem} from '../layout/konva-flex';
 import {TextLabel} from '../timeline-component';
-import {KonvaComponentFlexContentNode} from '../../layout/konva-component-flex';
-import {FlexSpacingBuilder} from '../../layout/flex-node';
-import {VideoControllerApi} from '../../video';
-import {KonvaFactory} from '../../konva/konva-factory';
+import {FlexSpacingBuilder} from '../layout/flex-node';
+import {KonvaComponentFlexContentNode} from '../layout/konva-component-flex';
+import type {StyledElementWithId} from '../../ui';
+import {type ConfigAndStyle} from '../timeline-api';
+import {omitKeys} from '../../util/object-util';
+import type {OmpProvider} from '../../omp-provider';
 
-export interface LabelLaneConfig extends TimelineLaneConfig<LabelLaneStyle> {
+export interface LabelLaneConfig extends TimelineLaneConfig {
   text: string;
 }
 
@@ -36,35 +40,40 @@ export interface LabelLaneStyle extends TimelineLaneStyle {
 
 const configDefault: Omit<LabelLaneConfig, 'text'> = {
   ...TIMELINE_LANE_CONFIG_DEFAULT,
-  style: {
-    ...TIMELINE_LANE_CONFIG_DEFAULT.style,
-    height: 40,
-    textFill: 'red',
-    textFontSize: 14,
-    textAreaStretch: true,
-  },
 };
 
 export class LabelLane extends BaseTimelineLane<LabelLaneConfig, LabelLaneStyle> {
   protected _contentFlexGroup?: KonvaFlexGroup;
   protected _textLabel?: TextLabel;
 
-  constructor(config: TimelineLaneConfigDefaultsExcluded<LabelLaneConfig>) {
-    super(timelineLaneComposeConfig(configDefault, config));
+  constructor(configAndStyle: ConfigAndStyle<LabelLaneConfig, LabelLaneStyle> & Pick<LabelLaneConfig, 'text'>) {
+    super(
+      {
+        ...configDefault,
+        ...omitKeys(configAndStyle, 'style'),
+      },
+      configAndStyle.style
+    );
   }
 
-  override prepareForTimeline(timeline: Timeline, videoController: VideoControllerApi) {
-    super.prepareForTimeline(timeline, videoController);
+  /**
+   * @internal
+   * @param timeline
+   * @param player
+   * @param ompProvider
+   */
+  override prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider) {
+    super.prepareForTimeline(timeline, player, ompProvider);
 
     let timecodedContainerDimension = this._timeline!.getTimecodedContainerDimension();
 
     this._contentFlexGroup = KonvaFlexGroup.of({
       konvaNode: KonvaFactory.createGroup(),
       width: timecodedContainerDimension.width,
-      height: this._config.minimized ? 0 : this._config.style.height,
+      height: this._config.minimized ? 0 : this._style!.height,
       flexDirection: 'FLEX_DIRECTION_ROW',
       alignItems: 'ALIGN_CENTER',
-      margins: FlexSpacingBuilder.instance().topRightBottomLeft([0, 0, 0, 10]).build(),
+      margins: FlexSpacingBuilder.create().topRightBottomLeft([0, 0, 0, 10]).build(),
     });
 
     this._timeline!.addToTimecodedStaticContent(this._contentFlexGroup.contentNode.konvaNode);
@@ -74,12 +83,12 @@ export class LabelLane extends BaseTimelineLane<LabelLaneConfig, LabelLaneStyle>
       listening: true,
       style: {
         fontFamily: this._timeline!.style.textFontFamily,
-        fontSize: this.style.textFontSize,
-        fontStyle: this.style.textFontStyle,
-        fill: this.style.textFill,
+        fontSize: this._style!.textFontSize,
+        fontStyle: this._style!.textFontStyle,
+        fill: this._style!.textFill,
         align: 'left',
         verticalAlign: 'middle',
-        textAreaStretch: this.style.textAreaStretch,
+        textAreaStretch: this._style!.textAreaStretch,
       },
     });
 
@@ -98,33 +107,29 @@ export class LabelLane extends BaseTimelineLane<LabelLaneConfig, LabelLaneStyle>
     });
 
     this._contentFlexGroup.addChild(textLabelFlexItem);
+
+    this._prepared.next(true);
   }
 
-  override onStyleChange() {
-    super.onStyleChange();
-
-    if (this._textLabel) {
-      this._textLabel.style = {
-        fontFamily: this._timeline?.style.textFontFamily,
-        fontSize: this._styleAdapter.style.textFontSize,
-        fontStyle: this._styleAdapter.style.textFontStyle,
-        fill: this._styleAdapter.style.textFill,
-      };
-    }
+  protected createStyledElement(): StyledElementWithId<LabelLaneStyle> {
+    return {
+      id: this._id,
+      classes: [this._ui!.resolveStyleClass('LabelLane')],
+    };
   }
 
   protected settleLayout() {
     let timecodedContainerDimension = this._timeline!.getTimecodedContainerDimension();
     let timecodedRect = this.getTimecodedRect();
 
-    this._contentFlexGroup!.setDimensionAndPositions(timecodedContainerDimension.width, timecodedRect.height, FlexSpacingBuilder.instance().topRightBottomLeft([timecodedRect.y, 0, 0, 0]).build());
+    this._contentFlexGroup!.setDimensionAndPositions(timecodedContainerDimension.width, timecodedRect.height, FlexSpacingBuilder.create().topRightBottomLeft([timecodedRect.y, 0, 0, 0]).build());
   }
-
-  override clearContent() {}
 
   override destroy() {
     super.destroy();
 
     this._contentFlexGroup?.destroy();
   }
+
+  override clearContent() {}
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,29 +14,34 @@
  * limitations under the License.
  */
 
-import {Subject} from 'rxjs';
-import {Destroyable} from '../types';
-import {nextCompleteSubject} from '../util/rxjs-util';
 import {RouterVisualizationComponent} from './router-visualization-component';
 import {RouterVisualizationDomController} from './router-visualization-dom-controller';
-import {nullifier} from '../util/destroy-util';
-import {RouterVisualizationApi} from '../api';
-import {OmpAudioRoutingConnection, VideoControllerApi} from '../video';
+import type {AudioRoutingConnection} from '../audio';
+import type {Destroyable} from '../common/capabilities';
+
+import type {OmakasePlayerApi} from '../omakase-player-api';
+
+export interface RouterVisualizationApi {
+  /**
+   * Updates the size of the Router Visualization component
+   * @param size small, medium or large
+   */
+  updateSize(size: RouterVisualizationSize): void;
+
+  /**
+   * Destroys Router Visualization component
+   */
+  destroy(): void;
+}
 
 export type RouterVisualizationSize = 'small' | 'medium' | 'large';
 
-export interface RouterVisualizationTrackUpdate {
-  name?: string;
-  inputNumber?: number;
-  inputLabels?: string[];
-}
-
-export interface RouterVisualizationTrack extends RouterVisualizationTrackUpdate {
+export interface RouterVisualizationTrack {
+  name?: string | undefined;
+  inputNumber?: number | undefined;
+  inputLabels?: string[] | undefined;
   maxInputNumber: number;
-}
-
-export interface RouterVisualizationSidecarTrack extends RouterVisualizationTrack {
-  trackId: string;
+  trackId?: string | undefined;
 }
 
 export interface RouterVisualizationConfig {
@@ -44,12 +49,11 @@ export interface RouterVisualizationConfig {
   routerVisualizationHTMLElementId: string;
   outputNumber?: number;
   outputLabels?: string[];
-  mainTrack?: RouterVisualizationTrack;
-  sidecarTracks?: RouterVisualizationSidecarTrack[];
-  defaultMatrix?: OmpAudioRoutingConnection[];
+  visualizationTracks?: RouterVisualizationTrack[];
+  defaultMatrix?: AudioRoutingConnection[];
 }
 
-export const defaultRouterVisualizationLabels = ['L', 'R', 'C', 'LFE', 'Ls', 'Rs'];
+export const ROUTER_VISUALIZATION_LABELS_DEFAULT = ['L', 'R', 'C', 'LFE', 'Ls', 'Rs'];
 
 const configDefault: Partial<RouterVisualizationConfig> = {
   size: 'medium',
@@ -60,32 +64,39 @@ export class RouterVisualization implements Destroyable, RouterVisualizationApi 
   private _config: RouterVisualizationConfig;
   private _routerVisualizationDomController: RouterVisualizationDomController;
   private _routerVisualizationComponent: RouterVisualizationComponent;
-  private _videoController: VideoControllerApi;
-  private readonly _destroyed$ = new Subject<void>();
+  private _omakasePlayer: OmakasePlayerApi;
 
-  constructor(config: RouterVisualizationConfig, videoController: VideoControllerApi) {
+  constructor(config: RouterVisualizationConfig, player: OmakasePlayerApi) {
     this._config = {
       ...configDefault,
       ...config,
     };
-    this._videoController = videoController;
+    this._omakasePlayer = player;
+
+    this._omakasePlayer;
     this._routerVisualizationDomController = new RouterVisualizationDomController(this);
     this._routerVisualizationComponent = this._routerVisualizationDomController.routerVisualizationComponent;
-    this._routerVisualizationComponent.videoController = this._videoController;
+    this._routerVisualizationComponent.player = this._omakasePlayer;
     if (this._config.outputNumber || this._config.outputLabels) {
       this._routerVisualizationComponent.outputs = this._config.outputLabels
         ? this._config.outputLabels.slice(0, this._config.outputNumber)
-        : defaultRouterVisualizationLabels.slice(0, this._config.outputNumber);
+        : ROUTER_VISUALIZATION_LABELS_DEFAULT.slice(0, this._config.outputNumber);
     }
-    if (this._config.mainTrack) {
+    const mainTrack = this._config.visualizationTracks?.filter((track) => !track.trackId);
+    if (mainTrack?.length) {
       this._routerVisualizationComponent.mainTrack = {
-        track: this.prepareTrack(this._config.mainTrack),
+        track: this.prepareTrack(mainTrack.at(0)!),
         defaultMatrix: this._config.defaultMatrix,
       };
+
+      if (mainTrack.length > 1) {
+        console.warn('Multiple visualization tracks without id have been provided, only the first one was used.');
+      }
     }
-    if (this._config.sidecarTracks) {
+    const sidecarTracks = this._config.visualizationTracks?.filter((track) => track.trackId);
+    if (sidecarTracks?.length) {
       this._routerVisualizationComponent.sidecarTracks = {
-        tracks: this._config.sidecarTracks,
+        tracks: sidecarTracks,
         defaultMatrix: this._config.defaultMatrix,
       };
     }
@@ -96,18 +107,11 @@ export class RouterVisualization implements Destroyable, RouterVisualizationApi 
     return this._config;
   }
 
-  updateMainTrack(track: RouterVisualizationTrackUpdate) {
-    if (this._routerVisualizationComponent.mainTrack?.track) {
-      this._routerVisualizationComponent.mainTrack = {
-        track: this.prepareTrack({...this._routerVisualizationComponent.mainTrack.track, ...track}),
-      };
-    } else {
-      throw Error('Main track is not defined');
-    }
-  }
-
   private prepareTrack(track: RouterVisualizationTrack): RouterVisualizationTrack {
-    let channelCount = this._videoController.getActiveAudioTrack()?.channelCount;
+    // let channelCount = this._player.getActiveAudioTrack()?.channelCount;
+
+    const activeMainTrackId = this._omakasePlayer!.player.playerSession.audio?.tracks['MAIN'].find((track) => track.active)?.trackId;
+    let channelCount = this._omakasePlayer?.player.audio.getTracks().find((track) => track.id === activeMainTrackId)?.channels;
 
     return channelCount ? {...track, inputNumber: channelCount} : track;
   }
@@ -117,8 +121,6 @@ export class RouterVisualization implements Destroyable, RouterVisualizationApi 
   }
 
   destroy(): void {
-    nextCompleteSubject(this._destroyed$);
     this._routerVisualizationDomController.destroy();
-    nullifier(this._config);
   }
 }

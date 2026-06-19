@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,14 +19,19 @@ import {defineConfig} from 'vite';
 import dtsPlugin from 'vite-plugin-dts';
 
 const outputNames = {
-  omp_peak_sample_processor: 'omp-peak-sample-processor.js',
-  omp_true_peak_processor: 'omp-true-peak-processor.js',
-  omp_synchronization_processor: 'omp-synchronization-processor.js',
-  // omp_time_stretch_processor: 'omp-time-stretch-processor.js',
+  sync_audio_worklet_processor: 'sync-audio-worklet-processor.js',
+  peak_sample_audio_worklet_processor: 'peak-sample-audio-worklet-processor.js',
+  true_peak_audio_worklet_processor: 'true-peak-audio-worklet-processor.js',
 };
 
 export default defineConfig({
-  plugins: [dtsPlugin()],
+  plugins: [
+    // dtsPlugin({
+    //   rollupTypes: true,
+    //   copyDtsFiles: false,
+    //   entryRoot: 'src',
+    // }),
+  ],
   build: {
     sourcemap: false,
     emptyOutDir: false,
@@ -34,18 +39,15 @@ export default defineConfig({
     lib: {
       // Specify multiple entry points
       entry: {
-        omp_peak_sample_processor: resolve(__dirname, 'src/worker/omp-peak-sample-processor.ts'),
-        omp_true_peak_processor: resolve(__dirname, 'src/worker/omp-true-peak-processor.ts'),
-        omp_synchronization_processor: resolve(__dirname, 'src/worker/omp-synchronization-processor.ts'),
-        // omp_time_stretch_processor: resolve(__dirname, 'src/worker/omp-time-stretch-processor.ts'),
+        sync_audio_worklet_processor: resolve(__dirname, 'src/worker/sync-audio-worklet-processor.ts'),
+        peak_sample_audio_worklet_processor: resolve(__dirname, 'src/worker/peak-sample-audio-worklet-processor.ts'),
+        true_peak_audio_worklet_processor: resolve(__dirname, 'src/worker/true-peak-audio-worklet-processor.ts'),
       },
       formats: ['es'], // Only output ES format
-      name: 'OmpWorkers', // Global name if needed
       // fileName: (format, entryName) => `${entryName}.js`, // Use entry name for file name
       fileName: (format, entryName) => {
         return `${outputNames[entryName]}` || `${entryName}.js`; // Fallback to entryName if not found
       },
     },
-    rollupOptions: {},
   },
 });

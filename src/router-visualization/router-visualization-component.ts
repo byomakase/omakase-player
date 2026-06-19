@@ -1,217 +1,223 @@
-import {AudioApi} from '../api';
-import {OmpAudioRoutingConnection, OmpMainAudioState, OmpSidecarAudioState} from '../video/model';
-import {defaultRouterVisualizationLabels, RouterVisualizationSidecarTrack, RouterVisualizationSize, RouterVisualizationTrack} from './router-visualization';
-import {
-  AudioLoadedEvent,
-  AudioSwitchedEvent,
-  MainAudioChangeEvent,
-  SidecarAudioChangeEvent,
-  VideoWindowPlaybackStateChangeEvent,
-} from '../types';
-import {filter, Observable, of, skip, Subject, takeUntil} from 'rxjs';
-import {nextCompleteSubject} from '../util/rxjs-util';
-import {VideoControllerApi} from '../video';
+/*
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-const classes = {
-  routerVisualizationTable: 'omakase-router-table',
-  routerVisualizationWrapper: 'omakase-router-container',
-  routerVisualizationToggle: 'omakase-router-toggle',
-};
+import {filter, Observable, of, takeUntil} from 'rxjs';
+import {AudioRouterEventType, type AudioRouterState, type AudioRoutingConnection} from '../audio/audio-router';
+import {PlayerAudioEventType, PlayerAudioType, PlayerEventType} from '../player';
+import {ROUTER_VISUALIZATION_LABELS_DEFAULT, type RouterVisualizationTrack} from './router-visualization';
+import {WindowPlaybackMode} from '../common/window-playback';
+import {type MainTrackConfig, type SidecarTracksConfig, RouterVisualizationBase, RouterVisualizationClasses} from './router-visualization-base';
+import type {OmakasePlayerApi} from '../omakase-player-api';
+import {SessionEventType} from '../session';
 
-interface MainTrackConfig {
-  track?: RouterVisualizationTrack;
-  defaultMatrix?: OmpAudioRoutingConnection[];
-}
-
-interface SidecarTracksConfig {
-  tracks: RouterVisualizationSidecarTrack[];
-  defaultMatrix?: OmpAudioRoutingConnection[];
-}
-
-type SetNodesAction = 'deselect' | 'reset';
-
-export class RouterVisualizationComponent extends HTMLElement {
-  private _outputs?: string[];
-  private _mainTrack?: RouterVisualizationTrack;
-  private _sidecarTracks?: RouterVisualizationSidecarTrack[];
-  private _videoController?: VideoControllerApi;
-  private _size: RouterVisualizationSize = 'medium';
-  private _tableElement!: HTMLTableElement;
-  private _wrapperElement!: HTMLDivElement;
-  private readonly _destroyed$ = new Subject<void>();
+export class RouterVisualizationComponent extends RouterVisualizationBase {
+  private _omakasePlayer?: OmakasePlayerApi;
 
   constructor() {
     super();
     this.render();
   }
 
-  set outputs(outputs: string[]) {
-    this._outputs = outputs;
-    this.renderOutputs();
-  }
-
-  get mainTrack(): MainTrackConfig | undefined {
-    return {
-      track: this._mainTrack,
-    };
-  }
-
-  set mainTrack(config: MainTrackConfig | undefined) {
-    if (!config?.track) {
+  protected updateMainTrack(config: MainTrackConfig | undefined) {
+    this._mainTrackSetterBreaker.break();
+    this._mainTrackConfig = config;
+    if (!config) {
+      // undefenied can only be provided
+      this.renderTrack(undefined);
+      return;
+    }
+    if (!config.track) {
       this._mainTrack = undefined;
       return;
     }
     this._mainTrack = this.prepareTrackForVisualization(config.track);
 
-    const o$: Observable<any> = !this._videoController!.getMainAudioState()?.audioRouterState
-      ? this._videoController!.createMainAudioRouter(config.track.maxInputNumber, this._outputs!.length)
-      : of(true);
-    o$.subscribe({
+    const mainHandler = this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.MAIN)!;
+    const o$: Observable<any> = !mainHandler?.router ? mainHandler.createAudioRouter(config.track.maxInputNumber, this._outputs!.length) : of(true);
+    o$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe({
       next: () => {
         this.setAudioRouterDefaultMatrix(config.track!, config.defaultMatrix);
+        this._wireMainTrackEvents();
       },
     });
 
     this.renderTrack(config.track);
   }
 
-  set sidecarTracks(config: SidecarTracksConfig) {
+  protected setSidecarTracksConfig(config: SidecarTracksConfig) {
+    if (config.tracks.length === 0) {
+      this._providedSidecarTracksConfig?.tracks.forEach((track) => {
+        this.renderTrack(undefined, track.trackId);
+      });
+    }
+    this._providedSidecarTracksConfig = config;
+
     this._sidecarTracks = config.tracks.map((track) => {
-      const sidecarAudioState = this._videoController!.getSidecarAudioState(track.trackId);
+      //   const sidecarAudioState = this._player!.getSidecarAudioState(track.trackId);
+      const sidecarAudioState = this._omakasePlayer!.player.audio.getTracks(PlayerAudioType.SIDECAR).find((playerTrack) => track.trackId === playerTrack.id);
 
       if (sidecarAudioState) {
-        return this.prepareTrackForVisualization({...track, inputNumber: sidecarAudioState.numberOfChannels});
+        return this.prepareTrackForVisualization({...track, inputNumber: sidecarAudioState.channels});
       }
       return this.prepareTrackForVisualization(track);
-    });
+    }) as (RouterVisualizationTrack & {trackId: string})[];
 
     for (const track of config.tracks) {
-      if (!this._videoController!.getSidecarAudioState(track.trackId)?.audioRouterState) {
-        this._videoController!.createSidecarAudioRouter(track.trackId, track.maxInputNumber, this._outputs!.length).subscribe({
-          next: () => {
-            this.setAudioRouterDefaultMatrix(track, config.defaultMatrix);
+      const handler = this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.SIDECAR, track.trackId!)!;
+      const o$: Observable<any> = !handler?.router ? handler.createAudioRouter(track.maxInputNumber, this._outputs!.length) : of(true);
+
+      o$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe({
+        next: () => {
+          this._wireSidecarTrackEvents(track.trackId!);
+          for (const track of this._sidecarTracks!) {
+            this.renderTrack(track, track.trackId);
+          }
+        },
+      });
+    }
+
+    // for (const track of this._sidecarTracks) {
+    //   this.renderTrack(track, track.trackId);
+    // }
+  }
+
+  protected _wireSidecarTrackEvents(trackId: string) {
+    let attachedDetachedModeFilter = () => {
+      return this._omakasePlayer!.session.state.windowPlayback.mode === WindowPlaybackMode.ATTACHED || this._omakasePlayer!.session.state.windowPlayback.mode === WindowPlaybackMode.DETACHED;
+    };
+    this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.SIDECAR, trackId)!
+      .router!.onEvent$.pipe(takeUntil(this._destroyBreaker.observer))
+      .pipe(takeUntil(this._detachAttachBreaker.observer))
+      .pipe(filter((event) => event.type === AudioRouterEventType.AUDIO_ROUTER_CHANGE))
+      .pipe(filter(attachedDetachedModeFilter))
+
+      .subscribe((event) => {
+        this.updateTogglesFromState(this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.SIDECAR, trackId)!.router!.state, trackId);
+      });
+    this.updateTogglesFromState(this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.SIDECAR, trackId)!.router!.state, trackId);
+  }
+
+  protected _wireMainTrackEvents() {
+    let attachedDetachedModeFilter = () => {
+      return this._omakasePlayer!.session.state.windowPlayback.mode === WindowPlaybackMode.ATTACHED || this._omakasePlayer!.session.state.windowPlayback.mode === WindowPlaybackMode.DETACHED;
+    };
+    this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.MAIN)!
+      .router!.onEvent$.pipe(takeUntil(this._destroyBreaker.observer))
+      .pipe(takeUntil(this._detachAttachBreaker.observer))
+      .pipe(filter((event) => event.type === AudioRouterEventType.AUDIO_ROUTER_CHANGE))
+      .pipe(filter(attachedDetachedModeFilter))
+
+      .subscribe((event) => {
+        this.updateTogglesFromState(this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.MAIN)!.router!.state);
+      });
+    this.updateTogglesFromState(this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.MAIN)!.router!.state);
+  }
+
+  set player(player: OmakasePlayerApi) {
+    this._omakasePlayer = player;
+
+    this._omakasePlayer.session.state.windowPlayback.mode === WindowPlaybackMode.ATTACHED;
+
+    let attachedDetachedModeFilter = () => {
+      return this._omakasePlayer!.session.state.windowPlayback.mode === WindowPlaybackMode.ATTACHED || this._omakasePlayer!.session.state.windowPlayback.mode === WindowPlaybackMode.DETACHED;
+    };
+
+    this._omakasePlayer!.session.onEvent$.pipe(
+      takeUntil(this._destroyBreaker.observer),
+      filter((event) => event.type === SessionEventType.SESSION_WINDOW_PLAYBACK_MODE_CHANGE_REQUEST)
+    ).subscribe((event) => {
+      this._detachAttachBreaker.break();
+    });
+    this._omakasePlayer!.session.onEvent$.pipe(
+      takeUntil(this._destroyBreaker.observer),
+      filter((event) => event.type === SessionEventType.SESSION_WINDOW_PLAYBACK_UPDATED)
+    ).subscribe((event) => {
+      if (event.data.windowPlayback.mode === WindowPlaybackMode.ATTACHED || event.data.windowPlayback.mode === WindowPlaybackMode.DETACHED) {
+        this.updateMainTrack(this._mainTrackConfig);
+        if (this._providedSidecarTracksConfig) {
+          this.sidecarTracks = this._providedSidecarTracksConfig;
+        }
+      }
+    });
+
+    let updateMainTrack = () => {
+      const activeMainTrackId = this._omakasePlayer?.player.audio.state.tracks[PlayerAudioType.MAIN].find((track) => track.active)?.trackId;
+      let channelCount = this._omakasePlayer?.player.audio.getTracks().find((track) => track.id === activeMainTrackId)?.channels;
+      if (channelCount && this._mainTrack) {
+        this.updateMainTrack({
+          track: {
+            ...this._mainTrack,
+            inputNumber: channelCount,
           },
         });
       }
-    }
-
-    for (const track of this._sidecarTracks) {
-      this.renderTrack(track, track.trackId);
-    }
-  }
-
-  set videoController(videoController: VideoControllerApi) {
-    this._videoController = videoController;
-
-    let createAttachedDetachedModeFilter = <T>() => {
-      return filter<T>(() => this._videoController!.getVideoWindowPlaybackState() === 'attached' || this._videoController!.getVideoWindowPlaybackState() === 'detached');
     };
 
-    let updateMainTrack = () => {
-      let activeAudioTrack = this._videoController?.getActiveAudioTrack();
-      if (this._mainTrack && activeAudioTrack && activeAudioTrack.channelCount) {
-        this.mainTrack = {
-          track: {
-            ...this._mainTrack,
-            inputNumber: activeAudioTrack.channelCount,
-          },
+    this._omakasePlayer.player.audio.onEvent$
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .pipe(filter((event) => event.type === PlayerAudioEventType.PLAYER_AUDIO_TRACK_SWITCHED))
+      .pipe(filter(attachedDetachedModeFilter))
+
+      .subscribe((event) => {
+        updateMainTrack();
+      });
+
+    this._omakasePlayer.player.onEvent$
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .pipe(filter((event) => event.type === PlayerEventType.PLAYER_MAIN_MEDIA_LOADED))
+      .pipe(filter(attachedDetachedModeFilter))
+      .subscribe(() => {
+        updateMainTrack();
+      });
+
+    this._omakasePlayer.player.onEvent$
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .pipe(filter((event) => event.type === PlayerEventType.PLAYER_MAIN_MEDIA_UNLOADING))
+      .pipe(filter(attachedDetachedModeFilter))
+      .subscribe(() => {
+        this.updateMainTrack(undefined);
+        this.sidecarTracks = {
+          tracks: [],
+          defaultMatrix: [],
         };
-      }
-    };
-
-    this._videoController.onVideoWindowPlaybackStateChange$
-      .pipe(takeUntil(this._destroyed$))
-      .pipe(createAttachedDetachedModeFilter<VideoWindowPlaybackStateChangeEvent>())
-      .subscribe((event) => {
-        updateMainTrack();
-
-        let mainAudioState = this._videoController?.getMainAudioState();
-        if (mainAudioState) {
-          this.updateTogglesFromState(mainAudioState);
-        }
-
-        let sidecarAudioStates = this._videoController?.getSidecarAudioStates();
-        if (sidecarAudioStates) {
-          sidecarAudioStates.forEach((sidecarAudioState) => {
-            this.updateTogglesFromState(sidecarAudioState);
-          });
-        }
-      });
-
-    this._videoController.onMainAudioChange$
-      .pipe(takeUntil(this._destroyed$))
-      .pipe(createAttachedDetachedModeFilter<MainAudioChangeEvent | undefined>())
-      .subscribe((event) => {
-        if (event) {
-          this.updateTogglesFromState(event.mainAudioState);
-        }
-      });
-
-    this._videoController.onSidecarAudioChange$
-      .pipe(takeUntil(this._destroyed$))
-      .pipe(createAttachedDetachedModeFilter<SidecarAudioChangeEvent>())
-      .subscribe((event) => {
-        this.updateTogglesFromState(event.sidecarAudioState);
-      });
-
-    this._videoController.onAudioSwitched$
-      .pipe(takeUntil(this._destroyed$))
-      .pipe(createAttachedDetachedModeFilter<AudioSwitchedEvent>())
-      .subscribe((event) => {
-        updateMainTrack();
-      });
-
-    this._videoController.onAudioLoaded$
-      .pipe(takeUntil(this._destroyed$))
-      .pipe(createAttachedDetachedModeFilter<AudioLoadedEvent | undefined>())
-      .subscribe((event) => {
-        updateMainTrack();
       });
 
     if (!this._outputs) {
-      const outputs = this.getOutputsFromAudioContext(this._videoController);
+      const outputs = this.getOutputsFromAudioContext();
       if (outputs) {
         this.outputs = outputs;
       }
     }
   }
 
-  set size(size: RouterVisualizationSize) {
-    this._size = size;
-    this._wrapperElement.classList.remove('size-small', 'size-medium', 'size-large');
-    this._wrapperElement.classList.add(`size-${this._size}`);
-  }
-
-  deselectAllNodes(track?: RouterVisualizationTrack) {
-    return this.setAllNodes('deselect', track);
-  }
-
-  resetAllNodes(track?: RouterVisualizationTrack) {
-    return this.setAllNodes('reset', track);
-  }
-
-  private setAudioRouterDefaultMatrix(track: RouterVisualizationTrack | RouterVisualizationSidecarTrack, defaultMatrix?: OmpAudioRoutingConnection[]) {
+  protected setAudioRouterDefaultMatrix(track: RouterVisualizationTrack, defaultMatrix?: AudioRoutingConnection[]) {
     if (defaultMatrix) {
       if ('trackId' in track) {
-        this._videoController!.setSidecarAudioRouterInitialRoutingConnections(track.trackId, defaultMatrix).subscribe(() => this.resetAllNodes(track));
+        const handler = this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.SIDECAR, track.trackId!)!;
+        handler.router!.setDefaultRoutingConnections(defaultMatrix);
+        this.resetAllNodes(track);
       } else {
-        this._videoController!.setMainAudioRouterInitialRoutingConnections(defaultMatrix).subscribe(() => this.resetAllNodes(track));
+        const handler = this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.MAIN)!;
+        handler.router!.setDefaultRoutingConnections(defaultMatrix);
+        this.resetAllNodes(track);
       }
     }
   }
 
-  private render() {
-    this._wrapperElement = document.createElement('div');
-    this._wrapperElement.classList.add(classes.routerVisualizationWrapper, `size-${this._size}`);
-
-    this._tableElement = document.createElement('table');
-    this._tableElement.classList.add(classes.routerVisualizationTable);
-
-    this._wrapperElement.appendChild(this._tableElement);
-    this.appendChild(this._wrapperElement);
-  }
-
-  private renderOutputs() {
+  protected renderOutputs() {
     const existingThead = this._tableElement.getElementsByTagName('thead')[0];
     if (existingThead) {
       this._tableElement.removeChild(existingThead);
@@ -220,14 +226,14 @@ export class RouterVisualizationComponent extends HTMLElement {
     const tr = document.createElement('tr');
     const th1 = document.createElement('th');
     th1.colSpan = 2;
-    th1.classList.add('align-left');
+    th1.classList.add(RouterVisualizationClasses.ALIGN_LEFT);
     const deselectAll = document.createElement('span');
-    deselectAll.classList.add('omakase-router-icon', 'icon-deselect-all');
+    deselectAll.classList.add(RouterVisualizationClasses.ICON, RouterVisualizationClasses.ICON_DESELECT_ALL);
     deselectAll.onclick = () => {
       this.deselectAllNodes();
     };
     const resetAll = document.createElement('span');
-    resetAll.classList.add('omakase-router-icon', 'icon-reset-all');
+    resetAll.classList.add(RouterVisualizationClasses.ICON, RouterVisualizationClasses.ICON_RESET_ALL);
     resetAll.onclick = () => {
       this.resetAllNodes();
     };
@@ -241,39 +247,44 @@ export class RouterVisualizationComponent extends HTMLElement {
     const th3 = document.createElement('th');
     th3.classList.add('align-right');
     const outputCount = document.createElement('span');
-    outputCount.classList.add('omakase-router-icon', `icon-outputs-${this._outputs!.length > 2 ? 'many' : 'few'}`);
+    outputCount.classList.add(RouterVisualizationClasses.ICON, this._outputs!.length > 2 ? RouterVisualizationClasses.ICON_OUTPUTS_MANY : RouterVisualizationClasses.ICON_OUTPUTS_FEW);
     th3.appendChild(outputCount);
     tr.appendChild(th3);
     thead.appendChild(tr);
     this._tableElement.appendChild(thead);
   }
 
-  private renderTrack(track: RouterVisualizationTrack, trackId = 'main') {
-    const id = `omakase-router-visualization-${trackId}`;
+  protected renderTrack(track: RouterVisualizationTrack | undefined, trackId = this._mainTrackLabel) {
+    const id = `${RouterVisualizationClasses.TRACK_PREFIX}-${trackId}`;
     const tbody = document.getElementById(id) ?? document.createElement('tbody');
-
-    const routingConnections =
-      trackId === 'main'
-        ? this._videoController!.getMainAudioState()?.audioRouterState?.routingConnections
-        : this._videoController!.getSidecarAudioState(trackId)?.audioRouterState?.routingConnections;
-
     tbody.innerHTML = '';
     tbody.id = id;
+
+    if (!track) {
+      // there is nothing to render, return
+      return;
+    }
+
+    const routingConnections =
+      trackId === this._mainTrackLabel
+        ? this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.MAIN)?.router?.state.routingConnections
+        : this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.SIDECAR, trackId)?.router?.state.routingConnections;
+
     track.inputLabels!.forEach((input, inputNumber) => {
       const tr = document.createElement('tr');
       const td1 = document.createElement('td');
-      td1.classList.add('align-left', 'router-visualization-label');
+      td1.classList.add(RouterVisualizationClasses.ALIGN_LEFT, RouterVisualizationClasses.LABEL);
       if (inputNumber === 0) {
         td1.innerHTML = track.name ?? '';
         td1.title = track.name ?? '';
       } else if (inputNumber === track.inputNumber! - 1) {
         const iconDeselect = document.createElement('span');
-        iconDeselect.classList.add('omakase-router-icon', 'icon-deselect');
+        iconDeselect.classList.add(RouterVisualizationClasses.ICON, RouterVisualizationClasses.ICON_DESELECT);
         iconDeselect.onclick = () => {
           this.deselectAllNodes(track);
         };
         const iconReset = document.createElement('span');
-        iconReset.classList.add('omakase-router-icon', 'icon-reset');
+        iconReset.classList.add(RouterVisualizationClasses.ICON, RouterVisualizationClasses.ICON_RESET);
         iconReset.onclick = () => {
           this.resetAllNodes(track);
         };
@@ -281,31 +292,31 @@ export class RouterVisualizationComponent extends HTMLElement {
         td1.appendChild(iconReset);
       }
       const td2 = document.createElement('td');
-      td2.classList.add('align-right');
+      td2.classList.add(RouterVisualizationClasses.ALIGN_RIGHT);
       td2.innerHTML = input;
       tr.append(td1, td2);
       this._outputs!.forEach((_, outputNumber) => {
         const td = document.createElement('td');
         const toggle = this.getToggleElement();
-        toggle.id = `${classes.routerVisualizationToggle}-${trackId}-${inputNumber}-${outputNumber}`;
+        toggle.id = `${RouterVisualizationClasses.TOGGLE}-${trackId}-${inputNumber}-${outputNumber}`;
 
         if (routingConnections && routingConnections[inputNumber] && routingConnections[inputNumber][outputNumber] && routingConnections[inputNumber][outputNumber].connected) {
-          toggle.classList.add('active');
+          toggle.classList.add(RouterVisualizationClasses.ACTIVE);
         }
         toggle.onclick = () => {
-          const routingConnections: OmpAudioRoutingConnection[] = [
+          const routingConnections: AudioRoutingConnection[] = [
             {
               path: {
                 input: inputNumber,
                 output: outputNumber,
               },
-              connected: !toggle.classList.contains('active'),
+              connected: !toggle.classList.contains(RouterVisualizationClasses.ACTIVE),
             },
           ];
-          if (trackId === 'main') {
-            this._videoController!.updateMainAudioRouterConnections(routingConnections);
+          if (trackId === this._mainTrackLabel) {
+            this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.MAIN)?.router?.updateConnections(routingConnections);
           } else {
-            this._videoController!.updateSidecarAudioRouterConnections(trackId, routingConnections);
+            this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.SIDECAR, trackId)?.router?.updateConnections(routingConnections);
           }
         };
 
@@ -320,96 +331,55 @@ export class RouterVisualizationComponent extends HTMLElement {
       this._tableElement.appendChild(tbody);
     }
     if (this._tableElement.getElementsByTagName('tbody').length > 1) {
-      this._tableElement.classList.add('omakase-router-multiple');
+      this._tableElement.classList.add(RouterVisualizationClasses.MULTIPLE);
     }
   }
 
-  private getToggleElement(): HTMLElement {
-    const element = document.createElement('div');
-    element.classList.add(classes.routerVisualizationToggle);
-    const innerElement = document.createElement('div');
-    innerElement.classList.add(`${classes.routerVisualizationToggle}-inner`);
-    element.appendChild(innerElement);
-    return element;
+  protected getRoutingConnections(trackId: string): AudioRoutingConnection[][] | undefined {
+    return trackId === this._mainTrackLabel
+      ? this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.MAIN)?.router?.state.routingConnections
+      : this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.SIDECAR, trackId)?.router?.state.routingConnections;
   }
 
-  private setAllNodes(action: SetNodesAction, track?: RouterVisualizationTrack | RouterVisualizationSidecarTrack) {
-    if (track) {
-      let routingConnections: OmpAudioRoutingConnection[];
-      if (action === 'deselect') {
-        routingConnections = [...Array(track.inputLabels!.length).keys()].flatMap((input) => {
-          return [...Array(this._outputs!.length).keys()].map((output) => ({
-            path: {
-              input,
-              output,
-            },
-            connected: false,
-          }));
-        });
-      } else {
-        if ('trackId' in track) {
-          routingConnections = this._videoController!.getSidecarAudioRouterInitialRoutingConnections(track.trackId) ?? [];
-        } else {
-          routingConnections = this._videoController!.getMainAudioRouterInitialRoutingConnections() ?? [];
-        }
-      }
-
-      if ((track as RouterVisualizationSidecarTrack).trackId) {
-        this._videoController!.updateSidecarAudioRouterConnections((track as RouterVisualizationSidecarTrack).trackId, routingConnections);
-      } else {
-        this._videoController!.updateMainAudioRouterConnections(routingConnections);
-      }
+  protected updateConnections(trackId: string, routingConnections: AudioRoutingConnection[]): void {
+    if (trackId === this._mainTrackLabel) {
+      this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.MAIN)?.router?.updateConnections(routingConnections);
     } else {
-      if (this._mainTrack) {
-        this.setAllNodes(action, this._mainTrack);
-      }
-      if (this._sidecarTracks) {
-        this._sidecarTracks.forEach((track) => {
-          this.setAllNodes(action, track);
-        });
-      }
+      this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.SIDECAR, trackId)?.router?.updateConnections(routingConnections);
     }
   }
 
-  private prepareTrackForVisualization<T extends RouterVisualizationTrack | RouterVisualizationSidecarTrack>(track: T): T {
-    if (!track.inputNumber) {
-      track.inputNumber = track.maxInputNumber;
-    }
-    if (!track.inputLabels || track.inputLabels.length !== track.inputNumber) {
-      track.inputLabels = defaultRouterVisualizationLabels.slice(0, track.inputNumber);
+  protected getDefaultRoutingConnections(audioType: PlayerAudioType, trackId?: string): AudioRoutingConnection[] | undefined {
+    if (audioType === PlayerAudioType.MAIN) {
+      return this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.MAIN)?.router?.getDefaultRoutingConnections() ?? [];
     } else {
-      track.inputLabels = track.inputLabels.slice(0, track.inputNumber);
-    }
-    return track;
-  }
-
-  private getOutputsFromAudioContext(audio: AudioApi): string[] | undefined {
-    const outputCount = audio.getMainAudioState()?.numberOfChannels;
-    if (outputCount && outputCount >= 6) {
-      return defaultRouterVisualizationLabels.slice(0, 6);
-    } else if (outputCount && outputCount >= 2) {
-      return defaultRouterVisualizationLabels.slice(0, 2);
-    } else {
-      return undefined;
+      return this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.SIDECAR, trackId!)?.router?.getDefaultRoutingConnections() ?? [];
     }
   }
 
-  private updateTogglesFromState(state: OmpMainAudioState | OmpSidecarAudioState) {
-    const trackId = (state as OmpSidecarAudioState).audioTrack?.id ?? 'main';
-    if (state.audioRouterState) {
-      state.audioRouterState.routingConnections.forEach((connections) => {
+  protected updateTogglesFromState(state: AudioRouterState, trackId?: string | undefined) {
+    trackId = trackId ?? this._mainTrackLabel;
+    if (state) {
+      state.routingConnections.forEach((connections) => {
         connections.forEach((connection) => {
           if (connection.connected) {
-            document.getElementById(`${classes.routerVisualizationToggle}-${trackId}-${connection.path.input}-${connection.path.output}`)?.classList.add('active');
+            document.getElementById(`${RouterVisualizationClasses.TOGGLE}-${trackId}-${connection.path.input}-${connection.path.output}`)?.classList.add('active');
           } else {
-            document.getElementById(`${classes.routerVisualizationToggle}-${trackId}-${connection.path.input}-${connection.path.output}`)?.classList.remove('active');
+            document.getElementById(`${RouterVisualizationClasses.TOGGLE}-${trackId}-${connection.path.input}-${connection.path.output}`)?.classList.remove('active');
           }
         });
       });
     }
   }
 
-  destroy(): void {
-    nextCompleteSubject(this._destroyed$);
+  protected getOutputsFromAudioContext(): string[] | undefined {
+    const outputCount = this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.OUTPUT)!.channelCount;
+    if (outputCount && outputCount >= 6) {
+      return ROUTER_VISUALIZATION_LABELS_DEFAULT.slice(0, 6);
+    } else if (outputCount && outputCount >= 2) {
+      return ROUTER_VISUALIZATION_LABELS_DEFAULT.slice(0, 2);
+    } else {
+      return undefined;
+    }
   }
 }

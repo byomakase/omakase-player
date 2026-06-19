@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,28 +14,28 @@
  * limitations under the License.
  */
 
-import {ZodError} from 'zod';
-import {ParseParams} from 'zod/lib/helpers/parseUtil';
-
-export function parseErrorMessage(error: unknown): string {
-  let message;
-  if (typeof error === 'string') {
-    message = error;
-  } else if (error instanceof ZodError) {
-    message = (error as ZodError).errors.map((p) => p.message).join('. ');
-  } else if (error instanceof Error) {
-    message = error.message;
-  } else {
-    message = 'Unexpected error';
+export function extractErrorMessage(err: unknown): string {
+  if (err === null || err === undefined) {
+    return 'Unknown error';
   }
-
-  return message;
-}
-
-export function zodErrorMapOverload(message: string): Partial<ParseParams> {
-  return {
-    errorMap: (issue, ctx) => {
-      return {message};
-    },
-  };
+  if (typeof err === 'string') {
+    return err;
+  }
+  if (err instanceof Error) {
+    return err.message;
+  }
+  if (typeof err === 'object') {
+    const obj = err as Record<string, unknown>;
+    const targetMessage = (obj['target'] as Record<string, unknown> | undefined)?.['error'];
+    if (typeof targetMessage === 'object' && targetMessage !== null) {
+      const msg = (targetMessage as Record<string, unknown>)['message'];
+      if (typeof msg === 'string') return msg;
+    }
+    if (typeof obj['message'] === 'string') {
+      return obj['message'];
+    }
+    const json = JSON.stringify(err);
+    return json !== '{}' ? json : 'Unknown error';
+  }
+  return String(err);
 }

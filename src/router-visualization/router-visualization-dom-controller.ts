@@ -1,6 +1,5 @@
-import {RouterVisualizationComponent} from './router-visualization-component';
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +14,10 @@ import {RouterVisualizationComponent} from './router-visualization-component';
  * limitations under the License.
  */
 
-import {Destroyable} from '../types';
-import {DomUtil} from '../util/dom-util';
+import {RouterVisualizationComponent} from './router-visualization-component';
 import {RouterVisualization} from './router-visualization';
+import type {Destroyable} from '../common/capabilities';
+import {DomUtil} from '../dom/dom-util';
 
 export class RouterVisualizationDomController implements Destroyable {
   private _routerVisualization: RouterVisualization;
@@ -29,7 +29,7 @@ export class RouterVisualizationDomController implements Destroyable {
     if (!customElements.get('omakase-audio-router')) {
       customElements.define('omakase-audio-router', RouterVisualizationComponent);
     }
-    this._divRouterVisualization = DomUtil.getElementById<HTMLElement>(this._routerVisualization.config.routerVisualizationHTMLElementId);
+    this._divRouterVisualization = DomUtil.getElementByIdOrFail<HTMLElement>(this._routerVisualization.config.routerVisualizationHTMLElementId);
     this.createDom();
   }
 

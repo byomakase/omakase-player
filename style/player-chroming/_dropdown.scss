@@ -1,0 +1,159 @@
+/*
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+omakase-dropdown {
+  position: absolute;
+  color: white;
+  font-size: 13px;
+  bottom: 25px;
+  background-color: rgba(#333, 0.9);
+  border-radius: 3px;
+
+  &:not([floating]) {
+    .omakase-dropdown-close {
+      display: none;
+    }
+  }
+
+  .omakase-dropdown-close {
+    position: absolute;
+    width: 11px;
+    height: 11px;
+    top: 9px;
+    right: 9px;
+    cursor: pointer;
+    background-image: url(/images/media-chrome-close.svg);
+  }
+
+  omakase-dropdown-list {
+    display: inline-block;
+    vertical-align: top;
+
+    &[type='default'] omakase-dropdown-option {
+      &.active {
+        background-color: white;
+        color: black;
+      }
+
+      &:hover:not(.active) {
+        background-color: rgba(0, 0, 0, 0.7);
+      }
+
+      .omakase-dropdown-option-icon {
+        display: none;
+      }
+    }
+
+    &[type='radio'] omakase-dropdown-option {
+      .omakase-dropdown-option-icon {
+        background-image: url(/images/media-chrome-radio-off.svg);
+      }
+
+      &.active .omakase-dropdown-option-icon {
+        background-image: url(/images/media-chrome-radio-on.svg);
+      }
+    }
+
+    &[type='checkbox'] omakase-dropdown-option {
+      .omakase-dropdown-option-icon {
+        background-image: url(/images/media-chrome-checkbox-off.svg);
+      }
+
+      &.active .omakase-dropdown-option-icon {
+        background-image: url(/images/media-chrome-checkbox-on.svg);
+      }
+    }
+
+    &.align-left {
+      .omakase-dropdown-title,
+      omakase-dropdown-option {
+        justify-content: left;
+        padding-left: 20px;
+        padding-right: 10px;
+      }
+    }
+
+    &:not(.align-left) {
+      text-align: center;
+      omakase-dropdown-option {
+        justify-content: center;
+      }
+    }
+
+    &:first-child .omakase-dropdown-title {
+      border-top-left-radius: 3px;
+    }
+
+    &:last-child .omakase-dropdown-title,
+    &:has(+ .d-none) .omakase-dropdown-title {
+      border-top-right-radius: 3px;
+    }
+  }
+
+  .omakase-dropdown-title {
+    line-height: 20px;
+    background-color: #434242e5;
+    color: #bbbbbb;
+    padding: 5px;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .omakase-dropdown-container {
+    padding: 5px 0;
+
+    omakase-dropdown-option {
+      display: flex;
+      gap: 5px;
+      line-height: 25px;
+      cursor: pointer;
+
+      .omakase-dropdown-option-icon {
+        min-width: 12px;
+        height: 12px;
+        display: inline-block;
+        background-repeat: no-repeat;
+        background-size: cover;
+        margin: auto 0;
+      }
+
+      .omakase-dropdown-option-text {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    }
+  }
+}
+
+omakase-dropdown-toggle {
+  line-height: var(--icon-size-default);
+  font-size: calc(var(--icon-size-default) * 0.75);
+
+  &.disabled {
+    .media-chrome-button {
+      cursor: auto;
+    }
+  }
+}
+
+omakase-dropdown,
+omakase-dropdown-toggle,
+.omakase-help {
+  font-family: var(--dropdown-font-family, 'Lato');
+}

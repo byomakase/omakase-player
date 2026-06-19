@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,30 +14,27 @@
  * limitations under the License.
  */
 
-import {AxiosRequestConfig} from 'axios';
 import {from, map, Observable} from 'rxjs';
-import {httpGet} from '../http';
-import {OmpM3u8Parser} from './omp-m3u8-parser';
-import {Manifest} from './m3u8.model';
-import {AuthConfig, AuthenticationData} from '../common/authentication';
+import type {Manifest} from './m3u8.model';
+import {AuthConfig, type AuthenticationData} from '../common/authentication';
+import {M3u8Parser} from './m3u8-parser';
+import {httpGetText} from '../http';
 
 export abstract class BaseM3u8File {
-  private _url: string;
-  private _axiosConfig?: AxiosRequestConfig;
+  private readonly _url: string;
+  private _requestInit?: RequestInit | undefined;
   private _manifest?: Manifest;
 
-  protected constructor(url: string, axiosConfig?: AxiosRequestConfig) {
+  protected constructor(url: string, requestInit?: RequestInit) {
     this._url = url;
-    this._axiosConfig = axiosConfig;
+    this._requestInit = requestInit;
   }
 
   fetch(): Observable<boolean> {
-    return from(httpGet<string>(this._url, this._axiosConfig)).pipe(
-      map((result) => {
-        let m3u8FileText = result.data;
-
+    return from(httpGetText(this._url, this._requestInit)).pipe(
+      map((m3u8FileText) => {
         try {
-          this._manifest = OmpM3u8Parser.parse(m3u8FileText);
+          this._manifest = M3u8Parser.parse(m3u8FileText);
           return true;
         } catch (e) {
           console.error(e);
@@ -58,11 +55,7 @@ export abstract class BaseM3u8File {
 
 export class M3u8File extends BaseM3u8File {
   static create(url: string, authentication?: AuthenticationData): Observable<M3u8File> {
-    let instance = new M3u8File(url, AuthConfig.createAxiosRequestConfig(url, authentication));
-    return instance.fetch().pipe(
-      map((result) => {
-        return instance;
-      })
-    );
+    const instance = new M3u8File(url, AuthConfig.createRequestInit(url, authentication));
+    return instance.fetch().pipe(map(() => instance));
   }
 }

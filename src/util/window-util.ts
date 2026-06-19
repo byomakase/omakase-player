@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,9 @@
  */
 
 export class WindowUtil {
-  static resetCursorStyle() {
-    this.cursor('default');
+
+  static getCursor() {
+    return document.body.style.cursor;
   }
 
   static cursor(cursor: 'default' | 'pointer' | 'grab' | 'grabbing' | 'ew-resize' | 'col-resize') {

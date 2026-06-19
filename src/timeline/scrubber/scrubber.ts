@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 ByOmakase, LLC (https://byomakase.org)
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-import {BaseKonvaComponent, ComponentConfig, ConfigWithOptionalStyle} from '../../layout/konva-component';
 import Konva from 'konva';
-import {positionTopLeft} from '../../constants';
-import {OnMeasurementsChange} from '../../common/measurement';
-import {Timeline} from '../timeline';
-import {Subject, takeUntil} from 'rxjs';
-import {ScrubberMoveEvent} from '../../types';
+import {filter, Subject, takeUntil} from 'rxjs';
+import {BaseKonvaComponent, type ComponentConfig, type ConfigWithOptionalStyle} from '../layout/konva-component';
+import type {OnMeasurementsChange} from '../model';
+import type {TimelineImpl} from '../timeline';
+import {TIMELINE} from '../../constants';
+import {TimelineEventType} from '../timeline-api';
 
 export interface ScrubberStyle {
   fill: string;
@@ -70,10 +70,15 @@ const configDefault: ScrubberConfig = {
   },
 };
 
+export interface ScrubberMoveEvent {
+  timecode: string;
+  snapped: boolean;
+}
+
 export class Scrubber extends BaseKonvaComponent<ScrubberConfig, ScrubberStyle, Konva.Group> implements OnMeasurementsChange {
   public readonly onMove$: Subject<ScrubberMoveEvent> = new Subject<ScrubberMoveEvent>();
 
-  protected _timeline: Timeline;
+  protected _timeline: TimelineImpl;
 
   protected _group: Konva.Group;
 
@@ -84,7 +89,7 @@ export class Scrubber extends BaseKonvaComponent<ScrubberConfig, ScrubberStyle, 
   protected _northLine: Konva.Line;
   protected _southLine: Konva.Line;
 
-  constructor(config: Partial<ConfigWithOptionalStyle<ScrubberConfig>>, timeline: Timeline) {
+  constructor(config: Partial<ConfigWithOptionalStyle<ScrubberConfig>>, timeline: TimelineImpl) {
     super({
       ...configDefault,
       ...config,
@@ -99,7 +104,7 @@ export class Scrubber extends BaseKonvaComponent<ScrubberConfig, ScrubberStyle, 
     this._timeline = timeline;
 
     this._group = new Konva.Group({
-      ...positionTopLeft,
+      ...TIMELINE.positionTopLeft,
       visible: this.style.visible,
       listening: listening,
     });
@@ -140,7 +145,7 @@ export class Scrubber extends BaseKonvaComponent<ScrubberConfig, ScrubberStyle, 
       fontSize: this.style.textFontSize,
       fontFamily: this._timeline.style.textFontFamily,
       fill: this.style.textFill,
-      ...positionTopLeft,
+      ...TIMELINE.positionTopLeft,
       text: ``,
       listening: listening,
     });
@@ -148,16 +153,19 @@ export class Scrubber extends BaseKonvaComponent<ScrubberConfig, ScrubberStyle, 
     this._label.add(this._text);
     this._group.add(this._label);
 
-    this._styleAdapter.onChange$.pipe(takeUntil(this._destroyed$)).subscribe((style) => {
+    this._styleAdapter.onChange$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe((style) => {
       this.onStyleChange();
     });
 
-    this._timeline.onStyleChange$.pipe(takeUntil(this._destroyed$)).subscribe((timelineStyle) => {
-      this._text.setAttrs({
-        fontFamily: this._timeline.style.textFontFamily,
-        fontStyle: this._timeline.style.textFontStyle,
+    this._timeline.onEvent$
+      .pipe(filter((p) => p.type === TimelineEventType.TIMELINE_STYLE_CHANGE))
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe((event) => {
+        this._text.setAttrs({
+          fontFamily: event.data.style.textFontFamily,
+          fontStyle: event.data.style.textFontStyle,
+        });
       });
-    });
   }
 
   protected provideKonvaNode(): Konva.Group {
