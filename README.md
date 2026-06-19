@@ -13,7 +13,7 @@ Omakase Player is an open source JavaScript player for building frame accurate v
   - [VU Meter](https://api.player.byomakase.org/interfaces/VuMeterApi.html) as Volume levels visualization tool
 
 
-> For versions prior to v1.0.0 please refer to [v0.25.4 API documentation](https://api.player.byomakase.org/archive/0.25.4/)
+> For versions prior to v1.0.0 please refer to [v0.25.4 API documentation](https://api.player.byomakase.org/archive/0.25.4/index.html)
 
 ## Prerequisites
 
@@ -504,7 +504,7 @@ Omakase Player supports three predefined effect chain slots: `source`, `router` 
 
 The audio chains samples for main media and one audio sidecar are shown in the image below:
 
-![audio chain](./docs/audio-effect-chain.png)
+![audio chain](https://api.player.byomakase.org/static/audio-effect-chain.png)
 
 Adding effects to `router` slot can be further granulated with routing path that can select specific connections and apply effects on specified connections only.
 
@@ -589,7 +589,7 @@ omakasePlayer.player.audio.getHandler(PlayerAudioType.MAIN).effects.setEffectGra
 
 Omakase Player elements (including media chrome elements) can be styled with CSS/SCSS. The CSS structure is shown below.
 
-![Omakase Player CSS structure](./static/styling-diagram.svg)
+![Omakase Player CSS structure](https://api.player.byomakase.org/static/styling-diagram.svg)
 
 ### Sizing
 
