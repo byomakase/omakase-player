@@ -213,9 +213,9 @@ export interface AudioRoutingRoute {
    */
   connection: AudioRoutingConnection;
 
-  // /**
-  //  * Audio graph state
-  //  */
+  /**
+   * Audio effect graph state
+   */
   audioEffectGraphState: AudioEffectGraphState | undefined;
 }
 

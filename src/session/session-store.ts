@@ -21,7 +21,7 @@ import type {DeepPartial} from '../types/ts-types';
 import {deepMerge} from '../util/util-functions';
 import {type WindowPlayback, WindowPlaybackMode} from '../common';
 import {type SessionEvent, SessionEventType} from './session-event';
-import type {MainMedia, MainMediaState, MediaEntityState, Track} from '../media';
+import {type MainMedia, type MainMediaState, MainMediaType, type MediaEntityState, type Track} from '../media';
 import type {PlayerAudioState, PlayerPlayback, PlayerTextState} from '../player';
 import type {ChromingState} from '../chroming';
 import {freeObserver, nextCompleteObserver} from '../util/rxjs-util';
@@ -57,7 +57,8 @@ export interface SessionState extends Serializable {
 
 export interface MediaLoadRequest {
   id: string;
-  mediaId?: MediaEntityState['id'] | undefined;
+  mediaId: MediaEntityState['id'] | undefined;
+  playerMainMediaId: MainMediaState['id'] | undefined;
 }
 
 export interface PlayerSession extends Serializable {
@@ -270,10 +271,11 @@ export class SessionStore implements SessionApi, Destroyable {
     });
   }
 
-  createMediaLoadRequest(media?: Track | MainMedia): MediaLoadRequest {
+  createMediaLoadRequest(media?: Track | MainMedia, playerMainMedia?: MainMedia): MediaLoadRequest {
     let mediaLoadPackage: MediaLoadRequest = {
       id: CryptoUtil.uuid(),
       mediaId: media?.id,
+      playerMainMediaId: playerMainMedia?.id
     };
     this._mediaLoadRequests.set(mediaLoadPackage.id, mediaLoadPackage);
     this.patch({

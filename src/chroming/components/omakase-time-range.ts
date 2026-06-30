@@ -26,6 +26,7 @@ import {affectsStyledElement, Ui, type MarkerStyle, type StyledElement} from '..
 import type {UiProxy} from '../../remoting/impl/ui-proxy';
 import {DomUtil} from '../../dom/dom-util';
 import {isNullOrUndefined} from '../../util/util-functions';
+import {PlayerEventType, type PlayerInternalApi} from '../../player';
 
 export const OmakaseTimeRangeAttributes = {
   NAME: 'name',
@@ -64,6 +65,7 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
 
   destroy$ = new Subject<void>();
 
+  private _player?: PlayerInternalApi;
   private _markerDisplayContainer: HTMLElement;
   private _markerAreaContainer: HTMLElement;
   private _rangeElement: HTMLInputElement;
@@ -222,6 +224,25 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
     } else {
       this.removeAttribute(OmakaseTimeRangeAttributes.OMAKASE);
     }
+  }
+
+  get player(): PlayerInternalApi | undefined {
+    return this._player;
+  }
+
+  set player(player: PlayerInternalApi) {
+    this._player = player;
+    this._player.onEvent$
+      .pipe(
+        filter((event) => event.type === PlayerEventType.PLAYER_SEEKING),
+        takeUntil(this._destroyBreaker.observer)
+      )
+      .subscribe((event) => {
+        const time = event.data.toTime;
+        const duration = this._player!.getDuration();
+        this.range.valueAsNumber = time / duration;
+        this.updateBar();
+      });
   }
 
   protected get _ui(): UiProxy | Ui {

@@ -18,7 +18,7 @@ import {type MediaProbe, MediaProbeImpl, type MediaProbeResult, MediaProbeToolTy
 import {Observable} from 'rxjs';
 import type {Destroyable} from '../common/capabilities';
 
-const defaultProbeToolTypes: MediaProbeToolType[] = [MediaProbeToolType.EXTENSION_PROBE, MediaProbeToolType.HEAD_REQUEST_PROBE];
+const defaultProbeToolTypes: MediaProbeToolType[] = [MediaProbeToolType.EXTENSION_PROBE, MediaProbeToolType.HEAD_REQUEST_PROBE, MediaProbeToolType.MEDIA_METADATA_RESOLVER_PROBE];
 
 export interface OmakaseToolsApi {
   /**

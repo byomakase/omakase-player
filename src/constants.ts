@@ -47,12 +47,15 @@ export const PLAYER_CONTROLLER_DEFAULTS = {
   frameDurationSpillOverCorrection: 0.001,
   muted: false,
   MP4: {
-    audioLabel: 'Default'
+    audioLabel: 'Default',
   },
   HLS: {
     audioTrackSwitchTimeout: 20000,
-    textTrackSwitchTimeout: 5000
-  }
+    textTrackSwitchTimeout: 5000,
+  },
+  AUDIO: {
+    audioLabel: 'Default',
+  },
 } as const;
 
 export const AUDIO_DEFAULTS = {

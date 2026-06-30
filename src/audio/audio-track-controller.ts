@@ -222,7 +222,6 @@ export class MediaElementAudioTrackController extends BaseAudioTrackController {
       )
       .pipe(takeUntil(this._destroyBreaker.observer))
       .subscribe((event) => {
-        // console.log(this.getPlayerAudioHandler().id, event);
         switch (event.type) {
           case PlayerControllerEventType.PLAYER_CONTROLLER_PLAY:
             this.audioPlay();

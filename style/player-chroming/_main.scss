@@ -1403,12 +1403,6 @@ media-controller {
       }
     }
 
-    .media-control-bar.has-markers {
-      + .omakase-control-bar {
-        bottom: calc(26px + calc(var(--marker-track-count, 0) * 10px));
-      }
-    }
-
     .omakase-vu-meter {
       &.omakase-vu-meter-floating {
         height: min(var(--omakase-vu-meter-height), calc(100% - 50px));
@@ -1439,11 +1433,22 @@ media-controller {
       }
     }
 
+    .media-control-bar:not(.control-bar-offset) {
+      + .omakase-control-bar {
+        bottom: calc(20px + calc(var(--marker-track-count, 0) * 10px));
+      }
+      &.has-markers {
+        + .omakase-control-bar {
+          bottom: calc(26px + calc(var(--marker-track-count, 0) * 10px));
+        }
+      }
+    }
+
     .omakase-control-bar {
       width: 70%;
       position: absolute;
       z-index: 1;
-      bottom: calc(20px + calc(var(--marker-track-count, 0) * 10px));
+      bottom: 20px;
       left: 15%;
 
       .omakase-control-bar-upper {

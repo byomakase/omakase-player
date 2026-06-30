@@ -47,7 +47,6 @@ export function completeObserver<T>(observer: Observer<T>): void {
     observer.complete();
   } catch (e) {
     // nop
-    // console.debug(e);
   }
 }
 

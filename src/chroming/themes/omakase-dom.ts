@@ -317,7 +317,7 @@ export class OmakaseDomController extends ChromingDomController<ChromingTheme.OM
                   <span class="${ChromingDomClasses.mediaChromeTrackselector}"></span>
                   <media-tooltip>Select track</media-tooltip>
               </omakase-dropdown-toggle>
-              <media-chrome-button class="${this.getControlBarClass(OmakaseThemeControl.DETACH)} ${ChromingDomClasses.mediaChromeButton} omakase-player-attach-detach">
+              <media-chrome-button class="${this.getControlBarClass(OmakaseThemeControl.DETACH_TOGGLE)} ${ChromingDomClasses.mediaChromeButton} omakase-player-attach-detach">
                   <span class="${this._config.playerWindowPlaybackMode === WindowPlaybackMode.DETACHED ? ChromingDomClasses.mediaChromeAttach : ChromingDomClasses.mediaChromeDetach}"></span>
                   <media-tooltip>Select track</media-tooltip>
               </media-chrome-button>
@@ -447,9 +447,9 @@ export class OmakaseDomController extends ChromingDomController<ChromingTheme.OM
     }
     if (this._lowerControlBar) {
       if (this._themeConfig.progressBarPosition === OmakaseProgressBarPosition.UNDER_VIDEO) {
-        this._lowerControlBar.classList.add('control-bar-offset');
+        this._lowerControlBar.classList.add(ChromingDomClasses.controlBarOffset);
       } else {
-        this._lowerControlBar.classList.remove('control-bar-offset');
+        this._lowerControlBar.classList.remove(ChromingDomClasses.controlBarOffset);
       }
     }
     if (this._upperControlBar) {
@@ -515,6 +515,7 @@ export class OmakaseDomController extends ChromingDomController<ChromingTheme.OM
       this.wireAudioTextDropdown(this._audioTextDropdown);
     }
     if (this._timeRange) {
+      this._timeRange.player = playerInternal;
       this._timeRange.onSeek$.pipe(takeUntil(this._playerBreaker.observer), takeUntil(this._destroyBreaker.observer)).subscribe({
         next: (time) => {
           playerInternal.seekTo(time);

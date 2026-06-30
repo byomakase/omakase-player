@@ -198,10 +198,12 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
 
     this._mainMediaState = mainMediaState;
     this._mediaTemporalConverter = MediaTemporalConverter.create({
-      duration: this._mainMediaState.duration,
-      frameRateModel: this._mainMediaState.frameRateModel,
-      ffomTimecodeModel: this._mainMediaState.ffomTimecodeModel,
-      initSegmentTimeOffset: this._mainMediaState.initSegmentTimeOffset,
+      duration: mainMediaState.duration,
+      frameRateModel: mainMediaState.frameRateModel,
+      ffomTimecodeModel: mainMediaState.ffomTimecodeModel,
+      initSegmentTimeOffset: mainMediaState.initSegmentTimeOffset,
+      hasVideo: mainMediaState.hasVideo,
+      hasAudio: mainMediaState.hasAudio
     });
 
     this.checkMainMediaEssentials();
@@ -257,7 +259,6 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
             finalizePause();
           } else {
             // console.debug(`%cpause control sync start`, 'color: purple');
-
             this._seekFromCurrentFrame(1)
               .pipe(takeUntil(this._pausingBreaker.observer), takeUntil(this._seekBreaker.observer), take(1))
               .subscribe({
@@ -266,19 +267,6 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
                   finalizePause();
                 },
               });
-
-            // this.syncVideoFrames({}).subscribe((result) => {
-            //   // playbackState.pausing can be either true (pause through API) or even false (pause initiated externally by browser with PIP close)
-            //   // Thus, we will not inspect this._playbackStateMachine!.pausing
-            //   this._seekFromCurrentFrame(1)
-            //     .pipe(takeUntil(this._pausingBreaker.observer), takeUntil(this._seekBreaker.observer), take(1))
-            //     .subscribe({
-            //       next: () => {
-            //         // console.debug(`%cpause control sync end`, 'color: purple');
-            //         finalizePause();
-            //       },
-            //     });
-            // });
           }
         },
       });
@@ -516,9 +504,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
   protected startTimeSynchronizationCallback() {
     this.checkMainMediaEssentials();
 
-    let hasFrameRate = !!this._mainMediaState!.frameRateModel;
-
-    let isSW = !hasFrameRate || this._mainMediaState!.isDrm;
+    let isSW = (!!this._mainMediaState?.hasAudio && !this._mainMediaState?.hasVideo) || !!this._mainMediaState!.hasDrm;
     let isRVFC = this._playerDomController.mainMediaVideoElement && 'requestVideoFrameCallback' in this._playerDomController.mainMediaVideoElement;
 
     if (isSW) {
@@ -1013,6 +999,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
   }
 
   seekTo(value: MediaTemporalFormatValueMap[MediaTemporalFormat], format: MediaTemporalFormat = MediaTemporalFormat.SECONDS): Observable<boolean> {
+    this._checkAndCancelPausing();
     switch (format) {
       case MediaTemporalFormat.SECONDS:
         return this.seekToTime(value as MediaTemporalFormatValueMap[MediaTemporalFormat.SECONDS]);
@@ -1040,6 +1027,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
   }
 
   seekFromCurrentTime(value: MediaTemporalFormatValueMap[MediaTemporalFormat], format: MediaTemporalFormat = MediaTemporalFormat.SECONDS): Observable<boolean> {
+    this._checkAndCancelPausing();
     switch (format) {
       case MediaTemporalFormat.SECONDS:
         return this.seekFromCurrentTimeSeconds(value as MediaTemporalFormatValueMap[MediaTemporalFormat.SECONDS]);
@@ -1048,9 +1036,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
       case MediaTemporalFormat.TIMECODE:
         let timecode = value as MediaTemporalFormatValueMap[MediaTemporalFormat.TIMECODE];
         if (this.isPlaying()) {
-          return this.seekFromCurrentTimeSeconds(
-            this.toPlayerTime(this._mediaTemporalConverter!.convert(timecode, MediaTemporalFormat.TIMECODE, MediaTemporalFormat.SECONDS) as number)
-          );
+          return this.seekFromCurrentTimeSeconds(this.toPlayerTime(this._mediaTemporalConverter!.convert(timecode, MediaTemporalFormat.TIMECODE, MediaTemporalFormat.SECONDS) as number));
         } else {
           return this.seekFromCurrentTimeFrame(this._mediaTemporalConverter!.convert(timecode, MediaTemporalFormat.TIMECODE, MediaTemporalFormat.FRAME_COUNT));
         }
@@ -1133,6 +1119,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
   private _checkAndCancelPausing() {
     if (this._mediaElementPlayback!.pausing) {
       this._pausingBreaker.break();
+      this._mediaElementPlayback!.setPausing(false);
     }
   }
 
@@ -1183,28 +1170,36 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
           fromEvent(this._playerDomController.mainMediaVideoElement, HTMLVideoElementEvent.SEEKING)
             .pipe(takeUntil(this._seekBreaker.observer), take(1))
             .subscribe((event) => {
-              this._onEvent$.next({
-                type: PlayerControllerEventType.PLAYER_CONTROLLER_SEEKING,
-                data: {
-                  fromTime: timeBeforeSeek,
-                  toTime: newTime,
-                },
-              });
+              if (this._mediaElementPlayback!.pausing) {
+                // nop
+              } else {
+                this._onEvent$.next({
+                  type: PlayerControllerEventType.PLAYER_CONTROLLER_SEEKING,
+                  data: {
+                    fromTime: timeBeforeSeek,
+                    toTime: newTime,
+                  },
+                });
+              }
             });
 
           fromEvent(this._playerDomController.mainMediaVideoElement, HTMLVideoElementEvent.SEEKED)
             .pipe(takeUntil(this._seekBreaker.observer), take(1))
             .subscribe((event) => {
               let finalizeSeek = () => {
-                let currentTime = this.getCurrentTime();
-                this._onEvent$.next({
-                  type: PlayerControllerEventType.PLAYER_CONTROLLER_SEEKED,
-                  data: {
-                    currentTime: currentTime,
-                    previousTime: timeBeforeSeek,
-                  },
-                });
-                this._mediaElementPlayback!.seeking = false;
+                if (this._mediaElementPlayback!.pausing) {
+                  // nop
+                } else {
+                  let currentTime = this.getCurrentTime();
+                  this._onEvent$.next({
+                    type: PlayerControllerEventType.PLAYER_CONTROLLER_SEEKED,
+                    data: {
+                      currentTime: currentTime,
+                      previousTime: timeBeforeSeek,
+                    },
+                  });
+                  this._mediaElementPlayback!.seeking = false;
+                }
               };
 
               let finishSeek = () => {
@@ -1395,7 +1390,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
           },
         });
 
-        this._mediaElementPlayback!.setPausing();
+        this._mediaElementPlayback!.setPausing(true);
 
         this.onEvent$
           .pipe(filter((p) => p.type === PlayerControllerEventType.PLAYER_CONTROLLER_PAUSE))

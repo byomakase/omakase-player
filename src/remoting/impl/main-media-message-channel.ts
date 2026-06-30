@@ -28,8 +28,6 @@ export class MainMediMessageChannelUtil {
 }
 
 export interface MainMediaMessageChannel {
-  // onEvent$: Observable<MainMediaEvent>;
-
   loadStart(): Observable<boolean>;
 
   loadSuccess(): Observable<boolean>;

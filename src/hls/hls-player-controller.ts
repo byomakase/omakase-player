@@ -67,8 +67,7 @@ export interface HlsPlayerControllerConfig extends PlayerControllerConfig {
 
 export const _hlsControllerConfigDefault: HlsPlayerControllerConfig = {
   hlsConfig: {
-    ...Hls.DefaultConfig,
-    // enableWorker: false,
+    ...Hls.DefaultConfig
   },
 };
 
@@ -141,20 +140,12 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
 
       let that = this;
 
-      let isDrm = false;
+      let hasDrm = false;
       this._hls.once(HlsEvents.KEY_LOADED, function (event, data) {
-        // console.debug(event, data);
-        isDrm = true;
+        hasDrm = true;
       });
 
-      // Object.values(Hls.Events).forEach(eventName => {
-      //   this._hls!.on(eventName, (event, data) => {
-      //     console.log(eventName, data);
-      //   });
-      // });
-
       this._hls!.on(HlsEvents.AUDIO_TRACK_SWITCHED, function (event, data) {
-        // console.debug(event, data);
         that._onEvent$.next({
           type: PlayerControllerEventType.PLAYER_CONTROLLER_AUDIO_SWITCHED,
           data: {
@@ -164,7 +155,6 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
       });
 
       this._hls!.on(HlsEvents.SUBTITLE_TRACK_SWITCH, function (event, data) {
-        // console.debug(event, data);
         that._onEvent$.next({
           type: PlayerControllerEventType.PLAYER_CONTROLLER_TEXT_TRACK_SWITCHED,
           data: {
@@ -259,7 +249,6 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
         }
 
         if (hlsAudioTrackForPreload) {
-          // console.debug(`Track marked for preload, setting as default audio option`, hlsAudioTrackForPreload);
           this._hls!.setAudioOption(hlsAudioTrackForPreload);
         }
 
@@ -315,8 +304,12 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
               let firstLevelFrameRate = firstLevel?.frameRate;
 
               if (firstLevelFrameRate && hasVideo) {
-                let frameRateModel = FrameRateResolver.resolveFrameRateModel(firstLevelFrameRate, loadOptions?.dropFrame);
-                nextCompleteObserver(frameRateResolution$, frameRateModel);
+                try {
+                  let frameRateModel = FrameRateResolver.resolveFrameRateModel(firstLevelFrameRate, loadOptions?.dropFrame);
+                  nextCompleteObserver(frameRateResolution$, frameRateModel);
+                } catch (e) {
+                  errorCompleteObserver(rootObserver, e);
+                }
               } else {
                 let firstLevelIndex = manifestParsedData.firstLevel;
                 let firstLevel = manifestParsedData.levels[firstLevelIndex];
@@ -366,7 +359,6 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
                 MediaMetadataResolver.getMediaMetadata(preloadedLevel.details.fragments[0].url, ['firstVideoTrackInitSegmentTime']).subscribe({
                   next: (mediaMetadata) => {
                     let initSegmentTimeOffset = mediaMetadata.firstVideoTrackInitSegmentTime;
-                    // console.debug(`Init segment resolved to`, initSegmentTimeOffset);
                     nextCompleteObserver(initSegmentResolution$, initSegmentTimeOffset);
                   },
                   error: (err) => {
@@ -411,36 +403,10 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
             return;
           }
 
-          if (isDrm) {
+          if (hasDrm) {
             console.warn(`Init segment time offset for DRM videos set to undefined`);
             initSegmentTimeOffset = void 0;
           }
-
-          let ffomTimecodeModel: TimecodeModel | undefined;
-          if (loadOptions?.ffom) {
-            let timecodeConverter = TimecodeConverter.create({
-              frameRateModel: frameRateModel,
-            });
-            ffomTimecodeModel = timecodeConverter.parseValueTextToTimecodeModel(loadOptions.ffom);
-          }
-
-          args
-            .mainMediaEssentialArgsHook({
-              isDrm: isDrm,
-              duration: duration,
-              frameRateModel: frameRateModel,
-              initSegmentTimeOffset: initSegmentTimeOffset,
-              ffomTimecodeModel: ffomTimecodeModel,
-            })
-            .pipe(takeUntil(this._loadBreaker.observer))
-            .subscribe({
-              next: () => {
-                nextCompleteObserver(mainMediaEssentialArgsHookCompleted$);
-              },
-              error: (err) => {
-                errorCompleteObserver(mainMediaEssentialArgsHookCompleted$, err);
-              },
-            });
 
           let hlsVideo = new HlsVideo({
             source: new UrlSource(url),
@@ -477,6 +443,43 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
               duration: duration,
             });
           });
+
+          let hasVideo = !!hlsVideo;
+          let hasAudio = hlsAudios.length > 0;
+
+          let ffomTimecodeModel: TimecodeModel | undefined;
+          if (loadOptions?.ffom) {
+            let timecodeConverter = TimecodeConverter.create({
+              frameRateModel: frameRateModel,
+              hasVideo: hasVideo,
+              hasAudio: hasAudio
+            });
+            try {
+              ffomTimecodeModel = timecodeConverter.parseValueTextToTimecodeModel(loadOptions.ffom);
+            } catch (e) {
+              errorCompleteObserver(rootObserver, e);
+            }
+          }
+
+          args
+            .mainMediaEssentialArgsHook({
+              duration: duration,
+              frameRateModel: frameRateModel,
+              initSegmentTimeOffset: initSegmentTimeOffset,
+              ffomTimecodeModel: ffomTimecodeModel,
+              hasDrm: hasDrm,
+              hasVideo: !!hlsVideo,
+              hasAudio: hlsAudios.length > 0
+            })
+            .pipe(takeUntil(this._loadBreaker.observer))
+            .subscribe({
+              next: () => {
+                nextCompleteObserver(mainMediaEssentialArgsHookCompleted$);
+              },
+              error: (err) => {
+                errorCompleteObserver(mainMediaEssentialArgsHookCompleted$, err);
+              },
+            });
 
           // subtitles
           this._hls!.subtitleTrack = -1;
@@ -544,7 +547,6 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
   switchAudioTrack(track: HlsAudioState, activate: boolean): Observable<void> {
     return new Observable((observer) => {
       let newActiveIdentifier = this.resolveAudioTrackIdentifier(track);
-      // console.debug(`Switch HLS audio track: ${newActiveIdentifier} => ${activate}`);
 
       if (activate) {
         if (this._hls!.audioTrack !== newActiveIdentifier) {
@@ -567,7 +569,7 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
           nextCompleteObserver(observer);
         }
       } else {
-        // console.debug(`Switch HLS audio track: ${newActiveIdentifier} => ${activate} not supported`);
+        // Switch HLS audio track not supported
         nextCompleteObserver(observer);
       }
     });

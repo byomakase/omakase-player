@@ -179,7 +179,6 @@ export class AudioHandlerMessageChannelBinding extends BaseMessageChannelBinding
       .pipe(takeUntil(this._destroyBreaker.observer))
       .subscribe({
         next: ([[inputsNumber, outputsNumber], sendResponseHook]) => {
-          // sendResponseHook(this._audioHandler.createAudioRouter(inputsNumber, outputsNumber).pipe(map(() => {})));
           this._audioHandler.createAudioRouter(inputsNumber, outputsNumber).subscribe(() => {
             sendResponseHook();
           });

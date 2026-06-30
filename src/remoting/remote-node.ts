@@ -306,7 +306,6 @@ export abstract class BaseRemoteNode implements RemoteNode, Destroyable {
         this._remoteMessageChannelsByName.set(messageChannelDto.messageChannelName, byTopic);
       }
       byTopic.set(messageChannelDto.topic, messageChannel);
-      // console.debug(`Created remote message channel "${messageChannelDto.messageChannelName}", topic: ${messageChannel.topic}`, messageChannel);
     });
   }
 

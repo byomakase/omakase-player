@@ -278,22 +278,14 @@ export class Player implements PlayerApi, Destroyable {
           switchMap((track) => {
             switch (track.trackType) {
               case TrackType.TEXT_TRACK:
-                let textTrackLoadOptions = loadOptions as TrackLoadOptionsMap[TrackType.TEXT_TRACK];
-                let slewOptions = TextTrackUtil.resolveSlewOptions(this.resolveTimeReference(textTrackLoadOptions?.timeReference), this.getFfomTimecodeModel());
-                let outputFormat = TextTrackUtil.isUnplayableTextTrackFileFormatType(track.sourceFileFormatType)
-                  ? textTrackLoadOptions?.fallbackFormat
-                    ? TextTrackUtil.resolveOutputFormat(textTrackLoadOptions.fallbackFormat)
-                    : FileFormatType.TTML
-                  : void 0;
-
-                if (!slewOptions && !outputFormat) {
+                let textTrackConversionOptions = TextTrackUtil.resolveTextTrackConversionOptions(this.mainMedia!, track, loadOptions as TrackLoadOptionsMap[TrackType.TEXT_TRACK]);
+                if (!textTrackConversionOptions.slewOptions && !textTrackConversionOptions.outputFormat) {
                   return of(track);
                 }
                 return this._trackUtils
                   .convertTextTrack(TrackSource.of(track.id), {
                     label: track.label,
-                    outputFormat,
-                    slewOptions,
+                    ...textTrackConversionOptions,
                   })
                   .pipe(
                     map((track) => {
@@ -320,30 +312,22 @@ export class Player implements PlayerApi, Destroyable {
               .pipe(map(() => track));
           }),
           finalize(() => {
+            if (mediaLoadRequest.playerMainMediaId && (mediaLoadRequest.playerMainMediaId !== this.mainMedia?.id)) {
+              this.removeSidecarTrack(mediaLoadRequest.mediaId!).subscribe(() => {
+                console.debug(`Removed sidecar track with id=${mediaLoadRequest.mediaId} as it was not loaded in the main media with id=${mediaLoadRequest.playerMainMediaId}`);
+              });
+            }
             this._sessionStore.removeMediaLoadRequest(mediaLoadRequest);
           })
         )
         .subscribe({
-          next: (track) => nextCompleteObserver(observer, track),
+          next: (track) => {nextCompleteObserver(observer, track)},
           error: (error) => {
             this._alertsManager.error(error);
             errorCompleteObserver(observer, error);
           },
         });
     });
-  }
-
-  protected resolveTimeReference(timeReference: TimeReference | undefined): TimeReference {
-    if (timeReference) {
-      return timeReference;
-    } else if (this.getFfomTimecodeModel()) {
-      return TimeReference.FFOM;
-    }
-    return TimeReference.SELF;
-  }
-
-  protected getFfomTimecodeModel(): TimecodeModel | undefined {
-    return this.mainMedia?.ffomTimecodeModel;
   }
 
   loadSlate(slateType: SlateType): Observable<MainMedia> {

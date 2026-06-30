@@ -40,12 +40,14 @@ export class HlsMainMedia extends BaseMainMedia<HlsMainMediaState> {
       source: this.source.state,
       loadStage: this.loadStage.state,
 
-      isDrm: this._isDrm,
       duration: this._duration,
       initialDuration: this._initialDuration,
       frameRateModel: this._frameRateModel,
       ffomTimecodeModel: this._ffomTimecodeModel,
       initSegmentTimeOffset: this._initSegmentTimeOffset,
+      hasDrm: this._hasDrm,
+      hasVideo: this._hasVideo,
+      hasAudio: this._hasAudio
     };
   }
 }

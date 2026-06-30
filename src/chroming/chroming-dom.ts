@@ -167,6 +167,7 @@ export const ChromingDomClasses = {
   timecodeFormatStandard: 'omakase-timecode-format-standard',
   audioTextDropdown: 'omakase-audio-text-dropdown',
   omakaseTextToggle: 'omakase-player-text-toggle',
+  controlBarOffset: 'control-bar-offset',
 
   frameForwardButton: 'omakase-player-frame-forward',
   frameBackwardsButton: 'omakase-player-frame-backwards',

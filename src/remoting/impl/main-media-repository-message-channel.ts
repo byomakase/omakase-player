@@ -99,7 +99,6 @@ export class MainMediaRepositoryMessageChannelBinding extends BaseMessageChannel
     });
     this._mainMediaRepository.onMainMediaEvent$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe((event) => {
       this._messageChannel.send('onMainMediaEvent$', event);
-      // this._mainMediaMessageChannel.send('onEvent$', event)
     });
     this._messageChannel
       .receiveAndSendResponse('get')

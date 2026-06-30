@@ -108,8 +108,6 @@ export class RouterVisualization implements Destroyable, RouterVisualizationApi 
   }
 
   private prepareTrack(track: RouterVisualizationTrack): RouterVisualizationTrack {
-    // let channelCount = this._player.getActiveAudioTrack()?.channelCount;
-
     const activeMainTrackId = this._omakasePlayer!.player.playerSession.audio?.tracks['MAIN'].find((track) => track.active)?.trackId;
     let channelCount = this._omakasePlayer?.player.audio.getTracks().find((track) => track.id === activeMainTrackId)?.channels;
 

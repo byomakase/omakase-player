@@ -16,9 +16,9 @@
 
 import {first, forkJoin, fromEvent, Observable, Subject, take, takeUntil} from 'rxjs';
 import {MediaMetadataResolver} from '../tools';
-import {FrameRateResolver} from '../common/frame-rate';
+import {type FrameRateModel, FrameRateResolver} from '../common/frame-rate';
 import {Mp4Audio, type Mp4AudioState, Mp4Video} from './mp4-track';
-import {TimecodeConverter} from '../common/timecode';
+import {TimecodeConverter, type TimecodeModel} from '../common/timecode';
 import {type LoadMainMediaArgsType, type PlayerDomController} from '../player';
 import {type AudioTrackIdentifier, BasePlayerController, type PlayerControllerConfig, type TextTrackIdentifier} from '../player/player-controller';
 import {errorCompleteObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
@@ -39,6 +39,9 @@ export class Mp4PlayerController extends BasePlayerController<Mp4PlayerControlle
   }
 
   loadMainMedia(args: LoadMainMediaArgsType): Observable<boolean> {
+    let url = args.url;
+    let loadOptions = args.loadOptions;
+
     return new Observable<boolean>((observer) => {
       this._loadBreaker.break();
       const videoElement = this._playerDomController.mainMediaVideoElement;
@@ -57,13 +60,13 @@ export class Mp4PlayerController extends BasePlayerController<Mp4PlayerControlle
 
       let mainMediaEssentialArgsHookCompleted$ = new Subject<void>();
       let tracksCreatedHookCompleted$ = new Subject<void>();
-      let metadataNames: (keyof MediaMetadata)[] = ['firstVideoTrackInitSegmentTime', 'firstAudioTrackChannelsNumber', 'firstAudioTrackAudioCodec'];
+      let metadataNames: (keyof MediaMetadata)[] = ['videoTracks', 'audioTracks', 'firstVideoTrackInitSegmentTime', 'firstAudioTrackChannelsNumber', 'firstAudioTrackAudioCodec'];
 
-      if (!args.loadOptions?.frameRate) {
+      if (!loadOptions?.frameRate) {
         metadataNames.push('firstVideoTrackFrameRate');
       }
 
-      let metadataFromResolver$ = MediaMetadataResolver.getMediaMetadata(args.url, metadataNames);
+      let metadataFromResolver$ = MediaMetadataResolver.getMediaMetadata(url, metadataNames);
 
       // once both hooks are completed finish loading
       forkJoin([mainMediaEssentialArgsHookCompleted$, tracksCreatedHookCompleted$]).subscribe(() => {
@@ -74,57 +77,89 @@ export class Mp4PlayerController extends BasePlayerController<Mp4PlayerControlle
       // wait until video is loaded to complete both hooks
       forkJoin([videoLoadedData$, metadataFromResolver$])
         .pipe(takeUntil(this._loadBreaker.observer), take(1))
-        .subscribe(([_, metadata]) => {
-          if (!metadata.firstVideoTrackFrameRate && !args.loadOptions?.frameRate) {
-            this._loadBreaker.break();
-            errorCompleteObserver(observer, `Could not infer frame rate and none was provided`);
-          }
+        .subscribe({
+          next: ([_, metadata]) => {
+            if (!metadata.firstVideoTrackFrameRate && !loadOptions?.frameRate) {
+              this._loadBreaker.break();
+              errorCompleteObserver(observer, `Could not infer frame rate and none was provided`);
+            }
 
-          const frameRate = args.loadOptions?.frameRate ?? metadata.firstVideoTrackFrameRate!;
-          const frameRateModel = FrameRateResolver.resolveFrameRateModel(frameRate, args.loadOptions?.dropFrame);
+            let frameRate = loadOptions?.frameRate ?? metadata.firstVideoTrackFrameRate!;
+            let frameRateModel: FrameRateModel;
+            try {
+              frameRateModel = FrameRateResolver.resolveFrameRateModel(frameRate, loadOptions?.dropFrame);
+            } catch (e) {
+              errorCompleteObserver(observer, e);
+              return;
+            }
 
-          let ffomTimecodeModel;
-          if (args.loadOptions?.ffom) {
-            let timecodeConverter = TimecodeConverter.create({
-              frameRateModel: frameRateModel,
+            let hasVideo = metadata.videoTracks ? metadata.videoTracks.length > 0 : true; // default to true if no video tracks are detected :)
+            let hasAudio = metadata.audioTracks ? metadata.audioTracks.length > 0 : true; // default to true if no audio tracks are detected :)
+
+            let ffomTimecodeModel: TimecodeModel | undefined;
+            if (args.loadOptions?.ffom) {
+              let timecodeConverter = TimecodeConverter.create({
+                frameRateModel: frameRateModel,
+                hasVideo: hasVideo,
+                hasAudio: hasAudio,
+              });
+              try {
+                ffomTimecodeModel = timecodeConverter.parseValueTextToTimecodeModel(args.loadOptions.ffom);
+              } catch (e) {
+                errorCompleteObserver(observer, e);
+                return;
+              }
+            }
+
+            args
+              .mainMediaEssentialArgsHook({
+                duration: videoElement.duration,
+                frameRateModel: frameRateModel,
+                initSegmentTimeOffset: metadata.firstVideoTrackInitSegmentTime,
+                ffomTimecodeModel: ffomTimecodeModel,
+                hasVideo: hasVideo,
+                hasAudio: hasAudio,
+              })
+              .subscribe(() => {
+                nextCompleteObserver(mainMediaEssentialArgsHookCompleted$);
+              });
+
+            let tracks = [];
+
+            if (hasVideo) {
+              const track = new Mp4Video({
+                loadStage: OpStage.of(OpStageStatus.SUCCESS),
+                duration: videoElement.duration,
+                relations: [],
+              });
+              tracks.push(track);
+            }
+
+            if (hasAudio) {
+              const track = new Mp4Audio({
+                loadStage: OpStage.of(OpStageStatus.SUCCESS),
+                url: url,
+                duration: videoElement.duration,
+                channels: metadata.firstAudioTrackChannelsNumber,
+                audioCodec: metadata.firstAudioTrackAudioCodec,
+                label: PLAYER_CONTROLLER_DEFAULTS.MP4.audioLabel,
+              });
+              tracks.push(track);
+              this._audioTrack = track;
+            }
+
+            args.tracksCreatedHook(tracks).subscribe(() => {
+              nextCompleteObserver(tracksCreatedHookCompleted$);
             });
-            ffomTimecodeModel = timecodeConverter.parseValueTextToTimecodeModel(args.loadOptions.ffom);
-          }
-
-          args
-            .mainMediaEssentialArgsHook({
-              duration: videoElement.duration,
-              frameRateModel: frameRateModel,
-              initSegmentTimeOffset: metadata.firstVideoTrackInitSegmentTime,
-              ffomTimecodeModel: ffomTimecodeModel,
-            })
-            .subscribe(() => {
-              nextCompleteObserver(mainMediaEssentialArgsHookCompleted$);
-            });
-
-          const mp4VideoTrack = new Mp4Video({
-            loadStage: OpStage.of(OpStageStatus.SUCCESS),
-            duration: videoElement.duration,
-            relations: [],
-          });
-
-          const mp4AudioTrack = new Mp4Audio({
-            loadStage: OpStage.of(OpStageStatus.SUCCESS),
-            url: args.url,
-            duration: videoElement.duration,
-            channels: metadata.firstAudioTrackChannelsNumber,
-            audioCodec: metadata.firstAudioTrackAudioCodec,
-            label: PLAYER_CONTROLLER_DEFAULTS.MP4.audioLabel,
-          });
-          this._audioTrack = mp4AudioTrack;
-
-          args.tracksCreatedHook([mp4VideoTrack, mp4AudioTrack]).subscribe(() => {
-            nextCompleteObserver(tracksCreatedHookCompleted$);
-          });
+          },
+          error: (error) => {
+            console.log('matkić');
+            errorCompleteObserver(observer, error);
+          },
         });
 
       // load new mp4 media
-      videoElement.src = args.url;
+      videoElement.src = url;
       videoElement.load();
     });
   }

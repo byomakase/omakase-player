@@ -41,20 +41,7 @@ export class AudioMainMedia extends BaseMainMedia<AudioFileMainMediaState> {
 
   protected _state(): AudioFileMainMediaState {
     return {
-      id: this._id,
-      mediaType: this._mediaType,
-      mainMediaType: this._mainMediaType,
-      loadOptions: this._loadOptions,
-      tracks: this.tracks.map((p) => p.state),
-      source: this._source.state,
-      loadStage: this.loadStage.state,
-
-      isDrm: this._isDrm,
-      duration: this._duration,
-      initialDuration: this._initialDuration,
-      frameRateModel: this._frameRateModel,
-      ffomTimecodeModel: this._ffomTimecodeModel,
-      initSegmentTimeOffset: this._initSegmentTimeOffset,
+      ...super._getState(),
     };
   }
 }

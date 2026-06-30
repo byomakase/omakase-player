@@ -34,10 +34,6 @@ export interface TextTrackHandlerEventData extends Serializable {
   state: TextTrackHandlerState;
 }
 
-// export interface TextTrackHandlerErrorEventData extends TextTrackHandlerEventData {
-//   error: string | undefined;
-// }
-
 export type TextTrackHandlerEventTypeDataMap = {
   [TextTrackHandlerEventType.TEXT_TRACK_HANDLER_CHANGE]: TextTrackHandlerEventData;
 };

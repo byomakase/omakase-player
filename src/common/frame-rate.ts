@@ -42,10 +42,11 @@ export class FrameRateResolver {
   static readonly FR_29_97_DF = this.createFrameRateModel({fraction: {numerator: 30000, denominator: 1001}, dropFrames: 2});
   static readonly FR_59_94 = this.createFrameRateModel({fraction: {numerator: 60000, denominator: 1001}});
   static readonly FR_59_94_DF = this.createFrameRateModel({fraction: {numerator: 60000, denominator: 1001}, dropFrames: 4});
+  static readonly FR_100 = this.createFrameRateModel({fraction: {numerator: 100, denominator: 1}});
   static readonly FR_119_88 = this.createFrameRateModel({fraction: {numerator: 120000, denominator: 1001}});
   static readonly FR_239_76 = this.createFrameRateModel({fraction: {numerator: 240000, denominator: 1001}});
 
-  private static _presetFrameRateModels: FrameRateModel[] = [this.FR_23_98, this.FR_29_97, this.FR_29_97_DF, this.FR_59_94, this.FR_59_94_DF, this.FR_119_88, this.FR_239_76];
+  private static _presetFrameRateModels: FrameRateModel[] = [this.FR_23_98, this.FR_29_97, this.FR_29_97_DF, this.FR_59_94, this.FR_59_94_DF, this.FR_100, this.FR_119_88, this.FR_239_76];
 
   private static _presetFrameRateModelsByLooseKey: Map<string, FrameRateModel> = new Map(this._presetFrameRateModels.map((m) => [this.createFrameRateModelLooseKey(m.value, !!m.dropFrames), m]));
 

@@ -16,9 +16,8 @@
 
 import {from, Observable, of} from 'rxjs';
 import {catchError, map, switchMap} from 'rxjs/operators';
-import {type MediaMetadata, MediaMetadataResolver} from './media-metadata-resolver';
-import {FileFormat} from '../common';
-import {AuthConfig} from '../common';
+import {MediaMetadataResolver} from './media-metadata-resolver';
+import {AuthConfig, FileFormat} from '../common';
 
 export interface VideoProbeMetadata {
   frameRate: number;
@@ -38,7 +37,8 @@ export interface MediaProbeMetadata {
 }
 
 export interface MediaProbeToolResult {
-  fileFormat: FileFormat;
+  fileFormat?: FileFormat;
+  candidates?: FileFormat[];
   metadata: Partial<MediaProbeMetadata>;
 }
 
@@ -47,38 +47,60 @@ export interface MediaProbeResult {
   metadata: Partial<MediaProbeMetadata>;
 }
 
+/**
+ * High-level media probing interface.
+ * Runs the given probe tools in order, merging their results into a single {@link MediaProbeResult}.
+ * Returns `undefined` if no tool could determine the file format.
+ */
 export interface MediaProbe {
   probe(url: string, toolTypes: MediaProbeToolType[]): Observable<MediaProbeResult | undefined>;
 }
 
+/**
+ * Low-level probe tool that inspects a URL and returns a {@link MediaProbeToolResult}, or `undefined`
+ * if the tool cannot contribute to format detection.
+ *
+ * When `candidates` are passed, the tool should attempt to narrow them to a unique `fileFormat`.
+ * When a tool cannot uniquely resolve the format, it may return `candidates` itself — the pipeline
+ * will continue to the next tool. If all tools are exhausted with candidates remaining, the first
+ * candidate is used as the default.
+ */
 export interface MediaProbeTool {
-  probe(url: string): Observable<MediaProbeToolResult | undefined>;
+  probe(url: string, candidates?: FileFormat[]): Observable<MediaProbeToolResult | undefined>;
 }
 
 /**
  * Identifies the strategy used to probe a media URL.
  *
- * - `EXTENSION_PROBE`: Infers the format from the URL file extension.
+ * - `EXTENSION_PROBE`: Infers the format from the URL file extension. Returns candidates for ambiguous extensions (e.g. `.mp4`).
  * - `HEAD_REQUEST_PROBE`: Sends an HTTP HEAD request and reads the `Content-Type` header.
- * - `METADATA_RESOLVE`: Fetches deeper media metadata (e.g. frame rate, codec) by partially downloading the file.
+ * - `MEDIA_METADATA_RESOLVER_PROBE`: Partially downloads the file to resolve its actual MIME type via mediabunny.
+ *   Use this to disambiguate formats the server's `Content-Type` header misreports (e.g. audio-only MP4 served as `video/mp4`).
  */
 export enum MediaProbeToolType {
   EXTENSION_PROBE = 'EXTENSION_PROBE',
   HEAD_REQUEST_PROBE = 'HEAD_REQUEST_PROBE',
-  METADATA_RESOLVE = 'METADATA_RESOLVE',
+  MEDIA_METADATA_RESOLVER_PROBE = 'MEDIA_METADATA_RESOLVER_PROBE',
 }
 
 export class ExtensionProbeTool implements MediaProbeTool {
-  probe(url: string): Observable<MediaProbeToolResult | undefined> {
+  probe(url: string, _candidates?: FileFormat[]): Observable<MediaProbeToolResult | undefined> {
     try {
       // URL.pathname strips '?' and '#'; strip ';' (path parameters, e.g. /video.mp4;quality=high)
       const pathname = new URL(url).pathname.toLowerCase().split(';')[0]!;
+      const matches: FileFormat[] = [];
       for (const fmt of FileFormat.ALL) {
         for (const ext of fmt.extensions) {
           if (pathname.endsWith(ext)) {
-            return of({fileFormat: fmt, metadata: {}});
+            matches.push(fmt);
+            break;
           }
         }
+      }
+      if (matches.length === 1) {
+        return of({fileFormat: matches[0]!, metadata: {}});
+      } else if (matches.length > 1) {
+        return of({candidates: matches, metadata: {}});
       }
     } catch {
       // malformed URL
@@ -89,7 +111,7 @@ export class ExtensionProbeTool implements MediaProbeTool {
 }
 
 export class HeadRequestProbeTool implements MediaProbeTool {
-  probe(url: string): Observable<MediaProbeToolResult | undefined> {
+  probe(url: string, candidates?: FileFormat[]): Observable<MediaProbeToolResult | undefined> {
     return from(
       fetch(url, {method: 'HEAD', ...AuthConfig.createRequestInit(url, AuthConfig.authentication)}).then((res): MediaProbeToolResult | undefined => {
         if (!res.ok) {
@@ -104,6 +126,10 @@ export class HeadRequestProbeTool implements MediaProbeTool {
           return undefined;
         }
 
+        if (candidates && !candidates.includes(fileFormat)) {
+          return undefined;
+        }
+
         const metadata: Partial<MediaProbeMetadata> = {};
         if (mime) {
           metadata.contentType = mime;
@@ -114,73 +140,38 @@ export class HeadRequestProbeTool implements MediaProbeTool {
           metadata.contentLength = parseInt(contentLength, 10);
         }
 
-        return {fileFormat: fileFormat, metadata};
+        // video/mp4 is unreliable — servers report it for audio-only MP4 files too
+        if (fileFormat === FileFormat.MP4) {
+          return {candidates: [FileFormat.MP4, FileFormat.MP4_AUDIO], metadata};
+        }
+
+        return {fileFormat, metadata};
       })
-    ).pipe(catchError((err) => {
-      console.debug(`Failed to fetch HEAD for ${url}`, err);
-      return of(undefined);
-    }));
+    ).pipe(
+      catchError((err) => {
+        console.debug(`Failed to fetch HEAD for ${url}`, err);
+        return of(undefined);
+      })
+    );
   }
 }
 
-const streamingFormats = new Set(FileFormat.STREAMING);
-
-const videoFormats = new Set(FileFormat.VIDEO);
-
-const audioFormats = new Set(FileFormat.AUDIO);
-
-export class MediaMetadataResolveProbeTool {
-  resolve(url: string, fileFormat?: FileFormat): Observable<Partial<MediaProbeMetadata> | undefined> {
-    if (fileFormat && !streamingFormats.has(fileFormat) && !videoFormats.has(fileFormat) && !audioFormats.has(fileFormat)) {
-      return of(undefined);
-    }
-
-    const resolveVideo = !fileFormat || streamingFormats.has(fileFormat) || videoFormats.has(fileFormat);
-    const resolveAudio = !fileFormat || streamingFormats.has(fileFormat) || videoFormats.has(fileFormat) || audioFormats.has(fileFormat);
-
-    const keys: (keyof MediaMetadata)[] = [];
-    if (resolveVideo) {
-      keys.push('firstVideoTrackFrameRate', 'firstVideoTrackInitSegmentTime');
-    }
-    if (resolveVideo || resolveAudio) {
-      keys.push('firstAudioTrackChannelsNumber', 'firstAudioTrackAudioCodec');
-    }
-
-    return MediaMetadataResolver.getMediaMetadata(url, keys).pipe(
-      map((result): Partial<MediaProbeMetadata> | undefined => {
-        const metadata: Partial<MediaProbeMetadata> = {};
-
-        if (resolveVideo) {
-          const video: Partial<VideoProbeMetadata> = {};
-          if (result.firstVideoTrackFrameRate !== undefined) {
-            video.frameRate = result.firstVideoTrackFrameRate;
-          }
-          if (result.firstVideoTrackInitSegmentTime !== undefined) {
-            video.initSegmentTime = result.firstVideoTrackInitSegmentTime;
-          }
-          if (Object.keys(video).length > 0) {
-            metadata.video = video;
-          }
+export class MediaMetadataResolverProbe implements MediaProbeTool {
+  probe(url: string, candidates?: FileFormat[]): Observable<MediaProbeToolResult | undefined> {
+    return MediaMetadataResolver.getMediaMetadata(url, ['mimeType']).pipe(
+      map((result): MediaProbeToolResult | undefined => {
+        const fileFormat = result.mimeType ? FileFormat.fromMimeType(result.mimeType) : undefined;
+        if (!fileFormat) {
+          return undefined;
         }
-
-        if (resolveAudio) {
-          const audio: Partial<AudioProbeMetadata> = {};
-          if (result.firstAudioTrackChannelsNumber !== undefined) {
-            audio.channelsNumber = result.firstAudioTrackChannelsNumber;
-          }
-          if (result.firstAudioTrackAudioCodec !== undefined) {
-            audio.codec = result.firstAudioTrackAudioCodec;
-          }
-          if (Object.keys(audio).length > 0) {
-            metadata.audio = audio;
-          }
+        if (candidates && !candidates.includes(fileFormat)) {
+          return undefined;
         }
-
-        return Object.keys(metadata).length > 0 ? metadata : undefined;
+        return {fileFormat, metadata: {}};
       }),
       catchError((err) => {
-        console.debug(`Failed to resolve metadata for ${url}`, err);
-        return of(undefined)
+        console.debug(`[MediaMetadataResolverProbe] Failed to resolve MIME type for ${url}`, err);
+        return of(undefined);
       })
     );
   }
@@ -188,75 +179,68 @@ export class MediaMetadataResolveProbeTool {
 
 export class MediaProbeImpl implements MediaProbe {
   private readonly _probeTools: Map<MediaProbeToolType, MediaProbeTool>;
-  private readonly _metadataResolveTool: MediaMetadataResolveProbeTool;
+  private readonly _customTools: MediaProbeTool[];
 
   constructor(tools?: MediaProbeTool[]) {
     this._probeTools = new Map<MediaProbeToolType, MediaProbeTool>([
       [MediaProbeToolType.EXTENSION_PROBE, new ExtensionProbeTool()],
       [MediaProbeToolType.HEAD_REQUEST_PROBE, new HeadRequestProbeTool()],
-      ...(tools ?? []).map((tool, i) => [`custom_${i}` as unknown as MediaProbeToolType, tool] as const),
+      [MediaProbeToolType.MEDIA_METADATA_RESOLVER_PROBE, new MediaMetadataResolverProbe()],
     ]);
-    this._metadataResolveTool = new MediaMetadataResolveProbeTool();
+    this._customTools = tools ?? [];
+  }
+
+  protected resolveDefaultCandidate(_url: string, candidates: FileFormat[]): FileFormat | undefined {
+    return candidates[0];
   }
 
   probe(url: string, toolTypes: MediaProbeToolType[]): Observable<MediaProbeResult | undefined> {
     if (!toolTypes || toolTypes.length === 0) {
       throw new Error('At least one MediaProbeToolType must be provided');
     }
-    return this.runProbeAll(url, toolTypes, 0, undefined, {});
+    const tools: MediaProbeTool[] = [
+      ...toolTypes.map((t) => this._probeTools.get(t)).filter((t): t is MediaProbeTool => !!t),
+      ...this._customTools,
+    ];
+    return this.runProbeAll(url, tools, 0, undefined, {});
   }
 
   private runProbeAll(
     url: string,
-    toolTypes: MediaProbeToolType[],
+    tools: MediaProbeTool[],
     index: number,
-    fileFormat: FileFormat | undefined,
+    candidates: FileFormat[] | undefined,
     metadata: Partial<MediaProbeMetadata>
   ): Observable<MediaProbeResult | undefined> {
-    if (index >= toolTypes.length) {
-      if (!fileFormat) {
-        return of(undefined);
+    if (index >= tools.length) {
+      if (candidates?.length) {
+        const resolvedFormat = this.resolveDefaultCandidate(url, candidates);
+        if (resolvedFormat) {
+          console.debug(`[MediaProbe] Format not uniquely resolved for ${url}, candidates: [${candidates.map((c) => c.type).join(', ')}], using default: ${resolvedFormat.type}`);
+          return of({fileFormat: resolvedFormat, metadata});
+        }
       }
-      return of({fileFormat: fileFormat, metadata});
+      return of(undefined);
     }
 
-    const toolType = toolTypes[index]!;
+    const tool = tools[index]!;
 
-    if (toolType === MediaProbeToolType.METADATA_RESOLVE) {
-      if (fileFormat && !streamingFormats.has(fileFormat) && !videoFormats.has(fileFormat) && !audioFormats.has(fileFormat)) {
-        return this.runProbeAll(url, toolTypes, index + 1, fileFormat, metadata);
-      }
-      return this._metadataResolveTool.resolve(url, fileFormat).pipe(
-        switchMap((resolvedMetadata) => {
-          const merged = {...metadata, ...resolvedMetadata};
-          return this.runProbeAll(url, toolTypes, index + 1, fileFormat, merged);
-        }),
-        catchError(() => this.runProbeAll(url, toolTypes, index + 1, fileFormat, metadata))
-      );
-    }
-
-    const tool = this._probeTools.get(toolType);
-    if (!tool) {
-      return this.runProbeAll(url, toolTypes, index + 1, fileFormat, metadata);
-    }
-
-    return tool.probe(url).pipe(
+    return tool.probe(url, candidates).pipe(
       switchMap((result) => {
         if (!result) {
-          return this.runProbeAll(url, toolTypes, index + 1, fileFormat, metadata);
+          return this.runProbeAll(url, tools, index + 1, candidates, metadata);
         }
-        if (!fileFormat) {
+        if (result.fileFormat) {
           const merged = {...metadata, ...result.metadata};
-          return this.runProbeAll(url, toolTypes, index + 1, result.fileFormat, merged);
+          return of({fileFormat: result.fileFormat, metadata: merged});
         }
-        if (fileFormat !== result.fileFormat) {
-          console.debug(`[MediaProbe] Conflicting file formats detected for ${url}: ${fileFormat.type} vs ${result.fileFormat.type}`);
-          return of(undefined);
+        if (result.candidates?.length) {
+          // Don't merge metadata — format is unresolved and metadata from this tool may be misleading
+          return this.runProbeAll(url, tools, index + 1, result.candidates, metadata);
         }
-        const merged = {...metadata, ...result.metadata};
-        return this.runProbeAll(url, toolTypes, index + 1, fileFormat, merged);
+        return this.runProbeAll(url, tools, index + 1, candidates, metadata);
       }),
-      catchError(() => this.runProbeAll(url, toolTypes, index + 1, fileFormat, metadata))
+      catchError(() => this.runProbeAll(url, tools, index + 1, candidates, metadata))
     );
   }
 }

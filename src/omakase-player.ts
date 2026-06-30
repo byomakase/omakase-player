@@ -16,7 +16,7 @@
 
 import {ObserverBreaker} from './common/observer-breaker';
 import {type MainMedia, type MainMediaLoadOptions, ThumbnailTrack} from './media';
-import {BehaviorSubject, combineLatest, concat, filter, Observable, takeUntil} from 'rxjs';
+import {BehaviorSubject, combineLatest, concat, EMPTY, filter, Observable, takeUntil, timeout} from 'rxjs';
 import {Player, type PlayerApi, type PlayerConfig, type PlayerDetachedApi, type PlayerInternalApi} from './player';
 import {type PrefixKeys} from './types/ts-types';
 import {type AlertsApi, type SessionApi, SessionEventType, type SessionState, SessionStore} from './session';

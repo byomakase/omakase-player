@@ -138,6 +138,8 @@ export class PlayerDetachedProxy extends BaseMessageChannelProxy<PlayerDetachedM
       frameRateModel: this._mainMedia.frameRateModel,
       ffomTimecodeModel: this._mainMedia.ffomTimecodeModel,
       initSegmentTimeOffset: this._mainMedia.initSegmentTimeOffset,
+      hasVideo: this._mainMedia.hasVideo,
+      hasAudio: this._mainMedia.hasAudio
     });
 
     this._mainMedia.onEvent$
@@ -151,6 +153,8 @@ export class PlayerDetachedProxy extends BaseMessageChannelProxy<PlayerDetachedM
           frameRateModel: this._mainMedia.frameRateModel,
           ffomTimecodeModel: this._mainMedia.ffomTimecodeModel,
           initSegmentTimeOffset: this._mainMedia.initSegmentTimeOffset,
+          hasVideo: this._mainMedia.hasVideo,
+          hasAudio: this._mainMedia.hasAudio,
         });
       });
   }

@@ -15,21 +15,7 @@
  */
 
 import {concat, filter, forkJoin, Observable, Subject, switchMap, takeUntil} from 'rxjs';
-import {
-  type AudioState,
-  type AudioUpdateableAttrs,
-  type MainMedia,
-  type MainMediaErrorEventData,
-  MainMediaEventType,
-  type MainMediaState,
-  Relation,
-  RelationType,
-  type TextTrackState,
-  type TextTrackUpdateableAttrs,
-  type Track,
-  TrackEventType,
-  TrackType,
-} from '../media';
+import {type AudioState, type AudioUpdateableAttrs, type MainMedia, type MainMediaErrorEventData, MainMediaEventType, type MainMediaState, Relation, RelationType, type TextTrackState, type TextTrackUpdateableAttrs, type Track, TrackEventType, TrackType,} from '../media';
 import {OpStageStatus} from '../common/op-stage';
 import {describedObservable, errorCompleteObserver, freeObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
 import {ObserverBreaker} from '../common/observer-breaker';
@@ -475,12 +461,14 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
       let textTracks = mainMediaState.tracks.filter((p) => p.trackType === TrackType.TEXT_TRACK);
       preloadTextTrackHandlers.forEach((preloadTextTrackHandler) => {
         textTracks.forEach((textTrack) => {
-          this._trackUtils!.preloadTrack(textTrack.id).subscribe((track) => {
-            this.loadSidecarTrack(track.id, {
-              trackType: TrackType.TEXT_TRACK,
-              handlerType: preloadTextTrackHandler,
-            }).subscribe((event) => {});
-          });
+          this._trackUtils!.preloadTrack(textTrack.id)
+            .pipe(takeUntil(this._loadMainMediaBreaker.observer))
+            .subscribe((track) => {
+              this.loadSidecarTrack(track.id, {
+                trackType: TrackType.TEXT_TRACK,
+                handlerType: preloadTextTrackHandler,
+              }).subscribe((event) => {});
+            });
         });
       });
     }

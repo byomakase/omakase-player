@@ -16,11 +16,11 @@
 
 import Decimal from 'decimal.js';
 import {MediaTimeConverter, type MediaTimeModel} from '../common/media-time';
-import {FallbackFormat, type OutputTextFileFormatType, type SlewOptions, TimeReference} from '../media';
+import {FallbackFormat, type MainMedia, type OutputTextFileFormatType, type SlewOptions, type TextTrackConversionOptions, TimeReference, type Track} from '../media';
 import {FrameRateResolver} from '../common/frame-rate';
 import {isNullOrUndefined} from '../util/util-functions';
-import {FileFormatType, MediaTemporalConverter, MediaTemporalFormat} from '../common';
-import type {TimecodeModel} from '../common/timecode';
+import {FileFormatType, MediaTemporalConverter, type MediaTemporalConverterArgs, MediaTemporalFormat} from '../common';
+import type {PlayerTextTrackLoadOptions} from '../player';
 
 type TimeBase = 'media' | 'smpte' | 'clock';
 
@@ -296,23 +296,25 @@ export class TextTrackUtil {
     return timeSlew;
   }
 
-  static resolveSlewOptions(timeReference: TimeReference, ffomTimecodeModel: TimecodeModel | undefined): SlewOptions | undefined {
+  static resolveSlewOptions(timeReference: TimeReference, mediaTemporalConverterArgs: MediaTemporalConverterArgs): SlewOptions | undefined {
     switch (timeReference) {
       case TimeReference.SELF:
         return void 0;
       case TimeReference.FFOM:
-        if (!ffomTimecodeModel) {
+        if (!mediaTemporalConverterArgs.ffomTimecodeModel) {
           return void 0;
         }
 
         let timeSlew = MediaTemporalConverter.create({
-          frameRateModel: ffomTimecodeModel.frameRateModel,
-        }).convert(ffomTimecodeModel.valueText, MediaTemporalFormat.TIMECODE, MediaTemporalFormat.SECONDS);
+          frameRateModel: mediaTemporalConverterArgs.ffomTimecodeModel.frameRateModel,
+          hasVideo: mediaTemporalConverterArgs.hasVideo,
+          hasAudio: mediaTemporalConverterArgs.hasAudio,
+        }).convert(mediaTemporalConverterArgs.ffomTimecodeModel.valueText, MediaTemporalFormat.TIMECODE, MediaTemporalFormat.SECONDS);
 
         return timeSlew
           ? {
               timeSlew: -timeSlew,
-              expectedFrameRate: ffomTimecodeModel.frameRateModel.value,
+              expectedFrameRate: mediaTemporalConverterArgs.ffomTimecodeModel.frameRateModel.value,
             }
           : void 0;
       default:
@@ -343,6 +345,28 @@ export class TextTrackUtil {
       default:
         return false;
     }
+  }
+
+  static resolvePlayerOutputTextFileFormatType(track: Track, textTrackLoadOptions: PlayerTextTrackLoadOptions): OutputTextFileFormatType | undefined {
+    return TextTrackUtil.isUnplayableTextTrackFileFormatType(track.sourceFileFormatType)
+      ? textTrackLoadOptions?.fallbackFormat
+        ? TextTrackUtil.resolveOutputFormat(textTrackLoadOptions.fallbackFormat)
+        : FileFormatType.TTML
+      : void 0;
+  }
+
+  static resolveTextTrackConversionOptions(mainMedia: MainMedia, track: Track, textTrackLoadOptions: PlayerTextTrackLoadOptions): TextTrackConversionOptions {
+    let outputFormat = TextTrackUtil.resolvePlayerOutputTextFileFormatType(track, textTrackLoadOptions);
+    let timeReference: TimeReference = textTrackLoadOptions?.timeReference ? textTrackLoadOptions?.timeReference : mainMedia.ffomTimecodeModel ? TimeReference.FFOM : TimeReference.SELF;
+    let slewOptions = TextTrackUtil.resolveSlewOptions(timeReference, {
+      ffomTimecodeModel: mainMedia.ffomTimecodeModel,
+      hasVideo: mainMedia.hasVideo,
+      hasAudio: mainMedia.hasAudio,
+    });
+    return {
+      outputFormat,
+      slewOptions,
+    };
   }
 }
 

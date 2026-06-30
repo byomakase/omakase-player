@@ -199,8 +199,6 @@ export interface PlayerController extends Destroyable {
 
   extractVideoKeyframe(options?: VideoKeyframeOptions): Observable<VideoKeyframe>;
 
-  // endregion
-
   // region convertTime()
   convertTime<S extends MediaTemporalFormat>(
     value: MediaTemporalFormatValueMap[S],

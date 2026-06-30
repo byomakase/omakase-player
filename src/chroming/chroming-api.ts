@@ -15,7 +15,7 @@
  */
 
 import {MediaTemporalFormat} from '../common';
-import type {MarkerTrack, MarkerTrackState, ThumbnailTrack, ThumbnailTrackState, Track} from '../media';
+import type {MarkerTrack, ThumbnailTrack, Track} from '../media';
 import {TrackType} from '../media';
 import type {BehaviorSubject, Observable} from 'rxjs';
 import type {ChromingState} from './chroming-state';
@@ -394,14 +394,14 @@ export enum DefaultThemeControl {
   TEN_FRAMES_FORWARD = 'TEN_FRAMES_FORWARD',
   FRAME_BACKWARD = 'FRAME_BACKWARD',
   TEN_FRAMES_BACKWARD = 'TEN_FRAMES_BACKWARD',
-  BITC = 'BITC',
+  TIME_TOGGLE = 'TIME_TOGGLE',
   FULLSCREEN = 'FULLSCREEN',
   TEXT_TOGGLE = 'TEXT_TOGGLE',
   VOLUME = 'VOLUME',
   SCRUBBER = 'SCRUBBER',
   TRACK_SELECTOR = 'TRACK_SELECTOR',
   PLAYBACK_RATE = 'PLAYBACK_RATE',
-  DETACH = 'DETACH',
+  DETACH_TOGGLE = 'DETACH_TOGGLE',
   ROUTER = 'ROUTER',
   VU_METER = 'VU_METER',
   VU_METER_TOGGLE = 'VU_METER_TOGGLE',
@@ -461,8 +461,8 @@ export enum OmakaseThemeControl {
   VOLUME = 'VOLUME',
   TRACK_SELECTOR = 'TRACK_SELECTOR',
   PLAYBACK_RATE = 'PLAYBACK_RATE',
-  DETACH = 'DETACH',
-  TIME = 'TIME',
+  DETACH_TOGGLE = 'DETACH_TOGGLE',
+  TIME_TOGGLE = 'TIME_TOGGLE',
   CLOSE = 'CLOSE',
   ROUTER = 'ROUTER',
   VU_METER = 'VU_METER',
@@ -865,8 +865,8 @@ export const DEFAULT_PLAYER_CHROMING_CONFIG: DefaultThemeConfig = {
     DefaultThemeControl.TEN_FRAMES_FORWARD,
     DefaultThemeControl.FRAME_BACKWARD,
     DefaultThemeControl.TEN_FRAMES_BACKWARD,
-    DefaultThemeControl.BITC,
-    DefaultThemeControl.DETACH,
+    DefaultThemeControl.TIME_TOGGLE,
+    DefaultThemeControl.DETACH_TOGGLE,
     DefaultThemeControl.FULLSCREEN,
     DefaultThemeControl.TEXT_TOGGLE,
     DefaultThemeControl.VOLUME,
@@ -922,9 +922,9 @@ export const DEFAULT_OMAKASE_PLAYER_CHROMING_CONFIG: OmakaseThemeConfig = {
     OmakaseThemeControl.PLAYBACK_RATE,
     OmakaseThemeControl.TRACK_SELECTOR,
     OmakaseThemeControl.FULLSCREEN,
-    OmakaseThemeControl.DETACH,
+    OmakaseThemeControl.DETACH_TOGGLE,
     OmakaseThemeControl.CLOSE,
-    OmakaseThemeControl.TIME,
+    OmakaseThemeControl.TIME_TOGGLE,
   ],
   floatingControls: [OmakaseThemeFloatingControl.PLAYBACK_CONTROLS, OmakaseThemeFloatingControl.PROGRESS_BAR, OmakaseThemeFloatingControl.TIME, OmakaseThemeFloatingControl.ACTION_ICONS],
   alwaysOnFloatingControls: [OmakaseThemeFloatingControl.TIME, OmakaseThemeFloatingControl.PROGRESS_BAR, OmakaseThemeFloatingControl.VU_METER],

@@ -21,7 +21,6 @@ import type {PlayerController} from '../player';
 
 export class AudioControllerFactory {
   static create(trackState: TrackState, playerController: PlayerController): AudioTrackController {
-    // return new AudioBufferAudioTrackController(trackState as AudioState, playerController);
     if (BrowserProvider.instance.isSafari) {
       return new AudioBufferAudioTrackController(trackState as AudioState, playerController);
     } else {

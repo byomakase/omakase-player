@@ -25,7 +25,6 @@ export class HlsJsFactory {
   }
 
   private static overrideMethods(hls: Hls, hlsPlayerControllerConfig: HlsPlayerControllerConfig) {
-    // unsafe, working on HLS version 1.5.8
     // see https://github.com/video-dev/hls.js/blob/master/src/controller/subtitle-track-controller.ts
     // @ts-ignore
     let hlsSubtitleTrackController = hls.subtitleTrackController;
@@ -42,12 +41,6 @@ export class HlsJsFactory {
           // overriden to prevent HLS polling & toggling already shown / hidden subtitles
         };
       }
-
-      // if (!hlsPlayerControllerConfig.subtitleDisplay) {
-      //   hlsSubtitleTrackController.toggleTrackModes = () => {
-      //     // overriden to prevent HLS reacting to event listeners on tracks
-      //   };
-      // }
     }
   }
 }

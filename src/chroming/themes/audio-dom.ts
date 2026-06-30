@@ -336,6 +336,7 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
         });
     }
     if (this._timeRange) {
+      this._timeRange.player = playerInternal;
       this._timeRange.onSeek$.pipe(takeUntil(this._playerBreaker.observer), takeUntil(this._destroyBreaker.observer)).subscribe({
         next: (time) => {
           playerInternal.seekTo(time);

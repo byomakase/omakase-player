@@ -75,10 +75,6 @@ export interface AudioHandlerEventData extends Serializable {
   state: AudioHandlerState;
 }
 
-// export interface AudioHandlerErrorEventData extends AudioHandlerEventData {
-//   error: string | undefined;
-// }
-
 export type AudioHandlerEventTypeDataMap = {
   [AudioHandlerEventType.AUDIO_HANDLER_CHANGE]: AudioHandlerEventData;
 };

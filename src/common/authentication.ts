@@ -77,7 +77,6 @@ export class AuthConfig {
       };
     }
 
-    // custom headers
     return authentication.headers(url);
   }
 }

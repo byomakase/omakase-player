@@ -15,7 +15,7 @@
  */
 
 import Konva from 'konva';
-import {BehaviorSubject, filter, Subject, takeUntil} from 'rxjs';
+import {auditTime, BehaviorSubject, debounceTime, distinctUntilChanged, filter, Subject, takeUntil} from 'rxjs';
 import {WindowUtil} from '../util/window-util';
 import type {OnMeasurementsChange, Position} from './model';
 import {BaseKonvaComponent, type ComponentConfig, type ConfigWithOptionalStyle} from './layout/konva-component';
@@ -289,22 +289,38 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
       }
     });
 
+    let lastSeek: number | undefined;
+    let dragMoveWatcher$ = new Subject<number>();
+
+    let trySeek = () => {
+      let position = this._playheadGroup.getPosition().x;
+      let seconds = this._timeline.timelinePositionToTime(position);
+      if (lastSeek !== seconds) {
+        this._player.seekTo(seconds);
+        lastSeek = seconds;
+      }
+    }
+
+    dragMoveWatcher$
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .pipe(auditTime(50), distinctUntilChanged())
+      .subscribe((position) => {
+        trySeek()
+      });
+
     this._playheadGroup.on('dragmove', (event) => {
+      let position = this._playheadGroup.getPosition().x;
+      dragMoveWatcher$.next(position);
       // playhead is already moved, but UI is not yet refreshed, thus we work directly with _playheadGroup
-      this.dragMove(this._playheadGroup.getPosition().x);
+      this.dragMove(position);
     });
 
     this._playheadGroup.on('dragend', (event) => {
-      if (!this._player.isMainMediaLoaded) {
+      if (!this._player.isMainMediaLoaded || !this._state.dragging) {
         return;
       }
-
-      let seconds = this._timeline.timelinePositionToTime(this._playheadGroup.getPosition().x);
-      this._player.seekTo(seconds).subscribe({
-        next: () => {
-          this.dragEnd();
-        },
-      });
+      trySeek()
+      this.dragEnd();
     });
 
     this._styleAdapter.onChange$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe({

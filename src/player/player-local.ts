@@ -38,24 +38,14 @@ import {
   TrackType,
 } from '../media';
 import {PlayerControllerFactory} from './player-controller-factory';
-import {
-  describedObservable,
-  errorCompleteObserver,
-  freeObserver,
-  nextCompleteObserver,
-  passiveObservable
-} from '../util/rxjs-util';
+import {describedObservable, errorCompleteObserver, freeObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
 import {SourceUtil} from '../source';
 import {MediaTemporalFormat, type MediaTemporalFormatValueMap} from '../common';
 import {Validators} from '../common/validators';
 import {COMMON_PLAYER_CONFIG_DEFAULT, type PlayerLocalApi, type PlayerLocalConfig} from './player-api';
 import {type PlayerSession, SessionStore} from '../session';
 import {OpStageStatus} from '../common/op-stage';
-import {
-  type MainMediaEssentialArgsHookType,
-  type PlayerController,
-  PlayerControllerEventType
-} from './player-controller-api';
+import {type MainMediaEssentialArgsHookType, type PlayerController, PlayerControllerEventType} from './player-controller-api';
 import {PlayerAudioInternal} from './player-audio';
 import {PlayerAudioEventType, type PlayerAudioInternalApi} from './player-audio-api';
 import type {PlayerPlaybackEngineMapping} from './player-playback-engine';
@@ -261,13 +251,15 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
       let textTracks = mainMediaState.tracks.filter((p) => p.trackType === TrackType.TEXT_TRACK);
       preloadTextTrackHandlers.forEach((preloadTextTrackHandler) => {
         textTracks.forEach((textTrack) => {
-          this._trackUtils.preloadTrack(textTrack.id).subscribe((track) => {
-            this.loadSidecarTrack(track.id, {
-              trackType: TrackType.TEXT_TRACK,
-              // fileFormatType: track.sourceFileFormatType,
-              handlerType: preloadTextTrackHandler,
-            }).subscribe((event) => {});
-          });
+          this._trackUtils
+            .preloadTrack(textTrack.id)
+            .pipe(takeUntil(this._loadMainMediaBreaker.observer))
+            .subscribe((track) => {
+              this.loadSidecarTrack(track.id, {
+                trackType: TrackType.TEXT_TRACK,
+                handlerType: preloadTextTrackHandler,
+              }).subscribe((event) => {});
+            });
         });
       });
     }

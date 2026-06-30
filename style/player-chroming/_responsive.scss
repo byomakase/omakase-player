@@ -60,13 +60,18 @@
         width: calc(0.8 * var(--center-control-size-default));
         height: calc(0.8 * var(--center-control-size-default));
       }
-      .omakase-control-bar {
-        bottom: calc(16px + var(--marker-track-count, 0) * 8px);
-      }
-      .media-control-bar.has-markers {
+      .media-control-bar:not(.control-bar-offset) {
         + .omakase-control-bar {
-          bottom: calc(20px + var(--marker-track-count, 0) * 8px);
+          bottom: calc(16px + calc(var(--marker-track-count, 0) * 8px));
         }
+        &.has-markers {
+          + .omakase-control-bar {
+            bottom: calc(20px + var(--marker-track-count, 0) * 8px);
+          }
+        }
+      }
+      .omakase-control-bar {
+        bottom: 16px;
       }
       &.with-control-bar {
         omakase-time-range {
@@ -622,8 +627,18 @@
           line-height: 32px;
         }
       }
+      .media-control-bar:not(.control-bar-offset) {
+        + .omakase-control-bar {
+          bottom: calc(24px + calc(var(--marker-track-count, 0) * 12px));
+        }
+        &.has-markers {
+          + .omakase-control-bar {
+            bottom: calc(32px + var(--marker-track-count, 0) * 12px);
+          }
+        }
+      }
       .omakase-control-bar {
-        bottom: calc(24px + var(--marker-track-count, 0) * 12px);
+        bottom: 24px;
         .omakase-control-bar-upper {
           height: 54px;
           omakase-dropdown {
@@ -675,11 +690,6 @@
             line-height: 27px;
             font-size: 15px;
           }
-        }
-      }
-      .media-control-bar.has-markers {
-        + .omakase-control-bar {
-          bottom: calc(32px + var(--marker-track-count, 0) * 12px);
         }
       }
       &.with-control-bar {
@@ -1048,13 +1058,18 @@
           line-height: 36px;
         }
       }
-      .omakase-control-bar {
-        bottom: calc(32px + var(--marker-track-count, 0) * 16px);
-      }
-      .media-control-bar.has-markers {
+      .media-control-bar:not(.control-bar-offset) {
         + .omakase-control-bar {
-          bottom: calc(48px + var(--marker-track-count, 0) * 16px);
+          bottom: calc(32px + calc(var(--marker-track-count, 0) * 16px));
         }
+        &.has-markers {
+          + .omakase-control-bar {
+            bottom: calc(48px + var(--marker-track-count, 0) * 16px);
+          }
+        }
+      }
+      .omakase-control-bar {
+        bottom: 32px;
       }
       &.with-control-bar {
         omakase-time-range {

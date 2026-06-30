@@ -67,7 +67,6 @@ export class ObservationTrackInterpolator extends TimedItemsInterpolator<Observa
       items,
       data: {
         sourceItemIds: timedItems.map((item) => item.id),
-        // sourceItems: timedItems.map((item) => JSON.stringify(item.state)),
       },
     });
   }

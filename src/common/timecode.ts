@@ -20,6 +20,7 @@ import Decimal from 'decimal.js';
 
 const regexValueTextNDF = /^(?:[01]\d|2[0-3]):(?:[0-5]\d):(?:[0-5]\d):(?:[0-9]{2})$/;
 const regexValueTextDF = /^(?:[01]\d|2[0-3]):(?:[0-5]\d):(?:[0-5]\d);(?:[0-9]{2})$/;
+const regexValueTextAudio = /^(?:[01]\d|2[0-3]):(?:[0-5]\d):(?:[0-5]\d)\.(?:[0-9]{2})$/;
 
 const separatorHms = ':';
 const separatorFramesNDF = ':';
@@ -33,6 +34,8 @@ export interface TimecodeModel extends Serializable {
   frames: number;
   valueText: string;
   frameRateModel: FrameRateModel;
+  hasVideo: boolean;
+  hasAudio: boolean;
 }
 
 function padZero(num: number): string {
@@ -43,17 +46,23 @@ interface TimecodeConverterArgs {
   frameRateModel: FrameRateModel;
   ffomTimecodeModel?: TimecodeModel | undefined;
   initSegmentTimeOffset?: number | undefined;
+  hasVideo?: boolean | undefined;
+  hasAudio?: boolean | undefined;
 }
 
 export class TimecodeConverter {
   protected _frameRateModel: FrameRateModel;
   protected _ffomTimecodeModel?: TimecodeModel | undefined;
   protected _initSegmentTimeOffset?: number | undefined;
+  protected _hasVideo?: boolean | undefined;
+  protected _hasAudio?: boolean | undefined;
 
   private constructor(args: TimecodeConverterArgs) {
     this._frameRateModel = args.frameRateModel;
     this._ffomTimecodeModel = args.ffomTimecodeModel;
     this._initSegmentTimeOffset = args.initSegmentTimeOffset;
+    this._hasVideo = args.hasVideo;
+    this._hasAudio = args.hasAudio;
   }
 
   static create(args: TimecodeConverterArgs): TimecodeConverter {
@@ -180,11 +189,20 @@ export class TimecodeConverter {
       frames: hmsf.frames,
       frameRateModel: this._frameRateModel,
       valueText: this.formatTimecodeValueText(hmsf),
+      hasVideo: this._hasVideo ?? false,
+      hasAudio: this._hasAudio ?? false,
     };
   }
 
   private formatTimecodeValueText(hmsf: Pick<TimecodeModel, 'hours' | 'minutes' | 'seconds' | 'frames'>): string {
-    let framesSeparator = !!this._frameRateModel.dropFrames ? separatorFramesDF : separatorFramesNDF;
+    let framesSeparator: string;
+    if (this._hasVideo) {
+      framesSeparator = !!this._frameRateModel.dropFrames ? separatorFramesDF : separatorFramesNDF;
+    } else if (this._hasAudio && !this._hasVideo) {
+      framesSeparator = separatorFramesAudio
+    } else {
+      throw new Error(`Cannot resolve frames separator`)
+    }
     return this.createTimecodeValueText(padZero(hmsf.hours), padZero(hmsf.minutes), padZero(hmsf.seconds), padZero(hmsf.frames), framesSeparator);
   }
 
@@ -231,6 +249,26 @@ export class TimecodeConverter {
       }
 
       let parts = valueText.split(separatorFramesDF);
+      let hms = parts[0]!.split(separatorHms);
+
+      let frames = parseInt(parts[1]!, 10);
+      checkFramesNumber(frames);
+
+      return this.createTimecodeModel({
+        hours: parseInt(hms[0]!, 10),
+        minutes: parseInt(hms[1]!, 10),
+        seconds: parseInt(hms[2]!, 10),
+        frames: frames,
+      });
+    } else if (regexValueTextAudio.test(valueText)) {
+      // Audio: HH:MM:SS.FF
+      let isNDFFrameRate = !this._frameRateModel.dropFrames;
+
+      if (!isNDFFrameRate) {
+        throwFormatMismatchError();
+      }
+
+      let parts = valueText.split(separatorFramesAudio);
       let hms = parts[0]!.split(separatorHms);
 
       let frames = parseInt(parts[1]!, 10);

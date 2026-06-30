@@ -41,7 +41,6 @@ export class OmakaseRouterVisualization extends RouterVisualizationBase {
     this._mainTrackSetterBreaker.break();
     this._mainTrackConfig = config;
     if (!config) {
-      // undefenied can only be provided
       this.renderTrack(undefined);
       return;
     }

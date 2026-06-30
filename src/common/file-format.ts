@@ -27,6 +27,7 @@ export enum FileFormatType {
   MOV = 'MOV',
 
   // Audio
+  MP4_AUDIO = 'MP4_AUDIO',
   MP3 = 'MP3',
   AAC = 'AAC',
   OGG = 'OGG',
@@ -67,6 +68,7 @@ export class FileFormat {
   static readonly MOV = new FileFormat(FileFormatType.MOV, ['video/quicktime'], ['.mov']);
 
   // Audio
+  static readonly MP4_AUDIO = new FileFormat(FileFormatType.MP4_AUDIO, ['audio/mp4'], ['.mp4', '.m4v']);
   static readonly MP3 = new FileFormat(FileFormatType.MP3, ['audio/mpeg', 'audio/mp3'], ['.mp3']);
   static readonly AAC = new FileFormat(FileFormatType.AAC, ['audio/aac'], ['.aac']);
   static readonly OGG = new FileFormat(FileFormatType.OGG, ['audio/ogg'], ['.ogg']);
@@ -87,8 +89,8 @@ export class FileFormat {
   static readonly STREAMING: readonly FileFormat[] = [FileFormat.HLS, FileFormat.DASH];
   /** All supported video file formats (MP4, MKV, WEBM, AVI, MOV). */
   static readonly VIDEO: readonly FileFormat[] = [FileFormat.MP4, FileFormat.MKV, FileFormat.WEBM, FileFormat.AVI, FileFormat.MOV];
-  /** All supported audio file formats (MP3, AAC, OGG, OPUS, WAV, FLAC). */
-  static readonly AUDIO: readonly FileFormat[] = [FileFormat.MP3, FileFormat.AAC, FileFormat.OGG, FileFormat.OPUS, FileFormat.WAV, FileFormat.FLAC];
+  /** All supported audio file formats (MP4_AUDIO, MP3, AAC, OGG, OPUS, WAV, FLAC). */
+  static readonly AUDIO: readonly FileFormat[] = [FileFormat.MP4_AUDIO, FileFormat.MP3, FileFormat.AAC, FileFormat.OGG, FileFormat.OPUS, FileFormat.WAV, FileFormat.FLAC];
   /** All supported text/subtitle formats (VTT, SRT, SSA, ASS, TTML, SCC, STL). */
   static readonly TEXT: readonly FileFormat[] = [FileFormat.VTT, FileFormat.SRT, FileFormat.SSA, FileFormat.ASS, FileFormat.TTML, FileFormat.SCC, FileFormat.STL];
 
@@ -130,6 +132,7 @@ export class FileFormat {
         }
       }
     }
-    return FileFormat._mimeIndex.get(mime);
+    const baseMime = mime.split(';')[0]!.trim().toLowerCase();
+    return FileFormat._mimeIndex.get(baseMime);
   }
 }

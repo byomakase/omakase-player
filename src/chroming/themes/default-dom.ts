@@ -289,11 +289,11 @@ export class DefaultDomController extends ChromingDomController<ChromingTheme.DE
                     <span class="${ChromingDomClasses.mediaChromeAudioText}"></span>
                     </media-chrome-button>
                 </omakase-dropdown-toggle>
-                <media-chrome-button class="${this.getControlBarClass(DefaultThemeControl.BITC)} ${ChromingDomClasses.mediaChromeButton} omakase-player-bitc">
+                <media-chrome-button class="${this.getControlBarClass(DefaultThemeControl.TIME_TOGGLE)} ${ChromingDomClasses.mediaChromeButton} omakase-player-bitc">
                     <span class="${ChromingDomClasses.mediaChromeBitcDisabled} omakase-player-bitc-icon"></span>
                     <media-tooltip class="${ChromingDomClasses.mediaChromeBitcTooltip} omakase-player-bitc-tooltip">Show timecode</media-tooltip>
                 </media-chrome-button>
-                <media-chrome-button class="${this.getControlBarClass(DefaultThemeControl.DETACH)} ${ChromingDomClasses.mediaChromeButton} omakase-player-attach-detach">
+                <media-chrome-button class="${this.getControlBarClass(DefaultThemeControl.DETACH_TOGGLE)} ${ChromingDomClasses.mediaChromeButton} omakase-player-attach-detach">
                     <span class="${this._config.playerWindowPlaybackMode === WindowPlaybackMode.DETACHED ? ChromingDomClasses.mediaChromeAttach : ChromingDomClasses.mediaChromeDetach}"></span>
                     <media-tooltip>${this._config.playerWindowPlaybackMode === WindowPlaybackMode.DETACHED ? 'Attach player' : 'Detach player'}</media-tooltip>
                 </media-chrome-button>
@@ -480,6 +480,7 @@ export class DefaultDomController extends ChromingDomController<ChromingTheme.DE
       this.wireAudioTextDropdown(this._audioTextDropdownBottom);
     }
     if (this._timeRange) {
+      this._timeRange.player = playerInternal;
       this._timeRange.onSeek$.pipe(takeUntil(this._playerBreaker.observer), takeUntil(this._destroyBreaker.observer)).subscribe({
         next: (time) => {
           playerInternal.seekTo(time);

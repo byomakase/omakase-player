@@ -24,6 +24,7 @@ import {ObserverBreaker} from '../common/observer-breaker';
 import type {Source, SourceState} from '../source';
 import type {FileFormatType, OmpEventGroup} from '../common';
 import {objectHasOwnProperty} from '../util/util-functions';
+import type {WithOptionalPartial} from '../types/ts-types';
 
 /**
  * Discriminator for the different kinds of tracks that can be associated with a {@link MainMedia}.
@@ -62,6 +63,7 @@ export interface TrackState extends MediaEntityState {
 
   sourceFileFormatType?: FileFormatType | undefined;
   label: string | undefined;
+  customAttrs: Record<string, any> | undefined;
 }
 
 /**
@@ -126,6 +128,9 @@ export interface Track<S extends TrackState = TrackState, E extends OmpEventGrou
   /** Human-readable label for this track. */
   label: string | undefined;
 
+  /** Custom arbitrary attributes for this track */
+  customAttrs: Record<string, any> | undefined;
+
   /** Transition the load stage to "loading" and emit a {@link TrackEventType.TRACK_LOADING} event. */
   loadStart(): void;
 
@@ -160,6 +165,8 @@ export interface BaseTrackArgs extends BaseMediaEntityArgs {
   sourceFileFormatType?: FileFormatType | undefined;
   /** Human-readable label for this track. */
   label?: string | undefined;
+  /** Custom arbitrary attributes for this track */
+  customAttrs?: Record<string, any> | undefined;
   /** Track load status **/
   loadStage?: OpStage | undefined;
 }
@@ -172,25 +179,22 @@ export interface BaseTrackLoadOptions {
 /**
  * Subset of {@link BaseTrackArgs} fields that can be updated at runtime
  */
-export type TrackUpdateableAttrs = Pick<BaseTrackArgs, 'label'>;
+export type TrackUpdateableAttrs = Pick<BaseTrackArgs, 'label' | 'customAttrs'>;
 
 export abstract class BaseTrack<S extends TrackState, E extends OmpEventGroup<any, any>> extends BaseMediaEntity<S> implements Track<S, E>, Destroyable {
   protected readonly _onEvent$: Subject<E | TrackEvent<S>> = new Subject<E | TrackEvent<S>>();
 
-  protected abstract _trackType: TrackType;
-
+  protected readonly _mediaType = MediaEntityType.TRACK;
+  protected abstract readonly _trackType: TrackType;
   protected readonly _source: Source | undefined;
-  protected _sourceFileFormatType?: FileFormatType | undefined;
-
+  protected readonly _sourceFileFormatType?: FileFormatType | undefined;
   protected readonly _relations: Relation[];
+  protected readonly _loadStage: OpStage;
 
   protected _label: string | undefined;
+  protected _customAttrs: Record<string, any> | undefined;
 
-  protected _mediaType = MediaEntityType.TRACK;
-
-  protected _loadStage: OpStage;
-
-  protected _destroyBreaker = new ObserverBreaker();
+  protected readonly _destroyBreaker = new ObserverBreaker();
 
   protected constructor(args?: BaseTrackArgs) {
     super(args);
@@ -201,6 +205,7 @@ export abstract class BaseTrack<S extends TrackState, E extends OmpEventGroup<an
 
     this._sourceFileFormatType = args?.sourceFileFormatType;
     this._label = args?.label;
+    this._customAttrs = args?.customAttrs;
 
     if (args?.relations) {
       args.relations.forEach((relation: Relation) => {
@@ -225,6 +230,10 @@ export abstract class BaseTrack<S extends TrackState, E extends OmpEventGroup<an
       this._label = attrs.label;
     }
 
+    if (objectHasOwnProperty(attrs, 'customAttrs')) {
+      this._customAttrs = attrs.customAttrs;
+    }
+
     if (emitEvent) {
       this._onEvent$.next({
         type: TrackEventType.TRACK_UPDATED,
@@ -244,6 +253,7 @@ export abstract class BaseTrack<S extends TrackState, E extends OmpEventGroup<an
       relations: this.relations.map((p) => p.state),
       loadStage: this.loadStage.state,
       label: this._label,
+      customAttrs: this._customAttrs,
     };
   }
 
@@ -316,6 +326,10 @@ export abstract class BaseTrack<S extends TrackState, E extends OmpEventGroup<an
 
   get label(): string | undefined {
     return this._label;
+  }
+
+  get customAttrs(): Record<string, any> | undefined {
+    return this._customAttrs;
   }
 
   destroy() {

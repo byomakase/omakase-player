@@ -866,11 +866,6 @@ class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
     });
   }
 
-  // protected styleChanged() {
-  //   this.render();
-  //   console.log('styleChanged');
-  // }
-
   redrawBars(viewWidth: number, gap: number) {
     this._group.destroyChildren();
 

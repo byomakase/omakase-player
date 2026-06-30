@@ -19,9 +19,8 @@ import {CryptoUtil} from '../util/crypto-util';
 import type {Destroyable} from '../common/capabilities';
 import {MessageChannelClosedError, OmpError} from '../types';
 import type {ExtractParameterTypes, ExtractReturnType, UnwrapObservable} from '../types/ts-types';
-import {fromPromise} from 'rxjs/internal/observable/innerFrom';
 import {ObserverBreaker} from '../common/observer-breaker';
-import {freeObserver} from '../util/rxjs-util';
+import {errorCompleteObserver, freeObserver, nextCompleteObserver} from '../util/rxjs-util';
 import type {OmpProvider} from '../omp-provider';
 
 type ExtractPropertyTypes<T, K extends keyof T> = {
@@ -212,7 +211,7 @@ abstract class UntypedMessageChannel implements Destroyable {
           }),
           catchError((error) => {
             if (error instanceof MessageChannelClosedError) {
-              console.debug(`Message channel closed for topic: ${this._topic}. This error is non-fatal and can be ignored.`)
+              console.debug(`Message channel closed for topic: ${this._topic}. This error is non-fatal and can be ignored.`);
               return EMPTY;
             } else if (error.name === 'TimeoutError') {
               let errorMessage = `Didnt receive response for: \n${JSON.stringify(message, null, 1)}.\nSend options: \n${JSON.stringify(sendOptions, null, 1)}`;
@@ -353,7 +352,22 @@ abstract class BaseMessageChannel<ChannelDef extends ExtractActions<any>> extend
     sendOptions?: Partial<SendOptions>
   ): Observable<UnwrapObservable<ResponseData>> {
     let message = this.createRequestMessage(action, arg);
-    return fromPromise(firstValueFrom(this._sendAndObserveResponse<UnwrapObservable<ResponseData>>(message, sendOptions).pipe(map((p) => p.data as UnwrapObservable<ResponseData>))));
+    const promise = firstValueFrom(this._sendAndObserveResponse<UnwrapObservable<ResponseData>>(message, sendOptions).pipe(map((p) => p.data as UnwrapObservable<ResponseData>)));
+    promise.catch(() => {});
+    return new Observable<UnwrapObservable<ResponseData>>((subscriber) => {
+      promise.then(
+        (value) => {
+          if (!subscriber.closed) {
+            nextCompleteObserver(subscriber, value)
+          }
+        },
+        (err) => {
+          if (!subscriber.closed) {
+            errorCompleteObserver(subscriber, err)
+          }
+        }
+      );
+    });
   }
 
   listen<Action extends ExtractActionType<ChannelDef>, ResponseData extends ChannelDef[Action]['responseData']>(action: Action): Observable<UnwrapObservable<ResponseData>> {
@@ -382,7 +396,6 @@ abstract class BaseMessageChannel<ChannelDef extends ExtractActions<any>> extend
 export class MessageChannel<T> extends BaseMessageChannel<ExtractActions<T>> {
   constructor(managedBroadcastChannel: ManagedBroadcastChannel, topic?: string) {
     super(managedBroadcastChannel, topic ? topic : CryptoUtil.uuid());
-    // console.debug(`MessageChannel[${this._topic}]`)
   }
 
   get topic(): string {
@@ -394,7 +407,7 @@ export class MessageChannel<T> extends BaseMessageChannel<ExtractActions<T>> {
   }
 }
 
-  export interface MessageChannelBinding extends Destroyable {
+export interface MessageChannelBinding extends Destroyable {
   bind(): void;
 }
 

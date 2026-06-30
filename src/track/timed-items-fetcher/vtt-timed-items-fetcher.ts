@@ -190,12 +190,11 @@ export class ObservationTrackVttFetcher extends VttTimedItemsFetcher<Observation
         default:
           return [];
       }
-    } else if (/^-?[\d.]+,-?[\d.]+$/.test(cue.text)) {
-      // -0.0014,0.0016
-      const [min, max] = cue.text.split(',');
+    } else if (/^-?[\d.]+,\s*-?[\d.]+$/.test(cue.text)) {
+      const [min, max] = cue.text.split(',').map((s) => s.trim());
       return [
-        {value: min, measurement: 'min'},
-        {value: max, measurement: 'max'},
+        {value: min?.trim(), measurement: 'min'},
+        {value: max?.trim(), measurement: 'max'},
       ];
     } else {
       return [];

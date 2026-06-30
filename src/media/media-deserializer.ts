@@ -72,11 +72,13 @@ export class MediaDeserializer implements Destroyable {
       source: SourceFactory.create(state.source),
       loadOptions: state.loadOptions,
       tracks: state.tracks.map((p) => this.createTrack(p)),
-      isDrm: isNullOrUndefined(state.isDrm) ? void 0 : state.isDrm,
       duration: state.duration,
       frameRateModel: state.frameRateModel,
       ffomTimecodeModel: state.ffomTimecodeModel,
       initSegmentTimeOffset: state.initSegmentTimeOffset,
+      hasDrm: isNullOrUndefined(state.hasDrm) ? void 0 : state.hasDrm,
+      hasVideo: isNullOrUndefined(state.hasVideo) ? void 0 : state.hasVideo,
+      hasAudio: isNullOrUndefined(state.hasAudio) ? void 0 : state.hasAudio,
     };
   }
 

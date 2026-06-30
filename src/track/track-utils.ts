@@ -135,8 +135,6 @@ export class TrackUtils implements TrackUtilsApi {
     return passiveObservable<Track>((observer) => {
       let track: Track = this._trackRepository.getOrFail(id);
 
-      // console.debug(`Preloading track`, track.state);
-
       let createNewTrack$: Observable<Track> | undefined;
 
       switch (track.trackType) {

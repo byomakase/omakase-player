@@ -108,9 +108,9 @@ export class MediaElementPlayback implements Destroyable {
     return this._state.pausing;
   }
 
-  setPausing() {
+  setPausing(value: boolean) {
     this.updateState({
-      pausing: true,
+      pausing: value,
     });
   }
 

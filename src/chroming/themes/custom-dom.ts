@@ -110,6 +110,7 @@ export class CustomDomController extends ChromingDomController<ChromingTheme.CUS
       });
     }
     if (this._timeRange) {
+      this._timeRange.player = playerInternal;
       this._timeRange.onSeek$.pipe(takeUntil(this._playerBreaker.observer), takeUntil(this._destroyBreaker.observer)).subscribe({
         next: (time) => {
           playerInternal.seekTo(time);

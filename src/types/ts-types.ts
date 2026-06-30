@@ -22,7 +22,6 @@ export type PartialRecord<K extends keyof any, T> = Partial<Record<K, T>>;
 
 export type AtLeastOne<T, U = {[K in keyof T]: Pick<T, K>}> = Partial<T> & U[keyof U];
 
-// export type WithOptionalPartial<T, K extends keyof T> = Omit<T, K> & PartialRecord<K, Partial<T[K]>>;
 export type WithOptionalPartial<T, K extends keyof T> = Omit<T, K> & {
   [P in K]?: Partial<T[P]>;
 };

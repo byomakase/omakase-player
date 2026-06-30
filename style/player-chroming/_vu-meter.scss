@@ -150,7 +150,7 @@ omakase-vu-meter {
       }
 
       .omakase-vu-meter-scale-subdivision {
-        width: calc(0.5 * var(--scale-thickness));
+        width: var(--scale-thickness);
         height: calc(0.5 * var(--scale-size));
         transform: translate(-50%, 0);
       }
@@ -238,7 +238,7 @@ omakase-vu-meter {
       }
 
       .omakase-vu-meter-scale-subdivision {
-        height: calc(0.5 * var(--scale-thickness));
+        height: var(--scale-thickness);
         width: calc(0.5 * var(--scale-size));
         transform: translate(0, 50%);
       }

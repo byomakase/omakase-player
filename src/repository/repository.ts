@@ -70,7 +70,7 @@ export abstract class BaseRepository<T extends MediaEntity> implements Repositor
     if (existingEntities.length > 0) {
       throw new Error(`Entities with ids=${mediaEntities.map((p) => p.id)} already exist`);
     } else if (mediaEntities.length < 1) {
-      // console.debug(`Nothing to add`)
+      // nop
     } else {
       mediaEntities.forEach((p) => this._add(p));
     }

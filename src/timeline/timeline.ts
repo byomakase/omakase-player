@@ -260,7 +260,7 @@ export class TimelineImpl implements TimelineApi, Destroyable {
 
     DomUtil.setAttributes(this._rootElement, {
       'data-omakase-timeline-id': this._id,
-      'class': domClasses.root,
+      class: domClasses.root,
     });
 
     this._rootElement.innerHTML = `<div class="${domClasses.timelineOverlay}">
@@ -1809,7 +1809,7 @@ export class TimelineImpl implements TimelineApi, Destroyable {
       }
     };
 
-    if (this._thumbnailHoverWrapper.thumbnail && (this._thumbnailHoverWrapper.thumbnail?.id === thumbnail.id)) {
+    if (this._thumbnailHoverWrapper.thumbnail && this._thumbnailHoverWrapper.thumbnail?.id === thumbnail.id) {
       let position = resolveThumbnailHoverPosition();
       if (position) {
         this._thumbnailHoverWrapper.setPosition(position);

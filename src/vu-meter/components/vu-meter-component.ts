@@ -82,6 +82,8 @@ export class VuMeterComponent extends HTMLElement {
 
   private _levelColors: VuMeterColor[] = DEFAULT_VU_METER_STYLE.levelColors;
   private _isNewFrame = true;
+  private _isSetUp = false;
+  private _isConnected = false;
 
   private _destroyBreaker = new ObserverBreaker();
   private _sourceBreaker = new ObserverBreaker();
@@ -221,15 +223,23 @@ export class VuMeterComponent extends HTMLElement {
   }
 
   connectedCallback() {
-    this.createDom();
-    this.initHoldTimers();
-    this._resizeObserver.observe(this);
+    this._isConnected = true;
+    if (!this._isSetUp) {
+      this.createDom();
+      this.initHoldTimers();
+      this._resizeObserver.observe(this);
+    }
+    this._isSetUp = true;
   }
 
-  disconnectedCallback() {
-    this._sourceBreaker.destroy();
-    this._destroyBreaker.destroy();
-    this._resizeObserver.disconnect();
+  async disconnectedCallback() {
+    this._isConnected = false;
+    await Promise.resolve();
+    if (!this._isConnected) {
+      this._sourceBreaker.destroy();
+      this._destroyBreaker.destroy();
+      this._resizeObserver.disconnect();
+    }
   }
 
   setSource(source: AudioLevelSourceApi) {
@@ -525,7 +535,7 @@ export class VuMeterComponent extends HTMLElement {
       const totalSize = this.getMaxSegmentSizeWithGap(height);
       const segmentCount = this.getBarSegmentCount(height, totalSize);
       const segmentSize = height / segmentCount;
-      const gap = Math.min(segmentSize / 3, 4);
+      const gap = segmentSize / 3;
       const rectHeight = (height - gap * (segmentCount - 1)) / segmentCount;
       this.style.setProperty('--bar-segment-size', DomUtil.getPixelValue(rectHeight));
 
@@ -537,7 +547,7 @@ export class VuMeterComponent extends HTMLElement {
       const totalSize = this.getMaxSegmentSizeWithGap(width);
       const segmentCount = this.getBarSegmentCount(width, totalSize);
       const segmentSize = width / segmentCount;
-      const gap = Math.min(segmentSize / 3, 4);
+      const gap = segmentSize / 3;
       const rectWidth = (width - gap * (segmentCount - 1)) / segmentCount;
       this.style.setProperty('--bar-segment-size', DomUtil.getPixelValue(rectWidth));
 

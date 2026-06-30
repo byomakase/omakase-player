@@ -41,7 +41,6 @@ export enum MainMediaEventType {
   MAIN_MEDIA_LOADING = 'MAIN_MEDIA_LOADING',
   MAIN_MEDIA_LOADED = 'MAIN_MEDIA_LOADED',
   MAIN_MEDIA_LOAD_ERROR = 'MAIN_MEDIA_LOAD_ERROR',
-  // MAIN_MEDIA_UPDATING = 'MAIN_MEDIA_UPDATING',
   MAIN_MEDIA_UPDATED = 'MAIN_MEDIA_UPDATED',
 }
 
@@ -62,12 +61,14 @@ export interface MainMediaState extends MediaEntityState {
 
   tracks: TrackState[];
 
-  isDrm?: boolean | undefined;
   duration?: number | undefined;
   initialDuration?: number | undefined;
   frameRateModel?: FrameRateModel | undefined;
   ffomTimecodeModel?: TimecodeModel | undefined;
   initSegmentTimeOffset?: number | undefined;
+  hasDrm?: boolean | undefined;
+  hasVideo?: boolean | undefined;
+  hasAudio?: boolean | undefined;
 }
 
 /**
@@ -91,7 +92,6 @@ export type MainMediaEventTypeDataMap = {
   [MainMediaEventType.MAIN_MEDIA_LOADING]: MainMediaEventData;
   [MainMediaEventType.MAIN_MEDIA_LOADED]: MainMediaEventData;
   [MainMediaEventType.MAIN_MEDIA_LOAD_ERROR]: MainMediaErrorEventData;
-  // [MainMediaEventType.MAIN_MEDIA_UPDATING]: MainMediaEventData;
   [MainMediaEventType.MAIN_MEDIA_UPDATED]: MainMediaEventData;
 };
 
@@ -150,9 +150,6 @@ export interface MainMedia extends MediaEntity {
   /** Register multiple tracks with this media. */
   addTracks(tracks: Track[]): void;
 
-  /** Whether the media source is DRM-protected. */
-  get isDrm(): boolean | undefined;
-
   /** The duration originally reported at load time, before any runtime updates. */
   get initialDuration(): number | undefined;
 
@@ -168,6 +165,15 @@ export interface MainMedia extends MediaEntity {
   /** Time offset of the initialization segment, if applicable. */
   get initSegmentTimeOffset(): number | undefined;
 
+  /** Whether the media source is DRM-protected. */
+  get hasDrm(): boolean | undefined;
+
+  /** Indicates whether media has video tracks. */
+  get hasVideo(): boolean | undefined;
+
+  /** Indicates whether media has audio tracks. */
+  get hasAudio(): boolean | undefined;
+
   /**
    * Partially update mutable media attributes and emit a
    * {@link MainMediaEventType.MAIN_MEDIA_UPDATED} event.
@@ -179,7 +185,7 @@ export interface MainMedia extends MediaEntity {
  * Subset of {@link MainMediaState} fields that can be updated at runtime
  * via {@link MainMedia.updateAttrs}.
  */
-export type MainMediaUpdateableAttrs = Pick<MainMediaState, 'isDrm' | 'duration' | 'frameRateModel' | 'ffomTimecodeModel' | 'initSegmentTimeOffset'>;
+export type MainMediaUpdateableAttrs = Pick<MainMediaState, 'duration' | 'frameRateModel' | 'ffomTimecodeModel' | 'initSegmentTimeOffset' | 'hasDrm' | 'hasVideo' | 'hasAudio'>;
 
 /**
  * Configuration provided when loading a main media source via
@@ -240,8 +246,6 @@ export interface BaseMainMediaArgs extends BaseMediaEntityArgs {
   loadOptions?: MainMediaLoadOptions | undefined;
   /** Pre-existing tracks to associate with the media. */
   tracks?: Track[];
-  /** Whether the media source is DRM-protected. */
-  isDrm?: boolean | undefined;
   /** Initial media duration in seconds. */
   duration?: number | undefined;
   /** Frame rate model for frame-accurate operations. */
@@ -250,6 +254,12 @@ export interface BaseMainMediaArgs extends BaseMediaEntityArgs {
   ffomTimecodeModel?: TimecodeModel | undefined;
   /** Initialization segment time offset. */
   initSegmentTimeOffset?: number | undefined;
+  /** Whether the media source is DRM-protected. */
+  hasDrm?: boolean | undefined;
+  /** Whether media has video. */
+  hasVideo?: boolean | undefined;
+  /** Whether media has audio. */
+  hasAudio?: boolean | undefined;
 }
 
 export abstract class BaseMainMedia<S extends MainMediaState> extends BaseMediaEntity<S> implements MainMedia {
@@ -269,12 +279,14 @@ export abstract class BaseMainMedia<S extends MainMediaState> extends BaseMediaE
   protected readonly _tracks: Track[];
   protected readonly _tracksMap: Map<Track['id'], Track>;
 
-  protected _isDrm?: boolean | undefined;
   protected _initialDuration?: number | undefined;
   protected _duration?: number | undefined;
   protected _frameRateModel?: FrameRateModel | undefined;
   protected _ffomTimecodeModel?: TimecodeModel | undefined;
   protected _initSegmentTimeOffset?: number | undefined;
+  protected _hasDrm?: boolean | undefined;
+  protected _hasVideo?: boolean | undefined;
+  protected _hasAudio?: boolean | undefined;
 
   protected constructor(args: BaseMainMediaArgs) {
     super(args);
@@ -293,12 +305,14 @@ export abstract class BaseMainMedia<S extends MainMediaState> extends BaseMediaE
       });
     }
 
-    this._isDrm = !!args?.isDrm;
     this._initialDuration = args.duration;
     this._duration = args.duration;
     this._frameRateModel = args.frameRateModel;
     this._ffomTimecodeModel = args.ffomTimecodeModel;
     this._initSegmentTimeOffset = args.initSegmentTimeOffset;
+    this._hasDrm = !!args?.hasDrm;
+    this._hasVideo = args.hasVideo;
+    this._hasAudio = args.hasAudio;
   }
 
   loadStart() {
@@ -359,8 +373,8 @@ export abstract class BaseMainMedia<S extends MainMediaState> extends BaseMediaE
     return this._loadStage;
   }
 
-  get isDrm(): boolean | undefined {
-    return this._isDrm;
+  get hasDrm(): boolean | undefined {
+    return this._hasDrm;
   }
 
   get initialDuration(): number | undefined {
@@ -383,15 +397,19 @@ export abstract class BaseMainMedia<S extends MainMediaState> extends BaseMediaE
     return this._initSegmentTimeOffset;
   }
 
+  get hasVideo(): boolean | undefined {
+    return this._hasVideo;
+  }
+
+  get hasAudio(): boolean | undefined {
+    return this._hasAudio;
+  }
+
   get sourceFileFormatType(): FileFormatType | undefined {
     return this._sourceFileFormatType;
   }
 
   updateAttrs(attrs: MainMediaUpdateableAttrs) {
-    if (objectHasOwnProperty(attrs, 'isDrm')) {
-      this._isDrm = attrs.isDrm;
-    }
-
     if (objectHasOwnProperty(attrs, 'duration')) {
       this._duration = attrs.duration;
       if (!this._initialDuration) {
@@ -409,6 +427,18 @@ export abstract class BaseMainMedia<S extends MainMediaState> extends BaseMediaE
 
     if (objectHasOwnProperty(attrs, 'initSegmentTimeOffset')) {
       this._initSegmentTimeOffset = attrs.initSegmentTimeOffset;
+    }
+
+    if (objectHasOwnProperty(attrs, 'hasDrm')) {
+      this._hasDrm = attrs.hasDrm;
+    }
+
+    if (objectHasOwnProperty(attrs, 'hasVideo')) {
+      this._hasVideo = attrs.hasVideo;
+    }
+
+    if (objectHasOwnProperty(attrs, 'hasAudio')) {
+      this._hasAudio = attrs.hasAudio;
     }
 
     this._onEvent$.next({
@@ -433,12 +463,14 @@ export abstract class BaseMainMedia<S extends MainMediaState> extends BaseMediaE
       tracks: this.tracks.map((p) => p.state),
       loadStage: this.loadStage.state,
 
-      isDrm: this._isDrm,
       duration: this._duration,
       initialDuration: this._initialDuration,
       frameRateModel: this._frameRateModel,
       ffomTimecodeModel: this._ffomTimecodeModel,
       initSegmentTimeOffset: this._initSegmentTimeOffset,
+      hasDrm: this._hasDrm,
+      hasVideo: this._hasVideo,
+      hasAudio: this._hasAudio,
     };
   }
 }

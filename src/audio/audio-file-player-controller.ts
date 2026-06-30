@@ -17,13 +17,14 @@
 import {first, forkJoin, fromEvent, Observable, Subject, take, takeUntil} from 'rxjs';
 
 import {MediaMetadataResolver} from '../tools';
-import {MediaTemporalFormat, type MediaTemporalFormatValueMap} from '../common';
 import {errorCompleteObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
 import {type AudioTrackIdentifier, BasePlayerController, type PlayerControllerConfig, type TextTrackIdentifier} from '../player/player-controller';
 import type {LoadMainMediaArgsType, PlayerDomController} from '../player';
-import {OmpError} from '../types';
 import {AudioFile, type AudioState, type TextTrackState} from '../media';
 import {OpStage, OpStageStatus} from '../common/op-stage';
+import {FrameRateResolver} from '../common/frame-rate';
+import {TimecodeConverter, type TimecodeModel} from '../common/timecode';
+import {PLAYER_CONTROLLER_DEFAULTS} from '../constants';
 
 export interface AudioFilePlayerControllerConfig extends PlayerControllerConfig {}
 
@@ -37,67 +38,93 @@ export class AudioFilePlayerController extends BasePlayerController<AudioFilePla
   }
 
   loadMainMedia(args: LoadMainMediaArgsType): Observable<boolean> {
+    let url = args.url;
+    let loadOptions = args.loadOptions;
+    let frameRateModel = FrameRateResolver.FR_100;
+
     this._loadBreaker.break();
     const videoElement = this._playerDomController.mainMediaVideoElement;
-    const result$ = new Subject<boolean>();
 
     // clear video element
     videoElement.src = '';
     videoElement.load();
 
-    let audioLoadedData$ = fromEvent(videoElement, 'loadeddata').pipe(takeUntil(this._loadBreaker.observer), first());
+    return new Observable<boolean>((observer) => {
 
-    fromEvent(videoElement, 'error')
-      .pipe(takeUntil(this._loadBreaker.observer), take(1))
-      .subscribe((error) => {
-        result$.error(error);
-        result$.complete();
+      let audioLoadedData$ = fromEvent(videoElement, 'loadeddata').pipe(takeUntil(this._loadBreaker.observer), first());
+
+      fromEvent(videoElement, 'error')
+        .pipe(takeUntil(this._loadBreaker.observer), take(1))
+        .subscribe((error) => {
+          errorCompleteObserver(observer, error);
+          this._loadBreaker.break();
+        });
+
+      let mainMediaEssentialArgsHookCompleted$ = new Subject<void>();
+      let tracksCreatedHookCompleted$ = new Subject<void>();
+
+      let metadataFromResolver$ = MediaMetadataResolver.getMediaMetadata(args.url, ['firstAudioTrackChannelsNumber', 'firstAudioTrackAudioCodec']);
+
+      // once both hooks are completed finish loading
+      forkJoin([mainMediaEssentialArgsHookCompleted$, tracksCreatedHookCompleted$]).subscribe(() => {
+        nextCompleteObserver(observer, true);
         this._loadBreaker.break();
       });
 
-    let mainMediaEssentialArgsHookCompleted$ = new Subject<void>();
-    let tracksCreatedHookCompleted$ = new Subject<void>();
+      forkJoin([audioLoadedData$, metadataFromResolver$])
+        .pipe(takeUntil(this._loadBreaker.observer), take(1))
+        .subscribe({
+          next: ([_, metadata]) => {
+            let ffomTimecodeModel: TimecodeModel | undefined;
+            if (loadOptions?.ffom) {
+              let timecodeConverter = TimecodeConverter.create({
+                frameRateModel: frameRateModel,
+                hasVideo: false,
+                hasAudio: true,
+              });
+              try {
+                ffomTimecodeModel = timecodeConverter.parseValueTextToTimecodeModel(loadOptions.ffom);
+              } catch (e) {
+                errorCompleteObserver(observer, e);
+                return;
+              }
+            }
 
-    let metadataFromResolver$ = MediaMetadataResolver.getMediaMetadata(args.url, ['firstAudioTrackChannelsNumber', 'firstAudioTrackAudioCodec']);
+            args
+              .mainMediaEssentialArgsHook({
+                duration: videoElement.duration,
+                frameRateModel: frameRateModel,
+                ffomTimecodeModel: ffomTimecodeModel,
+                hasVideo: false,
+                hasAudio: true,
+              })
+              .subscribe(() => {
+                nextCompleteObserver(mainMediaEssentialArgsHookCompleted$);
+              });
 
-    // once both hooks are completed finish loading
-    forkJoin([mainMediaEssentialArgsHookCompleted$, tracksCreatedHookCompleted$]).subscribe(() => {
-      result$.next(true);
-      result$.complete();
-      this._loadBreaker.break();
-    });
+            let audioTrack = new AudioFile({
+              loadStage: OpStage.of(OpStageStatus.SUCCESS),
+              url: args.url,
+              duration: videoElement.duration,
+              channels: metadata.firstAudioTrackChannelsNumber,
+              audioCodec: metadata.firstAudioTrackAudioCodec,
+              label: PLAYER_CONTROLLER_DEFAULTS.AUDIO.audioLabel,
+            });
+            this._audioTrack = audioTrack;
 
-    forkJoin([audioLoadedData$, metadataFromResolver$])
-      .pipe(takeUntil(this._loadBreaker.observer), take(1))
-      .subscribe(([_, metadata]) => {
-        args
-          .mainMediaEssentialArgsHook({
-            duration: videoElement.duration,
-          })
-          .subscribe(() => {
-            mainMediaEssentialArgsHookCompleted$.next();
-            mainMediaEssentialArgsHookCompleted$.complete();
-          });
-
-        let audioTrack = new AudioFile({
-          loadStage: OpStage.of(OpStageStatus.SUCCESS),
-          url: args.url,
-          duration: videoElement.duration,
-          channels: metadata.firstAudioTrackChannelsNumber,
-          audioCodec: metadata.firstAudioTrackAudioCodec,
+            args.tracksCreatedHook([audioTrack]).subscribe(() => {
+              nextCompleteObserver(tracksCreatedHookCompleted$);
+            });
+          },
+          error: (error) => {
+            errorCompleteObserver(observer, error);
+          },
         });
-        this._audioTrack = audioTrack;
 
-        args.tracksCreatedHook([audioTrack]).subscribe(() => {
-          nextCompleteObserver(tracksCreatedHookCompleted$);
-        });
-      });
-
-    // load new audio media
-    videoElement.src = args.url;
-    videoElement.load();
-
-    return result$;
+      // load new audio media
+      videoElement.src = args.url;
+      videoElement.load();
+    })
   }
 
   resolveAudioTrackIdentifier(track: AudioState): AudioTrackIdentifier {
@@ -139,39 +166,5 @@ export class AudioFilePlayerController extends BasePlayerController<AudioFilePla
 
   get textTracksDisplayed(): boolean {
     return false;
-  }
-
-  seekTo(value: MediaTemporalFormatValueMap[MediaTemporalFormat], format?: MediaTemporalFormat): Observable<boolean> {
-    if (format === MediaTemporalFormat.FRAME_COUNT || format === MediaTemporalFormat.TIMECODE) {
-      return passiveObservable((observer) => errorCompleteObserver(observer, 'Frame based seeking is not supported for audio'));
-    }
-
-    return super.seekTo(value, format);
-  }
-
-  seekFromCurrentTime(value: MediaTemporalFormatValueMap[MediaTemporalFormat], format?: MediaTemporalFormat): Observable<boolean> {
-    if (format === MediaTemporalFormat.FRAME_COUNT || format === MediaTemporalFormat.TIMECODE) {
-      return passiveObservable((observer) => errorCompleteObserver(observer, 'Frame based seeking is not supported for audio'));
-    }
-
-    return super.seekFromCurrentTime(value, format);
-  }
-
-  protected getTotalFrames(): number {
-    throw new OmpError(`Audio main media does not have frames`);
-  }
-
-  getCurrentTime(): MediaTemporalFormatValueMap[MediaTemporalFormat.SECONDS];
-  getCurrentTime<F extends MediaTemporalFormat>(format: F): MediaTemporalFormatValueMap[F];
-  getCurrentTime(format?: MediaTemporalFormat): MediaTemporalFormatValueMap[MediaTemporalFormat] {
-    if (format === MediaTemporalFormat.FRAME_COUNT || format === MediaTemporalFormat.TIMECODE) {
-      throw new OmpError(`Can't return current time for audio main media in frame based temporal formats`);
-    }
-
-    if (format) {
-      return super.getCurrentTime(format);
-    }
-
-    return super.getCurrentTime();
   }
 }

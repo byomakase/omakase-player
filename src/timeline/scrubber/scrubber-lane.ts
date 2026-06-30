@@ -48,35 +48,6 @@ const configDefault: ScrubberLaneConfig = {
   ...TIMELINE_LANE_CONFIG_DEFAULT,
 };
 
-// export enum ScrubberTrackLaneEventType {
-//   TIMELINE_SCRUBBER_TRACK_LANE__CLICK = 'TIMELINE_SCRUBBER_TRACK_LANE__CLICK',
-//   TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_ENTER = 'TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_ENTER',
-//   TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_OVER = 'TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_OVER',
-//   TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_MOVE = 'TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_MOVE',
-//   TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_OUT = 'TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_OUT',
-//   TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_LEAVE = 'TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_LEAVE',
-// }
-//
-// export interface ScrubberTrackLaneEventData {
-//
-// }
-//
-// export type ScrubberTrackLaneEventTypeDataMap = {
-//   [ScrubberTrackLaneEventType.TIMELINE_SCRUBBER_TRACK_LANE__CLICK]: ScrubberTrackLaneEventData;
-//   [ScrubberTrackLaneEventType.TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_ENTER]: ScrubberTrackLaneEventData;
-//   [ScrubberTrackLaneEventType.TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_OVER]: ScrubberTrackLaneEventData;
-//   [ScrubberTrackLaneEventType.TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_MOVE]: ScrubberTrackLaneEventData;
-//   [ScrubberTrackLaneEventType.TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_OUT]: ScrubberTrackLaneEventData;
-//   [ScrubberTrackLaneEventType.TIMELINE_SCRUBBER_TRACK_LANE_MOUSE_LEAVE]: ScrubberTrackLaneEventData;
-// };
-//
-// export type ScrubberTrackLaneEvent = {
-//   [K in ScrubberTrackLaneEventType]: {
-//     type: K;
-//     data: ScrubberTrackLaneEventTypeDataMap[K];
-//   };
-// }[keyof ScrubberTrackLaneEventTypeDataMap];
-
 export interface ScrubberLaneApi extends TimelineLaneApi<ScrubberLaneStyle> {
   /**
    * Fires on click
@@ -116,8 +87,6 @@ export interface ScrubberLaneApi extends TimelineLaneApi<ScrubberLaneStyle> {
 }
 
 export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberLaneStyle> implements ScrubberLaneApi {
-  // private readonly _onEvent$: Subject<ScrubberTrackLaneEvent> = new Subject<ScrubberTrackLaneEvent>();
-
   public readonly onClick$: Subject<ClickEvent> = new Subject<ClickEvent>();
   public readonly onMouseEnter$: Subject<MouseEnterEvent> = new Subject<MouseEnterEvent>();
   public readonly onMouseOver$: Subject<MouseOverEvent> = new Subject<MouseOverEvent>();

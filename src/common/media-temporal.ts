@@ -83,11 +83,23 @@ export type MediaTemporalSeconds = MediaTemporalByFormat[MediaTemporalFormat.SEC
 /** Shorthand for a frame-count-typed `{ format, value }` pair. */
 export type MediaTemporalFrame = MediaTemporalByFormat[MediaTemporalFormat.FRAME_COUNT];
 
-interface MediaTemporalConverterArgs {
+/**
+ * Construction arguments for {@link MediaTemporalConverter}.
+ * All fields are optional; omitting a field disables conversions that depend on it.
+ */
+export interface MediaTemporalConverterArgs {
+  /** Total media duration in seconds. Required for {@link MediaTemporalFormat.PERCENT} and {@link MediaTemporalFormat.COUNTDOWN_MEDIA_TIME} conversions. */
   duration?: number | undefined;
+  /** Frame-rate model (rational fps + drop-frame flag). Required for {@link MediaTemporalFormat.FRAME_COUNT} and {@link MediaTemporalFormat.TIMECODE} conversions. */
   frameRateModel?: FrameRateModel | undefined;
+  /** First-frame-of-media (FFOM) timecode model. When present, timecode output is offset so that `0 s` maps to this timecode value instead of `00:00:00:00`. */
   ffomTimecodeModel?: TimecodeModel | undefined;
+  /** HLS init-segment time offset in seconds. Applied as a base offset when converting absolute media time to presentation time. */
   initSegmentTimeOffset?: number | undefined;
+  /** Indicates if main media has video. **/
+  hasVideo?: boolean | undefined;
+  /** Indicates if main media has audio. **/
+  hasAudio?: boolean | undefined;
 }
 
 export class MediaTemporalConverter {
@@ -95,12 +107,16 @@ export class MediaTemporalConverter {
   protected _frameRateModel?: FrameRateModel | undefined;
   protected _ffomTimecodeModel?: TimecodeModel | undefined;
   protected _initSegmentTimeOffset?: number | undefined;
+  protected _hasVideo?: boolean | undefined;
+  protected _hasAudio?: boolean | undefined;
 
   private constructor(args?: MediaTemporalConverterArgs) {
     this._duration = args?.duration;
     this._frameRateModel = args?.frameRateModel;
     this._ffomTimecodeModel = args?.ffomTimecodeModel;
     this._initSegmentTimeOffset = args?.initSegmentTimeOffset;
+    this._hasVideo = args?.hasVideo;
+    this._hasAudio = args?.hasAudio;
   }
 
   static create(args?: MediaTemporalConverterArgs): MediaTemporalConverter {
@@ -137,7 +153,6 @@ export class MediaTemporalConverter {
     sourceFormat: S,
     destinationFormat: MediaTemporalFormat.COUNTDOWN_MEDIA_TIME
   ): MediaTemporalFormatValueMap[MediaTemporalFormat.COUNTDOWN_MEDIA_TIME];
-  // catch-all
   convert<S extends MediaTemporalFormat>(sourceValue: MediaTemporalFormatValueMap[S], sourceFormat: S, destinationFormat: MediaTemporalFormat): MediaTemporalFormatValueMap[MediaTemporalFormat];
   convert(sourceValue: MediaTemporalFormatValueMap[MediaTemporalFormat], sourceFormat: MediaTemporalFormat, destinationFormat: MediaTemporalFormat): MediaTemporalFormatValueMap[MediaTemporalFormat] {
     const mediaTemporal = this.convertMediaTemporal(
@@ -150,14 +165,6 @@ export class MediaTemporalConverter {
     return mediaTemporal.value;
   }
 
-  // convertMediaTemporal(sourceTemporal: MediaTemporal, destinationFormat: MediaTemporalFormat.SECONDS): MediaTemporalValueByFormat<MediaTemporalFormat.SECONDS>;
-  // convertMediaTemporal(sourceTemporal: MediaTemporal, destinationFormat: MediaTemporalFormat.FRAME): MediaTemporalValueByFormat<MediaTemporalFormat.FRAME>;
-  // convertMediaTemporal(sourceTemporal: MediaTemporal, destinationFormat: MediaTemporalFormat.PERCENT): MediaTemporalValueByFormat<MediaTemporalFormat.PERCENT>;
-  // convertMediaTemporal(sourceTemporal: MediaTemporal, destinationFormat: MediaTemporalFormat.TIMECODE): MediaTemporalValueByFormat<MediaTemporalFormat.TIMECODE>;
-  // convertMediaTemporal(sourceTemporal: MediaTemporal, destinationFormat: MediaTemporalFormat.MEDIA_TIME): MediaTemporalValueByFormat<MediaTemporalFormat.MEDIA_TIME>;
-  // convertMediaTemporal(sourceTemporal: MediaTemporal, destinationFormat: MediaTemporalFormat.COUNTDOWN_MEDIA_TIME): MediaTemporalValueByFormat<MediaTemporalFormat.COUNTDOWN_MEDIA_TIME>;
-  // // catch-all
-  // convertMediaTemporal(sourceTemporal: MediaTemporal, destinationFormat: MediaTemporalFormat): MediaTemporal;
   convertMediaTemporal(sourceTemporal: MediaTemporal, destinationFormat: MediaTemporalFormat): MediaTemporal {
     switch (destinationFormat) {
       case MediaTemporalFormat.SECONDS: {
@@ -177,10 +184,7 @@ export class MediaTemporalConverter {
           if (secondsTemporal.value >= this._duration) {
             percent = 100;
           } else {
-            percent = new Decimal(secondsTemporal.value)
-              .div(this._duration)
-              .times(100)
-              .toNumber();
+            percent = new Decimal(secondsTemporal.value).div(this._duration).times(100).toNumber();
           }
         }
         return {
@@ -217,6 +221,8 @@ export class MediaTemporalConverter {
           frameRateModel: this._frameRateModel,
           ffomTimecodeModel: this._ffomTimecodeModel,
           initSegmentTimeOffset: this._initSegmentTimeOffset,
+          hasVideo: this._hasVideo,
+          hasAudio: this._hasAudio,
         });
 
         if (
@@ -409,6 +415,8 @@ export class MediaTemporalConverter {
       frameRateModel: this._frameRateModel,
       ffomTimecodeModel: this._ffomTimecodeModel,
       initSegmentTimeOffset: this._initSegmentTimeOffset,
+      hasVideo: this._hasVideo,
+      hasAudio: this._hasAudio,
     });
     let timecodeModel = timecodeConverter.parseValueTextToTimecodeModel(timecodeValueText);
     let frame = timecodeConverter.timecodeModelToFrameNumber(timecodeModel);

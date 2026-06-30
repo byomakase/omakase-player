@@ -57,7 +57,7 @@ export interface MediaEntity {
  */
 export interface BaseMediaEntityArgs extends Serializable {
   /** Optional pre-assigned UUID. When omitted a new UUID is generated automatically. */
-  id?: MediaEntity['id'];
+  id?: MediaEntity['id'] | undefined;
 }
 
 export abstract class BaseMediaEntity<S extends MediaEntityState> implements MediaEntity {

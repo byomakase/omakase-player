@@ -17,9 +17,21 @@
 import {catchError, forkJoin, from, map, Observable, of, switchMap, tap} from 'rxjs';
 import {ALL_FORMATS, Input, UrlSource} from 'mediabunny';
 import {errorCompleteObserver, nextCompleteObserver} from '../util/rxjs-util';
-import {AuthConfig} from '../common/authentication';
+import {AuthConfig} from '../common';
+import {StringUtil} from '../util/string-util';
 
 export interface MediaMetadata {
+  mimeType?: string | undefined;
+  videoTracks?:
+    | {
+        id: number;
+      }[]
+    | undefined;
+  audioTracks?:
+    | {
+        id: number;
+      }[]
+    | undefined;
   firstVideoTrackFrameRate?: number | undefined;
   firstVideoTrackInitSegmentTime?: number | undefined;
   firstAudioTrackChannelsNumber?: number | undefined;
@@ -40,9 +52,13 @@ export class MediaMetadataResolver {
     });
 
     let mediaMetadataResult: MediaMetadata = {
+      mimeType: void 0,
+      videoTracks: void 0,
+      audioTracks: void 0,
       firstVideoTrackFrameRate: void 0,
       firstVideoTrackInitSegmentTime: void 0,
       firstAudioTrackChannelsNumber: void 0,
+      firstAudioTrackAudioCodec: void 0,
     };
 
     return new Observable<Pick<MediaMetadata, K>>((observer) => {
@@ -51,6 +67,69 @@ export class MediaMetadataResolver {
       let addObservable = (observable: Observable<any>) => {
         os$.push(observable);
       };
+
+      if (keys.find((p) => p === 'mimeType')) {
+        addObservable(
+          from(input.getMimeType())
+            .pipe(
+              map((mimeType) => {
+                return StringUtil.isNonEmpty(mimeType) ? mimeType : void 0;
+              })
+            )
+            .pipe(
+              tap((mimeType) => {
+                mediaMetadataResult.mimeType = mimeType;
+              })
+            )
+            .pipe(
+              catchError((err) => {
+                return of(undefined);
+              })
+            )
+        );
+      }
+
+      if (keys.find((p) => p === 'videoTracks')) {
+        addObservable(
+          from(input.getVideoTracks())
+            .pipe(
+              map((tracks) => {
+                return tracks ? tracks.map((videoTrack) => ({id: videoTrack.id})) : void 0;
+              })
+            )
+            .pipe(
+              tap((tracks) => {
+                mediaMetadataResult.videoTracks = tracks;
+              })
+            )
+            .pipe(
+              catchError((err) => {
+                return of(undefined);
+              })
+            )
+        );
+      }
+
+      if (keys.find((p) => p === 'audioTracks')) {
+        addObservable(
+          from(input.getAudioTracks())
+            .pipe(
+              map((tracks) => {
+                return tracks ? tracks.map((videoTrack) => ({id: videoTrack.id})) : void 0;
+              })
+            )
+            .pipe(
+              tap((tracks) => {
+                mediaMetadataResult.audioTracks = tracks;
+              })
+            )
+            .pipe(
+              catchError((err) => {
+                return of(undefined);
+              })
+            )
+        );
+      }
 
       if (keys.find((p) => p === 'firstVideoTrackInitSegmentTime')) {
         addObservable(
@@ -72,7 +151,6 @@ export class MediaMetadataResolver {
             )
             .pipe(
               catchError((err) => {
-                // console.debug('Error getting first video track init segment:', err);
                 return of(undefined);
               })
             )
