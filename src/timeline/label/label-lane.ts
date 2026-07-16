@@ -56,12 +56,6 @@ export class LabelLane extends BaseTimelineLane<LabelLaneConfig, LabelLaneStyle>
     );
   }
 
-  /**
-   * @internal
-   * @param timeline
-   * @param player
-   * @param ompProvider
-   */
   override prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider) {
     super.prepareForTimeline(timeline, player, ompProvider);
 

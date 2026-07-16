@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {catchError, combineLatest, defer, EMPTY, filter, firstValueFrom, map, Observable, Subject, take, takeUntil, tap, throwIfEmpty, timeout} from 'rxjs';
+import {catchError, combineLatest, defer, EMPTY, EmptyError, filter, firstValueFrom, map, Observable, Subject, take, takeUntil, tap, throwIfEmpty, timeout} from 'rxjs';
 import {CryptoUtil} from '../util/crypto-util';
 import type {Destroyable} from '../common/capabilities';
 import {MessageChannelClosedError, OmpError} from '../types';
@@ -211,7 +211,7 @@ abstract class UntypedMessageChannel implements Destroyable {
           }),
           catchError((error) => {
             if (error instanceof MessageChannelClosedError) {
-              console.debug(`Message channel closed for topic: ${this._topic}. This error is non-fatal and can be ignored.`);
+              // console.debug(`Message channel closed for topic: ${this._topic}. This error is non-fatal and can be ignored.`);
               return EMPTY;
             } else if (error.name === 'TimeoutError') {
               let errorMessage = `Didnt receive response for: \n${JSON.stringify(message, null, 1)}.\nSend options: \n${JSON.stringify(sendOptions, null, 1)}`;
@@ -363,7 +363,11 @@ abstract class BaseMessageChannel<ChannelDef extends ExtractActions<any>> extend
         },
         (err) => {
           if (!subscriber.closed) {
-            errorCompleteObserver(subscriber, err)
+            if (err instanceof EmptyError) {
+              subscriber.complete();
+            } else {
+              errorCompleteObserver(subscriber, err);
+            }
           }
         }
       );

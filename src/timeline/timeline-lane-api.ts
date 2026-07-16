@@ -35,45 +35,60 @@ export type TimelineLaneMinimizeMaximizeArgs = {easing?: boolean | undefined; du
  */
 export interface TimelineLaneApi<S extends TimelineLaneStyle = TimelineLaneStyle> extends Destroyable, OnMeasurementsChange {
   /**
-   * @returns TimelineLane id
+   * Unique identifier for this lane instance.
    */
   id: string;
 
+  /**
+   * Current resolved style for this lane.
+   * Reflects style defaults merged with any overrides applied via {@link setStyle}.
+   */
   style: TimelineLaneStyle;
 
   /**
+   * Flex group that owns the left description pane for this lane.
    * @internal
    */
   mainLeftFlexGroup: KonvaFlexGroup;
 
   /**
+   * Flex group that owns the right (static) pane for this lane.
    * @internal
    */
   mainRightFlexGroup: KonvaFlexGroup;
 
   /**
-   * @internal
+   * Merges `style` into the lane's current style and triggers a visual refresh.
+   * Only the properties present in `style` are changed; omitted properties retain their current values.
+   *
+   * @param style - Partial style object containing only the properties to update.
    */
-  getTimecodedRect(): RectMeasurement;
-
   setStyle(style: Partial<S>): void;
 
+  /**
+   * Updates mutable lane attributes without removing and re-adding the lane.
+   *
+   * @param attrs - The attributes to change. Properties that are `undefined` are ignored.
+   */
   updateAttrs(attrs: TimelineLaneUpdateableAttrs): void;
 
   /**
-   * Clears Timeline lane content
+   * Removes all visual content from the lane's timecoded area without destroying the lane itself.
+   * Useful for clearing stale data before reloading (e.g. when the main media changes).
    */
   clearContent(): void;
 
   /**
-   * Adds new timeline node to timeline lane
+   * Adds a floating {@link TimelineNode} overlay to this lane — typically an icon button or label
+   * anchored to the left or right edge of the lane's timecoded area.
    *
-   * @param config
+   * @param config - Position, size, margin, and the node instance to add.
+   * @returns The created {@link TimelineNode} handle.
    */
   addTimelineNode(config: TimelineLaneComponentConfig): TimelineNode;
 
   /**
-   * @returns is timeline lane minimized
+   * Returns `true` when the lane is currently collapsed to zero height.
    */
   isMinimized(): boolean;
 
@@ -83,6 +98,8 @@ export interface TimelineLaneApi<S extends TimelineLaneStyle = TimelineLaneStyle
    * Pass `args.easing: true` for an animated transition. When `args` is provided, `args.complete` is set to an
    * `Observable<void>` that completes when the operation finishes (immediately for non-eased, after the animation
    * for eased). Subscribe to `args.complete` after calling this method.
+   *
+   * @param args - Optional animation and completion options.
    */
   minimize(args?: TimelineLaneMinimizeMaximizeArgs): void;
 
@@ -92,23 +109,35 @@ export interface TimelineLaneApi<S extends TimelineLaneStyle = TimelineLaneStyle
    * Pass `args.easing: true` for an animated transition. When `args` is provided, `args.complete` is set to an
    * `Observable<void>` that completes when the operation finishes (immediately for non-eased, after the animation
    * for eased). Subscribe to `args.complete` after calling this method.
+   *
+   * @param args - Optional animation and completion options.
    */
   maximize(args?: TimelineLaneMinimizeMaximizeArgs): void;
 
   /**
-   * Toggles between minimized and maximized states.
+   * Collapses the lane if it is expanded, or expands it if it is collapsed.
    *
    * Pass `args.easing: true` for an animated transition. When `args` is provided, `args.complete` is set to an
    * `Observable<void>` that completes when the operation finishes. Subscribe to `args.complete` after calling
    * this method.
+   *
+   * @param args - Optional animation and completion options.
    */
   toggleMinimizeMaximize(args?: TimelineLaneMinimizeMaximizeArgs): void;
 
   /**
-   * @internal
-   * @param timeline
-   * @param player
-   * @param ompProvider
+   * Connects this lane to the timeline engine. Called by the timeline when the lane
+   * is added; do not call this directly.
+   *
+   * @param timeline - The owning {@link TimelineImpl} instance.
+   * @param player - The active {@link PlayerApi}.
+   * @param ompProvider - The OMP service provider.
    */
   prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider): void;
+
+  /**
+   * Returns the bounding rectangle of this lane's timecoded (right) area in stage coordinates.
+   * @internal
+   */
+  getTimecodedRect(): RectMeasurement;
 }

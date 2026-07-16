@@ -29,13 +29,19 @@ export class TextTrackControllerFactory {
 
     let handlerType = this.resolvePlayerTextHandlerType(textTrackState, loadOptions);
 
+    if (loadOptions?.renderingRegion !== undefined || loadOptions?.adaptiveRendering !== undefined) {
+      if (handlerType === PlayerTextHandlerType.NATIVE || handlerType === PlayerTextHandlerType.EMBEDDED) {
+        console.warn('renderingRegion and adaptiveRendering is not supported with NATIVE or EMBEDDED Player Text Handler types');
+      }
+    }
+
     switch (handlerType) {
       case PlayerTextHandlerType.NATIVE:
         return new NativeTextTrackController(trackState as TextTrackState, playerController, loadOptions?.fileFormatType);
       case PlayerTextHandlerType.MEDIA_CAPTIONS:
-        return new MediaCaptionsTextTrackController(trackState as TextTrackState, playerController, loadOptions?.fileFormatType);
+        return new MediaCaptionsTextTrackController(trackState as TextTrackState, playerController, loadOptions);
       case PlayerTextHandlerType.IMSC:
-        return new ImscTextTrackController(trackState as TextTrackState, playerController, loadOptions?.fileFormatType);
+        return new ImscTextTrackController(trackState as TextTrackState, playerController, loadOptions);
       default:
         throw new Error(`Unknown handler type: ${handlerType}`);
     }

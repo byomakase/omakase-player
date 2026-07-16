@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {concat, filter, forkJoin, Observable, Subject, switchMap, takeUntil} from 'rxjs';
+import {concat, filter, forkJoin, from, mergeMap, Observable, Subject, switchMap, takeUntil, tap} from 'rxjs';
 import {type AudioState, type AudioUpdateableAttrs, type MainMedia, type MainMediaErrorEventData, MainMediaEventType, type MainMediaState, Relation, RelationType, type TextTrackState, type TextTrackUpdateableAttrs, type Track, TrackEventType, TrackType,} from '../media';
 import {OpStageStatus} from '../common/op-stage';
 import {describedObservable, errorCompleteObserver, freeObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
@@ -34,8 +34,8 @@ import {TrackRepositoryProxy} from '../remoting/impl/track-repository-proxy';
 import {SessionStoreProxy} from '../remoting/impl/session-store-proxy';
 import {ChromingEventType, type ChromingInternalApi} from '../chroming';
 import {SourceUtil} from '../source';
-import {PlayerTextInternal} from './player-text';
-import {PlayerTextEventType, type PlayerTextInternalApi} from './player-text-api';
+import {PlayerTextInternal, PlayerTextType} from './player-text';
+import {PlayerTextEventType, type PlayerTextInternalApi, type PlayerTextState} from './player-text-api';
 import {PlayerInternalUtil} from './player-internal-util';
 import type {PlayerAudioLoadOptions} from './player-audio-track';
 import type {PlayerPlayback} from './player';
@@ -147,12 +147,9 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
     this._playerTextInternal.teardown();
 
     return new Observable<void>((observer) => {
-      if (!playerSession.mainMediaId) {
-        throw new Error(`mainMediaId must be set`);
-      }
-
-      this._mainMediaRepository!.getOrFail(playerSession.mainMediaId).subscribe({
-        next: (mainMediaState) => {
+      if (playerSession.mainMediaId) {
+        this._mainMediaRepository!.getOrFail(playerSession.mainMediaId).subscribe({
+          next: (mainMediaState) => {
           if (!mainMediaState) {
             throw new Error(`MainMedia not found`);
           }
@@ -207,7 +204,7 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
                       .map((p) => p as AudioState);
 
                     if (sidecarTracks) {
-                      this.loadSidecarAudios(sidecarTracks).subscribe(() => {
+                      this.restoreLoadSidecarAudios(sidecarTracks).subscribe(() => {
                         nextCompleteObserver(o1);
                       });
                     } else {
@@ -258,7 +255,7 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
                       .map((p) => p as TextTrackState);
 
                     if (sidecarTracks) {
-                      this.loadSidecarTextTracks(sidecarTracks).subscribe(() => {
+                      this.restoreLoadSidecarTextTracks(sidecarTracks, playerSession.text).subscribe(() => {
                         nextCompleteObserver(o1);
                       });
                     } else {
@@ -326,6 +323,24 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
           });
         },
       });
+      } else {
+        describedObservable(
+          `Restore player session`,
+          new Observable((o) => {
+            this._onEvent$.next({
+              type: PlayerEventType.PLAYER_SESSION_RESTORED,
+              data: {
+                playerSession: this.playerSession,
+              },
+            });
+            nextCompleteObserver(o);
+          })
+        ).subscribe({
+          complete: () => {
+            nextCompleteObserver(observer);
+          },
+        });
+      }
     });
   }
 
@@ -454,22 +469,39 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
     });
   }
 
+  /**
+   * Preloads all text tracks from the main media state as sidecar tracks.
+   */
   protected loadMainTextTracksAsSidecars(mainMediaState: MainMediaState) {
     let preloadTextTrackHandlers = this._config.textMainTracksHandler.filter((p) => p !== PlayerTextHandlerType.EMBEDDED);
     if (preloadTextTrackHandlers.length > 0) {
-      // start text tracks preloading
-      let textTracks = mainMediaState.tracks.filter((p) => p.trackType === TrackType.TEXT_TRACK);
+      let textTracks = mainMediaState.tracks.filter((p): p is TextTrackState => p.trackType === TrackType.TEXT_TRACK);
+      let defaultTextTrack = textTracks.findLast((p) => p.default);
       preloadTextTrackHandlers.forEach((preloadTextTrackHandler) => {
-        textTracks.forEach((textTrack) => {
-          this._trackUtils!.preloadTrack(textTrack.id)
-            .pipe(takeUntil(this._loadMainMediaBreaker.observer))
-            .subscribe((track) => {
-              this.loadSidecarTrack(track.id, {
-                trackType: TrackType.TEXT_TRACK,
-                handlerType: preloadTextTrackHandler,
-              }).subscribe((event) => {});
-            });
-        });
+        from(textTracks)
+          .pipe(
+            mergeMap((textTrack) =>
+              this._trackUtils!
+                .preloadTrack(textTrack.id)
+                .pipe(
+                  takeUntil(this._loadMainMediaBreaker.observer),
+                  switchMap((track) =>
+                    this.loadSidecarTrack(track.id, {
+                      trackType: TrackType.TEXT_TRACK,
+                      handlerType: preloadTextTrackHandler,
+                    }).pipe(
+                      tap(() => {
+                        if (defaultTextTrack?.id === textTrack.id) {
+                          this.textInternal.switchTrack(track.id).subscribe();
+                        }
+                      })
+                    )
+                  )
+                )
+            ),
+            takeUntil(this._loadMainMediaBreaker.observer)
+          )
+          .subscribe();
       });
     }
   }
@@ -878,10 +910,32 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
     });
   }
 
-  protected loadSidecarAudios(trackStates: AudioState[]): Observable<void> {
+  protected restoreLoadSidecarAudios(trackStates: AudioState[]): Observable<void> {
     return new Observable((observer) => {
       if (trackStates.length > 0) {
         let loaders$ = trackStates.map((p) => this.loadSidecarAudio(p));
+        concat(...loaders$).subscribe({
+          complete: () => {
+            nextCompleteObserver(observer);
+          },
+        });
+      } else {
+        nextCompleteObserver(observer);
+      }
+    });
+  }
+
+  protected restoreLoadSidecarTextTracks(trackStates: TextTrackState[], playerTextState: PlayerTextState | undefined): Observable<void> {
+    return new Observable((observer) => {
+      if (trackStates.length > 0) {
+        let loaders$ = trackStates.map((p) => {
+          let loadOptions: PlayerTextTrackLoadOptions | undefined;
+          if (playerTextState) {
+            let playerTextTrackState = [...playerTextState.tracks[PlayerTextType.MAIN], ...playerTextState.tracks[PlayerTextType.SIDECAR]].find(ptts => ptts.trackId === p.id);
+            loadOptions = playerTextTrackState?.loadOptions;
+          }
+          return this.loadSidecarTextTrack(p, loadOptions);
+        });
         concat(...loaders$).subscribe({
           complete: () => {
             nextCompleteObserver(observer);
@@ -912,21 +966,6 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
           errorCompleteObserver(observer, error);
         },
       });
-    });
-  }
-
-  protected loadSidecarTextTracks(trackStates: TextTrackState[]): Observable<void> {
-    return new Observable((observer) => {
-      if (trackStates.length > 0) {
-        let loaders$ = trackStates.map((p) => this.loadSidecarTextTrack(p));
-        concat(...loaders$).subscribe({
-          complete: () => {
-            nextCompleteObserver(observer);
-          },
-        });
-      } else {
-        nextCompleteObserver(observer);
-      }
     });
   }
 

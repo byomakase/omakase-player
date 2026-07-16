@@ -14,14 +14,18 @@
  * limitations under the License.
  */
 
-import {Subject} from 'rxjs';
-import type {PlayerApi, PlayerInternalApi} from '../../player';
-import type {OmakaseTimecodeEdit} from '../../timeline/timecode';
+import {Observable, Subject, map, of} from 'rxjs';
+import type {PlayerCommonApi} from '../../player';
+import type {OmakaseTimeEdit} from '../../timeline/time';
 import {MediaTemporalFormat} from '../../common';
-import '../../timeline/timecode';
+import '../../timeline/time';
+import {OmakaseTimeEditAttributes} from '../../timeline/time/omakase-time-edit';
+import {errorCompleteObserver, nextCompleteObserver, passiveObservable} from '../../util/rxjs-util';
 
 export class OmakaseInlineEdit extends HTMLElement {
   onEdit$: Subject<string> = new Subject();
+  beforeEdit?: () => Observable<void>;
+  afterEdit?: () => Observable<void>;
 
   private _text = '';
   private _isEditing = false;
@@ -29,7 +33,7 @@ export class OmakaseInlineEdit extends HTMLElement {
   private _validationFn?: (text: string | undefined) => boolean;
 
   private _container: HTMLDivElement;
-  private _input: HTMLInputElement | OmakaseTimecodeEdit;
+  private _input: HTMLInputElement | OmakaseTimeEdit;
   private _span: HTMLSpanElement;
   private _select?: HTMLSelectElement;
 
@@ -49,40 +53,6 @@ export class OmakaseInlineEdit extends HTMLElement {
     this._input.value = this._text;
     this._input.style.display = 'none';
 
-    this._container.appendChild(this._span);
-    this._container.appendChild(this._input);
-    this.appendChild(this._container);
-
-    const style = document.createElement('style');
-    style.textContent = `
-        .omakase-inline-edit-editable-text {
-          display: inline-block;
-          width: 100%;
-        }
-        .omakase-inline-edit-readonly-text {
-          display: inline-block;
-          min-width: 100px;
-          max-width: 100%;
-          height: 100%;
-        }
-        .omakase-inline-edit-dropdown {
-          font-size: 16px;
-          border: none;
-          outline: none;
-          background: transparent;
-        }
-        .omakase-inline-edit-input {
-          padding: 4px;
-          font-size: 16px;
-          outline: none;
-        }
-        .omakase-inline-edit-input-error {
-          border-color: red
-        }
-      `;
-
-    this.appendChild(style);
-
     this._span.addEventListener('click', this.handleClick.bind(this));
     this._input.addEventListener('keydown', this.handleKeyDown.bind(this));
     this._input.addEventListener('keyup', this.handleKeyUp.bind(this));
@@ -90,8 +60,22 @@ export class OmakaseInlineEdit extends HTMLElement {
     this._input.addEventListener('click', this.stopPropagation.bind(this));
   }
 
+  connectedCallback() {
+    this._container.appendChild(this._span);
+    this._container.appendChild(this._input);
+    this.appendChild(this._container);
+  }
+
   set validationFn(validationFn: (text: string | undefined) => boolean) {
     this._validationFn = validationFn;
+  }
+
+  get value(): string {
+    return this._text;
+  }
+
+  get isValid$() {
+    return (this._input as OmakaseTimeEdit).isValid$;
   }
 
   setText(text: string) {
@@ -100,14 +84,20 @@ export class OmakaseInlineEdit extends HTMLElement {
     this._input.value = text;
   }
 
-  setTimecode(timecode: string, player: PlayerApi, minTime?: number, maxTime?: number) {
-    this._container.removeChild(this._input);
-    this._input = document.createElement('omakase-timecode-edit') as OmakaseTimecodeEdit;
+  setTimecode(timecode: string, player: PlayerCommonApi, format: MediaTemporalFormat = MediaTemporalFormat.TIMECODE, minTime?: number, maxTime?: number) {
+    try {
+      this._container.removeChild(this._input);
+    } catch (e) {
+      // noop
+    }
+    this._input = document.createElement('omakase-time-edit') as OmakaseTimeEdit;
     this._input.blurHandler = () => {
+      console.log('blur');
       this.undoChanges();
     };
     this._container.appendChild(this._input);
     this._input.style.display = 'none';
+    this._input.setAttribute(OmakaseTimeEditAttributes.FORMAT, format);
     this._input.value = timecode;
     this._input.player = player;
 
@@ -119,7 +109,7 @@ export class OmakaseInlineEdit extends HTMLElement {
       this._input.maxValue = player.convertTime(maxTime, MediaTemporalFormat.SECONDS, MediaTemporalFormat.TIMECODE);
     }
 
-    this._validationFn = () => (this._input as OmakaseTimecodeEdit).isTimecodeValid();
+    this._validationFn = () => (this._input as OmakaseTimeEdit).isTimeValid();
 
     this._input.addEventListener('keydown', this.handleKeyDown.bind(this));
     this._input.addEventListener('keyup', this.handleKeyUp.bind(this));
@@ -161,33 +151,57 @@ export class OmakaseInlineEdit extends HTMLElement {
     };
   }
 
-  private enableEditMode() {
-    if (this._isEditing) {
-      return;
-    }
-    this._isEditing = true;
-    this._span.style.display = 'none';
-    this._input.style.display = 'inline-block';
-    this._input.value = this._text;
-    this._input.focus();
-  }
-
-  private disableEditMode() {
-    if (!this._isEditing) {
-      return;
-    }
-    if (this._text !== this._input.value) {
-      if (this._validationFn && !this._validationFn(this._input.value)) {
+  enableEditMode(): Observable<void> {
+    return passiveObservable((observer) => {
+      if (this._isEditing) {
+        nextCompleteObserver(observer);
         return;
       }
-      this._text = this._input.value ?? '';
-      this._span.textContent = this._text;
-      this.onEdit$.next(this._text);
-    }
-    this._isEditing = false;
-    this._span.style.display = 'inline-block';
-    this._input.style.display = 'none';
-    this._input.classList.remove('omakase-inline-edit-input-error');
+      this._isEditing = true;
+      (this.beforeEdit ? this.beforeEdit() : of<void>(undefined)).subscribe({
+        next: () => {
+          this._input.style.width = `${this._span.offsetWidth}px`;
+          this._span.style.display = 'none';
+          this._input.style.display = 'inline-block';
+          this._input.value = this._text;
+          this._input.focus();
+          nextCompleteObserver(observer);
+        },
+        error: (err) => {
+          errorCompleteObserver(observer, err);
+        },
+      });
+    });
+  }
+
+  disableEditMode(): Observable<void> {
+    return passiveObservable((observer) => {
+      if (!this._isEditing) {
+        nextCompleteObserver(observer);
+        return;
+      }
+      if (this._text !== this._input.value) {
+        if (this._validationFn && !this._validationFn(this._input.value)) {
+          nextCompleteObserver(observer);
+          return;
+        }
+        this._text = this._input.value ?? '';
+        this._span.textContent = this._text;
+        this.onEdit$.next(this._text);
+      }
+      this._isEditing = false;
+      this._span.style.display = 'inline-block';
+      this._input.style.display = 'none';
+      this._input.classList.remove('omakase-inline-edit-input-error');
+      (this.afterEdit ? this.afterEdit() : of<void>(undefined)).subscribe({
+        next: () => {
+          nextCompleteObserver(observer);
+        },
+        error: (err) => {
+          errorCompleteObserver(observer, err);
+        },
+      });
+    });
   }
 
   private undoChanges() {

@@ -26,6 +26,7 @@ import {StringUtil} from '../util/string-util';
 import {AuthConfig} from '../common';
 import {ObserverBreaker} from '../common/observer-breaker';
 import {SourceUtil} from '../source';
+import {PlayerTextRenderingRegion, TEXT_RENDERING_DOM_CLASSES, type PlayerTextTrackLoadOptions} from '../player/player-text-track';
 
 export class MediaCaptionsTextTrackController extends BaseTextTrackController {
   protected _playerController: PlayerController;
@@ -35,10 +36,12 @@ export class MediaCaptionsTextTrackController extends BaseTextTrackController {
 
   protected _captionsElement: HTMLElement;
   protected _switchBreaker = new ObserverBreaker();
+  protected _loadOptions: PlayerTextTrackLoadOptions | undefined;
 
-  constructor(trackState: TextTrackState, playerController: PlayerController, format?: FileFormatType) {
-    super(trackState, playerController, format);
+  constructor(trackState: TextTrackState, playerController: PlayerController, loadOptions?: PlayerTextTrackLoadOptions) {
+    super(trackState, playerController, loadOptions?.fileFormatType);
     this._playerController = playerController;
+    this._loadOptions = loadOptions;
 
     let captionsSlot = this._playerController.textMediaCaptionsElement;
 
@@ -48,6 +51,36 @@ export class MediaCaptionsTextTrackController extends BaseTextTrackController {
     captionsSlot.appendChild(this._captionsElement);
 
     this._captionsRenderer = new CaptionsRenderer(this._captionsElement);
+  }
+
+  private applyRenderingClasses() {
+    const slot = this._playerController.textMediaCaptionsElement;
+    slot.classList.remove(
+      TEXT_RENDERING_DOM_CLASSES.playerRegion,
+      TEXT_RENDERING_DOM_CLASSES.videoRegion,
+      TEXT_RENDERING_DOM_CLASSES.adaptiveRendering,
+      TEXT_RENDERING_DOM_CLASSES.noAdaptiveRendering
+    );
+    if (this._loadOptions?.renderingRegion === PlayerTextRenderingRegion.VIDEO) {
+      slot.classList.add(TEXT_RENDERING_DOM_CLASSES.videoRegion);
+    } else {
+      slot.classList.add(TEXT_RENDERING_DOM_CLASSES.playerRegion);
+    }
+    if (this._loadOptions?.adaptiveRendering === false) {
+      slot.classList.add(TEXT_RENDERING_DOM_CLASSES.noAdaptiveRendering);
+    } else {
+      slot.classList.add(TEXT_RENDERING_DOM_CLASSES.adaptiveRendering);
+    }
+  }
+
+  private removeRenderingClasses() {
+    const slot = this._playerController.textMediaCaptionsElement;
+    slot.classList.remove(
+      TEXT_RENDERING_DOM_CLASSES.playerRegion,
+      TEXT_RENDERING_DOM_CLASSES.videoRegion,
+      TEXT_RENDERING_DOM_CLASSES.adaptiveRendering,
+      TEXT_RENDERING_DOM_CLASSES.noAdaptiveRendering
+    );
   }
 
   get playerTextHandlerType(): PlayerTextHandlerType {
@@ -60,7 +93,7 @@ export class MediaCaptionsTextTrackController extends BaseTextTrackController {
       let url: string | undefined;
 
       if (source) {
-        url = SourceUtil.resolveUrlFromSourceState(source)
+        url = SourceUtil.resolveUrlFromSourceState(source);
       }
 
       if (StringUtil.isEmpty(url)) {
@@ -114,6 +147,8 @@ export class MediaCaptionsTextTrackController extends BaseTextTrackController {
 
       this._switchBreaker.break();
 
+      this.applyRenderingClasses();
+
       this._captionsRenderer.changeTrack({
         regions: this._parsedCaptionsResult!.regions,
         cues: this._parsedCaptionsResult!.cues,
@@ -138,6 +173,8 @@ export class MediaCaptionsTextTrackController extends BaseTextTrackController {
       this.checkIsLoaded();
 
       this._switchBreaker.break();
+
+      this.removeRenderingClasses();
 
       this._captionsRenderer.changeTrack({
         regions: [],

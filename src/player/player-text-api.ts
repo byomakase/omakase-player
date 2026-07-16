@@ -45,17 +45,27 @@ export interface PlayerTextState {
 }
 
 export enum PlayerTextEventType {
+  /** Text sub-system is initializing for the current media (start of setup). */
   PLAYER_TEXT_LOADING = 'PLAYER_TEXT_LOADING',
+  /** Text sub-system is ready; all embedded tracks have been registered. */
   PLAYER_TEXT_LOADED = 'PLAYER_TEXT_LOADED',
+  /** Text sub-system failed to initialize. */
   PLAYER_TEXT_LOAD_ERROR = 'PLAYER_TEXT_LOAD_ERROR',
+  /** Text sub-system has been torn down and all tracks removed. */
   PLAYER_TEXT_UNLOADED = 'PLAYER_TEXT_UNLOADED',
 
+  /** Fired after any change in text sub-system (catch-all change notification). */
   PLAYER_TEXT_CHANGE = 'PLAYER_TEXT_CHANGE',
+  /** The active text track has changed. */
   PLAYER_TEXT_TRACK_SWITCHED = 'PLAYER_TEXT_TRACK_SWITCHED',
 
+  /** An individual sidecar text track has started loading. */
   PLAYER_TEXT_TRACK_LOADING = 'PLAYER_TEXT_TRACK_LOADING',
+  /** An individual sidecar text track finished loading successfully. */
   PLAYER_TEXT_TRACK_LOADED = 'PLAYER_TEXT_TRACK_LOADED',
+  /** An individual sidecar text track failed to load. */
   PLAYER_TEXT_TRACK_LOAD_ERROR = 'PLAYER_TEXT_TRACK_LOAD_ERROR',
+  /** An individual sidecar text track has been unloaded. */
   PLAYER_TEXT_TRACK_UNLOADED = 'PLAYER_TEXT_TRACK_UNLOADED',
 }
 

@@ -225,7 +225,7 @@ interface PlayerCommonConfig {
  * Provides playback control, seeking (supporting multiple temporal formats),
  * time conversion, playback rate, and fullscreen toggling.
  */
-interface PlayerCommonApi {
+export interface PlayerCommonApi {
   /**
    * Observable stream of player lifecycle and playback events.
    */

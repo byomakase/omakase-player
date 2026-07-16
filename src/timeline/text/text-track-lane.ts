@@ -126,13 +126,7 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
     };
   }
 
-  /**
-   * @internal
-   * @param timeline
-   * @param player
-   * @param ompProvider
-   */
-  prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider): void {
+  override prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider): void {
     super.prepareForTimeline(timeline, player, ompProvider);
 
     let timecodedRect = this.getTimecodedRect();

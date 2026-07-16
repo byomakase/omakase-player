@@ -277,6 +277,8 @@ media-controller {
   --volume-range-width-default: 70px;
   --center-control-size-default: 128px;
   --aspect-ratio: var(--omakase-player-aspect-ratio, var(--video-aspect-ratio, 16 / 9));
+  --adaptive-rendering-control-bar-offset: 0px;
+  --omakase-vu-meter-scale-danger-color: white;
   container: media-chrome / inline-size;
   aspect-ratio: var(--aspect-ratio);
 
@@ -293,6 +295,7 @@ media-controller {
   &.omakase-video-not-loaded,
   &.omakase-control-bar-disabled,
   &.omakase-control-bar-fullscreen_only:not(.omakase-player-fullscreen) {
+    --adaptive-rendering-control-bar-offset: 0px !important;
     media-control-bar {
       display: none !important;
     }
@@ -316,6 +319,58 @@ media-controller {
     width: 100%;
     height: 100%;
     pointer-events: none;
+  }
+
+  &:not(.media-controller-stamp) {
+    .omakase-imsc.omakase-player-region:not(.omakase-adaptive-rendering),
+    .omakase-imsc.omakase-no-adaptive-rendering,
+    .omakase-media-captions.omakase-player-region:not(.omakase-adaptive-rendering),
+    .omakase-media-captions.omakase-no-adaptive-rendering {
+      height: 100%;
+    }
+
+    &:not(.media-controller-audio.compact) {
+      &.media-letterbox {
+        .omakase-imsc.omakase-video-region,
+        .omakase-media-captions.omakase-video-region {
+          height: auto !important;
+          aspect-ratio: var(--video-aspect-ratio);
+          top: 50%;
+          transform: translateY(-50%);
+        }
+      }
+
+      &.media-pillarbox {
+        .omakase-imsc.omakase-video-region,
+        .omakase-media-captions.omakase-video-region {
+          width: auto !important;
+          aspect-ratio: var(--video-aspect-ratio);
+          left: 50%;
+          transform: translateX(-50%);
+        }
+      }
+    }
+
+    &.media-controller-default:not([userinactive]),
+    &.media-controller-default[mediapaused] {
+      --adaptive-rendering-control-bar-offset: calc(
+        var(--controls-height, var(--controls-height-default)) + var(--time-range-height, var(--time-range-height-default)) + var(--marker-track-count, 0) * 17px + 1px
+      );
+    }
+
+    &:not(.media-controller-chromeless) {
+      .omakase-imsc.omakase-player-region.omakase-adaptive-rendering,
+      .omakase-media-captions.omakase-player-region.omakase-adaptive-rendering {
+        height: calc(100% - var(--adaptive-rendering-control-bar-offset));
+      }
+
+      .omakase-imsc.omakase-video-region.omakase-adaptive-rendering div,
+      .omakase-media-captions.omakase-video-region.omakase-adaptive-rendering [data-part='captions'] {
+        bottom: max(calc(var(--adaptive-rendering-control-bar-offset) - var(--video-letterbox-height)), 0px) !important;
+        top: 0;
+        height: unset;
+      }
+    }
   }
 
   .media-chrome-button {
@@ -356,12 +411,14 @@ media-controller {
   }
 
   .timecode-container {
-    width: 100%;
     position: absolute;
     top: 6%;
     text-align: center;
     z-index: 1;
-    pointer-events: none;
+    left: 0;
+    right: 0;
+    margin-inline: auto;
+    width: fit-content;
 
     omakase-time-display {
       font-family: var(--timecode-font-family, 'Nunito Sans'), 'Consolas', monospace;
@@ -369,6 +426,40 @@ media-controller {
       line-height: var(--timecode-line-height, var(--timecode-line-height-default));
       font-size: var(--timecode-font-size, var(--timecode-font-size-default));
       background-color: rgba(0, 0, 0, 0.5);
+
+      &.omakase-time-display-editing {
+        border: 1px solid white;
+
+        &.omakase-time-display-invalid {
+          border: 1px solid red;
+        }
+      }
+    }
+
+    .omakase-time-edit-input {
+      height: var(--timecode-line-height, var(--timecode-line-height-default));
+      font-size: var(--timecode-font-size, var(--timecode-font-size-default));
+    }
+  }
+
+  .timecode-container,
+  .omakase-timecode-wrapper {
+    .omakase-time-edit {
+      width: 100%;
+    }
+
+    .omakase-time-edit-input {
+      background-color: transparent;
+      border: none;
+      padding: 0;
+      color: white;
+      font-family: var(--timecode-font-family, 'Nunito Sans'), 'Consolas', monospace;
+      font-size: unset;
+      color: white;
+    }
+
+    .omakase-inline-edit-readonly-text {
+      min-width: 0;
     }
   }
 
@@ -989,6 +1080,14 @@ media-controller {
             margin-top: 1px;
             line-height: var(--icon-size, var(--icon-size-default));
           }
+
+          omakase-time-edit {
+            margin-top: 1px;
+          }
+
+          .omakase-time-edit-input {
+            height: var(--icon-size, var(--icon-size-default));
+          }
         }
       }
 
@@ -1011,6 +1110,9 @@ media-controller {
     --controls-height-default: 35px;
     --controls-left-padding-default: 5px;
     --controls-right-padding-default: 0;
+    --adaptive-rendering-control-bar-offset: calc(
+      var(--controls-height, var(--controls-height-default)) + var(--time-range-height, var(--time-range-height-default)) + var(--marker-track-count, 0) * 17px + 1px
+    );
 
     .omakase-media-captions [data-part='captions'] {
       --overlay-padding: 10px;
@@ -1024,8 +1126,6 @@ media-controller {
 
     .omakase-media-captions [data-part='cue-display'] {
       --cue-text-align: center !important;
-      --cue-top: unset !important;
-      --cue-bottom: calc(var(--controls-height, var(--controls-height-default)) + var(--time-range-height, var(--time-range-height-default)) + var(--marker-track-count, 0) * 15px) !important;
       background-color: rgba(#333, 0.7);
       border-radius: 3px;
     }
@@ -1044,6 +1144,9 @@ media-controller {
           .media-chrome-button {
             padding: 0;
           }
+        }
+        .omakase-time-edit-input-invalid {
+          color: red;
         }
       }
     }
@@ -1070,7 +1173,7 @@ media-controller {
       background-image: url(/images/media-chrome-audio-router-changed.svg);
     }
 
-    .omakase-imsc {
+    .omakase-imsc:not(.omakase-player-region):not(.omakase-no-adaptive-rendering) {
       height: calc(100% - var(--controls-height, var(--controls-height-default)) - var(--time-range-height, var(--time-range-height-default)) - var(--marker-track-count, 0) * 16px);
     }
 
@@ -1106,12 +1209,17 @@ media-controller {
         color: white;
       }
 
-      &.with-captions {
-        height: calc(132px + var(--marker-track-count, 0) * 15px);
-        background-color: #000;
-        omakase-marker-bar {
-          border-radius: 0 !important;
-        }
+      --adaptive-rendering-control-bar-offset: calc(30px + var(--time-range-height, var(--time-range-height-default)) + var(--marker-track-count, 0) * 17px + 1px);
+
+      .omakase-media-captions,
+      .omakase-imsc {
+        height: calc(var(--compact-player-height, 250px) - var(--adaptive-rendering-control-bar-offset)) !important;
+        bottom: var(--adaptive-rendering-control-bar-offset) !important;
+      }
+
+      .omakase-imsc.omakase-video-region.omakase-adaptive-rendering div,
+      .omakase-media-captions.omakase-video-region.omakase-adaptive-rendering [data-part='captions'] {
+        bottom: 0px !important;
       }
 
       .omakase-media-captions {
@@ -1143,6 +1251,12 @@ media-controller {
             padding-left: 20px;
           }
         }
+      }
+    }
+    &.media-has-video {
+      omakase-audio-visualization,
+      .omakase-audio-background {
+        display: none;
       }
     }
 
@@ -1193,6 +1307,14 @@ media-controller {
       text-align: center;
       border-radius: 3px;
       z-index: 1;
+
+      &:has(.omakase-time-display-editing) {
+        border: 1px solid white;
+      }
+
+      &:has(.omakase-time-display-editing.omakase-time-display-invalid) {
+        border: 1px solid red;
+      }
 
       &.omakase-timecode-with-progress-bar {
         bottom: 30px;
@@ -1430,6 +1552,17 @@ media-controller {
         &:has(.omakase-vu-meter-theme-led) {
           --omakase-vu-meter-bar-margin: 0;
         }
+      }
+    }
+
+    &[mediapaused],
+    &:not([userinactive]) {
+      --adaptive-rendering-control-bar-offset: calc(74px + var(--marker-track-count, 0) * 10px);
+      &:has(.media-control-bar.control-bar-offset) {
+        --adaptive-rendering-control-bar-offset: 74px;
+      }
+      &:has(.media-control-bar:not(.control-bar-offset).has-markers) {
+        --adaptive-rendering-control-bar-offset: calc(80px + var(--marker-track-count, 0) * 10px);
       }
     }
 
@@ -1891,6 +2024,11 @@ media-controller {
       }
     }
 
+    .omakase-time-edit-input {
+      font-family: var(--timecode-font-family, 'Lato'), 'Consolas', monospace;
+      width: 90px;
+    }
+
     .omakase-timecode-wrapper {
       position: absolute;
       left: 20px;
@@ -1904,6 +2042,10 @@ media-controller {
       text-align: center;
       font-size: 12px;
       font-family: var(--timecode-font-family, 'Lato'), 'Consolas', monospace;
+
+      &:has(.omakase-time-display-editing.omakase-time-display-invalid) {
+        border: 1px solid red;
+      }
 
       &:has(+ * .omakase-vu-meter-scale-nordic) {
         width: 100px;

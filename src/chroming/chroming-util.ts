@@ -27,8 +27,12 @@ export class ChromingUtil {
     return this._onResize$.asObservable();
   }
 
-  public static connectResizeObserver(element: HTMLElement) {
+  public static observeElementResize(element: HTMLElement) {
     this._resizeObserver.observe(element);
+  }
+
+  public static unobserveElementResize(element: HTMLElement) {
+    this._resizeObserver.unobserve(element);
   }
 
   public static disconnectResizeObserver() {

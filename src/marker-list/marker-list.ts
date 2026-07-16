@@ -22,6 +22,7 @@ import {
   TimedItemsTrackEventType,
   TimedItemTemporalType,
   TimedItemTemporalUtil,
+  TrackEventType,
   TrackType,
   type MarkerState,
   type MarkerUpdateableAttrs,
@@ -82,6 +83,7 @@ export class MarkerList implements Destroyable, MarkerListApi {
   private _thumbnailTrack?: ThumbnailTrack | undefined;
   private _player: OmakasePlayerApi;
   private readonly _destroyBreaker = new ObserverBreaker();
+  private readonly _thumbnailBreaker = new ObserverBreaker();
 
   private _trackRemove$ = new Subject<MarkerTrack['id']>();
   private _markerRemove$ = new Subject<MarkerState['id']>();
@@ -151,15 +153,20 @@ export class MarkerList implements Destroyable, MarkerListApi {
   }
 
   set thumbnailTrack(thumbnailTrack: ThumbnailTrack | undefined) {
+    this._thumbnailBreaker.break();
     this._thumbnailTrack = thumbnailTrack;
     if (this._thumbnailTrack) {
-      for (const marker of this._markerListComponent.markers) {
-        this.resolveThumbnail(marker).subscribe((thumbnail) => {
-          this._markerListComponent.updateMarker(marker.markerId, {
-            thumbnailUrl: thumbnail,
-          });
+      this._thumbnailTrack.onEvent$
+        .pipe(
+          filter((event) => event.type === TrackEventType.TRACK_LOADED),
+          takeUntil(this._destroyBreaker.observer),
+          takeUntil(this._thumbnailBreaker.observer)
+        )
+        .subscribe((event) => {
+          console.log('TRACK LOADED', event);
+          this.resolveThumbnails();
         });
-      }
+      this.resolveThumbnails();
     }
   }
 
@@ -196,6 +203,7 @@ export class MarkerList implements Destroyable, MarkerListApi {
 
   destroy(): void {
     this._destroyBreaker.destroy();
+    this._thumbnailBreaker.destroy();
     this._markerListDomController.destroy();
     freeObserver(this._onEvent$);
   }
@@ -203,14 +211,6 @@ export class MarkerList implements Destroyable, MarkerListApi {
   protected removeMarkerFromDom(markerId: string) {
     this._markerRemove$.next(markerId);
     this._markerListComponent.removeMarker(markerId);
-  }
-
-  private getMarkerItem(id: string): MarkerListItem {
-    const markerItem = this._markerListComponent.getMarkerItem(id);
-    if (!markerItem) {
-      throw Error(`Marker List error: Marker with id ${id} does not exist`);
-    }
-    return markerItem;
   }
 
   private resolveTrackSource(trackSource: MarkerListSource, trackType: TrackType.MARKER_TRACK | TrackType.THUMBNAIL_TRACK): Observable<Track | undefined> {
@@ -325,5 +325,15 @@ export class MarkerList implements Destroyable, MarkerListApi {
         nextCompleteObserver(observer, thumbnail?.url);
       }
     });
+  }
+
+  private resolveThumbnails() {
+    for (const marker of this._markerListComponent.markers) {
+      this.resolveThumbnail(marker).subscribe((thumbnail) => {
+        this._markerListComponent.updateMarker(marker.markerId, {
+          thumbnailUrl: thumbnail,
+        });
+      });
+    }
   }
 }

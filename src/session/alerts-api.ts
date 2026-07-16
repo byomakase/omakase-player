@@ -81,7 +81,7 @@ export interface AlertState {
   level: AlertLevel;
   message: string;
   timestamp: Date;
-  config: AlertConfig | undefined;
+  config?: AlertConfig | undefined;
 }
 
 export interface Alert {
@@ -89,7 +89,7 @@ export interface Alert {
   readonly level: AlertLevel;
   readonly message: string;
   readonly timestamp: Date;
-  readonly config: AlertConfig | undefined;
+  readonly config?: AlertConfig | undefined;
   readonly state: AlertState;
 }
 

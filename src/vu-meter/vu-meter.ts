@@ -24,8 +24,19 @@ import type {OmakasePlayerApi} from '../omakase-player-api';
 import {AudioFile, TrackType, type Track} from '../media';
 import {filter, takeUntil} from 'rxjs';
 import {ObserverBreaker} from '../common/observer-breaker';
-import {DEFAULT_VU_METER_CONFIG, DEFAULT_VU_METER_STYLE, VuMeterOrientation, VuMeterScale, VuMeterTheme, type VuMeterApi, type VuMeterConfig} from './vu-meter-api';
+import {
+  DEFAULT_VU_METER_CONFIG,
+  DEFAULT_VU_METER_DEFAULT_THEME_COLORS,
+  DEFAULT_VU_METER_LED_THEME_COLORS,
+  DEFAULT_VU_METER_STYLE,
+  VuMeterOrientation,
+  VuMeterScale,
+  VuMeterTheme,
+  type VuMeterApi,
+  type VuMeterConfig,
+} from './vu-meter-api';
 import {VuMeterFactory} from './vu-meter-factory';
+import {isNullOrUndefined} from '../util/util-functions';
 
 export interface VuMeterArgs {
   /**
@@ -80,8 +91,15 @@ export class VuMeter implements Destroyable, VuMeterApi {
       }
     }
     if (this._config.scale === VuMeterScale.NORDIC) {
-      this._config.scaleOffsetDb = 12;
+      this._config.scaleOffsetDb = 18;
       this._config.scaleStepDb = 3;
+    }
+    if (isNullOrUndefined(this._config.style.levelColors)) {
+      if (this._config.theme === VuMeterTheme.DEFAULT) {
+        this._config.style.levelColors = DEFAULT_VU_METER_DEFAULT_THEME_COLORS;
+      } else if (this._config.theme === VuMeterTheme.LED) {
+        this._config.style.levelColors = DEFAULT_VU_METER_LED_THEME_COLORS;
+      }
     }
     if (this._config.channels && ![1, 2, 6].includes(this._config.channels)) {
       throw new Error('Invalid number of channels provided. Allowed values are 1, 2 and 6');

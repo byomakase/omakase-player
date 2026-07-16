@@ -22,7 +22,7 @@ import type {AlertsApi, SessionApi} from './session';
 import type {ChromingApi} from './chroming';
 import type {OmakaseTrackApi} from './track';
 import type {OmakaseToolsApi} from './tools';
-import type {TimelineApi} from './timeline';
+import type {ConfigAndStyle, TimelineApi, TimelineConfig, TimelineStyle} from './timeline';
 import type {UiApi} from './ui';
 
 /**
@@ -99,6 +99,8 @@ export interface OmakasePlayerApi extends OmakasePlayerCommonApi {
    * Re-attaches a previously detached player.
    */
   attachPlayer(): Observable<void>;
+
+  createTimeline(configAndStyle?: ConfigAndStyle<TimelineConfig, TimelineStyle>): Observable<TimelineApi>;
 }
 
 /**

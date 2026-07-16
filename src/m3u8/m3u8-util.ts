@@ -16,7 +16,7 @@
 
 // @ts-ignore
 import webvtt from 'node-webvtt';
-import {forkJoin, from, map, Observable, of, switchMap} from 'rxjs';
+import {bufferCount, concatMap, defer, forkJoin, from, map, Observable, of, switchMap, toArray} from 'rxjs';
 import {M3u8File} from './m3u8-file';
 import {UrlUtil} from '../util/url-util';
 import {OmpError} from '../types';
@@ -27,30 +27,36 @@ import type {ParsedVttFile} from '../vtt';
 const webvttParseOptions = {strict: false, meta: true};
 
 export class M3u8Util {
-  static fetchVttSegmentedConcat(m3u8Url: string, authentication?: AuthenticationData): Observable<string | undefined> {
+  static fetchVttSegmentedConcat(m3u8Url: string, authentication?: AuthenticationData, maxConcurrentRequests?: number): Observable<string | undefined> {
     return M3u8File.create(m3u8Url, authentication).pipe(
       switchMap((m3u8File) => {
-        return this.fetchFromM3u8FileVttSegmentedConcat(m3u8File, authentication);
+        return this.fetchFromM3u8FileVttSegmentedConcat(m3u8File, authentication, maxConcurrentRequests);
       })
     );
   }
 
-  static fetchFromM3u8FileVttSegmentedConcat(m3u8File: M3u8File, authentication?: AuthenticationData): Observable<string | undefined> {
+  static fetchFromM3u8FileVttSegmentedConcat(m3u8File: M3u8File, authentication?: AuthenticationData, maxConcurrentRequests?: number): Observable<string | undefined> {
     if (m3u8File.manifest) {
       let vttRootUrl = m3u8File.url.substring(0, m3u8File.url.lastIndexOf('/'));
 
       let vttUrls = m3u8File.manifest.segments.filter((p) => !!p.uri).map((p) => UrlUtil.absolutizeUrl(vttRootUrl, p.uri));
 
-      return this.fetchSegmentedConcat(vttUrls, authentication);
+      return this.fetchSegmentedConcat(vttUrls, authentication, maxConcurrentRequests);
     } else {
       return of(void 0);
     }
   }
 
-  static fetchSegmentedConcat(urls: string[], authentication?: AuthenticationData): Observable<string | undefined> {
-    const vttTexts$ = urls.map((url) => from(httpGetText(url, AuthConfig.createRequestInit(url, authentication))));
-
-    return forkJoin(vttTexts$).pipe(map((vttTexts) => this.concatSegmented(vttTexts)));
+  static fetchSegmentedConcat(urls: string[], authentication?: AuthenticationData, maxConcurrentRequests?: number): Observable<string | undefined> {
+    const batchSize = maxConcurrentRequests ?? 50;
+    return from(urls).pipe(
+      bufferCount(batchSize),
+      concatMap((batch) =>
+        forkJoin(batch.map((url) => defer(() => from(httpGetText(url, AuthConfig.createRequestInit(url, authentication))))))
+      ),
+      toArray(),
+      map((batches) => this.concatSegmented(batches.flat()))
+    );
   }
 
   static concatSegmented(vttTexts: string[]): string | undefined {

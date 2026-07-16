@@ -153,12 +153,6 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
 
   protected abstract settleLayout(): void;
 
-  /**
-   * @internal
-   * @param timeline
-   * @param player
-   * @param ompProvider
-   */
   prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider) {
     this._timeline = timeline;
     this._player = player;
@@ -465,9 +459,11 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
       const subject = new ReplaySubject<void>(1);
       args.complete = subject.asObservable();
       if (args.easing) {
-        this._minimizeEased(args).pipe(take(1)).subscribe({
-          complete: () => nextCompleteObserver(subject),
-        });
+        this._minimizeEased(args)
+          .pipe(take(1))
+          .subscribe({
+            complete: () => nextCompleteObserver(subject),
+          });
       } else {
         this._minimize();
         nextCompleteObserver(subject);
@@ -482,9 +478,11 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
       const subject = new ReplaySubject<void>(1);
       args.complete = subject.asObservable();
       if (args.easing) {
-        this._maximizeEased(args).pipe(take(1)).subscribe({
-          complete: () => nextCompleteObserver(subject),
-        });
+        this._maximizeEased(args)
+          .pipe(take(1))
+          .subscribe({
+            complete: () => nextCompleteObserver(subject),
+          });
       } else {
         this._maximize();
         nextCompleteObserver(subject);
@@ -518,6 +516,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
             height: newHeight,
             marginBottom: newMargin,
           } as Partial<S>);
+          this.updateLayoutDimensions();
         },
         onCompleteHandler: (frame, value) => {
           this.minimize();
@@ -545,6 +544,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
               height: newHeight,
               marginBottom: newMargin,
             } as Partial<S>);
+            this.updateLayoutDimensions();
           },
           onCompleteHandler: (frame, value) => {
             this.maximize();

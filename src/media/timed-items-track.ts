@@ -88,8 +88,10 @@ export class TimedItemTemporalUtil {
         return Number(temporal.time) >= start && Number(temporal.time) <= end;
       case TimedItemTemporalType.SPAN:
         return Number(temporal.start) <= end && Number(temporal.end) >= start;
-      default:
-        return false;
+      case TimedItemTemporalType.SPAN_START:
+        return Number(temporal.start) <= end;
+      case TimedItemTemporalType.SPAN_END:
+        return Number(temporal.end) >= start;
     }
   }
 

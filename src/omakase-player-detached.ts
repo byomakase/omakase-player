@@ -112,8 +112,11 @@ export class OmakasePlayerDetached extends BaseOmakasePlayer implements OmakaseP
     remoteNode.onEvent$
       .pipe(takeUntil(this._destroyBreaker.observer))
       .pipe(filter((p) => p.type === RemoteNodeEventType.REMOTE_NODE_CONNECT_FAILURE || p.type === RemoteNodeEventType.REMOTE_NODE_DISCONNECTED))
-      .subscribe(() => {
+      .subscribe((event) => {
         this.destroy();
+        if (event.type === RemoteNodeEventType.REMOTE_NODE_DISCONNECTED) {
+          window.close();
+        }
       });
 
     remoteNode.onEvent$
@@ -175,6 +178,8 @@ export class OmakasePlayerDetached extends BaseOmakasePlayer implements OmakaseP
   destroy(): void {
     super.destroy();
 
+    this._playerDetached.destroy();
+    this._chroming.destroy();
     this._remoteNode.destroy();
     this._ompProvider.destroy();
   }

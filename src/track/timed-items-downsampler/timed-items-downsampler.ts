@@ -44,6 +44,7 @@ export abstract class TimedItemsTrackDownsampler<T extends TimedItemsTrack> impl
   protected readonly _downsampledTrack: T;
   protected readonly _options: DownsampleOptions;
 
+  private readonly _isPassthrough: boolean;
   private readonly _samplePeriodDuration: number;
   private readonly _periodBoundary: number;
   private readonly _bucketToItemId = new Map<number, string>();
@@ -54,27 +55,33 @@ export abstract class TimedItemsTrackDownsampler<T extends TimedItemsTrack> impl
   protected constructor(sourceTrack: T, options: DownsampleOptions) {
     this._sourceTrack = sourceTrack;
     this._options = {...DEFAULT_DOWNSAMPLE_OPTIONS, ...options};
+    this._isPassthrough = this._options.downsampleStrategy === 'none';
     this._samplePeriodDuration = new Decimal(this._options.downsamplePeriod ?? DEFAULT_DOWNSAMPLE_OPTIONS.downsamplePeriod).div(1000).toNumber();
     this._periodBoundary = new Decimal(10).pow(-TEMPORAL.timedItemsMillisPrecision).toNumber();
     this._downsampledTrack = this.createDownsampledTrack();
     this.initialDownsample();
 
-    this._subscription = sourceTrack.onEvent$
-      .pipe(
-        filter(
-          (event) =>
-            event.type === TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_ADDED ||
-            event.type === TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_DELETED ||
-            event.type === TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_UPDATED
-        ),
-        tap((event) => this.collectAffectedBuckets(event)),
-        debounceTime(0)
+    const trackEvents = sourceTrack.onEvent$.pipe(
+      filter(
+        (event) =>
+          event.type === TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_ADDED ||
+          event.type === TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_DELETED ||
+          event.type === TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_UPDATED
       )
-      .subscribe(() => {
-        const buckets = new Set(this._pendingBuckets);
-        this._pendingBuckets.clear();
-        this.recomputeBuckets(buckets);
-      });
+    );
+
+    this._subscription = this._isPassthrough
+      ? trackEvents.subscribe((event) => this.applyPassthrough(event))
+      : trackEvents
+          .pipe(
+            tap((event) => this.collectAffectedBuckets(event)),
+            debounceTime(0)
+          )
+          .subscribe(() => {
+            const buckets = new Set(this._pendingBuckets);
+            this._pendingBuckets.clear();
+            this.recomputeBuckets(buckets);
+          });
   }
 
   protected abstract createDownsampledTrack(): T;
@@ -83,6 +90,10 @@ export abstract class TimedItemsTrackDownsampler<T extends TimedItemsTrack> impl
 
   get downsampledTrack(): T {
     return this._downsampledTrack;
+  }
+
+  get sourceTrack(): T {
+    return this._sourceTrack;
   }
 
   destroy(): void {
@@ -102,6 +113,11 @@ export abstract class TimedItemsTrackDownsampler<T extends TimedItemsTrack> impl
   private initialDownsample(): void {
     const sourceItems = this._sourceTrack.timedItemsSorted;
     if (sourceItems.length === 0) return;
+
+    if (this._isPassthrough) {
+      this._downsampledTrack.addTimedItems(sourceItems as TrackTimedItem<T>[]);
+      return;
+    }
 
     const buckets = new Map<number, TrackTimedItem<T>[]>();
     for (const item of sourceItems) {
@@ -198,8 +214,19 @@ export abstract class TimedItemsTrackDownsampler<T extends TimedItemsTrack> impl
     if (toAdd.length > 0) this._downsampledTrack.addTimedItems(toAdd);
   }
 
-
-  get sourceTrack(): T {
-    return this._sourceTrack;
+  private applyPassthrough(event: {type: string; data: {updatedTimedItems?: TrackTimedItem<T>[]}}): void {
+    const items = (event.data.updatedTimedItems ?? []) as TrackTimedItem<T>[];
+    switch (event.type) {
+      case TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_ADDED:
+        this._downsampledTrack.addTimedItems(items);
+        break;
+      case TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_DELETED:
+        this._downsampledTrack.deleteTimedItems(items.map((i) => i.id));
+        break;
+      case TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_UPDATED:
+        this._downsampledTrack.deleteTimedItems(items.map((i) => i.id));
+        this._downsampledTrack.addTimedItems(items);
+        break;
+    }
   }
 }

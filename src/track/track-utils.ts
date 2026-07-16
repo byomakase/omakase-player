@@ -14,24 +14,7 @@
  * limitations under the License.
  */
 
-import {
-  Audio,
-  AudioFile,
-  AudioType,
-  type OutputTextFileFormatType,
-  Relation,
-  RelationType,
-  type SlewOptions,
-  type TextTrack,
-  type TextTrackArgs,
-  type TextTrackConversionOptions,
-  TextTrackFile,
-  type TextTrackLoadOptions,
-  TextTrackType,
-  type TimedItemsTrack,
-  type Track,
-  TrackType,
-} from '../media';
+import {Audio, AudioFile, AudioType, type OutputTextFileFormatType, Relation, RelationType, type SlewOptions, type TextTrack, type TextTrackArgs, type TextTrackConversionOptions, TextTrackFile, type TextTrackLoadOptions, TextTrackType, type TimedItemsTrack, type Track, TrackType,} from '../media';
 import {from, map, Observable, of, ReplaySubject, switchMap, tap, throwError} from 'rxjs';
 import {TrackRepository} from '../repository';
 import {HlsAudio, HlsTextTrack} from '../hls';
@@ -54,13 +37,7 @@ import type {OmakaseToolsApi} from '../tools';
 import {MediaFactory} from '../media/media-factory';
 import type {Destroyable} from '../common/capabilities';
 import {convert} from 'subtitle-converter';
-import {
-  convert as ttconvConvert,
-  type InputFormat,
-  type OutputFormat,
-  slew,
-  type SlewFormat
-} from '@byomakase/omakase-ttconv-ts';
+import {convert as ttconvConvert, type InputFormat, type OutputFormat, slew, type SlewFormat} from '@byomakase/omakase-ttconv-ts';
 import {OmakaseTools} from '../tools/omakase-tools-api';
 import {isEmptyObject} from '../util/object-util';
 import {type DownsampleOptions, TimedItemsDownsamplerFactory} from './timed-items-downsampler';
@@ -68,6 +45,18 @@ import {type DownsampleOptions, TimedItemsDownsamplerFactory} from './timed-item
 interface AudioFileCreateArgs {
   hlsAudio: HlsAudio;
   m3u8File: M3u8File;
+}
+
+/**
+ * Options controlling how a track is preloaded.
+ */
+export interface PreloadTrackOptions {
+  /**
+   * Maximum number of segment HTTP requests issued in parallel during preloading.
+   * Segments are processed in strict batches of this size — each batch must complete
+   * before the next one starts. Defaults to 50 when not specified.
+   */
+  maxConcurrentRequests?: number | undefined;
 }
 
 export interface TrackUtilsApi extends Destroyable {
@@ -80,9 +69,10 @@ export interface TrackUtilsApi extends Destroyable {
    * pointing to the original track.
    *
    * @param id - The ID of the track to preload.
+   * @param options - Optional preload configuration (e.g. segment request concurrency).
    * @returns An Observable that emits the newly created derived {@link Track} once preloading is complete.
    */
-  preloadTrack(id: Track['id']): Observable<Track>;
+  preloadTrack(id: Track['id'], options?: PreloadTrackOptions): Observable<Track>;
 
   /**
    * Downsamples a timed-items track and registers the result as a new derived track in the repository.
@@ -131,7 +121,7 @@ export class TrackUtils implements TrackUtilsApi {
     this._trackRepository = trackRepository;
   }
 
-  preloadTrack(id: Track['id']): Observable<Track> {
+  preloadTrack(id: Track['id'], options?: PreloadTrackOptions): Observable<Track> {
     return passiveObservable<Track>((observer) => {
       let track: Track = this._trackRepository.getOrFail(id);
 
@@ -141,14 +131,14 @@ export class TrackUtils implements TrackUtilsApi {
         case TrackType.AUDIO:
           switch ((track as Audio).audioType) {
             case AudioType.HLS_AUDIO:
-              createNewTrack$ = this.createAudioFile(track as HlsAudio);
+              createNewTrack$ = this.createAudioFile(track as HlsAudio, {maxConcurrentRequests: 20, ...options});
               break;
           }
           break;
         case TrackType.TEXT_TRACK:
           switch ((track as TextTrack).textTrackType) {
             case TextTrackType.HLS_TEXT_TRACK:
-              createNewTrack$ = this.createTextTrackFile(track as HlsTextTrack);
+              createNewTrack$ = this.createTextTrackFile(track as HlsTextTrack, {maxConcurrentRequests: 50, ...options});
               break;
           }
           break;
@@ -232,7 +222,7 @@ export class TrackUtils implements TrackUtilsApi {
     });
   }
 
-  protected createAudioFile(hlsAudio: HlsAudio): Observable<AudioFile> {
+  protected createAudioFile(hlsAudio: HlsAudio, options?: PreloadTrackOptions): Observable<AudioFile> {
     return new Observable<AudioFile>((observer) => {
       if (!hlsAudio.url) {
         throw new Error(`HlsAudio.url not defined`);
@@ -297,7 +287,7 @@ export class TrackUtils implements TrackUtilsApi {
 
               fragmentsAbsUrls = initSegmentUrl ? [initSegmentUrl, ...fragmentsAbsUrls] : fragmentsAbsUrls;
 
-              AudioUtil.fetchAndMergeAudioFiles(fragmentsAbsUrls, AuthConfig.authentication)
+              AudioUtil.fetchAndMergeAudioFiles(fragmentsAbsUrls, AuthConfig.authentication, options?.maxConcurrentRequests)
                 .pipe(
                   switchMap((audioArrayBuffer) =>
                     this._tools.probe(firstSegmentAbsUrl).pipe(map((probeResult) => createAndLoad(new UrlSource(BlobUtil.createBlobURL([audioArrayBuffer])), probeResult?.fileFormat.type)))
@@ -317,13 +307,13 @@ export class TrackUtils implements TrackUtilsApi {
     });
   }
 
-  protected createTextTrackFile(hlsTextTrack: HlsTextTrack): Observable<TextTrackFile> {
+  protected createTextTrackFile(hlsTextTrack: HlsTextTrack, options?: PreloadTrackOptions): Observable<TextTrackFile> {
     return new Observable<TextTrackFile>((observer) => {
       if (!hlsTextTrack.mediaPlaylist.url) {
         throw new Error(`HlsTextTrack.mediaPlaylist.url not defined`);
       }
 
-      M3u8Util.fetchVttSegmentedConcat(hlsTextTrack.mediaPlaylist.url, AuthConfig.authentication).subscribe((webvttText) => {
+      M3u8Util.fetchVttSegmentedConcat(hlsTextTrack.mediaPlaylist.url, AuthConfig.authentication, options?.maxConcurrentRequests).subscribe((webvttText) => {
         if (!webvttText) {
           throw new Error(`Could not find VTT's`);
         }

@@ -49,7 +49,7 @@ import {TIMELINE} from '../../constants';
 
 export interface BarChartLaneConfig extends ObservationTrackLaneConfig {}
 
-export interface BarChartLaneLaneStyle extends ObservationTrackLaneStyle {}
+export interface BarChartLaneStyle extends ObservationTrackLaneStyle {}
 
 type BarChartLaneTrackScale = {
   min: number;
@@ -127,11 +127,11 @@ const configDefault: BarChartLaneConfig = {
   ...TIMELINE_LANE_CONFIG_DEFAULT,
 };
 
-export class BarChartLane extends BaseObservationTrackLane<BarChartLaneConfig, BarChartLaneLaneStyle, BarChartLaneTrackConfig> {
+export class BarChartLane extends BaseObservationTrackLane<BarChartLaneConfig, BarChartLaneStyle, BarChartLaneTrackConfig> {
   protected _downsamplers: Map<ObservationTrack['id'], ObservationTrackDownsampler> = new Map();
   private _typedTrackViews: Map<ObservationTrack['id'], TrackView> = new Map();
 
-  constructor(configAndStyle?: ConfigAndStyle<BarChartLaneConfig, BarChartLaneLaneStyle>) {
+  constructor(configAndStyle?: ConfigAndStyle<BarChartLaneConfig, BarChartLaneStyle>) {
     super(
       {
         ...configDefault,
@@ -140,14 +140,6 @@ export class BarChartLane extends BaseObservationTrackLane<BarChartLaneConfig, B
       configAndStyle?.style
     );
   }
-
-  // TBD
-  // protected createStyledElement(): StyledElementWithId<BarChartLaneLaneStyle> {
-  //   return {
-  //     id: this._id,
-  //     classes: [this._ui!.resolveStyleClass('TimelineLane'), this._ui!.resolveStyleClass('ObservationTrackLane')],
-  //   };
-  // }
 
   override addTrack(track: ObservationTrack, config?: BarChartLaneTrackConfig): void;
   override addTrack(id: ObservationTrack['id'], config?: BarChartLaneTrackConfig): void;

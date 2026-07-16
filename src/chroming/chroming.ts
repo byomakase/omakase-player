@@ -210,8 +210,8 @@ export class Chroming implements ChromingApi, Destroyable {
     return this.getChromingInternalOrFail().removeSafeZone(id);
   }
 
-  setFloatingTimeVisible(visible: boolean): Observable<void> {
-    return this.getChromingInternalOrFail().setFloatingTimeVisible(visible);
+  setFloatingTimeVisible(visible: boolean, interactive?: boolean, openEditMode?: boolean): Observable<void> {
+    return this.getChromingInternalOrFail().setFloatingTimeVisible(visible, interactive, openEditMode);
   }
 
   setFloatingVuMeterVisible(visible: boolean): Observable<void> {

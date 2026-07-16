@@ -422,8 +422,17 @@ export class MediaTemporalConverter {
     let frame = timecodeConverter.timecodeModelToFrameNumber(timecodeModel);
 
     if (this._ffomTimecodeModel) {
-      return frame - timecodeConverter.timecodeModelToFrameNumber(this._ffomTimecodeModel);
+      const result = frame - timecodeConverter.timecodeModelToFrameNumber(this._ffomTimecodeModel);
+      if (result < 0) {
+        // Timecode crossed midnight (midnight-spanning clip). Add one full day of frames.
+        return result + this._framesPerDay();
+      }
+      return result;
     }
     return frame;
+  }
+
+  private _framesPerDay(): number {
+    return this.timeToFrame(24 * 3600);
   }
 }

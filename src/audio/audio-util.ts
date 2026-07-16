@@ -16,7 +16,7 @@
 
 import type {AudioRoutingConnection} from './audio-router';
 import {AuthConfig, type AuthenticationData} from '../common/authentication';
-import {catchError, from, map, mergeMap, type Observable, of, toArray} from 'rxjs';
+import {bufferCount, catchError, concatMap, defer, forkJoin, from, map, type Observable, of, toArray} from 'rxjs';
 import {httpGetArrayBuffer} from '../http';
 
 export class AudioUtil {
@@ -98,16 +98,15 @@ export class AudioUtil {
     }
   }
 
-  static fetchAndMergeAudioFiles(urls: string[], authentication?: AuthenticationData): Observable<ArrayBuffer> {
-    const maxConcurrent = 20;
-
+  static fetchAndMergeAudioFiles(urls: string[], authentication?: AuthenticationData, maxConcurrentRequests?: number): Observable<ArrayBuffer> {
+    const batchSize = maxConcurrentRequests ?? 20;
     return from(urls).pipe(
-      mergeMap((url, index) => this.fetchAudioFile(url, authentication).pipe(map((data) => ({index, data}))), maxConcurrent),
+      bufferCount(batchSize),
+      concatMap((batch) =>
+        forkJoin(batch.map((url) => defer(() => this.fetchAudioFile(url, authentication))))
+      ),
       toArray(),
-      map((results) => {
-        results.sort((a, b) => a.index - b.index);
-        return this.mergeBuffers(results.map((r) => r.data));
-      })
+      map((batches) => this.mergeBuffers(batches.flat()))
     );
   }
 

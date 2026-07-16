@@ -29,16 +29,49 @@ import {httpGetText} from '../http';
 import {fastHashObject} from '../util/object-util';
 import {ChromingUtil} from '../chroming/chroming-util';
 import {SourceUtil} from '../source';
+import {PlayerTextRenderingRegion, TEXT_RENDERING_DOM_CLASSES, type PlayerTextTrackLoadOptions} from '../player/player-text-track';
 
 export class ImscTextTrackController extends BaseTextTrackController {
   protected _ttDocument: TTDocument | undefined;
 
   protected _captionsElement: HTMLElement | undefined;
   protected _switchBreaker = new ObserverBreaker();
+  protected _loadOptions: PlayerTextTrackLoadOptions | undefined;
 
-  constructor(trackState: TextTrackState, playerController: PlayerController, format?: FileFormatType) {
-    super(trackState, playerController, format);
+  constructor(trackState: TextTrackState, playerController: PlayerController, loadOptions?: PlayerTextTrackLoadOptions) {
+    super(trackState, playerController, loadOptions?.fileFormatType);
     this._playerController = playerController;
+    this._loadOptions = loadOptions;
+  }
+
+  private applyRenderingClasses() {
+    const slot = this._playerController.textImscElement;
+    slot.classList.remove(
+      TEXT_RENDERING_DOM_CLASSES.playerRegion,
+      TEXT_RENDERING_DOM_CLASSES.videoRegion,
+      TEXT_RENDERING_DOM_CLASSES.adaptiveRendering,
+      TEXT_RENDERING_DOM_CLASSES.noAdaptiveRendering
+    );
+    if (this._loadOptions?.renderingRegion === PlayerTextRenderingRegion.VIDEO) {
+      slot.classList.add(TEXT_RENDERING_DOM_CLASSES.videoRegion);
+    } else {
+      slot.classList.add(TEXT_RENDERING_DOM_CLASSES.playerRegion);
+    }
+    if (this._loadOptions?.adaptiveRendering === false) {
+      slot.classList.add(TEXT_RENDERING_DOM_CLASSES.noAdaptiveRendering);
+    } else {
+      slot.classList.add(TEXT_RENDERING_DOM_CLASSES.adaptiveRendering);
+    }
+  }
+
+  private removeRenderingClasses() {
+    const slot = this._playerController.textImscElement;
+    slot.classList.remove(
+      TEXT_RENDERING_DOM_CLASSES.playerRegion,
+      TEXT_RENDERING_DOM_CLASSES.videoRegion,
+      TEXT_RENDERING_DOM_CLASSES.adaptiveRendering,
+      TEXT_RENDERING_DOM_CLASSES.noAdaptiveRendering
+    );
   }
 
   get playerTextHandlerType(): PlayerTextHandlerType {
@@ -49,14 +82,16 @@ export class ImscTextTrackController extends BaseTextTrackController {
     let element = DomUtil.createElement<'div'>('div');
     DomUtil.setAttributes(element, {
       'data-text-track-id': this._trackState.id,
-      'width': '100%',
-      'height': '100%',
+      width: '100%',
+      height: '100%',
     });
+    ChromingUtil.observeElementResize(element);
     return element;
   }
 
   private deleteCaptionsElement() {
     if (this._captionsElement) {
+      ChromingUtil.unobserveElementResize(this._captionsElement);
       this._captionsElement.remove();
       this._captionsElement = void 0;
     }
@@ -108,6 +143,7 @@ export class ImscTextTrackController extends BaseTextTrackController {
 
       this._switchBreaker.break();
       this.deleteCaptionsElement();
+      this.applyRenderingClasses();
 
       let captionsSlot = this._playerController.textImscElement;
       let captionsElement = this.createCaptionsElement();
@@ -161,6 +197,7 @@ export class ImscTextTrackController extends BaseTextTrackController {
 
       this._switchBreaker.break();
       this.deleteCaptionsElement();
+      this.removeRenderingClasses();
 
       nextCompleteObserver(observer);
     });

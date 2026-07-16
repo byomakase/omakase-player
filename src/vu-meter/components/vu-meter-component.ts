@@ -18,7 +18,15 @@ import {BehaviorSubject, filter, interval, scan, skip, switchMap, takeUntil, tak
 import {ObserverBreaker} from '../../common/observer-breaker';
 import {DomUtil} from '../../dom/dom-util';
 import {AudioLevelEventType, type AudioLevelSourceApi} from '../audio-level-source';
-import {DEFAULT_VU_METER_CONFIG, DEFAULT_VU_METER_STYLE, VuMeterScale, VuMeterTheme, type VuMeterColor} from '../vu-meter-api';
+import {
+  DEFAULT_VU_METER_CONFIG,
+  DEFAULT_VU_METER_DEFAULT_THEME_COLORS,
+  DEFAULT_VU_METER_LED_THEME_COLORS,
+  DEFAULT_VU_METER_STYLE,
+  VuMeterScale,
+  VuMeterTheme,
+  type VuMeterColor,
+} from '../vu-meter-api';
 
 export const OmakaseVuMeterAttributes = {
   THEME: 'theme',
@@ -45,6 +53,7 @@ export const OmakaseVuMeterDomClasses = {
   SCALE: 'omakase-vu-meter-scale',
   SCALE_LABELS: 'omakase-vu-meter-scale-labels',
   SCALE_LABEL: 'omakase-vu-meter-scale-label',
+  SCALE_LABEL_DANGER: 'omakase-vu-meter-scale-label-danger',
   SCALE_DIVISION: 'omakase-vu-meter-scale-division',
   SCALE_SUBDIVISION: 'omakase-vu-meter-scale-subdivision',
   CHANNEL: 'omakase-vu-meter-channel',
@@ -61,6 +70,7 @@ export const OmakaseVuMeterDomClasses = {
 export interface VuMeterScaleLabel {
   value: number;
   label: string;
+  danger: boolean;
 }
 
 export class VuMeterComponent extends HTMLElement {
@@ -80,7 +90,7 @@ export class VuMeterComponent extends HTMLElement {
   private _dbValues: number[] = new Array(this._maxChannelCount).fill(-Infinity);
   private _heldDbValues: BehaviorSubject<number | undefined>[] = Array.from({length: this._maxChannelCount}, () => new BehaviorSubject<number | undefined>(undefined));
 
-  private _levelColors: VuMeterColor[] = DEFAULT_VU_METER_STYLE.levelColors;
+  private _levelColors: VuMeterColor[] = this.theme === VuMeterTheme.DEFAULT ? DEFAULT_VU_METER_DEFAULT_THEME_COLORS : DEFAULT_VU_METER_LED_THEME_COLORS;
   private _isNewFrame = true;
   private _isSetUp = false;
   private _isConnected = false;
@@ -154,7 +164,7 @@ export class VuMeterComponent extends HTMLElement {
     if (this.hasAttribute(OmakaseVuMeterAttributes.RANGE_MAX)) {
       return parseInt(this.getAttribute(OmakaseVuMeterAttributes.RANGE_MAX)!, 10);
     } else {
-      return 0;
+      return this.scale === VuMeterScale.NORDIC ? -6 : 0;
     }
   }
 
@@ -374,6 +384,9 @@ export class VuMeterComponent extends HTMLElement {
     for (const scaleLabel of scaleLabels) {
       const scaleLabelElement = DomUtil.createElement('div');
       scaleLabelElement.classList.add(OmakaseVuMeterDomClasses.SCALE_LABEL);
+      if (scaleLabel.danger) {
+        scaleLabelElement.classList.add(OmakaseVuMeterDomClasses.SCALE_LABEL_DANGER);
+      }
       scaleLabelElement.innerText = scaleLabel.label.toString();
       const scaleLabelPosition = DomUtil.getPercentValue((scaleLabel.value - this.rangeMinDb) / (this.rangeMaxDb - this.rangeMinDb));
       if (this.isVertical) {
@@ -610,12 +623,12 @@ export class VuMeterComponent extends HTMLElement {
 
   private getScaleLabels(): VuMeterScaleLabel[] {
     const scaleLabels = [];
-    for (let i = 0; i >= this.rangeMinDb; i -= this.scaleStepDb) {
+    for (let i = this.rangeMaxDb; i >= this.rangeMinDb; i -= this.scaleStepDb) {
       if (this.scale === VuMeterScale.NORDIC && i === -this.scaleOffsetDb) {
-        scaleLabels.unshift({label: 'TEST', value: i});
+        scaleLabels.unshift({label: 'TEST', value: i, danger: false});
       } else {
         const scaleLabel = i + this.scaleOffsetDb;
-        scaleLabels.unshift({label: scaleLabel > 0 ? `+${scaleLabel}` : scaleLabel.toString(), value: i});
+        scaleLabels.unshift({label: scaleLabel > 0 ? `+${scaleLabel}` : scaleLabel.toString(), value: i, danger: this.scale === VuMeterScale.NORDIC && scaleLabel >= 6});
       }
     }
     return scaleLabels;

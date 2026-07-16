@@ -21,7 +21,8 @@
       padding: 10px;
     }
     &.media-controller-omakase {
-      .omakase-timecode-wrapper {
+      .omakase-timecode-wrapper,
+      .omakase-time-edit-input {
         width: 80px;
         &:has(+ * .omakase-vu-meter-scale-nordic) {
           width: 90px;
@@ -59,6 +60,16 @@
       .omakase-overlay-buttons .omakase-video-overlay-button {
         width: calc(0.8 * var(--center-control-size-default));
         height: calc(0.8 * var(--center-control-size-default));
+      }
+      &[mediapaused],
+      &:not([userinactive]) {
+        --adaptive-rendering-control-bar-offset: calc(70px + var(--marker-track-count, 0) * 8px);
+        &:has(.media-control-bar.control-bar-offset) {
+          --adaptive-rendering-control-bar-offset: 70px;
+        }
+        &:has(.media-control-bar:not(.control-bar-offset).has-markers) {
+          --adaptive-rendering-control-bar-offset: calc(74px + var(--marker-track-count, 0) * 8px);
+        }
       }
       .media-control-bar:not(.control-bar-offset) {
         + .omakase-control-bar {
@@ -203,7 +214,8 @@
     }
 
     &.media-controller-omakase {
-      .omakase-timecode-wrapper {
+      .omakase-timecode-wrapper,
+      .omakase-time-edit-input {
         width: 72px;
         &:has(+ * .omakase-vu-meter-scale-nordic) {
           width: 82px;
@@ -387,6 +399,13 @@
       }
     }
     &.media-controller-omakase {
+      --adaptive-rendering-control-bar-offset: calc(5px + var(--marker-track-count, 0) * 8px);
+      &:has(.media-control-bar.control-bar-offset) {
+        --adaptive-rendering-control-bar-offset: 0px;
+      }
+      &:has(.media-control-bar:not(.control-bar-offset).has-markers) {
+        --adaptive-rendering-control-bar-offset: calc(10px + var(--marker-track-count, 0) * 8px);
+      }
       .omakase-control-bar,
       .omakase-player-control-bar-toggle {
         display: none;
@@ -522,7 +541,8 @@
     }
 
     &.media-controller-omakase {
-      .omakase-timecode-wrapper {
+      .omakase-timecode-wrapper,
+      .omakase-time-edit-input {
         width: 110px;
         &:has(+ * .omakase-vu-meter-scale-nordic) {
           width: 120px;
@@ -585,6 +605,12 @@
   }
 }
 
+@container (inline-size > 1301px) {
+  media-controller.safari .lower-control-bar .end-container .omakase-timecode-wrapper omakase-time-display omakase-time-edit {
+    margin-top: 0.5px;
+  }
+}
+
 @container (inline-size >= 1440px) {
   media-controller {
     &.media-controller-omakase {
@@ -625,6 +651,16 @@
 
         omakase-time-display {
           line-height: 32px;
+        }
+      }
+      &[mediapaused],
+      &:not([userinactive]) {
+        --adaptive-rendering-control-bar-offset: calc(107px + var(--marker-track-count, 0) * 12px);
+        &:has(.media-control-bar.control-bar-offset) {
+          --adaptive-rendering-control-bar-offset: 107px;
+        }
+        &:has(.media-control-bar:not(.control-bar-offset).has-markers) {
+          --adaptive-rendering-control-bar-offset: calc(115px + var(--marker-track-count, 0) * 12px);
         }
       }
       .media-control-bar:not(.control-bar-offset) {
@@ -902,7 +938,8 @@
 @container (inline-size > 1800px) {
   media-controller {
     &.media-controller-omakase {
-      .omakase-timecode-wrapper {
+      .omakase-timecode-wrapper,
+      .omakase-time-edit-input {
         width: 130px;
         font-size: 16px;
         &:has(+ * .omakase-vu-meter-scale-nordic) {
@@ -957,7 +994,8 @@
     }
 
     &.media-controller-omakase {
-      .omakase-timecode-wrapper {
+      .omakase-timecode-wrapper,
+      .omakase-time-edit-input {
         width: 150px;
         font-size: 18px;
         &:has(+ * .omakase-vu-meter-scale-nordic) {
@@ -1014,6 +1052,12 @@
   }
 }
 
+@container (inline-size > 2551px) {
+  media-controller .lower-control-bar .end-container .omakase-timecode-wrapper omakase-time-display omakase-time-edit {
+    margin-top: 0.5px;
+  }
+}
+
 @container (inline-size >= 2560px) {
   media-controller {
     &.media-controller-omakase {
@@ -1056,6 +1100,16 @@
 
         omakase-time-display {
           line-height: 36px;
+        }
+      }
+      &[mediapaused],
+      &:not([userinactive]) {
+        --adaptive-rendering-control-bar-offset: calc(115px + var(--marker-track-count, 0) * 16px);
+        &:has(.media-control-bar.control-bar-offset) {
+          --adaptive-rendering-control-bar-offset: 115px;
+        }
+        &:has(.media-control-bar:not(.control-bar-offset).has-markers) {
+          --adaptive-rendering-control-bar-offset: calc(131px + var(--marker-track-count, 0) * 16px);
         }
       }
       .media-control-bar:not(.control-bar-offset) {

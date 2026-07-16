@@ -57,10 +57,12 @@ export abstract class BasePlayerAudioTrack extends BasePlayerTrack<AudioState, P
 
   abstract setActive(active: boolean): Observable<void>;
 
-  protected getState(): PlayerAudioTrackState {
+  protected _getState(): PlayerAudioTrackState {
     return {
       trackId: this._trackState.id,
       loadStage: this._loadStage.state,
+      loadOptions: this._loadOptions,
+
       handlerId: this.playerAudioHandler.id,
       active: this.active,
     };

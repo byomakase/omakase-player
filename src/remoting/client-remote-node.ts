@@ -25,6 +25,8 @@ import {type ChromingDetachedMessageChannel, ChromingDetachedMessageChannelBindi
 import type {PlayerDetachedApi} from '../player';
 import type {ChromingDetachedApi} from '../chroming';
 import type {OmpProvider} from '../omp-provider';
+import {AlertLevel, type AlertState} from '../session/alerts-api';
+import {CryptoUtil} from '../util/crypto-util';
 
 export class ClientRemoteNode extends BaseRemoteNode {
   protected _playerDetached: PlayerDetachedApi;
@@ -47,7 +49,13 @@ export class ClientRemoteNode extends BaseRemoteNode {
     ]);
 
     this._messageChannelBindings = [
-      new PlayerDetachedMessageChannelBinding(this.getChannelOrFail('PlayerDetached'), this.getChannelOrFail('PlayerAudioInternal'), this.getChannelOrFail('PlayerTextInternal'), this._playerDetached, ompProvider),
+      new PlayerDetachedMessageChannelBinding(
+        this.getChannelOrFail('PlayerDetached'),
+        this.getChannelOrFail('PlayerAudioInternal'),
+        this.getChannelOrFail('PlayerTextInternal'),
+        this._playerDetached,
+        ompProvider
+      ),
       new ChromingDetachedMessageChannelBinding(this.getChannelOrFail('ChromingDetached'), this._chromingDetached, ompProvider),
     ];
     this._messageChannelBindings.forEach((binding) => binding.bind());
@@ -118,6 +126,14 @@ export class ClientRemoteNode extends BaseRemoteNode {
       });
   }
 
+  private forceAddChromingAlert(alert: Omit<AlertState, 'id' | 'timestamp'>) {
+    this._chromingDetached.domController.addAlert({
+      id: CryptoUtil.uuid(),
+      timestamp: new Date(),
+      ...alert,
+    });
+  }
+
   private sendHeartBeat() {
     let heartbeat = new Date().getTime();
 
@@ -132,14 +148,22 @@ export class ClientRemoteNode extends BaseRemoteNode {
           // console.debug(`Heartbeat response:`, response);
         },
         error: (error) => {
-          console.error(error);
-
           this._heartbeatTimeoutNumber++;
-          console.debug(`Heartbeat timeout no: ${this._heartbeatTimeoutNumber}`);
+
+          let message = `Heartbeat timeout no: ${this._heartbeatTimeoutNumber}`;
+          console.debug(message);
 
           if (this._heartbeatTimeoutNumber >= REMOTING.client.maxHeartbeatTimeouts) {
-            console.debug(`Maximum heartheat timeouts reached (${REMOTING.client.maxHeartbeatTimeouts}), disconnecting..`);
-            this.disconnect();
+            this._handshakeChannelBreaker.break();
+            let message = `Maximum heartheat timeouts reached (${REMOTING.client.maxHeartbeatTimeouts}), disconnecting..`;
+            console.debug(message);
+            this.forceAddChromingAlert({
+              message: `${message} This window will be closed automatically in ${REMOTING.client.windowCloseCountdownSeconds} seconds.`,
+              level: AlertLevel.WARN,
+            });
+            setTimeout(() => {
+              this.disconnect();
+            }, REMOTING.client.windowCloseCountdownSeconds * 1000);
           }
         },
       });

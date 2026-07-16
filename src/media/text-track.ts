@@ -87,6 +87,9 @@ export interface TextTrackState extends TimedItemsTrackState<TextCueState> {
 
 export interface TextTrack<S extends TextTrackState = TextTrackState, E extends OmpEventGroup<any, any> = never> extends TimedItemsTrack<TextCue, S, TextCueUpdateableAttrs, E> {
   textTrackType: TextTrackType;
+  kind?: TextTrackKind | undefined;
+  srclang?: string | undefined;
+  default: boolean;
 }
 
 export enum TextTrackEventType {

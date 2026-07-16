@@ -22,6 +22,9 @@ import {WindowPlaybackMode} from '../common/window-playback';
 import {type MainTrackConfig, type SidecarTracksConfig, RouterVisualizationBase, RouterVisualizationClasses} from './router-visualization-base';
 import type {OmakasePlayerApi} from '../omakase-player-api';
 import {SessionEventType} from '../session';
+import {MainMediaType} from '../media';
+import {BrowserProvider} from '../common/browser-provider';
+import {AudioUtil} from '../audio/audio-util';
 
 export class RouterVisualizationComponent extends RouterVisualizationBase {
   private _omakasePlayer?: OmakasePlayerApi;
@@ -31,7 +34,7 @@ export class RouterVisualizationComponent extends RouterVisualizationBase {
     this.render();
   }
 
-  protected updateMainTrack(config: MainTrackConfig | undefined) {
+  protected updateMainTrack(config: MainTrackConfig | undefined, applyDefaultMatrix: boolean = true) {
     this._mainTrackSetterBreaker.break();
     this._mainTrackConfig = config;
     if (!config) {
@@ -45,18 +48,26 @@ export class RouterVisualizationComponent extends RouterVisualizationBase {
     this._mainTrack = this.prepareTrackForVisualization(config.track);
 
     const mainHandler = this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.MAIN)!;
-    const o$: Observable<any> = !mainHandler?.router ? mainHandler.createAudioRouter(config.track.maxInputNumber, this._outputs!.length) : of(true);
-    o$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe({
-      next: () => {
-        this.setAudioRouterDefaultMatrix(config.track!, config.defaultMatrix);
-        this._wireMainTrackEvents();
-      },
-    });
-
-    this.renderTrack(config.track);
+    const isSafariAndHls = this._omakasePlayer!.player.mainMedia?.mainMediaType === MainMediaType.HLS && BrowserProvider.instance.isSafari;
+    if (!isSafariAndHls) {
+      const o$: Observable<any> = !mainHandler?.router ? mainHandler.createAudioRouter(config.track.maxInputNumber, this._outputs!.length) : of(true);
+      o$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe({
+        next: () => {
+          if (applyDefaultMatrix) {
+            this.setAudioRouterDefaultMatrix(config.track!, config.defaultMatrix);
+          }
+          this._wireMainTrackEvents();
+        },
+      });
+      this.renderTrack(config.track);
+    } else {
+      this.renderTrack(config.track);
+      this._wireMainTrackEvents(false);
+    }
   }
 
-  protected setSidecarTracksConfig(config: SidecarTracksConfig) {
+  protected setSidecarTracksConfig(config: SidecarTracksConfig, applyDefaultMatrix: boolean = true) {
+    this._sidecarTrackSetterBreaker.break();
     if (config.tracks.length === 0) {
       this._providedSidecarTracksConfig?.tracks.forEach((track) => {
         this.renderTrack(undefined, track.trackId);
@@ -65,7 +76,6 @@ export class RouterVisualizationComponent extends RouterVisualizationBase {
     this._providedSidecarTracksConfig = config;
 
     this._sidecarTracks = config.tracks.map((track) => {
-      //   const sidecarAudioState = this._player!.getSidecarAudioState(track.trackId);
       const sidecarAudioState = this._omakasePlayer!.player.audio.getTracks(PlayerAudioType.SIDECAR).find((playerTrack) => track.trackId === playerTrack.id);
 
       if (sidecarAudioState) {
@@ -80,6 +90,9 @@ export class RouterVisualizationComponent extends RouterVisualizationBase {
 
       o$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe({
         next: () => {
+          if (applyDefaultMatrix) {
+            this.setAudioRouterDefaultMatrix(track, config.defaultMatrix);
+          }
           this._wireSidecarTrackEvents(track.trackId!);
           for (const track of this._sidecarTracks!) {
             this.renderTrack(track, track.trackId);
@@ -87,48 +100,59 @@ export class RouterVisualizationComponent extends RouterVisualizationBase {
         },
       });
     }
-
-    // for (const track of this._sidecarTracks) {
-    //   this.renderTrack(track, track.trackId);
-    // }
   }
 
   protected _wireSidecarTrackEvents(trackId: string) {
     let attachedDetachedModeFilter = () => {
       return this._omakasePlayer!.session.state.windowPlayback.mode === WindowPlaybackMode.ATTACHED || this._omakasePlayer!.session.state.windowPlayback.mode === WindowPlaybackMode.DETACHED;
     };
-    this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.SIDECAR, trackId)!
-      .router!.onEvent$.pipe(takeUntil(this._destroyBreaker.observer))
+    const sidecarRouter = this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.SIDECAR, trackId)?.router;
+    if (!sidecarRouter) {
+      return;
+    }
+    sidecarRouter.onEvent$
+      .pipe(takeUntil(this._destroyBreaker.observer))
       .pipe(takeUntil(this._detachAttachBreaker.observer))
+      .pipe(takeUntil(this._sidecarTrackSetterBreaker.observer))
       .pipe(filter((event) => event.type === AudioRouterEventType.AUDIO_ROUTER_CHANGE))
       .pipe(filter(attachedDetachedModeFilter))
-
-      .subscribe((event) => {
-        this.updateTogglesFromState(this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.SIDECAR, trackId)!.router!.state, trackId);
+      .subscribe(() => {
+        this.updateTogglesFromState(sidecarRouter.state, trackId);
       });
-    this.updateTogglesFromState(this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.SIDECAR, trackId)!.router!.state, trackId);
+    this.updateTogglesFromState(sidecarRouter.state, trackId);
   }
 
-  protected _wireMainTrackEvents() {
+  protected _wireMainTrackEvents(isRouterSupported: boolean = true) {
     let attachedDetachedModeFilter = () => {
       return this._omakasePlayer!.session.state.windowPlayback.mode === WindowPlaybackMode.ATTACHED || this._omakasePlayer!.session.state.windowPlayback.mode === WindowPlaybackMode.DETACHED;
     };
-    this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.MAIN)!
-      .router!.onEvent$.pipe(takeUntil(this._destroyBreaker.observer))
-      .pipe(takeUntil(this._detachAttachBreaker.observer))
-      .pipe(filter((event) => event.type === AudioRouterEventType.AUDIO_ROUTER_CHANGE))
-      .pipe(filter(attachedDetachedModeFilter))
-
-      .subscribe((event) => {
-        this.updateTogglesFromState(this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.MAIN)!.router!.state);
-      });
-    this.updateTogglesFromState(this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.MAIN)!.router!.state);
+    if (isRouterSupported) {
+      // capture the router and bail if the MAIN handler/router isn't present: on a detached media reload the handler
+      // can be undefined (mid-swap) or routerless, so re-fetching getHandler(MAIN).router in the callback would deref
+      // undefined -> crash. reading state off the captured router is destroy-safe.
+      const mainRouter = this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.MAIN)?.router;
+      if (!mainRouter) {
+        return;
+      }
+      // gate on _mainTrackSetterBreaker (broken at the start of updateMainTrack) so re-wiring on each media load /
+      // track switch tears down the previous subscription instead of leaking one per updateMainTrack call.
+      mainRouter.onEvent$
+        .pipe(takeUntil(this._destroyBreaker.observer))
+        .pipe(takeUntil(this._detachAttachBreaker.observer))
+        .pipe(takeUntil(this._mainTrackSetterBreaker.observer))
+        .pipe(filter((event) => event.type === AudioRouterEventType.AUDIO_ROUTER_CHANGE))
+        .pipe(filter(attachedDetachedModeFilter))
+        .subscribe(() => {
+          this.updateTogglesFromState(mainRouter.state);
+        });
+      this.updateTogglesFromState(mainRouter.state);
+    } else {
+      this.updateTogglesForDisabledRouter();
+    }
   }
 
   set player(player: OmakasePlayerApi) {
     this._omakasePlayer = player;
-
-    this._omakasePlayer.session.state.windowPlayback.mode === WindowPlaybackMode.ATTACHED;
 
     let attachedDetachedModeFilter = () => {
       return this._omakasePlayer!.session.state.windowPlayback.mode === WindowPlaybackMode.ATTACHED || this._omakasePlayer!.session.state.windowPlayback.mode === WindowPlaybackMode.DETACHED;
@@ -145,9 +169,9 @@ export class RouterVisualizationComponent extends RouterVisualizationBase {
       filter((event) => event.type === SessionEventType.SESSION_WINDOW_PLAYBACK_UPDATED)
     ).subscribe((event) => {
       if (event.data.windowPlayback.mode === WindowPlaybackMode.ATTACHED || event.data.windowPlayback.mode === WindowPlaybackMode.DETACHED) {
-        this.updateMainTrack(this._mainTrackConfig);
+        this.updateMainTrack(this._mainTrackConfig, false);
         if (this._providedSidecarTracksConfig) {
-          this.sidecarTracks = this._providedSidecarTracksConfig;
+          this.setSidecarTracksConfig(this._providedSidecarTracksConfig, false);
         }
       }
     });
@@ -174,9 +198,10 @@ export class RouterVisualizationComponent extends RouterVisualizationBase {
         updateMainTrack();
       });
 
-    this._omakasePlayer.player.onEvent$
+    //tricky
+    this._omakasePlayer.player.audio.onEvent$
       .pipe(takeUntil(this._destroyBreaker.observer))
-      .pipe(filter((event) => event.type === PlayerEventType.PLAYER_MAIN_MEDIA_LOADED))
+      .pipe(filter((event) => event.type === PlayerAudioEventType.PLAYER_AUDIO_LOADED))
       .pipe(filter(attachedDetachedModeFilter))
       .subscribe(() => {
         updateMainTrack();
@@ -368,6 +393,28 @@ export class RouterVisualizationComponent extends RouterVisualizationBase {
           }
         });
       });
+    }
+  }
+
+  protected updateTogglesForDisabledRouter(trackId?: string | undefined) {
+    trackId = trackId ?? this._mainTrackLabel;
+
+    const inputsNumber = trackId === this._mainTrackLabel ? this._mainTrack?.inputNumber : this._sidecarTracks?.find((track) => track.trackId === trackId)?.inputNumber;
+    const outputsNumber = this._outputs?.length;
+
+    if (!inputsNumber || !outputsNumber) {
+      return;
+    }
+
+    const defaultConnections = AudioUtil.resolveDefaultAudioRouting(inputsNumber, outputsNumber);
+
+    for (let input = 0; input < inputsNumber; input++) {
+      for (let output = 0; output < outputsNumber; output++) {
+        const connected = defaultConnections.some((connection) => connection.path.input === input && connection.path.output === output && connection.connected);
+        const toggle = document.getElementById(`${RouterVisualizationClasses.TOGGLE}-${trackId}-${input}-${output}`);
+        toggle?.classList.toggle(RouterVisualizationClasses.ACTIVE, connected);
+        toggle?.classList.add(RouterVisualizationClasses.DISABLED);
+      }
     }
   }
 

@@ -52,7 +52,6 @@ import {type DomMediaElementConfig, HTMLVideoElementEvent} from '../dom/dom-medi
 import {WindowPlaybackMode} from '../common';
 import {errorCompleteObserver, freeObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
 import {Fullscreen} from '../common/fullscreen';
-import {OpStageStatus} from '../common/op-stage';
 import type {Alert, AlertState} from '../session/alerts-api';
 import {OmakaseDropdown, OmakaseDropdownList, OmakaseMarkerBar, OmakaseMarkerTrack, OmakaseTimeDisplay, OmakaseTimeRange} from './components';
 import {MainMediaType, type AudioState, type MarkerState, type MarkerTrackState, type TextTrackState, type ThumbnailState, type ThumbnailTrackState} from '../media';
@@ -60,7 +59,7 @@ import {ChromingUtil} from './chroming-util';
 import type {OmakaseRouterVisualization} from './components/omakase-router-visualization';
 import type {AudioHandlerApi} from '../audio';
 import {type VideoKeyframe, VideoKeyframeExtractor, type VideoKeyframeOptions} from '../tools/keyframe-extractor';
-import {AudioLevelSource, PeakProcessorAudioLevelSource, VuMeter, VuMeterOrientation} from '../vu-meter';
+import {AudioLevelSource, PeakProcessorAudioLevelSource, VuMeter, VuMeterOrientation, VuMeterScale} from '../vu-meter';
 
 export interface ChromingDomConfig<T extends ChromingTheme> extends PlayerChromingThemeConfig<T>, PlayerChromingCommonConfig {
   playerHtmlElementId: string;
@@ -190,7 +189,9 @@ export const ChromingDomClasses = {
 
   mediaThemeCompact: 'omakase-media-theme-compact-audio',
   mediaControllerCompact: 'compact',
-  mediaControllerWithCaptions: 'with-captions',
+  mediaPillarbox: 'media-pillarbox',
+  mediaLetterbox: 'media-letterbox',
+  mediaHasVideo: 'media-has-video',
 
   audioRouter: 'media-chrome-router',
   audioRouterDefault: 'media-chrome-router-default',
@@ -289,6 +290,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
   protected _attachDetachButtonEnabled$ = new Subject<boolean>();
   private _maxAlertCount = 5;
   private _maxStackCount = 3;
+  private _displaySpinnerInDetached = true;
 
   protected _enterPictureInPictureHandler?: () => void;
   protected _leavePictureInPictureHandler?: () => void;
@@ -304,7 +306,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
       throw new Error(`No html element with id ${this._config.playerHtmlElementId}`);
     }
 
-    ChromingUtil.connectResizeObserver(this._htmlElement);
+    ChromingUtil.observeElementResize(this._htmlElement);
 
     this._videoElementId = CryptoUtil.uuid();
 
@@ -312,6 +314,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
         ${this.createTemplateDom()}
         <media-theme class="${ChromingDomClasses.mediaTheme}" template="omakase-player-theme-${this._config.playerHtmlElementId}">
         </media-theme>`;
+    this._htmlElement.addEventListener('contextmenu', (event) => event.preventDefault());
 
     this._themeElement = DomUtil.getElementByClass<MediaThemeElement>(ChromingDomClasses.mediaTheme, this._htmlElement);
     this._mediaControllerElement = this.getShadowElementByClass<MediaController>(ChromingDomClasses.mediaController);
@@ -342,6 +345,10 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
       throw new Error('No media-controller element found for chroming');
     }
 
+    if (BrowserProvider.instance.isSafari) {
+      this._mediaControllerElement.classList.add('safari');
+    }
+
     if (this._config.watermark) {
       this.setWatermark(this._config.watermark);
     }
@@ -368,6 +375,10 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
           }
         }
       },
+    });
+
+    ChromingUtil.onResize$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe(() => {
+      this.updateLetterboxHeight();
     });
   }
 
@@ -402,6 +413,12 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
 
   showLoaded(): void {
     this._mediaControllerElement.classList.remove('omakase-video-not-loaded');
+    const hasVideo = !!(this._mainMediaVideoElement.videoWidth && this._mainMediaVideoElement.videoHeight);
+    if (hasVideo) {
+      this._mediaControllerElement.classList.add(ChromingDomClasses.mediaHasVideo);
+    } else {
+      this._mediaControllerElement.classList.remove(ChromingDomClasses.mediaHasVideo);
+    }
     DomUtil.hideElements(this._divButtonOverlayLoading, this._divButtonOverlayError);
     if (!this._mainMediaVideoElement.poster) {
       DomUtil.hideElements(this._divBackground);
@@ -409,9 +426,32 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     const {videoWidth, videoHeight} = this._mainMediaVideoElement;
     if (videoWidth && videoHeight) {
       this._themeElement.style.setProperty('--video-aspect-ratio', `${videoWidth / videoHeight}`);
+      this.updateLetterboxHeight();
     }
     this.wireVuMeters();
     this.updateFloatingVuMeterToggle(this._playerInternal!.audioInternal.state);
+  }
+
+  private updateLetterboxHeight() {
+    const {videoWidth, videoHeight} = this._mainMediaVideoElement;
+    const {offsetHeight, offsetWidth} = this._themeElement;
+    if (videoWidth && videoHeight) {
+      this._themeElement.style.setProperty('--video-letterbox-height', `${Math.max((offsetHeight - offsetWidth * (videoHeight / videoWidth)) / 2, 0)}px`);
+      if (offsetWidth / offsetHeight > videoWidth / videoHeight) {
+        this._mediaControllerElement.classList.remove(ChromingDomClasses.mediaLetterbox);
+        this._mediaControllerElement.classList.add(ChromingDomClasses.mediaPillarbox);
+      } else if (offsetWidth / offsetHeight < videoWidth / videoHeight) {
+        this._mediaControllerElement.classList.remove(ChromingDomClasses.mediaPillarbox);
+        this._mediaControllerElement.classList.add(ChromingDomClasses.mediaLetterbox);
+      } else {
+        this._mediaControllerElement.classList.remove(ChromingDomClasses.mediaPillarbox);
+        this._mediaControllerElement.classList.remove(ChromingDomClasses.mediaLetterbox);
+      }
+    } else {
+      this._themeElement.style.setProperty('--video-letterbox-height', '0px');
+      this._mediaControllerElement.classList.remove(ChromingDomClasses.mediaPillarbox);
+      this._mediaControllerElement.classList.remove(ChromingDomClasses.mediaLetterbox);
+    }
   }
 
   showError(): void {
@@ -536,7 +576,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
   getVuMeterConfig(themeConfig: DefaultThemeConfig | OmakaseThemeConfig, position?: ChromingVuMeterPosition): ChromingVuMeterConfig {
     const baseVuMeterConfig = themeConfig.vuMeterConfig as ChromingVuMeterConfig;
     if (position === ChromingVuMeterPosition.CONTROL_BAR) {
-      return {
+      return this.applyNordicScale({
         ...baseVuMeterConfig,
         ...themeConfig.controlBarVuMeterConfig,
         style: {
@@ -545,9 +585,9 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
           showScaleMarks: false,
           showScaleLabels: false,
         },
-      };
+      });
     } else if (position === ChromingVuMeterPosition.FLOATING) {
-      return {
+      return this.applyNordicScale({
         ...baseVuMeterConfig,
         ...themeConfig.floatingVuMeterConfig,
         style: {
@@ -555,10 +595,17 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
           ...themeConfig.floatingVuMeterConfig?.style,
           showScaleMarks: false,
         },
-      };
+      });
     } else {
-      return baseVuMeterConfig;
+      return this.applyNordicScale(baseVuMeterConfig);
     }
+  }
+
+  protected applyNordicScale(config: ChromingVuMeterConfig): ChromingVuMeterConfig {
+    if (config.scale === VuMeterScale.NORDIC) {
+      config.scaleOffsetDb = 18;
+    }
+    return config;
   }
 
   protected createVuMeter(theme: ChromingTheme, themeConfig: DefaultThemeConfig | OmakaseThemeConfig, container: HTMLElement, position: ChromingVuMeterPosition) {
@@ -599,7 +646,15 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
         this._audioLevelSource = new PeakProcessorAudioLevelSource();
       }
       if (this._audioLevelSource instanceof PeakProcessorAudioLevelSource) {
-        this._audioLevelSource.setHandler(this._playerInternal.audioInternal.getHandler(PlayerAudioType.OUTPUT)!);
+        // TODO @dzivkovic fix:
+        // Uncaught TypeError: Cannot read properties of undefined (reading 'createPeakProcessor')
+        // at PeakProcessorAudioLevelSource.setHandler (peak-processor-audio-level-source.ts:45:8)
+        // at DefaultDomController.wireVuMeters (chroming-dom.ts:652:34)
+        // at DefaultDomController.showLoaded (chroming-dom.ts:431:10)
+        let handler = this._playerInternal.audioInternal.getHandler(PlayerAudioType.OUTPUT);
+        if (handler) {
+          this._audioLevelSource.setHandler(handler);
+        }
       }
       if (this._vuMeters[ChromingVuMeterPosition.CONTROL_BAR]) {
         this._vuMeters[ChromingVuMeterPosition.CONTROL_BAR].setSource(this._audioLevelSource);
@@ -692,6 +747,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
               DomUtil.hideElements(...allOverlayButtons).showElements(this._divButtonOverlayError);
               break;
             case PlayerEventType.PLAYER_MAIN_MEDIA_LOADING:
+              this._displaySpinnerInDetached = true;
               this.showLoading();
               DomUtil.hideElements(...allOverlayButtons).showElements(this._divButtonOverlayLoading);
               break;
@@ -716,6 +772,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
               }
               break;
             case PlayerEventType.PLAYER_MAIN_MEDIA_UNLOADED:
+              this._displaySpinnerInDetached = false;
               this.resetMainMediaVideoElement();
               return;
             case PlayerEventType.PLAYER_SEEKED:
@@ -1299,8 +1356,10 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
   }
 
   protected getAudioDropdownOptionActionClass(type: PlayerAudioType, track: PlayerAudioTrackState) {
+    const handler =
+      type === PlayerAudioType.MAIN ? this._playerInternal!.audioInternal.getHandler(PlayerAudioType.MAIN) : this._playerInternal!.audioInternal.getHandler(PlayerAudioType.SIDECAR, track.trackId);
     return this.includeAudioRouter() && track.active && (type !== PlayerAudioType.MAIN || this.isMainAudioRouterSupported())
-      ? `${ChromingDomClasses.audioRouter} ${this.isAudioRouterUpdated(this._playerInternal!.audioInternal.getHandler(PlayerAudioType.MAIN)!) ? ChromingDomClasses.audioRouterChanged : ChromingDomClasses.audioRouterDefault}`
+      ? `${ChromingDomClasses.audioRouter} ${this.isAudioRouterUpdated(handler!) ? ChromingDomClasses.audioRouterChanged : ChromingDomClasses.audioRouterDefault}`
       : '';
   }
 
@@ -1474,7 +1533,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     if (this._timeRange) {
       this._timeRange.removeAllMarkers();
     }
-    if (this._config.playerWindowPlaybackMode === WindowPlaybackMode.DETACHED) {
+    if (this._displaySpinnerInDetached && this._config.playerWindowPlaybackMode === WindowPlaybackMode.DETACHED) {
       DomUtil.showElements(this._divButtonOverlayLoading);
     }
   }

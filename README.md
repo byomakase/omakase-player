@@ -1576,12 +1576,21 @@ vuMeter.setSource(source);
 | `levelColors`       | `VuMeterColor[]` | See below     | Color thresholds for the level bar. Applied in ascending `maxValueDb`. |
 | `levelBackground`   | `string`         | `transparent` | Background color of the level bar or LED segments.                     |
 
-Default `levelColors`:
+Default `levelColors` for `Default` theme:
 
 | `maxValueDb` | `color`   | `holdColor` |
 | ------------ | --------- | ----------- |
-| `-20`        | `#04E400` | `#04E40088` |
-| `-10`        | `#F27100` | `#F2710088` |
+| `-18`        | `#008800` | `#00880088` |
+| `-12`        | `#04E400` | `#04E40088` |
+| `-9`        | `#F27100` | `#F2710088` |
+| `0`          | `#BB0000` | `#BB000088` |
+
+Default `levelColors` for `LED` theme:
+
+| `maxValueDb` | `color`   | `holdColor` |
+| ------------ | --------- | ----------- |
+| `-15`        | `#04E400` | `#04E40088` |
+| `-9`        | `#F27100` | `#F2710088` |
 | `0`          | `#BB0000` | `#BB000088` |
 
 #### `VuMeterColor`
@@ -1610,12 +1619,14 @@ The VU Meter component exposes the following CSS variables for visual customizat
 | `--omakase-vu-meter-bar-gap`                | `5px`                  | Gap between adjacent channel bars                                                                  |
 | `--omakase-vu-meter-bars-padding`                | `0px`                  | Padding around the bar area                                                                  |
 | `--omakase-vu-meter-scale-color`            | `#333`                 | Color of scale tick marks and label text                                                           |
+| `--omakase-vu-meter-scale-danger-color`            | `red`                 | Color of +6, +9 and +12 marks in NORDIC scale                                                           |
 | `--omakase-vu-meter-scale-background-color` | `transparent`          | Background color of the scale area                                                                 |
 | `--omakase-vu-meter-scale-padding`          | `0px`                  | Padding inside the scale container                                                                 |
 | `--omakase-vu-meter-scale-size`             | `16px`                 | Width of the tick column in vertical orientation; height of the tick row in horizontal orientation |
 | `--omakase-vu-meter-scale-gap`              | `4px`                  | Gap between the scale label column and the scale tick column                                       |
 | `--omakase-vu-meter-scale-margin`           | `5px`                  | Margin between the scale and the bar area                                                          |
 | `--omakase-vu-meter-scale-thickness`        | `1px`                  | Thickness of main scale division tick marks                                                        |
+| `--omakase-vu-meter-scale-subdivision-opacity` | `0.7`               | Opacity of subdivision tick marks                                  |
 | `--omakase-vu-meter-scale-label-width`      | `20px`                 | Width of the scale label column (vertical orientation only)                                        |
 | `--omakase-vu-meter-transition`             | `0.2s`                 | Duration of bar fill and clip-path transition animations                                           |
 

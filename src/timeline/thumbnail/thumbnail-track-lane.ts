@@ -408,13 +408,7 @@ export class ThumbnailTrackLane extends BaseTrackLane<ThumbnailTrackLaneConfig, 
     this.createMissingThumbnails();
   }
 
-  /**
-   * @internal
-   * @param timeline
-   * @param player
-   * @param ompProvider
-   */
-  prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider) {
+  override prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider) {
     super.prepareForTimeline(timeline, player, ompProvider);
 
     this._placeholderImageUrl = UrlUtil.formatBase64Url('image/svg+xml', btoa(this._timeline!.style.loadingAnimationTheme === 'light' ? lightPlaceholder : darkPlaceholder));

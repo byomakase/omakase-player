@@ -27,12 +27,14 @@ omakase-vu-meter {
   --bar-gap: var(--omakase-vu-meter-bar-gap, 5px);
   --bars-padding: var(--omakase-vu-meter-bars-padding, 0px);
   --scale-color: var(--omakase-vu-meter-scale-color, #333);
+  --scale-danger-color: var(--omakase-vu-meter-scale-danger-color, red);
   --scale-background-color: var(--omakase-vu-meter-scale-background-color, transparent);
   --scale-padding: var(--omakase-vu-meter-scale-padding, 0px);
   --scale-size: var(--omakase-vu-meter-scale-size, 16px);
   --scale-gap: var(--omakase-vu-meter-scale-gap, 4px);
   --scale-margin: var(--omakase-vu-meter-scale-margin, 5px);
   --scale-thickness: var(--omakase-vu-meter-scale-thickness, 1px);
+  --scale-subdivision-opacity: var(--omakase-vu-meter-scale-subdivision-opacity, 0.7);
   --scale-label-width: var(--omakase-vu-meter-scale-label-width, 20px);
   --transition: var(--omakase-vu-meter-transition, 0.2s);
 
@@ -324,6 +326,10 @@ omakase-vu-meter {
       height: var(--font-size);
       width: var(--scale-label-width);
       position: absolute;
+
+      &.omakase-vu-meter-scale-label-danger {
+        color: var(--scale-danger-color);
+      }
     }
   }
 
@@ -335,6 +341,10 @@ omakase-vu-meter {
     .omakase-vu-meter-scale-subdivision {
       position: absolute;
       background-color: var(--scale-color);
+    }
+
+    .omakase-vu-meter-scale-subdivision {
+      opacity: var(--scale-subdivision-opacity);
     }
   }
 }

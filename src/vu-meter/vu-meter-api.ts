@@ -154,27 +154,51 @@ export interface VuMeterConfig {
   style: Partial<VuMeterStyle>;
 }
 
-export const DEFAULT_VU_METER_STYLE: VuMeterStyle = {
+export const DEFAULT_VU_METER_DEFAULT_THEME_COLORS = [
+  {
+    maxValueDb: -18,
+    color: '#008800',
+    holdColor: '#00880088',
+  },
+  {
+    maxValueDb: -12,
+    color: '#04E400',
+    holdColor: '#04E40088',
+  },
+  {
+    maxValueDb: -6,
+    color: '#F27100',
+    holdColor: '#F2710088',
+  },
+  {
+    maxValueDb: 0,
+    color: '#BB0000',
+    holdColor: '#BB000088',
+  },
+];
+
+export const DEFAULT_VU_METER_LED_THEME_COLORS = [
+  {
+    maxValueDb: -15,
+    color: '#04E400',
+    holdColor: '#04E40088',
+  },
+  {
+    maxValueDb: -9,
+    color: '#F27100',
+    holdColor: '#F2710088',
+  },
+  {
+    maxValueDb: 0,
+    color: '#BB0000',
+    holdColor: '#BB000088',
+  },
+];
+
+export const DEFAULT_VU_METER_STYLE: Omit<VuMeterStyle, 'levelColors'> = {
   showScaleLabels: true,
   showScaleMarks: true,
   showChannelLabels: true,
-  levelColors: [
-    {
-      maxValueDb: -20,
-      color: '#04E400',
-      holdColor: '#04E40088',
-    },
-    {
-      maxValueDb: -10,
-      color: '#F27100',
-      holdColor: '#F2710088',
-    },
-    {
-      maxValueDb: 0,
-      color: '#BB0000',
-      holdColor: '#BB000088',
-    },
-  ],
   levelBackground: 'transparent',
 };
 

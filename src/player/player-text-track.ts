@@ -28,6 +28,16 @@ export interface PlayerTextTrackLoadOptions extends PlayerTrackLoadOptions {
   handlerType?: PlayerTextHandlerType;
   timeReference?: TimeReference;
   fallbackFormat?: FallbackFormat;
+
+  /**
+   * Not supported with NATIVE or EMBEDDED handlerType
+   */
+  renderingRegion?: PlayerTextRenderingRegion;
+
+  /**
+   * Not supported with NATIVE or EMBEDDED handlerType
+   */
+  adaptiveRendering?: boolean;
 }
 
 export enum PlayerTextHandlerType {
@@ -36,6 +46,18 @@ export enum PlayerTextHandlerType {
   MEDIA_CAPTIONS = 'MEDIA_CAPTIONS',
   IMSC = 'IMSC',
 }
+
+export enum PlayerTextRenderingRegion {
+  PLAYER = 'PLAYER',
+  VIDEO = 'VIDEO',
+}
+
+export const TEXT_RENDERING_DOM_CLASSES = {
+  playerRegion: 'omakase-player-region',
+  videoRegion: 'omakase-video-region',
+  adaptiveRendering: 'omakase-adaptive-rendering',
+  noAdaptiveRendering: 'omakase-no-adaptive-rendering',
+};
 
 export interface PlayerTextTrackState extends PlayerTrackState {
   handlerId: PlayerTextTrackHandlerState['id'];
@@ -60,14 +82,15 @@ export abstract class BasePlayerTextTrack extends BasePlayerTrack<TextTrackState
     return this.handler.active;
   }
 
-  protected getState(): PlayerTextTrackState {
+  protected _getState(): PlayerTextTrackState {
     return {
       trackId: this._trackState.id,
       loadStage: this._loadStage.state,
+      loadOptions: this._loadOptions,
 
       handlerId: this.handler.id,
-
       active: this.handler.active,
+
       shown: this.handler.shown,
     };
   }

@@ -32,7 +32,7 @@ import {type PlayerApi, PlayerEventType} from '../player';
 import {AuthConfig, MediaTemporalFormat} from '../common';
 import Decimal from 'decimal.js';
 import {animate} from './animation-util';
-import {type OmakaseTimecodeEdit} from './timecode';
+import {type OmakaseTimeEdit} from './time';
 import {Playhead} from './playhead';
 import {Scrubber} from './scrubber/scrubber';
 import {MeasurementUtil} from './measurement-util';
@@ -145,7 +145,7 @@ export class TimelineImpl implements TimelineApi, Destroyable {
   private _canvasElement!: HTMLDivElement;
   private _timelineOverlayElement!: HTMLDivElement;
   private _timecodeElement!: HTMLDivElement;
-  private _timecodeEdit: OmakaseTimecodeEdit | undefined;
+  private _timecodeEdit: OmakaseTimeEdit | undefined;
   // endregion
 
   private _timelineLanes: TimelineLaneApi[] = [];
@@ -1726,7 +1726,7 @@ export class TimelineImpl implements TimelineApi, Destroyable {
 
   private openTimecodeEdit() {
     this._player.pause().subscribe(() => {
-      this._timecodeEdit = document.createElement('omakase-timecode-edit') as OmakaseTimecodeEdit;
+      this._timecodeEdit = document.createElement('omakase-time-edit') as OmakaseTimeEdit;
 
       this._timecodeEdit.player = this._player;
       this._timecodeEdit.value = this._player.convertTime(this._player.getCurrentTime(), MediaTemporalFormat.SECONDS, MediaTemporalFormat.TIMECODE);

@@ -176,7 +176,10 @@ export class AudioHandlerProxy extends BaseMessageChannelProxy<AudioHandlerMessa
     freeObserver(this._onEventQueue$);
     this._destroyBreaker.destroy();
 
-    this._audioRouter?.destroy();
+    const audioRouter = this._audioRouter;
+    this._audioRouter = undefined;
+    audioRouter?.destroy();
+
     this._audioEffects.destroy();
   }
 }

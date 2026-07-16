@@ -69,6 +69,15 @@ export class PlayerDetachedProxy extends BaseMessageChannelProxy<PlayerDetachedM
         },
       });
 
+    this._mainMediaRepository.onEvent$
+      .pipe(filter((p) => p.type === MainMediaRepositoryEventType.MAIN_MEDIA_ADDED))
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe({
+        next: (event) => {
+          this.initMainMedia(event.data.mainMediaState.id);
+        },
+      });
+
     combineLatest([this._playerAudioInternal.onInitialized$.pipe(filter((p) => p)), this._playerTextInternal.onInitialized$.pipe(filter((p) => p))])
       .pipe(take(1))
       .pipe(takeUntil(this._destroyBreaker.observer))
@@ -98,7 +107,7 @@ export class PlayerDetachedProxy extends BaseMessageChannelProxy<PlayerDetachedM
       })
       .pipe(
         tap((mainMediaState) => {
-          this.initUtils(mainMediaState.id);
+          this.initMainMedia(mainMediaState.id);
         })
       );
   }
@@ -124,39 +133,39 @@ export class PlayerDetachedProxy extends BaseMessageChannelProxy<PlayerDetachedM
       })
       .pipe(
         tap(() => {
-          this.initUtils(playerSession.mainMediaId!);
+          this.initMainMedia(playerSession.mainMediaId!);
         })
       );
   }
 
-  protected initUtils(mainMediaId: MainMediaState['id']) {
+  private initMainMedia(mainMediaId: MainMediaState['id']) {
     this._utilsBreaker.break();
 
     this._mainMedia = this._mainMediaRepository.getOrFail(mainMediaId);
-    this._mediaTemporalConverter = MediaTemporalConverter.create({
-      duration: this._mainMedia.duration,
-      frameRateModel: this._mainMedia.frameRateModel,
-      ffomTimecodeModel: this._mainMedia.ffomTimecodeModel,
-      initSegmentTimeOffset: this._mainMedia.initSegmentTimeOffset,
-      hasVideo: this._mainMedia.hasVideo,
-      hasAudio: this._mainMedia.hasAudio
-    });
+    this.initUtils();
 
     this._mainMedia.onEvent$
       .pipe(filter((p) => p.type === MainMediaEventType.MAIN_MEDIA_UPDATED))
       .pipe(takeUntil(this._utilsBreaker.observer))
       .pipe(takeUntil(this._destroyBreaker.observer))
       .subscribe((event) => {
-        this._mainMedia = this._mainMediaRepository.getOrFail(mainMediaId);
-        this._mediaTemporalConverter = MediaTemporalConverter.create({
-          duration: this._mainMedia.duration,
-          frameRateModel: this._mainMedia.frameRateModel,
-          ffomTimecodeModel: this._mainMedia.ffomTimecodeModel,
-          initSegmentTimeOffset: this._mainMedia.initSegmentTimeOffset,
-          hasVideo: this._mainMedia.hasVideo,
-          hasAudio: this._mainMedia.hasAudio,
-        });
+        this.initMainMedia(mainMediaId)
       });
+  }
+
+  private initUtils() {
+    if (this._mainMedia) {
+      this._mediaTemporalConverter = MediaTemporalConverter.create({
+        duration: this._mainMedia.duration,
+        frameRateModel: this._mainMedia.frameRateModel,
+        ffomTimecodeModel: this._mainMedia.ffomTimecodeModel,
+        initSegmentTimeOffset: this._mainMedia.initSegmentTimeOffset,
+        hasVideo: this._mainMedia.hasVideo,
+        hasAudio: this._mainMedia.hasAudio,
+      });
+    } else {
+      console.debug(`Trying to init utils before main media is loaded.`)
+    }
   }
 
   play(): Observable<void> {

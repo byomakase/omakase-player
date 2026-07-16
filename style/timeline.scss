@@ -24,8 +24,8 @@
     padding-top: 10px;
     overflow: hidden;
 
-    .omakase-timecode-edit {
-      .omakase-timecode-edit-input {
+    .omakase-time-edit {
+      .omakase-time-edit-input {
         font-size: 10pt;
         height: 15px;
       }
@@ -40,7 +40,7 @@
           background-color: #ccc;
         }
 
-        &.omakase-timecode-edit-input-invalid {
+        &.omakase-time-edit-input-invalid {
           border: 1px solid #fa6664;
         }
       }

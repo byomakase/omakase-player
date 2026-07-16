@@ -108,8 +108,8 @@ export class ChromingDetachedMessageChannelBinding extends BaseMessageChannelBin
       .receiveAndSendResponse('setFloatingTimeVisible')
       .pipe(takeUntil(this._destroyBreaker.observer))
       .subscribe({
-        next: ([[visible], sendResponseHook]) => {
-          sendResponseHook(this._chromingDetached.setFloatingTimeVisible(visible));
+        next: ([[visible, interactive, openEditMode], sendResponseHook]) => {
+          sendResponseHook(this._chromingDetached.setFloatingTimeVisible(visible, interactive, openEditMode));
         },
       });
 

@@ -113,13 +113,16 @@ export class MarkerViewComponent extends BaseKonvaComponent2<Konva.Group> {
           parent: {
             id: args.markerTrackId,
             parent: {
-              classes: [this._ui!.resolveStyleClass('MarkerOnMarkerTrackLane')],
+              id: this._markerTrackLane.id,
               parent: {
-                classes: [this._ui!.resolveStyleClass('MarkerTrackOnMarkerTrackLane')],
+                classes: [this._ui!.resolveStyleClass('MarkerOnMarkerTrackLane')],
                 parent: {
-                  classes: [this._ui!.resolveStyleClass('MarkerTrack')],
+                  classes: [this._ui!.resolveStyleClass('MarkerTrackOnMarkerTrackLane')],
                   parent: {
-                    classes: [this._ui!.resolveStyleClass('Marker')],
+                    classes: [this._ui!.resolveStyleClass('MarkerTrack')],
+                    parent: {
+                      classes: [this._ui!.resolveStyleClass('Marker')],
+                    },
                   },
                 },
               },
@@ -857,91 +860,6 @@ enum MarkerViewHandleType {
 }
 
 export class MarkerViewHandleSymbolUtil {
-  static create(symbol: MarkerOnMarkerTrackLaneStyle['markerSymbol'], handleType: MarkerViewHandleType, symbolSize: number, color: string): Konva.Shape {
-    const halfSymbolSize = new Decimal(symbolSize / 2).toDecimalPlaces(2).toNumber();
-
-    switch (symbol) {
-      case 'none':
-        if (handleType === MarkerViewHandleType.CENTER) {
-          return new Konva.Line({
-            points: [0, 0, 0, symbolSize],
-            stroke: color,
-            strokeWidth: 1,
-            closed: false,
-            offsetY: halfSymbolSize,
-          });
-        } else {
-          const borderWidth = 1;
-          const colorDiffPercent = 30;
-          const borderColor = ColorUtil.lightenColor(color, colorDiffPercent * (ColorUtil.isLightColor(color) ? -1 : 1));
-
-          return new Konva.Rect({
-            width: borderWidth,
-            height: symbolSize,
-            fill: borderColor,
-            opacity: 1,
-            offsetY: halfSymbolSize,
-            offsetX: handleType === MarkerViewHandleType.START ? 0 : borderWidth,
-          });
-        }
-      case 'triangle':
-        if (handleType === MarkerViewHandleType.CENTER) {
-          return new Konva.Line({
-            points: [-halfSymbolSize, 0, halfSymbolSize, 0, 0, symbolSize],
-            fill: color,
-            closed: true,
-            offsetY: halfSymbolSize,
-          });
-        } else {
-          return new Konva.Line({
-            points: handleType === MarkerViewHandleType.START ? [-halfSymbolSize, 0, 0, 0, 0, symbolSize] : [0, 0, halfSymbolSize, 0, 0, symbolSize],
-            fill: color,
-            closed: true,
-            offsetY: halfSymbolSize,
-          });
-        }
-      case 'circle':
-        if (handleType === MarkerViewHandleType.CENTER) {
-          return new Konva.Circle({
-            fill: color,
-            radius: halfSymbolSize,
-          });
-        } else {
-          return new Konva.Arc({
-            fill: color,
-            innerRadius: 0,
-            outerRadius: halfSymbolSize,
-            angle: 180,
-            rotation: handleType === MarkerViewHandleType.START ? 90 : -90,
-          });
-        }
-      case 'square': {
-        const side = new Decimal(symbolSize).div(Decimal.sqrt(2)).toDecimalPlaces(2).toNumber();
-        const halfSide = new Decimal(side / 2).toDecimalPlaces(2).toNumber();
-        if (handleType === MarkerViewHandleType.CENTER) {
-          return KonvaFactory.createRect({
-            fill: color,
-            width: side,
-            height: side,
-            rotation: 45,
-            offsetX: halfSide,
-            offsetY: halfSide,
-          });
-        } else {
-          return new Konva.Line({
-            points: [0, 0, side, 0, side, side],
-            fill: color,
-            closed: true,
-            rotation: handleType === MarkerViewHandleType.START ? 225 : 45,
-            offsetX: halfSide,
-            offsetY: halfSide,
-          });
-        }
-      }
-      default:
-        throw new Error(`Unsupported symbol type: ${symbol}`);
-    }
-  }
 
   static resolveSymbolVerticals(style: MarkerOnMarkerTrackLaneStyle): Verticals {
     let symbol = style.markerSymbol;
@@ -1136,7 +1054,8 @@ class MarkerViewHandleComponent extends BaseKonvaComponent2<Konva.Group> {
           });
         } else {
           return new Konva.Line({
-            points: this._config.handleType === MarkerViewHandleType.START ? [-halfSymbolSize, 0, 0, 0, 0, style.markerSymbolSize] : [0, 0, halfSymbolSize, 0, 0, style.markerSymbolSize],
+            points:
+              this._config.handleType === MarkerViewHandleType.START ? [-style.markerSymbolSize, 0, 0, 0, 0, style.markerSymbolSize] : [0, 0, style.markerSymbolSize, 0, 0, style.markerSymbolSize],
             fill: style.markerColor,
             closed: true,
             offsetY: halfSymbolSize,

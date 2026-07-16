@@ -232,18 +232,18 @@ export class SessionStore implements SessionApi, Destroyable {
   }
 
   private resolveCanDetach(mode: WindowPlaybackMode) {
-    return this.resolveCanAttachOrDetach() && (mode === WindowPlaybackMode.ATTACHED || mode === WindowPlaybackMode.FAILURE);
-  }
-
-  private resolveCanAttach(mode: WindowPlaybackMode) {
-    return this.resolveCanAttachOrDetach() && (mode === WindowPlaybackMode.DETACHED || mode === WindowPlaybackMode.FAILURE);
-  }
-
-  private resolveCanAttachOrDetach() {
     let isDetachable = this.state.isDetachable;
     let hasMainMedia = !!this.state.player.mainMediaId;
     let noMediaLoadRequests = this.state.mediaLoadRequests.length === 0;
-    return isDetachable && hasMainMedia && noMediaLoadRequests;
+    return isDetachable && hasMainMedia && noMediaLoadRequests && (mode === WindowPlaybackMode.ATTACHED || mode === WindowPlaybackMode.FAILURE);
+  }
+
+  private resolveCanAttach(mode: WindowPlaybackMode) {
+    let isDetachable = this.state.isDetachable;
+    let hasMainMedia = !!this.state.player.mainMediaId;
+    let noMediaLoadRequests = this.state.mediaLoadRequests.length === 0;
+    // return isDetachable && hasMainMedia && noMediaLoadRequests;
+    return isDetachable && noMediaLoadRequests && (mode === WindowPlaybackMode.DETACHED || mode === WindowPlaybackMode.FAILURE);
   }
 
   requestWindowPlaybackModeChange(mode: WindowPlaybackMode): void {
@@ -275,7 +275,7 @@ export class SessionStore implements SessionApi, Destroyable {
     let mediaLoadPackage: MediaLoadRequest = {
       id: CryptoUtil.uuid(),
       mediaId: media?.id,
-      playerMainMediaId: playerMainMedia?.id
+      playerMainMediaId: playerMainMedia?.id,
     };
     this._mediaLoadRequests.set(mediaLoadPackage.id, mediaLoadPackage);
     this.patch({

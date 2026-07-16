@@ -67,18 +67,18 @@ export const markerListDefaultTemplates = {
         text-align: center;
         line-height: 60px;
       }
-      omakase-timecode-edit {
+      omakase-time-edit {
         max-width: 110px;
       }`,
   row: `
         <div class="flex-row bordered">
-            <div class="flex-cell"><span slot="color" style="display:inline-block;height:60px;min-width:10px"></span></div>
-            <div class="flex-cell" style="min-width: 120px"><img class="drag-handle" slot="thumbnail" height="60"></div>
+            <div class="flex-cell color-cell"><span slot="color" style="display:inline-block;height:60px;min-width:10px"></span></div>
+            <div class="flex-cell thumbnail-cell" style="min-width: 120px"><img class="drag-handle" slot="thumbnail" height="60"></div>
             <div class="flex-cell drag-handle" style="flex-grow:1" slot="name"></div>
-            <div class="flex-cell" style="min-width:120px" slot="start"></div>
-            <div class="flex-cell" style="min-width:120px" slot="end"></div>
-            <div class="flex-cell" style="min-width:120px" slot="duration"></div>
-            <div class="flex-cell" style="min-width:60px">
+            <div class="flex-cell start-cell" style="min-width:120px" slot="start"></div>
+            <div class="flex-cell end-cell" style="min-width:120px" slot="end"></div>
+            <div class="flex-cell duration-cell" style="min-width:120px" slot="duration"></div>
+            <div class="flex-cell action-cell" style="min-width:60px">
                 <span slot="action-edit">✎</span>
                 <span slot="remove">🗑</span>
             </div>

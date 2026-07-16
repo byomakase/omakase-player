@@ -29,6 +29,8 @@ import type {OmakaseTimeDisplay} from '../components';
 import type {ThumbnailTrackState} from '../../media/thumbnail-track';
 import {PlayerEventType} from '../../player';
 import {filter, takeUntil} from 'rxjs';
+import {OmakaseTimeDisplayAttributes} from '../components/omakase-time-display';
+import {isNullOrUndefined} from '../../util/util-functions';
 
 export class ChromelessDomController extends ChromingDomController<ChromingTheme.CHROMELESS> {
   protected _themeConfig: ChromelessThemeConfig;
@@ -57,7 +59,7 @@ export class ChromelessDomController extends ChromingDomController<ChromingTheme
 
   addControlBar() {
     return `<div class="${ChromingDomClasses.timecodeContainer} d-none" slot="middle-chrome">
-            <omakase-time-display format="${this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard'}" ${this._themeConfig.timeFormat === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME ? 'countdown ' : ''} class="${ChromingDomClasses.mediaChromeCurrentTimecode}"></omakase-time-display>
+            <omakase-time-display ${this._themeConfig.timeInteractive ? 'editable' : ''} format="${this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard'}" ${this._themeConfig.timeFormat === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME ? 'countdown ' : ''} class="${ChromingDomClasses.mediaChromeCurrentTimecode}"></omakase-time-display>
         </div>`;
   }
 
@@ -65,13 +67,15 @@ export class ChromelessDomController extends ChromingDomController<ChromingTheme
     this._themeConfig = {
       ...this._themeConfig,
       timeFormat: themeConfig.timeFormat ?? this._themeConfig.timeFormat,
+      timeInteractive: themeConfig.timeInteractive ?? this._themeConfig.timeInteractive,
       floatingControls: (themeConfig as ChromelessThemeConfig).floatingControls ?? this._themeConfig.floatingControls,
     };
     this.updateFloatingTime();
     this.updateTimeFormat();
+    this.updateTimeInteractivity();
   }
 
-  setFloatingTimeVisible(visible: boolean): void {
+  setFloatingTimeVisible(visible: boolean, timeInteractive?: boolean, openEditMode?: boolean): void {
     const floatingControls = this._themeConfig.floatingControls;
     if (visible && floatingControls && !floatingControls.includes(ChromelessThemeFloatingControl.TIME)) {
       floatingControls.push(ChromelessThemeFloatingControl.TIME);
@@ -79,6 +83,30 @@ export class ChromelessDomController extends ChromingDomController<ChromingTheme
     } else if (!visible && floatingControls && floatingControls.includes(ChromelessThemeFloatingControl.TIME)) {
       floatingControls.splice(floatingControls.indexOf(ChromelessThemeFloatingControl.TIME), 1);
       this.updateFloatingTime();
+    }
+    if (!isNullOrUndefined(timeInteractive)) {
+      this._themeConfig.timeInteractive = timeInteractive;
+      this.updateTimeInteractivity();
+    }
+    if (!isNullOrUndefined(openEditMode) && this._currentTimecode) {
+      if (openEditMode) {
+        if (!this._themeConfig.timeInteractive) {
+          throw new Error('Unsupported mode');
+        }
+        this._currentTimecode.enableEditMode();
+      } else {
+        this._currentTimecode.disableEditMode();
+      }
+    }
+  }
+
+  updateTimeInteractivity() {
+    if (this._currentTimecode) {
+      if (this._themeConfig.timeInteractive) {
+        this._currentTimecode.setAttribute(OmakaseTimeDisplayAttributes.EDITABLE, '');
+      } else {
+        this._currentTimecode.removeAttribute(OmakaseTimeDisplayAttributes.EDITABLE);
+      }
     }
   }
 
@@ -109,7 +137,7 @@ export class ChromelessDomController extends ChromingDomController<ChromingTheme
 
   updateTimeFormat() {
     if (this._currentTimecode) {
-      this._currentTimecode.format = this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard';
+      this._currentTimecode.displayFormat = this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard';
       this._currentTimecode.isCountdown = this._themeConfig.timeFormat === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME;
       this._currentTimecode.updateTime();
     }

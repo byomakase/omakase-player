@@ -15,9 +15,9 @@
  */
 
 import {ObserverBreaker} from './common/observer-breaker';
-import {type MainMedia, type MainMediaLoadOptions, ThumbnailTrack} from './media';
-import {BehaviorSubject, combineLatest, concat, EMPTY, filter, Observable, takeUntil, timeout} from 'rxjs';
-import {Player, type PlayerApi, type PlayerConfig, type PlayerDetachedApi, type PlayerInternalApi} from './player';
+import {type MainMedia, type MainMediaLoadOptions, SlateType} from './media';
+import {BehaviorSubject, combineLatest, concat, filter, Observable, takeUntil} from 'rxjs';
+import {Player, type PlayerApi, type PlayerConfig, type PlayerDetachedApi, PlayerEventType, type PlayerInternalApi} from './player';
 import {type PrefixKeys} from './types/ts-types';
 import {type AlertsApi, type SessionApi, SessionEventType, type SessionState, SessionStore} from './session';
 import {AuthConfig, type AuthenticationData, WindowPlaybackMode} from './common';
@@ -369,6 +369,16 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
               this._session.updateWindowPlaybackMode(WindowPlaybackMode.ATTACHED);
 
               completeAttaching();
+
+              // TODO @dzivkovic - TEMPORARY HACK FOR CHROMING - THIS WILL BE REMOVED
+              if (!this._player.mainMedia) {
+                setTimeout(() => {
+                  this._player.loadSlate(SlateType.BLACK).subscribe(() => {
+                    this._player.unloadMainMedia()
+                  })
+                })
+              }
+
               nextCompleteObserver(observer);
             },
             error: (err) => {
@@ -503,10 +513,11 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
 
     this._attachingBreaker.destroy();
     this._detachingBreaker.destroy();
-    this._detachedBreaker.destroy();
 
     this._player.destroy();
     this.tryDisconnectDetached();
+
+    this._detachedBreaker.destroy();
 
     this._chroming.destroy();
     this._chromingDetached?.destroy();

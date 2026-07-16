@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {from, map, type Observable} from 'rxjs';
+import {catchError, forkJoin, from, map, of, switchMap, type Observable} from 'rxjs';
 import {
   DefaultMarker,
   DefaultObservation,
@@ -38,6 +38,40 @@ import {OmpError} from '../../types';
 import {UrlUtil} from '../../util/url-util';
 import type {TrackLoadOptions} from '../track-load-options';
 import {StringUtil} from '../../util/string-util';
+import {BlobUtil} from '../../util/blob-util';
+
+function parseXywh(url: string): {x: number; y: number; w: number; h: number} | null {
+  const match = url.match(/#xywh=(\d+),(\d+),(\d+),(\d+)$/);
+  if (!match) return null;
+  return {x: +match[1]!, y: +match[2]!, w: +match[3]!, h: +match[4]!};
+}
+
+function extractSpriteRegion(imageUrl: string, xywh: {x: number; y: number; w: number; h: number}): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = xywh.w;
+      canvas.height = xywh.h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Failed to get canvas 2D context'));
+        return;
+      }
+      ctx.drawImage(img, xywh.x, xywh.y, xywh.w, xywh.h, 0, 0, xywh.w, xywh.h);
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('Failed to extract sprite region to blob'));
+          return;
+        }
+        resolve(BlobUtil.createObjectURL(blob));
+      });
+    };
+    img.onerror = () => reject(new Error(`Failed to load spritesheet image: ${imageUrl}`));
+    img.src = imageUrl;
+  });
+}
 
 type TimedItemOf<T> = T extends TimedItemsTrack<infer I, any> ? I : never;
 
@@ -107,6 +141,61 @@ export class ThumbnailTrackVttFetcher extends VttTimedItemsFetcher<ThumbnailTrac
         index: index,
       },
     });
+  }
+
+  override fetchTimedItems(): Observable<void> {
+    if (!this._track.source) {
+      throw new OmpError(`Source not set`);
+    }
+
+    this._vttUrl = SourceUtil.resolveUrlFromSource(this._track.source);
+    const vttUrl = this._vttUrl;
+
+    return from(httpGetText(vttUrl, AuthConfig.createRequestInit(vttUrl, AuthConfig.authentication))).pipe(
+      switchMap((vttText) => {
+        const parsed = VttUtil.parseVtt(vttText);
+        this._omakaseVttVersion = parsed.omakaseVttVersion;
+
+        if (parsed.cues.length === 0) {
+          this._track.areTimedItemsFetched = true;
+          return of(void 0);
+        }
+
+        const vttRootUrl = vttUrl.substring(0, vttUrl.lastIndexOf('/'));
+
+        const thumbnailObservables = parsed.cues.map((cue, index) => {
+          const fullUrl = vttRootUrl ? UrlUtil.absolutizeUrl(vttRootUrl, cue.text) : cue.text;
+          const xywh = parseXywh(fullUrl);
+
+          const temporal: TimedItemTemporal = {
+            type: TimedItemTemporalType.SPAN,
+            start: `${cue.start}`,
+            end: `${cue.end}`,
+          };
+          const data = {index};
+
+          if (!xywh) {
+            return of<DefaultThumbnail | null>(new DefaultThumbnail({url: fullUrl, temporal, data}));
+          }
+
+          const baseUrl = fullUrl.substring(0, fullUrl.indexOf('#xywh='));
+          return from(extractSpriteRegion(baseUrl, xywh)).pipe(
+            map((blobUrl) => new DefaultThumbnail({url: blobUrl, temporal, data}) as DefaultThumbnail | null),
+            catchError((err) => {
+              console.error(`ThumbnailTrackVttFetcher: failed to extract sprite region for cue ${index}:`, err);
+              return of<DefaultThumbnail | null>(null);
+            })
+          );
+        });
+
+        return forkJoin(thumbnailObservables).pipe(
+          map((thumbnails) => {
+            this._track.addTimedItems(thumbnails.filter((t): t is DefaultThumbnail => t !== null));
+            this._track.areTimedItemsFetched = true;
+          })
+        );
+      })
+    );
   }
 }
 

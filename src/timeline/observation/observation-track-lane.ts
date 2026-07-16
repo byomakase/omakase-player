@@ -17,7 +17,7 @@
 import {TIMELINE_LANE_CONFIG_DEFAULT, type TimelineLaneStyle} from '../timeline-lane';
 import {type ObservationState, type ObservationTrack} from '../../media';
 import {type StyledElementWithId} from '../../ui';
-import {debounceTime, merge, Subject, takeUntil} from 'rxjs';
+import {debounceTime, filter, merge, Subject, takeUntil} from 'rxjs';
 import type {Position} from '../model';
 import {type TimelineImpl} from '../timeline';
 import type {PlayerApi} from '../../player';
@@ -26,7 +26,6 @@ import {KonvaFactory} from '../konva/konva-factory';
 import Konva from 'konva';
 import {type ObservationTrackView} from './observation-track-view';
 import {freeObserver} from '../../util/rxjs-util';
-import Decimal from 'decimal.js';
 import {BaseMultiTrackLane, type MultiTrackLaneTrackConfig, type TrackLaneConfig} from '../track-lane';
 import type {DownsampleOptions} from '../../track';
 
@@ -83,6 +82,7 @@ export abstract class BaseObservationTrackLane<C extends ObservationTrackLaneCon
 
     merge(this._onTimelineZoom$, this._onTimelineScroll$, this._onSettleLayout$)
       .pipe(debounceTime(100))
+      .pipe(filter(() => !this.isMinimized()))
       .pipe(takeUntil(this._destroyBreaker.observer))
       .subscribe(() => {
         this.render();
@@ -160,12 +160,6 @@ export abstract class BaseObservationTrackLane<C extends ObservationTrackLaneCon
     // }
   }
 
-  /**
-   * @internal
-   * @param timeline
-   * @param player
-   * @param ompProvider
-   */
   override prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider) {
     super.prepareForTimeline(timeline, player, ompProvider);
 
@@ -215,7 +209,6 @@ export abstract class BaseObservationTrackLane<C extends ObservationTrackLaneCon
   protected settleLayout() {
     super.settleLayout();
 
-    let timelineTimecodedDimension = this._timeline!.getTimecodedFloatingDimension();
     let timecodedRect = this.getTimecodedRect();
 
     this._timecodedGroup!.setAttrs({
@@ -227,16 +220,11 @@ export abstract class BaseObservationTrackLane<C extends ObservationTrackLaneCon
       node!.width(timecodedRect.width);
     });
 
-    let clipFactorHeightDecimal = new Decimal(timelineTimecodedDimension.height).div(this.style.height);
-    let clipFactorYDecimal = new Decimal(timecodedRect.height).div(this.style.height);
-
-    let clipX = -this._timeline!.style.rightPaneClipPadding;
-    let clipY = timecodedRect.y - timecodedRect.y * clipFactorYDecimal.toNumber();
-    let clipWidth = timecodedRect.width + this._timeline!.style.rightPaneClipPadding * 2;
-    let clipHeight = clipFactorHeightDecimal.mul(timecodedRect.height).toNumber();
+    const clipX = -this._timeline!.style.rightPaneClipPadding;
+    const clipWidth = timecodedRect.width + this._timeline!.style.rightPaneClipPadding * 2;
 
     this._timecodedGroup!.clipFunc((ctx) => {
-      ctx.rect(clipX, clipY, clipWidth, clipHeight);
+      ctx.rect(clipX, 0, clipWidth, timecodedRect.height);
     });
 
     this._onSettleLayout$.next();

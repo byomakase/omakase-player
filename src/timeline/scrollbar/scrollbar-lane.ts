@@ -89,12 +89,6 @@ export class ScrollbarLane extends BaseTimelineLane<ScrollbarLaneConfig, Scrollb
     };
   }
 
-  /**
-   * @internal
-   * @param timeline
-   * @param player
-   * @param ompProvider
-   */
   override prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider) {
     super.prepareForTimeline(timeline, player, ompProvider);
 

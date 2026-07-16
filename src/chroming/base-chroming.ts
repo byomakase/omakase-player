@@ -54,7 +54,7 @@ import {
 } from './chroming-marker-bar';
 import {MarkerTrack, type MarkerState, type MarkerTrackState, type MarkerUpdateableAttrs} from '../media/marker-track';
 import type {TrackRepositoryEvent} from '../repository';
-import {ThumbnailTrack, type Track, TrackType} from '../media';
+import {ThumbnailTrack, type ThumbnailTrackState, type Track, TrackType} from '../media';
 import {StampDomController} from './themes/stamp-dom';
 import {OmakaseDomController} from './themes/omakase-dom';
 import type {Ui} from '../ui';
@@ -163,10 +163,10 @@ export abstract class BaseChroming implements ChromingInternalApi, Destroyable {
     }
   }
 
-  protected handleThumbnailTrackEvent(event: TimedItemsTrackEvent, track: ThumbnailTrack) {
+  protected handleThumbnailTrackEvent(event: TimedItemsTrackEvent, trackState: ThumbnailTrackState) {
     if (event.data.trackId === this._thumbnailTrackId) {
       if (event.type === TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_UPDATED) {
-        this._domController.setThumbnailTrack(track.state);
+        this._domController.setThumbnailTrack(trackState);
       } else if (event.type === TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_DELETED) {
         this._domController.setThumbnailTrack(undefined);
       }
@@ -571,7 +571,7 @@ export abstract class BaseChroming implements ChromingInternalApi, Destroyable {
     });
   }
 
-  setFloatingTimeVisible(visible: boolean): Observable<void> {
+  setFloatingTimeVisible(visible: boolean, interactive?: boolean, openEditMode?: boolean): Observable<void> {
     return passiveObservable((observer) => {
       if (
         this._domController instanceof DefaultDomController ||
@@ -579,7 +579,10 @@ export abstract class BaseChroming implements ChromingInternalApi, Destroyable {
         this._domController instanceof StampDomController ||
         this._domController instanceof OmakaseDomController
       ) {
-        this._domController.setFloatingTimeVisible(visible);
+        if (!visible && interactive) {
+          throw new Error('Unsupported mode');
+        }
+        this._domController.setFloatingTimeVisible(visible, interactive, openEditMode);
         nextCompleteObserver(observer);
       } else {
         errorCompleteObserver(observer, `Current theme doesn't support invoked method`);

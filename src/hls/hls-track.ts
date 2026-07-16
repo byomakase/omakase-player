@@ -150,6 +150,7 @@ export class HlsTextTrack extends BaseTextTrack<TextCue, BaseTextCue, HlsTextTra
       ...args,
       label: args.mediaPlaylist.name,
       kind: HlsTextTrack.resolveKind(args.mediaPlaylist.type),
+      default: args.mediaPlaylist.default
     });
 
     this._mediaPlaylist = args.mediaPlaylist;

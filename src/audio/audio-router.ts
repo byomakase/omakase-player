@@ -21,15 +21,7 @@ import {ObserverBreaker} from '../common/observer-breaker';
 import {freeObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
 import {Validators} from '../common/validators';
 import {AudioUtil} from './audio-util';
-import type {
-  AudioEffect,
-  AudioEffectFilter,
-  AudioEffectGraphState,
-  AudioEffectParam,
-  AudioEffectState,
-  RoutedAudioEffect,
-  RoutedAudioEffectGraph,
-} from './audio-effects';
+import type {AudioEffect, AudioEffectFilter, AudioEffectGraphState, AudioEffectParam, AudioEffectState, RoutedAudioEffect, RoutedAudioEffectGraph} from './audio-effects';
 import {AudioEffectGraph} from './audio-effects';
 import {isNonNullable} from '../util/util-functions';
 import {OmpError} from '../types';
@@ -39,8 +31,9 @@ export enum AudioRouterEventType {
   AUDIO_ROUTER_LOADING = 'AUDIO_ROUTER_LOADING',
   AUDIO_ROUTER_LOADED = 'AUDIO_ROUTER_LOADED',
   AUDIO_ROUTER_LOAD_ERROR = 'AUDIO_ROUTER_LOAD_ERROR',
-
   AUDIO_ROUTER_CHANGE = 'AUDIO_ROUTER_CHANGE',
+  AUDIO_ROUTER_SOLO_CHANGE = 'AUDIO_ROUTER_SOLO_CHANGE',
+  AUDIO_ROUTER_MUTE_CHANGE = 'AUDIO_ROUTER_MUTE_CHANGE',
 }
 
 export interface AudioRouterEventData extends Serializable {
@@ -51,12 +44,21 @@ export interface AudioRouterErrorEventData extends AudioRouterEventData {
   error: string | undefined;
 }
 
+export interface AudioRouterSoloChangeEventData extends Serializable {
+  state: Omit<AudioRouterSoloMuteState, 'muted' | 'inputMutedConnections'>;
+}
+
+export interface AudioRouterMuteChangeEventData extends Serializable {
+  state: Omit<AudioRouterSoloMuteState, 'soloed' | 'inputSoloedConnections' | 'unsoloConnections'>;
+}
+
 export type AudioRouterEventTypeDataMap = {
   [AudioRouterEventType.AUDIO_ROUTER_LOADING]: AudioRouterEventData;
   [AudioRouterEventType.AUDIO_ROUTER_LOADED]: AudioRouterEventData;
   [AudioRouterEventType.AUDIO_ROUTER_LOAD_ERROR]: AudioRouterErrorEventData;
-
   [AudioRouterEventType.AUDIO_ROUTER_CHANGE]: AudioRouterEventData;
+  [AudioRouterEventType.AUDIO_ROUTER_SOLO_CHANGE]: AudioRouterSoloChangeEventData;
+  [AudioRouterEventType.AUDIO_ROUTER_MUTE_CHANGE]: AudioRouterMuteChangeEventData;
 };
 
 export type AudioRouterEvent = {
@@ -90,9 +92,14 @@ export interface AudioRouterState {
   initialRoutingConnections: AudioRoutingConnection[];
 
   routingRoutes: AudioRoutingRoute[];
+
+  /**
+   * Per-input solo/mute state
+   */
+  soloMuteStates: AudioRouterSoloMuteState[];
 }
 
-export interface AudioRouterInputSoloMuteState {
+export interface AudioRouterSoloMuteState {
   /**
    * Audio router input number
    */
@@ -233,8 +240,10 @@ export class AudioRouter implements InternalAudioRouterApi {
 
   protected _defaultRoutingConnections: AudioRoutingConnection[];
 
-  protected _soloMuteStatesByInput: Map<number, AudioRouterInputSoloMuteState>;
-  protected _lastChangedSoloMuteStateInput: number | undefined;
+  protected _soloMuteStatesByInput: Map<number, AudioRouterSoloMuteState>;
+
+  protected _suppressMuteEvents = false;
+  protected _muteEventAllowedInputs: Set<number> | undefined = void 0;
 
   protected _connectionsByInputOutput: Map<number, Map<number, AudioRoutingConnection>>;
   protected _effectGraphsByInputOutput: Map<number, Map<number, AudioEffectGraph | undefined>>;
@@ -244,7 +253,7 @@ export class AudioRouter implements InternalAudioRouterApi {
   constructor(audioOutputNode: AudioNode, inputsNumber: number, outputsNumberResolver?: (maxChannelCount: number) => number) {
     this._loadStage = new OpStage();
 
-    this._soloMuteStatesByInput = new Map<number, AudioRouterInputSoloMuteState>();
+    this._soloMuteStatesByInput = new Map<number, AudioRouterSoloMuteState>();
 
     let maxChannelCount = OmakaseAudioContextProvider.audioContext.destination.maxChannelCount; // the maximum number of channels that this hardware is capable of supporting
 
@@ -269,6 +278,8 @@ export class AudioRouter implements InternalAudioRouterApi {
 
       let inputEffectsGraphsByOutput: Map<number, AudioEffectGraph> = new Map<number, AudioEffectGraph>();
       this._effectGraphsByInputOutput.set(inputNumber, inputEffectsGraphsByOutput);
+
+      this._soloMuteStatesByInput.set(inputNumber, this.createInitialSoloMuteState(inputNumber));
 
       for (let outputNumber = 0; outputNumber < this._outputsNumber; outputNumber++) {
         connectionsByOutput.set(outputNumber, {
@@ -358,9 +369,17 @@ export class AudioRouter implements InternalAudioRouterApi {
     return passiveObservable((observer) => {
       connections.forEach((p) => this._updateConnection(p, false));
 
-      this._updateInputsSoloMuteState();
-
+      // router change event precedes solo/mute events when the change originates from connections
       this.emitChange();
+
+      // only channels whose connections were actually updated may emit mute events -> previously muted channels do not emit again
+      this._muteEventAllowedInputs = new Set(connections.map((connection) => connection.path.input));
+      try {
+        this._updateInputsSoloMuteState();
+      } finally {
+        this._muteEventAllowedInputs = void 0;
+      }
+
       nextCompleteObserver(observer);
     });
   }
@@ -416,6 +435,41 @@ export class AudioRouter implements InternalAudioRouterApi {
     });
   }
 
+  protected emitSoloChange(inputNumber: number) {
+    const state = this._soloMuteStatesByInput.get(inputNumber);
+    if (!state) {
+      return;
+    }
+    this._onEvent$.next({
+      type: AudioRouterEventType.AUDIO_ROUTER_SOLO_CHANGE,
+      data: {
+        state: {
+          inputNumber: state.inputNumber,
+          soloed: state.soloed,
+          inputSoloedConnections: state.inputSoloedConnections,
+          unsoloConnections: state.unsoloConnections,
+        },
+      },
+    });
+  }
+
+  protected emitMuteChange(inputNumber: number) {
+    const state = this._soloMuteStatesByInput.get(inputNumber);
+    if (!state) {
+      return;
+    }
+    this._onEvent$.next({
+      type: AudioRouterEventType.AUDIO_ROUTER_MUTE_CHANGE,
+      data: {
+        state: {
+          inputNumber: state.inputNumber,
+          muted: state.muted,
+          inputMutedConnections: state.inputMutedConnections,
+        },
+      },
+    });
+  }
+
   getDefaultRoutingConnections(): AudioRoutingConnection[] {
     return this._defaultRoutingConnections;
   }
@@ -450,23 +504,51 @@ export class AudioRouter implements InternalAudioRouterApi {
       routingConnections: this.getRoutingConnections(),
       routingRoutes: routingRoutes,
       initialRoutingConnections: this._defaultRoutingConnections,
+      soloMuteStates: [...this._soloMuteStatesByInput.values()].map((soloMuteState) => ({
+        inputNumber: soloMuteState.inputNumber,
+        soloed: soloMuteState.soloed,
+        muted: soloMuteState.muted,
+        inputSoloedConnections: [...soloMuteState.inputSoloedConnections],
+        inputMutedConnections: [...soloMuteState.inputMutedConnections],
+        unsoloConnections: [...soloMuteState.unsoloConnections],
+      })),
     };
   }
 
   restoreState(state: AudioRouterState): Observable<void> {
-    return passiveObservable((observer) => {
+    return new Observable<void>((observer) => {
+      if (state.initialRoutingConnections?.length === this._inputsNumber * this._outputsNumber) {
+        this._defaultRoutingConnections = state.initialRoutingConnections;
+      }
+
+      state.soloMuteStates?.forEach((soloMuteState) => {
+        if (this._soloMuteStatesByInput.has(soloMuteState.inputNumber)) {
+          this._soloMuteStatesByInput.set(soloMuteState.inputNumber, {
+            inputNumber: soloMuteState.inputNumber,
+            soloed: soloMuteState.soloed,
+            muted: soloMuteState.muted,
+            inputSoloedConnections: soloMuteState.inputSoloedConnections ?? [],
+            inputMutedConnections: soloMuteState.inputMutedConnections ?? [],
+            unsoloConnections: soloMuteState.unsoloConnections ?? [],
+          });
+        }
+      });
+
       const os$ = state.routingRoutes.map((routingRoute) => {
         return new Observable((observer) => {
-          this._updateConnection({path: routingRoute.path, connected: routingRoute.connection.connected});
+          this._updateConnection({path: routingRoute.path, connected: routingRoute.connection.connected}, false);
           if (routingRoute.audioEffectGraphState) {
-            this._setEffectGraph(routingRoute.audioEffectGraphState, routingRoute.path.input, routingRoute.path.output).subscribe(() => nextCompleteObserver(observer));
+            this._setEffectGraph(routingRoute.audioEffectGraphState, routingRoute.path.input, routingRoute.path.output, false).subscribe(() => nextCompleteObserver(observer));
           } else {
             nextCompleteObserver(observer);
           }
         });
       });
       if (os$.length) {
-        forkJoin(os$).subscribe(() => nextCompleteObserver(observer));
+        forkJoin(os$).subscribe(() => {
+          this.emitChange();
+          nextCompleteObserver(observer);
+        });
       } else {
         nextCompleteObserver(observer);
       }
@@ -480,10 +562,16 @@ export class AudioRouter implements InternalAudioRouterApi {
       }
 
       const inputState = this._soloMuteStatesByInput.get(routingPath.input);
-      if (inputState && inputState.soloed) {
-        this._unsolo(routingPath.input);
-      } else {
-        this._solo(routingPath.input);
+      // mute events must not fire during solo
+      this._suppressMuteEvents = true;
+      try {
+        if (inputState && inputState.soloed) {
+          this._unsolo(routingPath.input);
+        } else {
+          this._solo(routingPath.input);
+        }
+      } finally {
+        this._suppressMuteEvents = false;
       }
 
       this.emitChange();
@@ -492,6 +580,7 @@ export class AudioRouter implements InternalAudioRouterApi {
   }
 
   protected _solo(inputNumber: number) {
+    const wasTargetMuted = this._soloMuteStatesByInput.get(inputNumber)?.muted ?? false;
     const inputSoloedState = [...this._soloMuteStatesByInput.values()].find((inputState) => inputState.soloed);
     if (inputSoloedState) {
       this._unsolo(inputSoloedState.inputNumber, false);
@@ -536,31 +625,36 @@ export class AudioRouter implements InternalAudioRouterApi {
         } else {
           inputState.muted = false;
         }
-
-        this._lastChangedSoloMuteStateInput = inputState.inputNumber;
-        // this.emitChange();
       }
     });
 
-    this.setInputSoloMuteState(
+    this.setInputSoloMuteState(inputNumber, {
       inputNumber,
-      {
-        inputNumber,
-        inputSoloedConnections,
-        inputMutedConnections: this._soloMuteStatesByInput.get(inputNumber)?.inputMutedConnections ?? [],
-        unsoloConnections: routingConnections.filter((_, index) => index !== inputNumber).flatMap((p) => [...p.values()]),
-        soloed: true,
-        muted: false,
-      },
-      false
-    );
+      inputSoloedConnections,
+      inputMutedConnections: this._soloMuteStatesByInput.get(inputNumber)?.inputMutedConnections ?? [],
+      unsoloConnections: routingConnections.filter((_, index) => index !== inputNumber).flatMap((p) => [...p.values()]),
+      soloed: true,
+      muted: false,
+    });
+
+    // the soloed channel itself, if it was muted, is now unmuted - emit that even though side-effect mutes are suppressed during solo
+    if (wasTargetMuted) {
+      this.emitMuteChange(inputNumber);
+    }
   }
 
-  private setInputSoloMuteState(inputNumber: number, state: AudioRouterInputSoloMuteState, emitEvent: boolean = true) {
-    this._lastChangedSoloMuteStateInput = inputNumber;
+  private setInputSoloMuteState(inputNumber: number, state: AudioRouterSoloMuteState) {
+    const previousState = this._soloMuteStatesByInput.get(inputNumber);
+    const previousSoloed = previousState?.soloed ?? false;
+    const previousMuted = previousState?.muted ?? false;
+
     this._soloMuteStatesByInput.set(inputNumber, state);
-    if (emitEvent) {
-      this.emitChange();
+
+    if (previousSoloed !== state.soloed) {
+      this.emitSoloChange(inputNumber);
+    }
+    if (previousMuted !== state.muted && !this._suppressMuteEvents && (this._muteEventAllowedInputs === void 0 || this._muteEventAllowedInputs.has(inputNumber))) {
+      this.emitMuteChange(inputNumber);
     }
   }
 
@@ -641,15 +735,11 @@ export class AudioRouter implements InternalAudioRouterApi {
       this._updateConnection(newConnection, false);
     });
 
-    this.setInputSoloMuteState(
-      inputNumber,
-      {
-        ...this.createInitialSoloMuteState(inputNumber),
-        inputMutedConnections,
-        muted: true,
-      },
-      false
-    );
+    this.setInputSoloMuteState(inputNumber, {
+      ...this.createInitialSoloMuteState(inputNumber),
+      inputMutedConnections,
+      muted: true,
+    });
   }
 
   protected _unmute(inputNumber: number) {
@@ -671,24 +761,18 @@ export class AudioRouter implements InternalAudioRouterApi {
       }
     }
 
-    this.resetInputSoloMuteState(inputNumber, false);
+    this.resetInputSoloMuteState(inputNumber);
   }
 
   private getInitialRoutingConnectionsForInput(inputNumber: number): AudioRoutingConnection[] {
     return this._defaultRoutingConnections.filter((p) => p.path.input === inputNumber);
   }
 
-  resetInputsSoloMuteState(): void {
-    [...Array(this._inputsNumber).keys()].forEach((inputNumber) => {
-      this.resetInputSoloMuteState(inputNumber);
-    });
+  protected resetInputSoloMuteState(inputNumber: number): void {
+    this.setInputSoloMuteState(inputNumber, this.createInitialSoloMuteState(inputNumber));
   }
 
-  protected resetInputSoloMuteState(inputNumber: number, emitEvent: boolean = true): void {
-    this.setInputSoloMuteState(inputNumber, this.createInitialSoloMuteState(inputNumber), emitEvent);
-  }
-
-  protected createInitialSoloMuteState(inputNumber: number): AudioRouterInputSoloMuteState {
+  protected createInitialSoloMuteState(inputNumber: number): AudioRouterSoloMuteState {
     return {
       inputNumber,
       inputSoloedConnections: [],
@@ -699,6 +783,11 @@ export class AudioRouter implements InternalAudioRouterApi {
     };
   }
 
+  /**
+   * Recomputes solo/mute states after connections change.
+   * Solo/mute change events are emitted inline via {@link setInputSoloMuteState}/{@link resetInputSoloMuteState}.
+   * A soloed input can only be unsoloed here (never soloed), when both mute and solo can be emitted, mute(s) are emitted.
+   */
   protected _updateInputsSoloMuteState() {
     const routingConnections = this.getRoutingConnections();
     let inputSoloedState = [...this._soloMuteStatesByInput.values()].find((inputState) => inputState.soloed);
@@ -976,6 +1065,12 @@ export class AudioRouter implements InternalAudioRouterApi {
     this._destroyBreaker.destroy();
 
     freeObserver(this._onEvent$);
+
+    // make state return "zeroed" object
+    // @matko - due to local proxies possibly fetching state before media unloads, but detach receiving them later than reload request
+    this._inputsNumber = 0;
+    this._outputsNumber = 0;
+    this._defaultRoutingConnections = [];
 
     try {
       this._channelSplitterNode.disconnect();

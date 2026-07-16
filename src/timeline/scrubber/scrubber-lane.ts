@@ -114,12 +114,6 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
     };
   }
 
-  /**
-   * @internal
-   * @param timeline
-   * @param player
-   * @param ompProvider
-   */
   override prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider) {
     super.prepareForTimeline(timeline, player, ompProvider);
 

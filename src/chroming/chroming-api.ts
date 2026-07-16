@@ -168,9 +168,12 @@ export interface ChromingCommonApi {
   clearHelpMenuGroups(): Observable<void>;
 
   /**
-   * Shows or hides the floating time display in the player chroming.
+   * Shows or hides and optionally sets the interactivity of the floating time display in the player chroming.
+   * @param visible is floating time shown
+   * @param isInteractive sets timeInteractive property in theme config to true/false
+   * @param openEditMode if true, changes the time to edit mode and focuses the input (only applicable if timeInteractive property is true)
    */
-  setFloatingTimeVisible(visible: boolean): Observable<void>;
+  setFloatingTimeVisible(visible: boolean, isInteractive?: boolean, openEditMode?: boolean): Observable<void>;
 
   /**
    * Changes the time format used in the player chroming.
@@ -577,6 +580,11 @@ export interface DefaultThemeConfigUpdateableAttrs {
   timeFormat: ChromingTimeFormat;
 
   /**
+   * Specifies if the time control can be used for seeking. It is activated by double clicking the time.
+   */
+  timeInteractive: boolean;
+
+  /**
    * Shared configuration for floating and control bar VU meters
    */
   vuMeterConfig: Partial<ChromingVuMeterConfig>;
@@ -649,6 +657,11 @@ export interface StampThemeConfigUpdateableAttrs {
    * Specifies which time format will be used in the timer control
    */
   timeFormat: ChromingTimeFormat;
+
+  /**
+   * Specifies if the time control can be used for seeking. It is activated by double clicking the time.
+   */
+  timeInteractive: boolean;
 }
 
 export interface StampThemeConfig extends StampThemeConfigUpdateableAttrs {
@@ -705,6 +718,11 @@ export interface AudioThemeConfigUpdateableAttrs {
    * Specifies which time format will be used in the timer control
    */
   timeFormat: ChromingTimeFormat;
+
+  /**
+   * Specifies if the time control can be used for seeking. It is activated by double clicking the time.
+   */
+  timeInteractive: boolean;
 }
 
 export interface AudioThemeConfig extends AudioThemeConfigUpdateableAttrs {
@@ -744,6 +762,11 @@ export interface OmakaseThemeConfigUpdateableAttrs {
    * Specifies which time format will be used in the timer control
    */
   timeFormat: ChromingTimeFormat;
+
+  /**
+   * Specifies if the time control can be used for seeking. It is activated by double clicking the time.
+   */
+  timeInteractive: boolean;
 
   /**
    * Specifies control bar visibility
@@ -813,6 +836,11 @@ export interface ChromelessThemeConfigUpdateableAttrs {
    * Specifies which time format will be used in the timer control
    */
   timeFormat: ChromingTimeFormat;
+
+  /**
+   * Specifies if the time control can be used for seeking. It is activated by double clicking the time.
+   */
+  timeInteractive: boolean;
 }
 
 export interface ChromelessThemeConfig extends ChromelessThemeConfigUpdateableAttrs {
@@ -840,8 +868,7 @@ export type ChromingThemeConfigMap = {
   [ChromingTheme.CUSTOM]: CustomThemeConfig;
 };
 
-export const DEFAULT_CHROMING_VU_METER_STYLE: ChromingVuMeterStyle = {
-  levelColors: DEFAULT_VU_METER_STYLE.levelColors,
+export const DEFAULT_CHROMING_VU_METER_STYLE: Omit<ChromingVuMeterStyle, 'levelColors'> = {
   levelBackground: DEFAULT_VU_METER_STYLE.levelBackground,
 };
 
@@ -881,6 +908,7 @@ export const DEFAULT_PLAYER_CHROMING_CONFIG: DefaultThemeConfig = {
   playbackRates: [0.25, 0.5, 0.75, 1, 2, 4, 8],
   trackSelectorAutoClose: true,
   timeFormat: ChromingTimeFormat.TIMECODE,
+  timeInteractive: false,
   vuMeterConfig: DEFAULT_CHROMING_VU_METER_CONFIG,
   isFloatingVuMeterVisible: true,
 };
@@ -888,6 +916,7 @@ export const DEFAULT_PLAYER_CHROMING_CONFIG: DefaultThemeConfig = {
 export const DEFAULT_STAMP_PLAYER_CHROMING_CONFIG: StampThemeConfig = {
   stampScale: StampThemeScale.FIT,
   timeFormat: ChromingTimeFormat.MEDIA_TIME,
+  timeInteractive: false,
   floatingControls: [StampThemeFloatingControl.PROGRESS_BAR, StampThemeFloatingControl.ACTION_ICONS, StampThemeFloatingControl.TIME, StampThemeFloatingControl.PLAYBACK_CONTROLS],
   alwaysOnFloatingControls: [StampThemeFloatingControl.PROGRESS_BAR, StampThemeFloatingControl.ACTION_ICONS, StampThemeFloatingControl.TIME],
   actionIcons: [StampThemeActionIcon.AUDIO_TOGGLE],
@@ -906,10 +935,12 @@ export const DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG: AudioThemeConfig = {
     fillColors: ['#F79433', '#88B840', '#CC6984', '#662D91'],
   },
   timeFormat: ChromingTimeFormat.TIMECODE,
+  timeInteractive: false,
 };
 
 export const DEFAULT_OMAKASE_PLAYER_CHROMING_CONFIG: OmakaseThemeConfig = {
   timeFormat: ChromingTimeFormat.TIMECODE,
+  timeInteractive: false,
   progressBarPosition: OmakaseProgressBarPosition.OVER_VIDEO,
   controlBarVisibility: OmakaseControlBarVisibility.ENABLED,
   controlBar: [
@@ -936,6 +967,7 @@ export const DEFAULT_OMAKASE_PLAYER_CHROMING_CONFIG: OmakaseThemeConfig = {
 
 export const DEFAULT_CHROMELESS_PLAYER_CHROMING_CONFIG: ChromelessThemeConfig = {
   timeFormat: ChromingTimeFormat.TIMECODE,
+  timeInteractive: false,
   floatingControls: [],
   alwaysOnFloatingControls: [ChromelessThemeFloatingControl.TIME],
 };

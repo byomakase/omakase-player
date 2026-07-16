@@ -30,6 +30,7 @@ import {
   type TextTrackState,
   type ThumbnailState,
   ThumbnailTrack,
+  type ThumbnailTrackState,
   type TimedItemsTrackEvent,
   TimedItemsTrackEventType,
   type Track,
@@ -139,7 +140,7 @@ export class ChromingLocal extends BaseChroming implements ChromingLocalApi {
         if (track?.trackType === TrackType.MARKER_TRACK) {
           this.handleMarkerTrackEvent(event);
         } else if (track?.trackType === TrackType.THUMBNAIL_TRACK) {
-          this.handleThumbnailTrackEvent(event, track as ThumbnailTrack);
+          this.handleThumbnailTrackEvent(event, track.state as ThumbnailTrackState);
         }
       });
 

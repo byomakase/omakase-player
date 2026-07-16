@@ -443,13 +443,7 @@ export class MarkerTrackLane extends BaseMultiTrackLane<MarkerTrackLaneConfig, M
     this._markerViewComponents.forEach((markerViewComponent) => markerViewComponent.refreshTimelinePosition());
   }
 
-  /**
-   * @internal
-   * @param timeline
-   * @param player
-   * @param ompProvider
-   */
-  prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider) {
+  override prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider) {
     super.prepareForTimeline(timeline, player, ompProvider);
 
     let timecodedDimension = this._timeline!.getTimecodedFloatingDimension();

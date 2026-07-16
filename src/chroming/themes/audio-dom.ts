@@ -28,6 +28,7 @@ import {
   type OmakaseDropdownListItem,
 } from '../chroming-api';
 import {ChromingDomClasses, ChromingDomController, type ChromingDomConfig, type ChromingTextTrack} from '../chroming-dom';
+import {OmakaseTimeDisplayAttributes} from '../components/omakase-time-display';
 import type {
   OmakaseAudioVisualization,
   OmakaseDropdown,
@@ -127,7 +128,7 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
     }
 
     if (this._timeRange) {
-      ChromingUtil.connectResizeObserver(this._timeRange);
+      ChromingUtil.observeElementResize(this._timeRange);
       ChromingUtil.onResize$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe(() => {
         if (this._markerBar && this._timeRange) {
           this._markerBar.containerSize = this._timeRange.rangeWidth;
@@ -193,7 +194,7 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
             <div class="end-container">
                 <slot name="end-container"></slot>
                 <div class="${this.getControlBarClass(AudioThemeControl.TIME)} ${ChromingDomClasses.timecodeWrapper}">
-                  <omakase-time-display format="${this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard'}" ${this._themeConfig.timeFormat === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME ? 'countdown ' : ''} class="${ChromingDomClasses.mediaChromeCurrentTimecode}"></omakase-time-display>
+                  <omakase-time-display ${this._themeConfig.timeInteractive ? 'editable' : ''} format="${this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard'}" ${this._themeConfig.timeFormat === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME ? 'countdown ' : ''} class="${ChromingDomClasses.mediaChromeCurrentTimecode}"></omakase-time-display>
                 </div>
                 <div>
                     <omakase-dropdown-toggle class="${this.getControlBarClass(AudioThemeControl.ROUTER)}" id="audio-router-toggle-${this._config.playerHtmlElementId}" dropdown="audio-router-${this._config.playerHtmlElementId}">
@@ -250,6 +251,7 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
       controlBarVisibility: themeConfig.controlBarVisibility ?? this._themeConfig.controlBarVisibility,
       controlBar: themeConfig.controlBar ?? this._themeConfig.controlBar,
       timeFormat: themeConfig.timeFormat ?? this._themeConfig.timeFormat,
+      timeInteractive: themeConfig.timeInteractive ?? this._themeConfig.timeInteractive,
       playerSize: themeConfig.playerSize ?? this._themeConfig.playerSize,
     };
     if (this._themeConfig.playerSize === AudioPlayerSize.COMPACT) {
@@ -263,6 +265,7 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
     }
     this.updateControlBar();
     this.updateTimeFormat();
+    this.updateTimeInteractivity();
   }
 
   setThumbnailTrack(track: ThumbnailTrackState | undefined) {
@@ -431,18 +434,29 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
 
   updateTimeFormat() {
     if (this._currentTimecode) {
-      this._currentTimecode.format = this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard';
+      this._currentTimecode.displayFormat = this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard';
       this._currentTimecode.isCountdown = this._themeConfig.timeFormat === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME;
       this._currentTimecode.updateTime();
     }
     if (this._previewTimecode) {
-      this._previewTimecode.format = this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard';
+      this._previewTimecode.displayFormat = this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard';
       this._previewTimecode.isCountdown = this._themeConfig.timeFormat === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME;
+    }
+  }
+
+  updateTimeInteractivity() {
+    if (this._currentTimecode) {
+      if (this._themeConfig.timeInteractive) {
+        this._currentTimecode.setAttribute(OmakaseTimeDisplayAttributes.EDITABLE, '');
+      } else {
+        this._currentTimecode.removeAttribute(OmakaseTimeDisplayAttributes.EDITABLE);
+      }
     }
   }
 
   setTextTracks(tracks: ChromingTextTrack[]): void {
     super.setTextTracks(tracks);
+    this.updateOffOption();
     this.updateCaptionClasses();
   }
 
@@ -453,15 +467,18 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
         tracks.map((track) => ({value: track.trackId, active: track.active && track.shown}))
       );
     }
+    this.updateOffOption();
   }
 
   addTextTrack(track: ChromingTextTrack): void {
     super.addTextTrack(track);
+    this.updateOffOption();
     this.updateCaptionClasses();
   }
 
   removeTextTrack(trackId: TextTrackState['id']): void {
     super.removeTextTrack(trackId);
+    this.updateOffOption();
     this.updateCaptionClasses();
   }
 
@@ -474,20 +491,31 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
   }
 
   protected setDropdownOptions(dropdownList: OmakaseDropdownList, options: OmakaseDropdownListItem[]) {
-    dropdownList.setOptions([{label: 'Off', value: '', active: !options.find((o) => o.active)}, ...options]);
+    dropdownList.setOptions([{label: 'Off', value: '', active: this.getOffOptionActive()}, ...options]);
   }
 
   protected updateDropdownOptions(dropdownList: OmakaseDropdownList, options: Partial<OmakaseDropdownListItem>[]) {
-    dropdownList.updateOptions([{value: '', active: !options.find((o) => o.active)}, ...options]);
+    dropdownList.updateOptions([{value: '', active: this.getOffOptionActive()}, ...options]);
   }
 
   private updateCaptionClasses() {
     const textOptions = this._textDropdownList!.options;
     this.setTrackSelectorEnabled(textOptions.length > 1);
-    if (textOptions.find((textOption) => textOption.active && textOption.value)) {
-      this._mediaControllerElement.classList.add(ChromingDomClasses.mediaControllerWithCaptions);
+  }
+
+  private updateOffOption() {
+    for (const dropdownList of this._textDropdownLists) {
+      dropdownList.updateOptions([{value: '', active: this.getOffOptionActive()}]);
+    }
+  }
+
+  private getOffOptionActive() {
+    if (this._playerInternal) {
+      const textTracks = [...this._playerInternal.textInternal.state.tracks[PlayerTextType.MAIN], ...this._playerInternal.textInternal.state.tracks[PlayerTextType.SIDECAR]];
+      const activeTrack = textTracks.find((track) => track.shown && track.active);
+      return !activeTrack;
     } else {
-      this._mediaControllerElement.classList.remove(ChromingDomClasses.mediaControllerWithCaptions);
+      return true;
     }
   }
 

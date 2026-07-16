@@ -25,6 +25,7 @@ export const RouterVisualizationClasses = {
   TOGGLE: 'omakase-router-toggle',
   TOGGLE_INNER: 'omakase-router-toggle-inner',
   ACTIVE: 'active',
+  DISABLED: 'disabled',
   MULTIPLE: 'omakase-router-multiple',
   ALIGN_RIGHT: 'align-right',
   ALIGN_LEFT: 'align-left',
@@ -61,6 +62,7 @@ export abstract class RouterVisualizationBase extends HTMLElement {
   protected _wrapperElement!: HTMLDivElement;
   protected _destroyBreaker = new ObserverBreaker();
   protected _mainTrackSetterBreaker = new ObserverBreaker();
+  protected _sidecarTrackSetterBreaker = new ObserverBreaker();
   protected _detachAttachBreaker = new ObserverBreaker();
   protected _providedMainTrackConfig?: MainTrackConfig | undefined;
   protected _mainTrackConfig?: MainTrackConfig | undefined;
@@ -122,6 +124,7 @@ export abstract class RouterVisualizationBase extends HTMLElement {
   destroy(): void {
     this._destroyBreaker.destroy();
     this._mainTrackSetterBreaker.destroy();
+    this._sidecarTrackSetterBreaker.destroy();
     this._detachAttachBreaker.destroy();
   }
 

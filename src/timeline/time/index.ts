@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {OmakaseTimecodeEdit} from './omakase-timecode-edit';
+import {OmakaseTimeEdit} from './omakase-time-edit';
 
-if (!globalThis.customElements.get('omakase-timecode-edit')) {
-  globalThis.customElements.define('omakase-timecode-edit', OmakaseTimecodeEdit);
+if (!globalThis.customElements.get('omakase-time-edit')) {
+  globalThis.customElements.define('omakase-time-edit', OmakaseTimeEdit);
 }
 
-export {OmakaseTimecodeEdit};
+export {OmakaseTimeEdit};

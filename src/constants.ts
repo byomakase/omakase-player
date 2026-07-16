@@ -36,6 +36,7 @@ export const REMOTING = {
     heartbeatInterval: 1000,
     heartbeatTimeout: 2000,
     maxHeartbeatTimeouts: 3,
+    windowCloseCountdownSeconds: 10,
   },
 } as const;
 

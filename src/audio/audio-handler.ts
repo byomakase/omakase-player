@@ -17,39 +17,14 @@
 import {combineLatest, filter, forkJoin, Observable, Subject, take, takeUntil} from 'rxjs';
 import {Validators} from '../common/validators';
 import type {Destroyable, Serializable} from '../common/capabilities';
-import {
-  emptyPassiveObservable,
-  errorCompleteObserver,
-  freeObserver,
-  nextCompleteObserver,
-  passiveObservable
-} from '../util/rxjs-util';
+import {emptyPassiveObservable, errorCompleteObserver, freeObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
 import {ObserverBreaker} from '../common/observer-breaker';
 import {AUDIO_DEFAULTS} from '../constants';
-import {
-  AudioPeakProcessor,
-  type AudioPeakProcessorApi,
-  type AudioPeakProcessorEvent,
-  AudioPeakProcessorMeterStandard,
-  type AudioPeakProcessorState
-} from './audio-peak-processor';
+import {AudioPeakProcessor, type AudioPeakProcessorApi, type AudioPeakProcessorEvent, AudioPeakProcessorMeterStandard, type AudioPeakProcessorState} from './audio-peak-processor';
 import {AudioRouter, type AudioRouterApi, AudioRouterEventType, type AudioRouterState} from './audio-router';
 import {isNullOrUndefined} from '../util/util-functions';
-import type {
-  AudioEffectFilter,
-  AudioEffectGraphConnection,
-  AudioEffectGraphSpecificConnection,
-  AudioEffectGraphState,
-  AudioEffectParam,
-  AudioEffectState
-} from './audio-effects';
-import {
-  type AudioEffectEvent,
-  AudioEffectEventType,
-  AudioEffectGraph,
-  type AudioEffectParameterChange,
-  type AudioEffectsApi
-} from './audio-effects';
+import type {AudioEffectFilter, AudioEffectGraphConnection, AudioEffectGraphSpecificConnection, AudioEffectGraphState, AudioEffectParam, AudioEffectState} from './audio-effects';
+import {type AudioEffectEvent, AudioEffectEventType, AudioEffectGraph, type AudioEffectParameterChange, type AudioEffectsApi} from './audio-effects';
 import {OmpError} from '../types';
 import {OmakaseAudioContextProvider} from '../omakase-audio-context-provider';
 
@@ -349,9 +324,9 @@ export abstract class BasePlayerAudioHandler implements PlayerAudioHandlerApi {
   destroy() {
     this._destroyBreaker.destroy();
 
-    this._audioRouter?.destroy();
-    this._audioRouter = undefined
-    
+    const audioRouter = this._audioRouter;
+    this._audioRouter = undefined;
+    audioRouter?.destroy();
 
     freeObserver(this._onEvent$);
     freeObserver(this._onPeakProcessorEvent$);
@@ -756,7 +731,7 @@ export class GainPlayerAudioHandler extends BasePlayerAudioHandler {
   }
 
   restoreState(state: PlayerAudioHandlerState): Observable<void> {
-    return passiveObservable((observer) => {
+    return new Observable<void>((observer) => {
       let success = () => {
         this.emitChangeEvent();
         nextCompleteObserver(observer);
@@ -934,7 +909,7 @@ export class DisabledMediaElementSourcePlayerAudioHandler extends BasePlayerAudi
   }
 
   restoreState(state: DisabledMediaElementSourcePlayerAudioHandlerState): Observable<void> {
-    return passiveObservable((observer) => {
+    return new Observable<void>((observer) => {
       this._setEnabled(state.enabled, false).subscribe(() => {
         this._providedMuted = state.providedMuted;
         this._providedVolume = state.providedVolume;
@@ -1012,7 +987,7 @@ export class DebugPlayerAudioHandler extends BasePlayerAudioHandler {
   protected _setVolumeMuted(volume: number, muted: boolean): void {}
 
   restoreState(state: PlayerAudioHandlerState): Observable<void> {
-    return passiveObservable((observer) => {
+    return new Observable<void>((observer) => {
       nextCompleteObserver(observer);
     });
   }

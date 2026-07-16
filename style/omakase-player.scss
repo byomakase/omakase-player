@@ -17,6 +17,8 @@
 @use 'player-chroming/dropdown';
 @use 'player-chroming/audio-router';
 @use 'player-chroming/vu-meter';
+@use 'player-chroming/inline-edit';
+@use 'player-chroming/timecode-edit';
 @use 'timeline';
 
 @font-face {
@@ -47,12 +49,10 @@
   container-type: inline-size;
   width: var(--omakase-player-width, 100%);
   height: var(--omakase-player-height);
+  aspect-ratio: var(--omakase-player-aspect-ratio);
   min-width: 200px;
   position: relative;
-  --aspect-ratio: var(--omakase-player-aspect-ratio, var(--video-aspect-ratio, 16 / 9));
-  aspect-ratio: var(--aspect-ratio);
   vertical-align: top;
-  background-color: black;
 
   &.omakase-media-theme-stamp {
     display: contents;

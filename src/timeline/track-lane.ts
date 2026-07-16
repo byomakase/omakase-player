@@ -100,12 +100,6 @@ export abstract class BaseTrackLane<C extends TrackLaneConfig, S extends Timelin
     }
   }
 
-  /**
-   * @internal
-   * @param timeline
-   * @param player
-   * @param ompProvider
-   */
   override prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider): void {
     super.prepareForTimeline(timeline, player, ompProvider);
     this._trackRepository = ompProvider.trackRepository;
@@ -285,12 +279,6 @@ export abstract class BaseMultiTrackLane<C extends MultiTrackLaneConfig, S exten
     }
   }
 
-  /**
-   * @internal
-   * @param timeline
-   * @param player
-   * @param ompProvider
-   */
   override prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider): void {
     super.prepareForTimeline(timeline, player, ompProvider);
     this._trackRepository = ompProvider.trackRepository;

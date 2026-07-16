@@ -24,7 +24,7 @@ import {ObserverBreaker} from '../common/observer-breaker';
 import type {Source, SourceState} from '../source';
 import type {FileFormatType, OmpEventGroup} from '../common';
 import {objectHasOwnProperty} from '../util/util-functions';
-import type {WithOptionalPartial} from '../types/ts-types';
+import type {TrackLoadOptions} from '../track';
 
 /**
  * Discriminator for the different kinds of tracks that can be associated with a {@link MainMedia}.
@@ -58,10 +58,13 @@ export enum TrackEventType {
 export interface TrackState extends MediaEntityState {
   trackType: Track['trackType'];
   source: SourceState | undefined;
+  sourceFileFormatType?: FileFormatType | undefined;
+
+  loadOptions: TrackLoadOptions | undefined;
   loadStage: OpStageState;
+
   relations: RelationState[];
 
-  sourceFileFormatType?: FileFormatType | undefined;
   label: string | undefined;
   customAttrs: Record<string, any> | undefined;
 }
@@ -163,6 +166,8 @@ export interface BaseTrackArgs extends BaseMediaEntityArgs {
   relations?: Relation[] | undefined;
   /** The resolved file format of the source. */
   sourceFileFormatType?: FileFormatType | undefined;
+  /** Load options used when the track was requested. */
+  loadOptions?: TrackLoadOptions | undefined;
   /** Human-readable label for this track. */
   label?: string | undefined;
   /** Custom arbitrary attributes for this track */
@@ -188,6 +193,9 @@ export abstract class BaseTrack<S extends TrackState, E extends OmpEventGroup<an
   protected abstract readonly _trackType: TrackType;
   protected readonly _source: Source | undefined;
   protected readonly _sourceFileFormatType?: FileFormatType | undefined;
+
+  protected readonly _loadOptions: TrackLoadOptions | undefined;
+
   protected readonly _relations: Relation[];
   protected readonly _loadStage: OpStage;
 
@@ -200,6 +208,9 @@ export abstract class BaseTrack<S extends TrackState, E extends OmpEventGroup<an
     super(args);
 
     this._source = args?.source;
+
+    this._loadOptions = args?.loadOptions;
+
     this._loadStage = args?.loadStage ? args.loadStage : new OpStage();
     this._relations = [];
 
@@ -249,6 +260,7 @@ export abstract class BaseTrack<S extends TrackState, E extends OmpEventGroup<an
       ...super._getState(),
       source: this.source?.state,
       sourceFileFormatType: this._sourceFileFormatType,
+      loadOptions: this._loadOptions,
       trackType: this._trackType,
       relations: this.relations.map((p) => p.state),
       loadStage: this.loadStage.state,

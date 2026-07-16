@@ -85,6 +85,7 @@ export class OmakaseRouterVisualization extends RouterVisualizationBase {
 
       o$.subscribe({
         next: () => {
+          this.setAudioRouterDefaultMatrix(track, config.defaultMatrix);
           this._wireSidecarTrackEvents(track.trackId!);
           for (const track of this._sidecarTracks!) {
             this.renderTrack(track, track.trackId);

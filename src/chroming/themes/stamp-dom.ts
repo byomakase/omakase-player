@@ -30,6 +30,8 @@ import {ChromingDomClasses, ChromingDomController, type ChromingDomConfig} from 
 import type {OmakaseFullscreenButton, OmakaseMuteButton, OmakaseTimeDisplay, OmakaseTimeRange} from '../components';
 import type {ThumbnailTrackState} from '../../media/thumbnail-track';
 import {PlayerEventType} from '../../player';
+import {OmakaseTimeDisplayAttributes} from '../components/omakase-time-display';
+import {isNullOrUndefined} from '../../util/util-functions';
 
 export class StampDomController extends ChromingDomController<ChromingTheme.STAMP> {
   protected _themeConfig: StampThemeConfig;
@@ -80,7 +82,7 @@ export class StampDomController extends ChromingDomController<ChromingTheme.STAM
       } class="${ChromingDomClasses.timecodeWrapper} omakase-timecode-format-${this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard'} omakase-timecode-${
         this._themeConfig.floatingControls?.includes(StampThemeFloatingControl.PROGRESS_BAR) ? 'with' : 'without'
       }-progress-bar">
-            <omakase-time-display class="${ChromingDomClasses.mediaChromeCurrentTimecode}" showduration format="${this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard'}" ${this._themeConfig.timeFormat === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME ? 'countdown ' : ''}></omakase-time-display>
+            <omakase-time-display ${this._themeConfig.timeInteractive ? 'editable' : ''} class="${ChromingDomClasses.mediaChromeCurrentTimecode}" showduration format="${this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard'}" ${this._themeConfig.timeFormat === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME ? 'countdown ' : ''}></omakase-time-display>
         </div>`
     );
 
@@ -147,11 +149,13 @@ export class StampDomController extends ChromingDomController<ChromingTheme.STAM
       ...this._themeConfig,
       stampScale: themeConfig.stampScale ?? this._themeConfig.stampScale,
       timeFormat: themeConfig.timeFormat ?? this._themeConfig.timeFormat,
+      timeInteractive: themeConfig.timeInteractive ?? this._themeConfig.timeInteractive,
       floatingControls: (themeConfig as StampThemeConfig).floatingControls ?? this._themeConfig.floatingControls,
     };
     this.setStampScale(this._themeConfig.stampScale);
     this.updateFloatingTime();
     this.updateTimeFormat();
+    this.updateTimeInteractivity();
   }
 
   setStampScale(stampScale: StampThemeScale | undefined) {
@@ -162,7 +166,7 @@ export class StampDomController extends ChromingDomController<ChromingTheme.STAM
     }
   }
 
-  setFloatingTimeVisible(visible: boolean): void {
+  setFloatingTimeVisible(visible: boolean, timeInteractive?: boolean, openEditMode?: boolean): void {
     const floatingControls = this._themeConfig.floatingControls;
     if (visible && floatingControls && !floatingControls.includes(StampThemeFloatingControl.TIME)) {
       floatingControls.push(StampThemeFloatingControl.TIME);
@@ -171,7 +175,31 @@ export class StampDomController extends ChromingDomController<ChromingTheme.STAM
       floatingControls.splice(floatingControls.indexOf(StampThemeFloatingControl.TIME), 1);
       this.updateFloatingTime();
     }
+    if (!isNullOrUndefined(timeInteractive)) {
+      this._themeConfig.timeInteractive = timeInteractive;
+      this.updateTimeInteractivity();
+    }
+    if (!isNullOrUndefined(openEditMode) && this._currentTimecode) {
+      if (openEditMode) {
+        if (!this._themeConfig.timeInteractive) {
+          throw new Error('Unsupported mode');
+        }
+        this._currentTimecode.enableEditMode();
+      } else {
+        this._currentTimecode.disableEditMode();
+      }
+    }
     this._themeConfigChange$.next();
+  }
+
+  updateTimeInteractivity() {
+    if (this._currentTimecode) {
+      if (this._themeConfig.timeInteractive) {
+        this._currentTimecode.setAttribute(OmakaseTimeDisplayAttributes.EDITABLE, '');
+      } else {
+        this._currentTimecode.removeAttribute(OmakaseTimeDisplayAttributes.EDITABLE);
+      }
+    }
   }
 
   isFloatingTimeVisible(): boolean {
@@ -230,7 +258,7 @@ export class StampDomController extends ChromingDomController<ChromingTheme.STAM
 
   updateTimeFormat() {
     if (this._currentTimecode) {
-      this._currentTimecode.format = this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard';
+      this._currentTimecode.displayFormat = this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard';
       this._currentTimecode.isCountdown = this._themeConfig.timeFormat === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME;
       this._currentTimecode.updateTime();
     }

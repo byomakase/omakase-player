@@ -181,8 +181,8 @@ export class ChromingDetachedProxy extends BaseMessageChannelProxy<ChromingDetac
     return this.messageChannel.sendAndWaitForResponse('restoreChromingSession', [chromingSession]);
   }
 
-  setFloatingTimeVisible(visible: boolean): Observable<void> {
-    return this.messageChannel.sendAndWaitForResponse('setFloatingTimeVisible', [visible]);
+  setFloatingTimeVisible(visible: boolean, interactive?: boolean, openEditMode?: boolean): Observable<void> {
+    return this.messageChannel.sendAndWaitForResponse('setFloatingTimeVisible', [visible, interactive, openEditMode]);
   }
 
   setFloatingVuMeterVisible(visible: boolean): Observable<void> {

@@ -117,7 +117,7 @@ export class ChromingDetached extends BaseChroming implements ChromingDetachedAp
               if (track?.trackType === TrackType.MARKER_TRACK) {
                 this.handleMarkerTrackEvent(event);
               } else if (track?.trackType === TrackType.THUMBNAIL_TRACK) {
-                this.handleThumbnailTrackEvent(event, track as ThumbnailTrack);
+                this.handleThumbnailTrackEvent(event, track as ThumbnailTrackState);
               }
             });
         }
@@ -299,10 +299,7 @@ export class ChromingDetached extends BaseChroming implements ChromingDetachedAp
                   if (markerTrack && markerTrack.trackType === TrackType.MARKER_TRACK) {
                     const existingHandler = this._markerTrackHandlers[ChromingTrackDestination.MARKER_BARS].find((h) => h.id === chromingTrackState.id);
                     if (existingHandler) {
-                      existingHandler
-                        .addTrack(markerTrack as MarkerTrack)
-                        .pipe(takeUntil(this._destroyBreaker.observer))
-                        .subscribe();
+                      existingHandler.addTrack(markerTrack.id).pipe(takeUntil(this._destroyBreaker.observer)).subscribe();
                     } else {
                       this.createMarkerElementAndHandler([markerTrack as MarkerTrackState], ChromingTrackDestination.MARKER_BARS, {id: chromingTrackState.id}, chromingTrackState, this._uiProxy);
                     }

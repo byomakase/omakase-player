@@ -357,6 +357,11 @@ export class MarkerListComponent extends HTMLElement {
       rowElement = rowElement.previousSibling as HTMLElement;
     }
     rowElement!.setAttribute(MarkerListAttributes.MARKER_ID, item.markerId);
+    if (item.style.highlightMarker) {
+      rowElement.classList.add(MarkerListDomClasses.ACTIVE);
+    } else {
+      rowElement.classList.remove(MarkerListDomClasses.ACTIVE);
+    }
     rowElement!.onclick = () => {
       this._onEvent$.next({type: MarkerListEventType.MARKER_LIST_ITEM_CLICK, data: {item: item.state, trackId: item.track.id}});
     };
@@ -377,6 +382,10 @@ export class MarkerListComponent extends HTMLElement {
     const thumbnailSlot = element.querySelector<HTMLImageElement>('[slot="thumbnail"]');
     if (thumbnailSlot) {
       thumbnailSlot.src = item.thumbnailUrl ?? '';
+      thumbnailSlot.style.display = 'none';
+      thumbnailSlot.onload = () => {
+        thumbnailSlot.style.removeProperty('display');
+      };
     }
     const nameSlot = element.querySelector<HTMLElement>('[slot="name"]');
     if (nameSlot) {
@@ -409,7 +418,7 @@ export class MarkerListComponent extends HTMLElement {
       if (this._timeEditable && !item.track.areTimedItemsLocked) {
         startSlot.innerHTML = `<omakase-inline-edit></omakase-inline-edit>`;
         const inlineEdit = startSlot.querySelector<OmakaseInlineEdit>('omakase-inline-edit');
-        inlineEdit!.setTimecode!(timecode, this._player!.player, undefined, item.numEnd);
+        inlineEdit!.setTimecode!(timecode, this._player!.player, MediaTemporalFormat.TIMECODE, undefined, item.numEnd);
         inlineEdit!.onEdit$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe((start) => {
           let startTime = Decimal(this._player!.player.convertTime(start, MediaTemporalFormat.TIMECODE, MediaTemporalFormat.SECONDS)).plus(PLAYER_CONTROLLER_DEFAULTS.frameDurationSpillOverCorrection);
           if (item.markerType === MarkerType.MOMENT_MARKER) {
@@ -429,7 +438,7 @@ export class MarkerListComponent extends HTMLElement {
         endSlot.innerHTML = `<omakase-inline-edit></omakase-inline-edit>`;
         const inlineEdit = endSlot.querySelector<OmakaseInlineEdit>('omakase-inline-edit');
 
-        inlineEdit!.setTimecode!(timecode, this._player!.player, item.numStart);
+        inlineEdit!.setTimecode!(timecode, this._player!.player, MediaTemporalFormat.TIMECODE, item.numStart);
         inlineEdit!.onEdit$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe((end) => {
           let endTime = Decimal(this._player!.player.convertTime(end, MediaTemporalFormat.TIMECODE, MediaTemporalFormat.SECONDS)).plus(PLAYER_CONTROLLER_DEFAULTS.frameDurationSpillOverCorrection);
           item.track.updateTimedItem(item.markerId, {temporal: {type: TimedItemTemporalType.SPAN, start: item.start!, end: endTime.toString()}});
@@ -450,6 +459,14 @@ export class MarkerListComponent extends HTMLElement {
         durationSlot.innerHTML = this._player!.player.convertTime(timeDiff.toNumber(), MediaTemporalFormat.SECONDS, MediaTemporalFormat.TIMECODE)!;
       } else {
         durationSlot.innerHTML = '';
+      }
+    }
+    const deleteSlot = element.querySelector<HTMLElement>('[slot="remove"]');
+    if (deleteSlot) {
+      if (item.style.canDeleteMarker) {
+        deleteSlot.style.removeProperty('display');
+      } else {
+        deleteSlot.style.setProperty('display', 'none');
       }
     }
     const customSlots = element.querySelectorAll<HTMLElement>('[slot^="data"]');

@@ -15,7 +15,7 @@
  */
 
 export * from './timeline-style';
-export type {TimelineLaneStyle, TimelineLaneConfig, TimelineLaneComponentConfig} from './timeline-lane';
+export type {BaseTimelineLane, TimelineLaneStyle, TimelineLaneConfig, TimelineLaneComponentConfig} from './timeline-lane';
 export type {TextLabelStyle} from './timeline-component';
 export * from './timeline-component';
 export * from './scrubber';
@@ -23,7 +23,7 @@ export * from './marker';
 export * from './thumbnail';
 export * from './scrollbar';
 export * from './timeline';
-export * from './timecode';
+export * from './time';
 export * from './timeline-api';
 export * from './timeline-lane-api';
 export type {Position, Dimension, RectMeasurement, Horizontals, Verticals} from './model';

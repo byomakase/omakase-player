@@ -77,6 +77,8 @@ export interface PlayerTrackState {
   trackId: TrackState['id'];
 
   loadStage: OpStageState;
+
+  loadOptions?: PlayerTrackLoadOptions | undefined;
 }
 
 export abstract class BasePlayerTrack<T extends TrackState, S extends PlayerTrackState, L extends PlayerTrackLoadOptions> implements PlayerTrack<T, S>, Destroyable {
@@ -95,7 +97,7 @@ export abstract class BasePlayerTrack<T extends TrackState, S extends PlayerTrac
     this._loadOptions = loadOptions;
   }
 
-  protected abstract getState(): S;
+  protected abstract _getState(): S;
 
   loadStart() {
     this._loadStage.start();
@@ -141,7 +143,7 @@ export abstract class BasePlayerTrack<T extends TrackState, S extends PlayerTrac
   }
 
   get state(): S {
-    return this.getState();
+    return this._getState();
   }
 
   get onEvent$(): Observable<PlayerTrackEvent> {

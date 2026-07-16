@@ -27,18 +27,18 @@ export enum SlateType {
 }
 
 export class SlateProvider implements Destroyable {
-  private _slates: Map<SlateType, Mp4MainMedia> = new Map();
+  private _slateUrls: Map<SlateType, string> = new Map();
 
   constructor() {
-    this._slates.set(SlateType.BLACK, this.createSlate(UrlUtil.formatBase64Url('video/mp4', blackMp4Base64)));
+    this._slateUrls.set(SlateType.BLACK, UrlUtil.formatBase64Url('video/mp4', blackMp4Base64));
   }
 
   getMainMedia(slateType: SlateType): MainMedia {
-    if (this._slates.has(slateType)) {
-      return this._slates.get(slateType)!;
-    } else {
+    const url = this._slateUrls.get(slateType);
+    if (url === undefined) {
       throw new Error(`Slate ${slateType} not found`);
     }
+    return this.createSlate(url);
   }
 
   private createSlate(url: string): Mp4MainMedia {
@@ -51,7 +51,7 @@ export class SlateProvider implements Destroyable {
   }
 
   destroy() {
-    this._slates.clear();
+    this._slateUrls.clear();
 
     // @ts-ignore
     SlateProvider._instance = void 0;

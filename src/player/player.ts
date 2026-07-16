@@ -16,13 +16,13 @@
 
 import {COMMON_PLAYER_CONFIG_DEFAULT, type PlayerApi, type PlayerConfig, type PlayerDetachedApi, type PlayerInternalApi, type PlayerLocalApi} from './player-api';
 import type {Destroyable} from '../common/capabilities';
-import {catchError, filter, finalize, map, Observable, of, Subject, switchMap, takeUntil} from 'rxjs';
+import {filter, finalize, map, Observable, of, Subject, switchMap, takeUntil} from 'rxjs';
 import {type PlayerEvent} from './player-event';
-import {MainMediaRepository, MainMediaRepositoryEventType, TrackRepository, TrackRepositoryEventType} from '../repository';
+import {MainMediaRepository, MainMediaRepositoryEventType, TrackRepository} from '../repository';
 import {ObserverBreaker} from '../common/observer-breaker';
 import {errorCompleteObserver, freeObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
-import {FileFormatType, MediaTemporalFormat, type MediaTemporalFormatValueMap, WindowPlaybackMode} from '../common';
-import {type MainMedia, type MainMediaLoadOptions, MainMediaType, SlateProvider, SlateType, TimeReference, type Track, TrackType} from '../media';
+import {MediaTemporalFormat, type MediaTemporalFormatValueMap, WindowPlaybackMode} from '../common';
+import {type MainMedia, type MainMediaLoadOptions, MainMediaType, SlateProvider, SlateType, type Track, TrackType} from '../media';
 import {PlayerLocal} from './player-local';
 import {type MediaLoadRequest, type PlayerSession, SessionStore} from '../session';
 import {type PlayerAudioApi} from './player-audio-api';
@@ -41,7 +41,6 @@ import type {BufferedTimeRange} from '../dom/dom-media-element';
 import {AlertsManager} from '../session/alert';
 import type {TrackLoadOptions, TrackLoadOptionsMap} from '../track';
 import {TrackUtils} from '../track/track-utils';
-import {type TimecodeModel} from '../common/timecode';
 import {TextTrackUtil} from '../text/text-track-util';
 import type {OmpProvider} from '../omp-provider';
 import type {VideoKeyframe, VideoKeyframeOptions} from '../tools/keyframe-extractor';
@@ -197,7 +196,11 @@ export class Player implements PlayerApi, Destroyable {
   }
 
   get isMainMediaLoaded(): boolean {
-    return this.getPlayerInternalOrFail().isMainMediaLoaded;
+    try {
+      return this.getPlayerInternalOrFail().isMainMediaLoaded;
+    } catch (e) {
+      return false;
+    }
   }
 
   loadMainMedia(url: string, loadOptions?: MainMediaLoadOptions | undefined): Observable<MainMedia> {
@@ -312,7 +315,7 @@ export class Player implements PlayerApi, Destroyable {
               .pipe(map(() => track));
           }),
           finalize(() => {
-            if (mediaLoadRequest.playerMainMediaId && (mediaLoadRequest.playerMainMediaId !== this.mainMedia?.id)) {
+            if (mediaLoadRequest.playerMainMediaId && mediaLoadRequest.playerMainMediaId !== this.mainMedia?.id) {
               this.removeSidecarTrack(mediaLoadRequest.mediaId!).subscribe(() => {
                 console.debug(`Removed sidecar track with id=${mediaLoadRequest.mediaId} as it was not loaded in the main media with id=${mediaLoadRequest.playerMainMediaId}`);
               });
@@ -321,7 +324,9 @@ export class Player implements PlayerApi, Destroyable {
           })
         )
         .subscribe({
-          next: (track) => {nextCompleteObserver(observer, track)},
+          next: (track) => {
+            nextCompleteObserver(observer, track);
+          },
           error: (error) => {
             this._alertsManager.error(error);
             errorCompleteObserver(observer, error);

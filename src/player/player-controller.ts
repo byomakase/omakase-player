@@ -981,11 +981,8 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
    * @param syncConditions
    */
   private seekFromCurrentTimeAndSync(timeOffset: number, syncConditions: SyncConditions = {}): Observable<boolean> {
-    let currentTime = this._getCurrentVideoTime();
     // sync to frame start
-    if (syncConditions.currentTime) {
-      currentTime = syncConditions.currentTime;
-    }
+    let currentTime = syncConditions.currentTime ? syncConditions.currentTime : this._getCurrentVideoTime();
     let newTime = Decimal.add(currentTime, timeOffset).toNumber();
     return this.seekTimeAndSync(newTime, syncConditions);
   }
@@ -1217,7 +1214,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
                   // video is playing, no need to sync frames if video is near the end, it will be done in onPause finalization when video finally ends
                 }
               } else {
-                this.syncVideoFrames(syncConditions).subscribe((result) => {
+                this.syncVideoFrames(syncConditions).subscribe(() => {
                   finalizeSeek();
                   finishSeek();
                 });

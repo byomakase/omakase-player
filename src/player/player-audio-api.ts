@@ -47,19 +47,30 @@ export interface PlayerAudioState {
 }
 
 export enum PlayerAudioEventType {
+  /** Audio sub-system is initializing for the current media (start of setup). */
   PLAYER_AUDIO_LOADING = 'PLAYER_AUDIO_LOADING',
+  /** Audio sub-system is ready; all embedded tracks have been registered. */
   PLAYER_AUDIO_LOADED = 'PLAYER_AUDIO_LOADED',
+  /** Audio sub-system failed to initialize. */
   PLAYER_AUDIO_LOAD_ERROR = 'PLAYER_AUDIO_LOAD_ERROR',
+  /** Audio sub-system has been torn down and all tracks removed. */
   PLAYER_AUDIO_UNLOADED = 'PLAYER_AUDIO_UNLOADED',
 
+  /** Fired after any change in audio sub-system (catch-all change notification). */
   PLAYER_AUDIO_CHANGE = 'PLAYER_AUDIO_CHANGE',
+  /** The active audio track has changed. */
   PLAYER_AUDIO_TRACK_SWITCHED = 'PLAYER_AUDIO_TRACK_SWITCHED',
 
+  /** An individual sidecar audio track has started loading. */
   PLAYER_AUDIO_TRACK_LOADING = 'PLAYER_AUDIO_TRACK_LOADING',
+  /** An individual sidecar audio track finished loading successfully. */
   PLAYER_AUDIO_TRACK_LOADED = 'PLAYER_AUDIO_TRACK_LOADED',
+  /** An individual sidecar audio track failed to load. */
   PLAYER_AUDIO_TRACK_LOAD_ERROR = 'PLAYER_AUDIO_TRACK_LOAD_ERROR',
+  /** An individual sidecar audio track has been unloaded. */
   PLAYER_AUDIO_TRACK_UNLOADED = 'PLAYER_AUDIO_TRACK_UNLOADED',
 
+  /** The set of tracks requesting media buffering has changed (a track started or stopped requesting buffering). */
   PLAYER_AUDIO_TRACKS_REQUESTING_BUFFERING_CHANGE = 'PLAYER_AUDIO_TRACKS_REQUESTING_BUFFERING_CHANGE',
 }
 

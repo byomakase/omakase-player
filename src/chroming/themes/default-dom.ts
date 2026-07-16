@@ -51,6 +51,8 @@ import {PlayerTextType} from '../../player/player-text';
 import type {ThumbnailTrackState} from '../../media/thumbnail-track';
 import {ChromingUtil} from '../chroming-util';
 import {VuMeterTheme} from '../../vu-meter';
+import {OmakaseTimeDisplayAttributes} from '../components/omakase-time-display';
+import {isNullOrUndefined} from '../../util/util-functions';
 
 export class DefaultDomController extends ChromingDomController<ChromingTheme.DEFAULT> {
   protected _themeConfig: DefaultThemeConfig;
@@ -180,7 +182,7 @@ export class DefaultDomController extends ChromingDomController<ChromingTheme.DE
     }
 
     if (this._timeRange) {
-      ChromingUtil.connectResizeObserver(this._timeRange);
+      ChromingUtil.observeElementResize(this._timeRange);
       ChromingUtil.onResize$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe(() => {
         if (this._markerBar && this._timeRange) {
           this._markerBar.containerSize = this._timeRange.rangeWidth;
@@ -212,7 +214,7 @@ export class DefaultDomController extends ChromingDomController<ChromingTheme.DE
   protected addControlBar(): string {
     return `
         <div class="${ChromingDomClasses.timecodeContainer} d-none" slot="middle-chrome" noautohide>
-            <omakase-time-display format="${this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard'}" ${this._themeConfig.timeFormat === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME ? 'countdown ' : ''} class="${ChromingDomClasses.mediaChromeCurrentTimecode}"></omakase-time-display>
+            <omakase-time-display ${this._themeConfig.timeInteractive ? 'editable' : ''} format="${this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard'}" ${this._themeConfig.timeFormat === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME ? 'countdown ' : ''} class="${ChromingDomClasses.mediaChromeCurrentTimecode}"></omakase-time-display>
         </div>
         <media-control-bar class="upper-control-bar">
             <omakase-marker-bars></omakase-marker-bars>
@@ -334,6 +336,7 @@ export class DefaultDomController extends ChromingDomController<ChromingTheme.DE
       controlBar: themeConfig.controlBar ?? this._themeConfig.controlBar,
       floatingControls: (themeConfig as DefaultThemeConfig).floatingControls ?? this._themeConfig.floatingControls,
       timeFormat: themeConfig.timeFormat ?? this._themeConfig.timeFormat,
+      timeInteractive: themeConfig.timeInteractive ?? this._themeConfig.timeInteractive,
       vuMeterConfig: {
         ...this._themeConfig.vuMeterConfig,
         ...(themeConfig.vuMeterConfig ?? this._themeConfig.vuMeterConfig),
@@ -364,6 +367,7 @@ export class DefaultDomController extends ChromingDomController<ChromingTheme.DE
     this.updateControlBar();
     this.updateFloatingTime();
     this.updateTimeFormat();
+    this.updateTimeInteractivity();
     this.updateAudioTrackRouters();
   }
 
@@ -377,17 +381,27 @@ export class DefaultDomController extends ChromingDomController<ChromingTheme.DE
 
   updateTimeFormat() {
     if (this._currentTimecode) {
-      this._currentTimecode.format = this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard';
+      this._currentTimecode.displayFormat = this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard';
       this._currentTimecode.isCountdown = this._themeConfig.timeFormat === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME;
       this._currentTimecode.updateTime();
     }
     if (this._previewTimecode) {
-      this._previewTimecode.format = this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard';
+      this._previewTimecode.displayFormat = this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard';
       this._previewTimecode.isCountdown = this._themeConfig.timeFormat === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME;
     }
   }
 
-  setFloatingTimeVisible(visible: boolean): void {
+  updateTimeInteractivity() {
+    if (this._currentTimecode) {
+      if (this._themeConfig.timeInteractive) {
+        this._currentTimecode.setAttribute(OmakaseTimeDisplayAttributes.EDITABLE, '');
+      } else {
+        this._currentTimecode.removeAttribute(OmakaseTimeDisplayAttributes.EDITABLE);
+      }
+    }
+  }
+
+  setFloatingTimeVisible(visible: boolean, timeInteractive?: boolean, openEditMode?: boolean): void {
     const floatingControls = this._themeConfig.floatingControls;
     if (visible && floatingControls && !floatingControls.includes(DefaultThemeFloatingControl.TIME)) {
       floatingControls.push(DefaultThemeFloatingControl.TIME);
@@ -395,6 +409,20 @@ export class DefaultDomController extends ChromingDomController<ChromingTheme.DE
     } else if (!visible && floatingControls && floatingControls.includes(DefaultThemeFloatingControl.TIME)) {
       floatingControls.splice(floatingControls.indexOf(DefaultThemeFloatingControl.TIME), 1);
       this.updateFloatingTime();
+    }
+    if (!isNullOrUndefined(timeInteractive)) {
+      this._themeConfig.timeInteractive = timeInteractive;
+      this.updateTimeInteractivity();
+    }
+    if (!isNullOrUndefined(openEditMode) && this._currentTimecode) {
+      if (openEditMode) {
+        if (!this._themeConfig.timeInteractive) {
+          throw new Error('Unsupported mode');
+        }
+        this._currentTimecode.enableEditMode();
+      } else {
+        this._currentTimecode.disableEditMode();
+      }
     }
     this._themeConfigChange$.next();
   }

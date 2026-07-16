@@ -20,7 +20,7 @@ import type {Destroyable} from '../../common/capabilities';
 import Decimal from 'decimal.js';
 import {TEMPORAL} from '../../constants';
 
-export type InterpolationStrategy = 'max' | 'min' | 'avg';
+export type InterpolationStrategy = 'max' | 'min' | 'avg' | 'max_abs' | 'min_abs';
 
 export interface InterpolationOptions {
   /**

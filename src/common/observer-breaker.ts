@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {type Observable, Subject} from 'rxjs';
+import {EMPTY, type Observable, Subject} from 'rxjs';
 import {errorCompleteObserver, nextCompleteObserver} from '../util/rxjs-util';
 import type {Destroyable} from './capabilities';
 
@@ -23,7 +23,7 @@ export class ObserverBreaker implements Destroyable {
 
   break() {
     if (!this._observer) {
-      throw new Error('Observer has already been destroyed');
+      return;
     }
 
     try {
@@ -39,6 +39,9 @@ export class ObserverBreaker implements Destroyable {
   }
 
   get observer(): Observable<void> {
+    if (!this._observer) {
+      return EMPTY;
+    }
     return this._observer.asObservable();
   }
 

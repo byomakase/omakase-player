@@ -16,24 +16,10 @@
 
 import type {Destroyable} from '../common/capabilities';
 import {type PlayerController} from './player-controller-api';
-import {
-  Audio,
-  type AudioState,
-  type AudioUpdateableAttrs,
-  type MainMediaState,
-  type TrackState,
-  TrackType
-} from '../media';
+import {Audio, type AudioState, type AudioUpdateableAttrs, type MainMediaState, type TrackState, TrackType} from '../media';
 import {ObserverBreaker} from '../common/observer-breaker';
 import {concat, filter, forkJoin, merge, Observable, observeOn, queueScheduler, Subject, take, takeUntil} from 'rxjs';
-import {
-  type PlayerAudioApi,
-  type PlayerAudioEvent,
-  PlayerAudioEventType,
-  type PlayerAudioInternalApi,
-  PlayerAudioMode,
-  type PlayerAudioState
-} from './player-audio-api';
+import {type PlayerAudioApi, type PlayerAudioEvent, PlayerAudioEventType, type PlayerAudioInternalApi, PlayerAudioMode, type PlayerAudioState} from './player-audio-api';
 import {PlayerTrackEventType} from './player-track';
 import {
   type AudioHandlerApi,
@@ -49,22 +35,10 @@ import {SessionStore} from '../session';
 import {TrackRepository} from '../repository';
 import {WindowPlaybackMode} from '../common';
 import type {PlayerInternalApi} from './player-api';
-import {
-  describedObservable,
-  errorCompleteObserver,
-  freeObserver,
-  nextCompleteObserver,
-  passiveObservable,
-  wrapObservable
-} from '../util/rxjs-util';
+import {describedObservable, errorCompleteObserver, freeObserver, nextCompleteObserver, passiveObservable, wrapObservable} from '../util/rxjs-util';
 import {AUDIO_DEFAULTS} from '../constants';
 import {OpStageStatus} from '../common/op-stage';
-import {
-  type PlayerAudioLoadOptions,
-  type PlayerAudioTrack,
-  PlayerMainAudioTrack,
-  PlayerSidecarAudioTrack
-} from './player-audio-track';
+import {type PlayerAudioLoadOptions, type PlayerAudioTrack, PlayerMainAudioTrack, PlayerSidecarAudioTrack} from './player-audio-track';
 import {OmakaseAudioContextProvider} from '../omakase-audio-context-provider';
 import {AudioEffectsRegistry} from '../audio';
 import type {OmpProvider} from '../omp-provider';
@@ -284,7 +258,6 @@ export class PlayerAudioInternal implements PlayerAudioInternalApi, Destroyable 
     this._eventBreaker.break();
 
     [...this._playerTracks[PlayerAudioType.SIDECAR]].forEach((p) => {
-      
       this._playerTracks[PlayerAudioType.SIDECAR].splice(this._playerTracks[PlayerAudioType.SIDECAR].indexOf(p), 1);
       this._handlers[PlayerAudioType.SIDECAR].splice(this._handlers[PlayerAudioType.SIDECAR].indexOf(p.playerAudioHandler), 1);
 
@@ -443,7 +416,18 @@ export class PlayerAudioInternal implements PlayerAudioInternalApi, Destroyable 
                 // if (playerTrack.trackState.channels) {
                 //   this._handlers['MAIN']!.channelCount = playerTrack.trackState.channels;
                 // }
-                nextCompleteObserver(observer);
+                const mainRouter = this._handlers[PlayerAudioType.MAIN]?.router;
+                if (activate && mainPlayerTrack && mainRouter) {
+                  mainRouter
+                    .resetRouter()
+                    .pipe(takeUntil(this._destroyBreaker.observer))
+                    .subscribe({
+                      next: () => nextCompleteObserver(observer),
+                      error: (err) => errorCompleteObserver(observer, err),
+                    });
+                } else {
+                  nextCompleteObserver(observer);
+                }
               },
               error: (err) => {
                 errorCompleteObserver(observer, err);
@@ -611,7 +595,6 @@ export class PlayerAudioInternal implements PlayerAudioInternalApi, Destroyable 
               });
               break;
             case PlayerTrackEventType.PLAYER_TRACK_LOADED:
-
               trackUpdater({
                 channels: playerTrack.playerAudioHandler.channelCount,
               }).subscribe((audioState) => {
@@ -733,9 +716,7 @@ export class PlayerAudioInternal implements PlayerAudioInternalApi, Destroyable 
 
   _removeAllSidecarTracks(): Observable<void> {
     const tracks = [...this._playerTracks[PlayerAudioType.SIDECAR]];
-    return tracks.length > 0
-      ? concat(...tracks.map((p) => this._removeSidecarTrack(p.trackState.id)))
-      : new Observable<void>((observer) => nextCompleteObserver(observer));
+    return tracks.length > 0 ? concat(...tracks.map((p) => this._removeSidecarTrack(p.trackState.id))) : new Observable<void>((observer) => nextCompleteObserver(observer));
   }
 
   get state(): PlayerAudioState {

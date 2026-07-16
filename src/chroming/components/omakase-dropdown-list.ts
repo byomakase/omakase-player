@@ -119,16 +119,20 @@ export class OmakaseDropdownList extends HTMLElement implements OmakaseDropdownL
 
   updateOptions(options: Partial<OmakaseDropdownListItem>[]) {
     for (const option of options) {
+      const optionItem = this._options.find((item) => item.value === option.value);
       const optionElement = this._optionElements.get(option.value);
-      if (optionElement) {
+      if (optionItem && optionElement) {
         if (option.hasOwnProperty('active')) {
           option.active ? optionElement.classList.add(OmakaseDropdownOptionDomClasses.ACTIVE) : optionElement.classList.remove(OmakaseDropdownOptionDomClasses.ACTIVE);
+          optionItem.active = option.active;
         }
         if (option.hasOwnProperty('actionClass')) {
           optionElement.setActionClass(option.actionClass);
+          optionItem.actionClass = option.actionClass;
         }
         if (option.hasOwnProperty('label')) {
           optionElement.setLabel(option.label);
+          optionItem.label = option.label;
         }
       }
     }
