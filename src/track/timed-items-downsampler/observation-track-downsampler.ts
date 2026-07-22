@@ -75,6 +75,10 @@ export class ObservationTrackDownsampler extends TimedItemsTrackDownsampler<Obse
         return Math.max(...values);
       case 'min':
         return Math.min(...values);
+      case 'max_abs':
+        return values.reduce((best, v) => (Math.abs(v) > Math.abs(best) ? v : best), values[0]!);
+      case 'min_abs':
+        return values.reduce((best, v) => (Math.abs(v) < Math.abs(best) ? v : best), values[0]!);
       case 'avg':
         return values.reduce((sum, val) => sum + val, 0) / values.length;
       case 'drop':

@@ -268,7 +268,7 @@ export interface PlayerDomController {
 
   resetMainMediaVideoElement(): void;
 
-  prepareForAttaching(): void;
+  prepareForAttaching(hasMainMedia: boolean): void;
   prepareForDetaching(): void;
 
   setAttachDetachButtonEnabled(enabled: true): void;

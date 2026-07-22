@@ -21,14 +21,7 @@ import {ObserverBreaker} from '../common/observer-breaker';
 import {concat, filter, forkJoin, merge, Observable, observeOn, queueScheduler, Subject, take, takeUntil} from 'rxjs';
 import {type PlayerAudioApi, type PlayerAudioEvent, PlayerAudioEventType, type PlayerAudioInternalApi, PlayerAudioMode, type PlayerAudioState} from './player-audio-api';
 import {PlayerTrackEventType} from './player-track';
-import {
-  type AudioHandlerApi,
-  AudioHandlerEventType,
-  DisabledMediaElementSourcePlayerAudioHandler,
-  GainPlayerAudioHandler,
-  MediaElementPlayerAudioHandler,
-  type PlayerAudioHandlerApi,
-} from '../audio/audio-handler';
+import {type AudioHandlerApi, AudioHandlerEventType, DisabledMediaElementSourcePlayerAudioHandler, GainPlayerAudioHandler, MediaElementPlayerAudioHandler, type PlayerAudioHandlerApi,} from '../audio/audio-handler';
 import {CryptoUtil} from '../util/crypto-util';
 import {StringUtil} from '../util/string-util';
 import {SessionStore} from '../session';

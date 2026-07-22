@@ -861,10 +861,15 @@ class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
   redrawBars(viewWidth: number, gap: number) {
     this._group.destroyChildren();
 
-    const containerHeight = this._group.height();
+    const fullHeight = this._group.height();
+    const paddingTop = this._style.paddingTop ?? 0;
+    const paddingBottom = this._style.paddingBottom ?? 0;
+    const containerHeight = fullHeight - paddingTop - paddingBottom;
+    const contentTop = paddingTop;
+    const contentBottom = fullHeight - paddingBottom;
     const scaleSize = this._config.scale.max - this._config.scale.min;
-    const calculateY = (value: number) => ((this._config.scale.max - value) / scaleSize) * containerHeight;
-    const clamp = (v: number) => Math.max(0, Math.min(containerHeight, v));
+    const calculateY = (value: number) => paddingTop + ((this._config.scale.max - value) / scaleSize) * containerHeight;
+    const clamp = (v: number) => Math.max(paddingTop, Math.min(paddingTop + containerHeight, v));
 
     const baselineInContainer = clamp(calculateY(this._config.scaleBaseline));
     const valueInContainer = clamp(calculateY(Number(this._observationItem.value)));
@@ -884,9 +889,9 @@ class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
       const barX = i * (effectiveViewWidth + gap) + paddingLeft;
 
       if (this._config.style?.barType === 'og') {
-        this.drawOgBar(barX, y, rectWidth, rectHeight, paddingLeft, paddingRight, isAboveBaseline, valueInContainer, baselineInContainer, containerHeight);
+        this.drawOgBar(barX, y, rectWidth, rectHeight, paddingLeft, paddingRight, isAboveBaseline, valueInContainer, baselineInContainer, contentTop, contentBottom);
       } else {
-        this.drawDefaultBar(barX, y, rectWidth, rectHeight, isAboveBaseline, valueInContainer, baselineInContainer, containerHeight);
+        this.drawDefaultBar(barX, y, rectWidth, rectHeight, isAboveBaseline, valueInContainer, baselineInContainer, contentTop, contentBottom);
       }
     }
 
@@ -903,7 +908,8 @@ class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
     isAboveBaseline: boolean,
     valueInContainer: number,
     baselineInContainer: number,
-    containerHeight: number
+    contentTop: number,
+    contentBottom: number
   ) {
     const circleRadius = rectWidth / 2;
     const circleGap = paddingLeft + paddingRight;
@@ -929,13 +935,13 @@ class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
       },
     });
 
-    clipGroup.add(this.createFillRect(0, 0, rectWidth, rectHeight, isAboveBaseline, valueInContainer, baselineInContainer, containerHeight));
+    clipGroup.add(this.createFillRect(0, 0, rectWidth, rectHeight, isAboveBaseline, valueInContainer, baselineInContainer, contentTop, contentBottom));
     this._group.add(clipGroup);
   }
 
-  private drawDefaultBar(barX: number, y: number, rectWidth: number, rectHeight: number, isAboveBaseline: boolean, valueInContainer: number, baselineInContainer: number, containerHeight: number) {
+  private drawDefaultBar(barX: number, y: number, rectWidth: number, rectHeight: number, isAboveBaseline: boolean, valueInContainer: number, baselineInContainer: number, contentTop: number, contentBottom: number) {
     if (rectHeight > 0) {
-      const rect = this.createFillRect(barX, y, rectWidth, rectHeight, isAboveBaseline, valueInContainer, baselineInContainer, containerHeight);
+      const rect = this.createFillRect(barX, y, rectWidth, rectHeight, isAboveBaseline, valueInContainer, baselineInContainer, contentTop, contentBottom);
       if (this._config.style?.cornerRadius) {
         rect.cornerRadius(this._config.style.cornerRadius);
       }
@@ -952,9 +958,9 @@ class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
     }
   }
 
-  private createFillRect(x: number, y: number, width: number, height: number, isAboveBaseline: boolean, valueInContainer: number, baselineInContainer: number, containerHeight: number): Konva.Rect {
+  private createFillRect(x: number, y: number, width: number, height: number, isAboveBaseline: boolean, valueInContainer: number, baselineInContainer: number, contentTop: number, contentBottom: number): Konva.Rect {
     const gradientStartY = isAboveBaseline ? height : 0;
-    const gradientEndY = isAboveBaseline ? -valueInContainer : containerHeight - baselineInContainer;
+    const gradientEndY = isAboveBaseline ? contentTop - valueInContainer : contentBottom - baselineInContainer;
 
     return KonvaFactory.createRect({
       x,

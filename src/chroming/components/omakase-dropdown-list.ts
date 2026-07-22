@@ -138,7 +138,7 @@ export class OmakaseDropdownList extends HTMLElement implements OmakaseDropdownL
     }
   }
 
-  addOption(option: OmakaseDropdownListItem) {
+  addOption(option: OmakaseDropdownListItem, insertAtIndex?: number) {
     const optionElement = document.createElement('omakase-dropdown-option') as OmakaseDropdownOption;
     optionElement.classList.add(`${OmakaseDropdownListDomClasses.OPTION_PREFIX}-${this.type}`);
     optionElement.innerText = option.label;
@@ -158,11 +158,20 @@ export class OmakaseDropdownList extends HTMLElement implements OmakaseDropdownL
     optionElement.onAction$.subscribe(() => {
       this._selectedAction$.next(optionItem);
     });
-    this._list!.appendChild(optionElement);
+    const referenceElement = insertAtIndex !== undefined ? this._list!.children[insertAtIndex] : undefined;
+    if (referenceElement) {
+      this._list!.insertBefore(optionElement, referenceElement);
+    } else {
+      this._list!.appendChild(optionElement);
+    }
     if (option.actionClass) {
       optionElement.setActionClass(option.actionClass);
     }
-    this._options.push(option);
+    if (insertAtIndex !== undefined && insertAtIndex >= 0 && insertAtIndex < this._options.length) {
+      this._options.splice(insertAtIndex, 0, option);
+    } else {
+      this._options.push(option);
+    }
     this._optionElements.set(option.value, optionElement);
   }
 

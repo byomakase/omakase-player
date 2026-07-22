@@ -101,7 +101,9 @@ export class ThumbnailTrack extends BaseTimedItemsTrack<Thumbnail, BaseThumbnail
 }
 
 /** Load options for thumbnail tracks. */
-export interface ThumbnailTrackLoadOptions extends BaseTrackLoadOptions {}
+export interface ThumbnailTrackLoadOptions extends BaseTrackLoadOptions {
+  args?: ThumbnailTrackArgs;
+}
 
 /**
  * Serializable snapshot of a {@link Thumbnail}.

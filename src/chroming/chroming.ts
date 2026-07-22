@@ -154,8 +154,8 @@ export class Chroming implements ChromingApi, Destroyable {
     });
   }
 
-  prepareDomForAttaching() {
-    this._chromingLocal.prepareDomForAttaching();
+  prepareDomForAttaching(hasMainMedia: boolean) {
+    this._chromingLocal.prepareDomForAttaching(hasMainMedia);
   }
 
   prepareDomForDetaching() {

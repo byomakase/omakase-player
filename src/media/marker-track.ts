@@ -109,7 +109,9 @@ export class MarkerTrack extends BaseTimedItemsTrack<Marker, BaseMarker, MarkerT
 }
 
 /** Load options for marker tracks. */
-export interface MarkerTrackLoadOptions extends BaseTrackLoadOptions {}
+export interface MarkerTrackLoadOptions extends BaseTrackLoadOptions {
+  args?: MarkerTrackArgs;
+}
 
 /**
  * Discriminator for marker variants.

@@ -135,12 +135,14 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
       .subscribe((event) => {
         switch (event.data.windowPlayback.mode) {
           case WindowPlaybackMode.ATTACHING:
-            this._chroming.prepareDomForAttaching();
+            this._chroming.prepareDomForAttaching(!!this._session.state.player.mainMediaId);
             this._chroming.chromingLocal.domController.showLoading();
             break;
           case WindowPlaybackMode.ATTACHED:
-            this._chroming.chromingLocal.domController.showLoaded();
-            this._chroming.chromingLocal.domController.setAttachDetachButtonEnabled(event.data.windowPlayback.canDetach);
+            if (this._player.isMainMediaLoaded) {
+              this._chroming.chromingLocal.domController.showLoaded();
+              this._chroming.chromingLocal.domController.setAttachDetachButtonEnabled(event.data.windowPlayback.canDetach);
+            }
             break;
           case WindowPlaybackMode.DETACHING:
             this._chroming.prepareDomForDetaching();
@@ -374,9 +376,9 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
               if (!this._player.mainMedia) {
                 setTimeout(() => {
                   this._player.loadSlate(SlateType.BLACK).subscribe(() => {
-                    this._player.unloadMainMedia()
-                  })
-                })
+                    this._player.unloadMainMedia();
+                  });
+                });
               }
 
               nextCompleteObserver(observer);

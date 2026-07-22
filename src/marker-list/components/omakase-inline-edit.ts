@@ -16,7 +16,7 @@
 
 import {Observable, Subject, map, of} from 'rxjs';
 import type {PlayerCommonApi} from '../../player';
-import type {OmakaseTimeEdit} from '../../timeline/time';
+import {OmakaseTimeEdit} from '../../timeline/time';
 import {MediaTemporalFormat} from '../../common';
 import '../../timeline/time';
 import {OmakaseTimeEditAttributes} from '../../timeline/time/omakase-time-edit';
@@ -92,7 +92,6 @@ export class OmakaseInlineEdit extends HTMLElement {
     }
     this._input = document.createElement('omakase-time-edit') as OmakaseTimeEdit;
     this._input.blurHandler = () => {
-      console.log('blur');
       this.undoChanges();
     };
     this._container.appendChild(this._input);
@@ -118,6 +117,12 @@ export class OmakaseInlineEdit extends HTMLElement {
 
     this._span.textContent = timecode;
     this._text = timecode;
+  }
+
+  setFormat(format: MediaTemporalFormat) {
+    if (this._input instanceof OmakaseTimeEdit) {
+      this._input.setAttribute(OmakaseTimeEditAttributes.FORMAT, format);
+    }
   }
 
   setOptions(options: string[]) {

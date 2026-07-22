@@ -540,10 +540,10 @@ export abstract class BaseTimedItemsTrack<T extends TimedItem, TM extends T & Mu
 
     newTimedItems.forEach((timedItem) => {
       this._timedItemHooks?.beforeCreate?.(timedItem);
+      this._timedItems.push(timedItem);
+      this._timedItemsSorted.push(timedItem);
     });
 
-    this._timedItems.push(...newTimedItems);
-    this._timedItemsSorted.push(...newTimedItems);
     this.sortTimedItemsSorted();
     newTimedItems.forEach((timedItem) => this._timedItemsById.set(timedItem.id, timedItem));
 

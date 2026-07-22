@@ -29,9 +29,15 @@ export abstract class BaseTimedItemsTrackLoader<T extends TimedItemsTrack, O ext
     super();
   }
 
+  protected abstract updateAttrs(track: T, loadOptions?: O): void;
+
   load(track: T, loadOptions?: O): Observable<T> {
     return passiveObservable((observer) => {
       track.loadStart();
+
+      // update any updateable attributes if they exist
+      this.updateAttrs(track, loadOptions);
+
       this._trackUtils.fetchTimedItems(track.id, loadOptions).subscribe({
         next: () => {
           track.loadSuccess();
@@ -46,13 +52,37 @@ export abstract class BaseTimedItemsTrackLoader<T extends TimedItemsTrack, O ext
   }
 }
 
-export class MarkerTrackLoader extends BaseTimedItemsTrackLoader<MarkerTrack, MarkerTrackLoadOptions> {}
+export class MarkerTrackLoader extends BaseTimedItemsTrackLoader<MarkerTrack, MarkerTrackLoadOptions> {
+  protected updateAttrs(track: MarkerTrack, loadOptions?: MarkerTrackLoadOptions) {
+    if (loadOptions?.args) {
+      track.updateAttrs(loadOptions?.args);
+    }
+  }
+}
 
-export class ThumbnailTrackLoader extends BaseTimedItemsTrackLoader<ThumbnailTrack, ThumbnailTrackLoadOptions> {}
+export class ThumbnailTrackLoader extends BaseTimedItemsTrackLoader<ThumbnailTrack, ThumbnailTrackLoadOptions> {
+  protected updateAttrs(track: ThumbnailTrack, loadOptions?: ThumbnailTrackLoadOptions) {
+    if (loadOptions?.args) {
+      track.updateAttrs(loadOptions?.args);
+    }
+  }
+}
 
-export class TextTrackLoader extends BaseTimedItemsTrackLoader<TextTrack, TextTrackLoadOptions> {}
+export class TextTrackLoader extends BaseTimedItemsTrackLoader<TextTrack, TextTrackLoadOptions> {
+  updateAttrs(track: TextTrack, loadOptions?: TextTrackLoadOptions) {
+    if (loadOptions?.args) {
+      track.updateAttrs(loadOptions?.args);
+    }
+  }
+}
 
-export class ObservationTrackLoader extends BaseTimedItemsTrackLoader<ObservationTrack, ObservationTrackLoadOptions> {}
+export class ObservationTrackLoader extends BaseTimedItemsTrackLoader<ObservationTrack, ObservationTrackLoadOptions> {
+  protected updateAttrs(track: ObservationTrack, loadOptions?: ObservationTrackLoadOptions) {
+    if (loadOptions?.args) {
+      track.updateAttrs(loadOptions?.args);
+    }
+  }
+}
 
 export class TrackLoaderFactory {
   static create(track: Track, trackUtils: TrackUtils): BaseTrackLoader<Track, BaseTrackLoadOptions> {

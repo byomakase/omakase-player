@@ -207,7 +207,7 @@ export class MarkerListComponent extends HTMLElement {
 
     const deleteSlot = marker.element.querySelector<HTMLElement>('[slot="remove"]');
     if (deleteSlot) {
-      if (canDeleteMarker) {
+      if (canDeleteMarker && !marker.item.track.areTimedItemsLocked) {
         deleteSlot.style.removeProperty('display');
       } else {
         deleteSlot.style.setProperty('display', 'none');
@@ -463,7 +463,7 @@ export class MarkerListComponent extends HTMLElement {
     }
     const deleteSlot = element.querySelector<HTMLElement>('[slot="remove"]');
     if (deleteSlot) {
-      if (item.style.canDeleteMarker) {
+      if (item.style.canDeleteMarker && !item.track.areTimedItemsLocked) {
         deleteSlot.style.removeProperty('display');
       } else {
         deleteSlot.style.setProperty('display', 'none');

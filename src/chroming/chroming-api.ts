@@ -82,7 +82,7 @@ export interface ChromingApi extends ChromingCommonApi {
 }
 
 export interface ChromingLocalApi extends ChromingInternalApi, Destroyable {
-  prepareDomForAttaching(): void;
+  prepareDomForAttaching(isMainMediaLoaded: boolean): void;
   prepareDomForDetaching(): void;
 
   getPlayerChromingElement<T>(querySelector: string): T;

@@ -23,6 +23,10 @@ export const OmakaseTimeEditAttributes = {
 };
 
 export class OmakaseTimeEdit extends HTMLElement {
+  static get observedAttributes() {
+    return [OmakaseTimeEditAttributes.FORMAT];
+  }
+
   private _timeString: string | undefined;
   private _container: HTMLDivElement;
   private _input: HTMLInputElement;
@@ -43,6 +47,7 @@ export class OmakaseTimeEdit extends HTMLElement {
 
     this._input = document.createElement('input');
     this._input.type = 'text';
+    this._input.maxLength = this._maxLength;
 
     this._input.classList.add('omakase-time-edit-input');
 
@@ -65,6 +70,12 @@ export class OmakaseTimeEdit extends HTMLElement {
 
   public connectedCallback() {
     this.appendChild(this._container);
+  }
+
+  public attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null) {
+    if (name === OmakaseTimeEditAttributes.FORMAT && oldValue !== newValue) {
+      this._input.maxLength = this._maxLength;
+    }
   }
 
   get player(): PlayerCommonApi | undefined {
@@ -126,6 +137,16 @@ export class OmakaseTimeEdit extends HTMLElement {
   private get _isNumericFormat(): boolean {
     const format = this._format;
     return format === MediaTemporalFormat.SECONDS || format === MediaTemporalFormat.FRAME_COUNT || format === MediaTemporalFormat.PERCENT;
+  }
+
+  private get _maxLength(): number {
+    if (this._format === MediaTemporalFormat.TIMECODE) {
+      return 11;
+    } else if (this._format === MediaTemporalFormat.MEDIA_TIME || this._format === MediaTemporalFormat.COUNTDOWN_MEDIA_TIME) {
+      return 12;
+    } else {
+      return 10;
+    }
   }
 
   private handleKeyUp(event: KeyboardEvent) {

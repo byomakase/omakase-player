@@ -1068,7 +1068,22 @@ media-controller {
 
       .omakase-timecode-wrapper {
         display: inline-block;
+        text-align: center;
         height: var(--icon-size, var(--icon-size-default));
+
+        &:has(omakase-time-display[format='timecode']) {
+          min-width: 90px;
+
+          .omakase-time-edit-input {
+            min-width: 90px;
+          }
+        }
+
+        &:has(omakase-time-display[format='standard']) {
+          .omakase-time-edit-input {
+            min-width: 100px;
+          }
+        }
 
         omakase-time-display {
           display: inline-block;
@@ -1279,8 +1294,6 @@ media-controller {
     --media-range-thumb-width: 7px;
     --media-range-thumb-height: 7px;
     --media-range-track-height: 4px;
-    min-width: 160px;
-    min-height: 90px;
 
     .omakase-watermark {
       font-size: 14px;

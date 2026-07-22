@@ -42,7 +42,7 @@ export type OmakaseTimeDisplayFormat = 'timecode' | 'standard';
 
 export class OmakaseTimeDisplay extends HTMLElement {
   static get observedAttributes() {
-    return [OmakaseTimeDisplayAttributes.EDITABLE];
+    return [OmakaseTimeDisplayAttributes.EDITABLE, OmakaseTimeDisplayAttributes.FORMAT];
   }
 
   private _player: PlayerInternalApi | undefined;
@@ -241,6 +241,10 @@ export class OmakaseTimeDisplay extends HTMLElement {
         if (this._player) {
           this.displayTime(this._player.getCurrentTime());
         }
+      }
+    } else if (name === OmakaseTimeDisplayAttributes.FORMAT) {
+      if (oldValue !== newValue && this._inlineEdit) {
+        this._inlineEdit.setFormat(this.temporalFormat);
       }
     }
   }

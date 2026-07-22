@@ -229,7 +229,7 @@ Local player instance configuration on `https://my-server.com/omp-player`:
 // Local OmakasePlayer instance configuration on https://my-server.com/omp-player
 let omakasePlayer = new omakase.OmakasePlayer({
   playerHTMLElementId: 'omakase-player',
-  detachedPlayerUrlFn: (mainMedia) => 'https://my-server.com/player/omp-player-detached',
+  detachWindowUrlFn: (mainMedia) => 'https://my-server.com/player/omp-player-detached',
 });
 ```
 

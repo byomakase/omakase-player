@@ -50,6 +50,7 @@ import {MainMediaType, type TextTrackState} from '../../media';
 import type {OmakaseRouterVisualization} from '../components/omakase-router-visualization';
 import {ChromingUtil} from '../chroming-util';
 import {OmakaseDropdownToggleAttributes} from '../components/omakase-dropdown-toggle';
+import {isNullOrUndefined} from '../../util/util-functions';
 
 export class AudioDomController extends ChromingDomController<ChromingTheme.AUDIO> {
   protected _themeConfig: AudioThemeConfig;
@@ -488,6 +489,15 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
       label: track.textTrack.label ?? defaultLabel,
       active: track.playerTrack.active && track.playerTrack.shown,
     };
+  }
+
+  protected override getTextTrackIndex(track: ChromingTextTrack): number | undefined {
+    const index = super.getTextTrackIndex(track);
+    if (!isNullOrUndefined(index) && index !== -1) {
+      return index + 1;
+    } else {
+      return undefined;
+    }
   }
 
   protected setDropdownOptions(dropdownList: OmakaseDropdownList, options: OmakaseDropdownListItem[]) {

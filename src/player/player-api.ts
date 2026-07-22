@@ -47,11 +47,7 @@ export const COMMON_PLAYER_CONFIG_DEFAULT: PlayerCommonConfig = {
  * Configuration for the player.
  */
 export interface PlayerConfig extends PlayerCommonConfig {
-  /**
-   * Optional function that resolves the URL used when the player transitions to detached mode.
-   * Receives the current {@link MainMedia} and returns the URL for the detached player endpoint.
-   */
-  playerDetachedUrlFn?: (mainMedia: MainMedia) => string | undefined;
+
 }
 
 /**

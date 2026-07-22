@@ -215,8 +215,8 @@ export class ChromingLocal extends BaseChroming implements ChromingLocalApi {
     }
   }
 
-  prepareDomForAttaching(): void {
-    this._domController.prepareForAttaching();
+  prepareDomForAttaching(hasMainMedia: boolean): void {
+    this._domController.prepareForAttaching(hasMainMedia);
   }
 
   prepareDomForDetaching(): void {

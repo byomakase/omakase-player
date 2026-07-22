@@ -347,6 +347,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
 
     if (BrowserProvider.instance.isSafari) {
       this._mediaControllerElement.classList.add('safari');
+      this._themeElement.classList.add('safari');
     }
 
     if (this._config.watermark) {
@@ -378,7 +379,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     });
 
     ChromingUtil.onResize$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe(() => {
-      this.updateLetterboxHeight();
+      this.updateCssClassesAndVariables();
     });
   }
 
@@ -426,31 +427,42 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     const {videoWidth, videoHeight} = this._mainMediaVideoElement;
     if (videoWidth && videoHeight) {
       this._themeElement.style.setProperty('--video-aspect-ratio', `${videoWidth / videoHeight}`);
-      this.updateLetterboxHeight();
+      this.updateCssClassesAndVariables();
     }
     this.wireVuMeters();
     this.updateFloatingVuMeterToggle(this._playerInternal!.audioInternal.state);
   }
 
-  private updateLetterboxHeight() {
+  private updateCssClassesAndVariables() {
     const {videoWidth, videoHeight} = this._mainMediaVideoElement;
     const {offsetHeight, offsetWidth} = this._themeElement;
+    const comparisonTreshhold = 0.01;
     if (videoWidth && videoHeight) {
       this._themeElement.style.setProperty('--video-letterbox-height', `${Math.max((offsetHeight - offsetWidth * (videoHeight / videoWidth)) / 2, 0)}px`);
-      if (offsetWidth / offsetHeight > videoWidth / videoHeight) {
+      this._themeElement.style.setProperty('--player-width', `${offsetWidth}`);
+      this._themeElement.style.setProperty('--player-height', `${offsetHeight}`);
+      if (offsetWidth / offsetHeight > videoWidth / videoHeight + comparisonTreshhold) {
         this._mediaControllerElement.classList.remove(ChromingDomClasses.mediaLetterbox);
         this._mediaControllerElement.classList.add(ChromingDomClasses.mediaPillarbox);
-      } else if (offsetWidth / offsetHeight < videoWidth / videoHeight) {
+        this._themeElement.classList.remove(ChromingDomClasses.mediaLetterbox);
+        this._themeElement.classList.add(ChromingDomClasses.mediaPillarbox);
+      } else if (offsetWidth / offsetHeight < videoWidth / videoHeight - comparisonTreshhold) {
         this._mediaControllerElement.classList.remove(ChromingDomClasses.mediaPillarbox);
         this._mediaControllerElement.classList.add(ChromingDomClasses.mediaLetterbox);
+        this._themeElement.classList.remove(ChromingDomClasses.mediaPillarbox);
+        this._themeElement.classList.add(ChromingDomClasses.mediaLetterbox);
       } else {
         this._mediaControllerElement.classList.remove(ChromingDomClasses.mediaPillarbox);
         this._mediaControllerElement.classList.remove(ChromingDomClasses.mediaLetterbox);
+        this._themeElement.classList.remove(ChromingDomClasses.mediaPillarbox);
+        this._themeElement.classList.remove(ChromingDomClasses.mediaLetterbox);
       }
     } else {
       this._themeElement.style.setProperty('--video-letterbox-height', '0px');
       this._mediaControllerElement.classList.remove(ChromingDomClasses.mediaPillarbox);
       this._mediaControllerElement.classList.remove(ChromingDomClasses.mediaLetterbox);
+      this._themeElement.classList.remove(ChromingDomClasses.mediaPillarbox);
+      this._themeElement.classList.remove(ChromingDomClasses.mediaLetterbox);
     }
   }
 
@@ -462,10 +474,13 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     return this._mediaControllerElement.classList.contains('omakase-video-not-loaded');
   }
 
-  prepareForAttaching(): void {
+  prepareForAttaching(hasMainMedia: boolean): void {
     this._divAlerts.innerHTML = '';
     this._mediaControllerElement.classList.remove('omakase-player-detached');
-    DomUtil.hideElements(this._divButtonOverlayAttach).showElements(this._divButtonOverlayLoading);
+    DomUtil.hideElements(this._divButtonOverlayAttach);
+    if (hasMainMedia) {
+      DomUtil.showElements(this._divButtonOverlayLoading);
+    }
     this.showLoading();
   }
 
@@ -646,11 +661,6 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
         this._audioLevelSource = new PeakProcessorAudioLevelSource();
       }
       if (this._audioLevelSource instanceof PeakProcessorAudioLevelSource) {
-        // TODO @dzivkovic fix:
-        // Uncaught TypeError: Cannot read properties of undefined (reading 'createPeakProcessor')
-        // at PeakProcessorAudioLevelSource.setHandler (peak-processor-audio-level-source.ts:45:8)
-        // at DefaultDomController.wireVuMeters (chroming-dom.ts:652:34)
-        // at DefaultDomController.showLoaded (chroming-dom.ts:431:10)
         let handler = this._playerInternal.audioInternal.getHandler(PlayerAudioType.OUTPUT);
         if (handler) {
           this._audioLevelSource.setHandler(handler);
@@ -1319,7 +1329,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
 
   addTextTrack(track: ChromingTextTrack) {
     for (const dropdownList of this._textDropdownLists) {
-      this.addDropdownOption(dropdownList, this.getTextDropdownOption(track, this.getDefaultTextLabel(dropdownList.options.length)));
+      this.addDropdownOption(dropdownList, this.getTextDropdownOption(track, this.getDefaultTextLabel(dropdownList.options.length)), this.getTextTrackIndex(track));
     }
   }
 
@@ -1327,6 +1337,10 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     for (const dropdownList of this._textDropdownLists) {
       this.removeDropdownOption(dropdownList, trackId);
     }
+  }
+
+  protected getTextTrackIndex(track: ChromingTextTrack): number | undefined {
+    return this._playerInternal?.textInternal.getTracks().findIndex((t) => t.id === track.textTrack.id);
   }
 
   private clearShowTemporaryOnMouseMoveTimeoutId() {
@@ -1415,8 +1429,8 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     }
   }
 
-  protected addDropdownOption(dropdownList: OmakaseDropdownList, option: OmakaseDropdownListItem) {
-    dropdownList.addOption(option);
+  protected addDropdownOption(dropdownList: OmakaseDropdownList, option: OmakaseDropdownListItem, index?: number) {
+    dropdownList.addOption(option, index);
     if (!DomUtil.isShown(dropdownList)) {
       DomUtil.showElements(dropdownList);
     }

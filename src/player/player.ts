@@ -271,6 +271,12 @@ export class Player implements PlayerApi, Destroyable {
       } else if (sourceOrUrl.type === SourceType.TRACK) {
         const existingTrack = this._trackRepository.getOrFail((sourceOrUrl as TrackSource).trackId);
         mediaLoadRequest.mediaId = existingTrack.id;
+
+        // update args immediately if they're provided
+        if (loadOptions?.args) {
+          existingTrack.updateAttrs(loadOptions.args)
+        }
+
         track$ = of(existingTrack);
       } else {
         throw new Error(`Error loading sidecar track`);

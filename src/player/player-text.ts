@@ -15,7 +15,7 @@
  */
 
 import {PlayerTrackEventType} from './player-track';
-import {type MainMediaState, type TextTrack, type TextTrackState, type TextTrackUpdateableAttrs, TrackEventType, type TrackState, TrackType} from '../media';
+import {type MainMediaState, RelationType, type TextTrack, type TextTrackState, type TextTrackUpdateableAttrs, type TrackState, TrackType} from '../media';
 import {type PlayerTextApi, type PlayerTextEvent, PlayerTextEventType, type PlayerTextInternalApi, PlayerTextMode, type PlayerTextState} from './player-text-api';
 import type {Destroyable} from '../common/capabilities';
 import {concat, filter, forkJoin, Observable, observeOn, queueScheduler, Subject, takeUntil} from 'rxjs';
@@ -166,6 +166,8 @@ export class PlayerTextInternal implements PlayerTextInternalApi, Destroyable {
     [PlayerTextType.SIDECAR]: PlayerTextTrack[];
   };
 
+  private _mainMediaOrderById: Map<TextTrack['id'], number> = new Map<TextTrack['id'], number>();
+
   private _eventBreaker = new ObserverBreaker();
   private _destroyBreaker = new ObserverBreaker();
 
@@ -232,6 +234,9 @@ export class PlayerTextInternal implements PlayerTextInternalApi, Destroyable {
     });
 
     this._playerController = playerController;
+
+    this._mainMediaOrderById = new Map<TextTrack['id'], number>();
+    mainMediaState.tracks.filter((p) => p.trackType === TrackType.TEXT_TRACK).forEach((p, index) => this._mainMediaOrderById.set(p.id, index));
 
     let mainTracks = mainMediaState.tracks.filter((p) => p.trackType === TrackType.TEXT_TRACK && p.loadStage.status === OpStageStatus.SUCCESS).map((p) => p as TextTrackState);
     let mainPlayerTracks = mainTracks.filter((p) => playerTextHandlerType.includes(PlayerTextHandlerType.EMBEDDED)).map((p) => new PlayerMainTextTrack(p, this._playerController!));
@@ -319,6 +324,20 @@ export class PlayerTextInternal implements PlayerTextInternalApi, Destroyable {
 
   private _getPlayerTracks() {
     return [...this._playerTracks[PlayerTextType.MAIN], ...this._playerTracks[PlayerTextType.SIDECAR]];
+  }
+
+  private sortSidecarTracks(): void {
+    const orderKey = (playerTrack: PlayerTextTrack): number => {
+      const derivedFromId = playerTrack.trackState.relations.find((relation) => relation.relationType === RelationType.DERIVED_FROM)?.entityId;
+      const index = derivedFromId !== undefined ? this._mainMediaOrderById.get(derivedFromId) : undefined;
+      return index ?? Number.POSITIVE_INFINITY;
+    };
+
+    this._playerTracks[PlayerTextType.SIDECAR].sort((a, b) => {
+      const keyA = orderKey(a);
+      const keyB = orderKey(b);
+      return keyA === keyB ? 0 : keyA - keyB;
+    });
   }
 
   updateTrack(trackState: TextTrackState): void {
@@ -413,6 +432,7 @@ export class PlayerTextInternal implements PlayerTextInternalApi, Destroyable {
       let playerTrack = new PlayerSidecarTextTrack(trackState, this._playerController!, loadOptions);
 
       this._playerTracks[PlayerTextType.SIDECAR].push(playerTrack);
+      this.sortSidecarTracks();
 
       let onUnloaded$ = this._onEvent$
         .pipe(takeUntil(this._eventBreaker.observer), takeUntil(this._destroyBreaker.observer))

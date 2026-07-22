@@ -20,7 +20,7 @@ import type {Destroyable} from '../../common/capabilities';
 import Decimal from 'decimal.js';
 import {TEMPORAL} from '../../constants';
 
-export type DownsampleStrategy = 'none' | 'drop' | 'max' | 'min' | 'avg';
+export type DownsampleStrategy = 'none' | 'drop' | 'max' | 'min' | 'avg' | 'max_abs' | 'min_abs';
 
 export interface DownsampleOptions {
   /**
@@ -29,7 +29,7 @@ export interface DownsampleOptions {
   downsamplePeriod?: number;
 
   /**
-   * Strategy for downsampling (supported values: none, drop, min, max, and avg)
+   * Strategy for downsampling (supported values: none, drop, min, max, avg, max_abs, and min_abs)
    */
   downsampleStrategy?: DownsampleStrategy;
 }

@@ -339,10 +339,13 @@ class TrackView extends BaseKonvaComponent2<Konva.Group> implements ObservationT
     const scale = this._config?.scale;
     if (!scale) return undefined;
     const scaleBaseline = this._config?.scaleBaseline ?? LINE_CHART_LANE_TRACK_CONFIG_DEFAULT.scaleBaseline;
-    const height = this._timelineLane.style.height;
+    const fullHeight = this._timelineLane.style.height;
+    const paddingTop = this._config?.style?.paddingTop ?? 0;
+    const paddingBottom = this._config?.style?.paddingBottom ?? 0;
+    const contentHeight = fullHeight - paddingTop - paddingBottom;
     const scaleSize = scale.max - scale.min;
-    const clamp = (v: number) => Math.max(0, Math.min(height, v));
-    this._baselineY = clamp(((scale.max - scaleBaseline) / scaleSize) * height);
+    const clamp = (v: number) => Math.max(paddingTop, Math.min(paddingTop + contentHeight, v));
+    this._baselineY = clamp(paddingTop + ((scale.max - scaleBaseline) / scaleSize) * contentHeight);
     return this._baselineY;
   }
 
@@ -530,6 +533,8 @@ class TrackMeasurementsView extends BaseKonvaComponent2<Konva.Group> {
         scaleBaseline,
         startTime,
         style: measurementStyle,
+        ...(this._config?.style?.paddingTop !== undefined ? {paddingTop: this._config.style.paddingTop} : {}),
+        ...(this._config?.style?.paddingBottom !== undefined ? {paddingBottom: this._config.style.paddingBottom} : {}),
       });
 
       const pos = view.computePosition();
@@ -537,7 +542,9 @@ class TrackMeasurementsView extends BaseKonvaComponent2<Konva.Group> {
     });
 
     if (polylinePoints.length >= 4) {
-      const containerHeight = this._timelineLane.style.height;
+      const fullHeight = this._timelineLane.style.height;
+      const contentTop = this._config?.style?.paddingTop ?? 0;
+      const contentBottom = fullHeight - (this._config?.style?.paddingBottom ?? 0);
       const firstX: number = polylinePoints[0]!;
       const lastX: number = polylinePoints[polylinePoints.length - 2]!;
 
@@ -545,7 +552,7 @@ class TrackMeasurementsView extends BaseKonvaComponent2<Konva.Group> {
       const fillBelowGradient = measurementStyle?.fillBelowLinearGradientColorStops;
       if (fillBelowColor || fillBelowGradient) {
         this._fillBelowShape = KonvaFactory.createLine({
-          points: [...polylinePoints, lastX, containerHeight, firstX, containerHeight],
+          points: [...polylinePoints, lastX, contentBottom, firstX, contentBottom],
           closed: true,
           strokeWidth: 0,
           listening: false,
@@ -555,8 +562,8 @@ class TrackMeasurementsView extends BaseKonvaComponent2<Konva.Group> {
             : {
                 fillPriority: 'linear-gradient',
                 fillLinearGradientColorStops: fillBelowGradient,
-                fillLinearGradientStartPoint: {x: 0, y: 0},
-                fillLinearGradientEndPoint: {x: 0, y: containerHeight},
+                fillLinearGradientStartPoint: {x: 0, y: contentTop},
+                fillLinearGradientEndPoint: {x: 0, y: contentBottom},
               }),
         });
         this._group.add(this._fillBelowShape);
@@ -567,7 +574,7 @@ class TrackMeasurementsView extends BaseKonvaComponent2<Konva.Group> {
       const fillAboveGradient = measurementStyle?.fillAboveLinearGradientColorStops;
       if (fillAboveColor || fillAboveGradient) {
         this._fillAboveShape = KonvaFactory.createLine({
-          points: [...polylinePoints, lastX, 0, firstX, 0],
+          points: [...polylinePoints, lastX, contentTop, firstX, contentTop],
           closed: true,
           strokeWidth: 0,
           listening: false,
@@ -577,8 +584,8 @@ class TrackMeasurementsView extends BaseKonvaComponent2<Konva.Group> {
             : {
                 fillPriority: 'linear-gradient',
                 fillLinearGradientColorStops: fillAboveGradient,
-                fillLinearGradientStartPoint: {x: 0, y: containerHeight},
-                fillLinearGradientEndPoint: {x: 0, y: 0},
+                fillLinearGradientStartPoint: {x: 0, y: contentBottom},
+                fillLinearGradientEndPoint: {x: 0, y: contentTop},
               }),
         });
         this._group.add(this._fillAboveShape);
@@ -633,11 +640,13 @@ class TrackMeasurementsView extends BaseKonvaComponent2<Konva.Group> {
     this._polyline?.points(polylinePoints);
 
     if (polylinePoints.length >= 4) {
-      const containerHeight = this._timelineLane.style.height;
+      const fullHeight = this._timelineLane.style.height;
+      const contentTop = this._config?.style?.paddingTop ?? 0;
+      const contentBottom = fullHeight - (this._config?.style?.paddingBottom ?? 0);
       const firstX: number = polylinePoints[0]!;
       const lastX: number = polylinePoints[polylinePoints.length - 2]!;
-      this._fillBelowShape?.points([...polylinePoints, lastX, containerHeight, firstX, containerHeight]);
-      this._fillAboveShape?.points([...polylinePoints, lastX, 0, firstX, 0]);
+      this._fillBelowShape?.points([...polylinePoints, lastX, contentBottom, firstX, contentBottom]);
+      this._fillAboveShape?.points([...polylinePoints, lastX, contentTop, firstX, contentTop]);
     }
   }
 
@@ -689,6 +698,8 @@ interface MeasurementItemViewConfig {
   scaleBaseline: number;
   startTime: number;
   style?: Partial<LineChartLaneTrackMeasurementStyle> | undefined;
+  paddingTop?: number;
+  paddingBottom?: number;
 }
 
 class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
@@ -793,11 +804,14 @@ class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
 
   computePosition(): {x: number; y: number} {
     const x = this._timeline.timeToTimelinePosition(this._config.startTime);
-    const containerHeight = this._timelineLane.style.height;
+    const fullHeight = this._timelineLane.style.height;
+    const paddingTop = this._config.paddingTop ?? 0;
+    const paddingBottom = this._config.paddingBottom ?? 0;
+    const contentHeight = fullHeight - paddingTop - paddingBottom;
     const scale = this._config.scale;
     const scaleSize = scale.max - scale.min;
-    const clamp = (v: number) => Math.max(0, Math.min(containerHeight, v));
-    const y = clamp(((scale.max - Number(this._observationItem.value)) / scaleSize) * containerHeight);
+    const clamp = (v: number) => Math.max(paddingTop, Math.min(paddingTop + contentHeight, v));
+    const y = clamp(paddingTop + ((scale.max - Number(this._observationItem.value)) / scaleSize) * contentHeight);
     return {x, y};
   }
 

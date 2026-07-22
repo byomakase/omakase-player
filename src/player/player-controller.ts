@@ -220,6 +220,13 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
 
     this.initEventHandlers();
     this.startTimeSynchronizationCallback();
+
+    // Sync state in case the video was already playing when wireEvents was called
+    // (e.g. play() was called during the load window, or a durationchange fired mid-playback).
+    // The `playing` DOM event won't re-fire, so we must set the state here.
+    if (this.isPlaying()) {
+      this.setPlaying()
+    }
   }
 
   initEventHandlers() {
@@ -333,16 +340,14 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
       .pipe(filter((p) => p.type === PlayerControllerEventType.PLAYER_CONTROLLER_PLAY))
       .pipe(takeUntil(this._mediaEventBreaker.observer))
       .subscribe((event) => {
-        this._mediaElementPlayback!.setPlaying();
-        this._videoStalledCheckLastCurrentTime = void 0;
+        this.setPlaying()
       });
 
     this.onEvent$
       .pipe(filter((p) => p.type === PlayerControllerEventType.PLAYER_CONTROLLER_PAUSE))
       .pipe(takeUntil(this._mediaEventBreaker.observer))
       .subscribe((event) => {
-        this._videoStalledCheckLastCurrentTime = void 0;
-        this._mediaElementPlayback!.setPaused();
+        this.setPaused()
       });
 
     this.onEvent$
@@ -423,6 +428,16 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
     this._mediaTemporalConverter = void 0;
 
     this.stopSynchronizationCallbacks();
+  }
+
+  protected setPlaying() {
+    this._mediaElementPlayback!.setPlaying();
+    this._videoStalledCheckLastCurrentTime = void 0;
+  }
+
+  protected setPaused() {
+    this._videoStalledCheckLastCurrentTime = void 0;
+    this._mediaElementPlayback!.setPaused();
   }
 
   restoreMainMediaSession(args: RestoreMainMediaSessionArgsType): Observable<void> {
@@ -1346,7 +1361,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
         this._checkAndCancelPausing();
 
         let startPlay = () => {
-          // first start request video frame callback cycle
+           // first start request video frame callback cycle
           this._playerDomController.mainMediaVideoElement
             .play()
             .then(() => {

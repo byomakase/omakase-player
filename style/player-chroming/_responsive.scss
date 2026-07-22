@@ -463,6 +463,12 @@
   }
 }
 
+@container (inline-size > 600px) {
+  media-controller:not(.safari) .lower-control-bar .end-container .omakase-timecode-wrapper omakase-time-display omakase-time-edit {
+    margin-top: 0.5px;
+  }
+}
+
 @container (inline-size >= 750px) {
   media-controller {
     &.media-controller-stamp {
@@ -540,6 +546,10 @@
       --center-control-size: calc(var(--center-control-size-default) * 1.125);
     }
 
+    &:not(.safari) .lower-control-bar .end-container .omakase-timecode-wrapper omakase-time-display omakase-time-edit {
+      margin-top: 1px;
+    }
+
     &.media-controller-omakase {
       .omakase-timecode-wrapper,
       .omakase-time-edit-input {
@@ -605,7 +615,7 @@
   }
 }
 
-@container (inline-size > 1301px) {
+@container (inline-size >= 1400px) {
   media-controller.safari .lower-control-bar .end-container .omakase-timecode-wrapper omakase-time-display omakase-time-edit {
     margin-top: 0.5px;
   }
@@ -1052,8 +1062,8 @@
   }
 }
 
-@container (inline-size > 2551px) {
-  media-controller .lower-control-bar .end-container .omakase-timecode-wrapper omakase-time-display omakase-time-edit {
+@container (inline-size > 2401px) {
+  media-controller:not(.safari) .lower-control-bar .end-container .omakase-timecode-wrapper omakase-time-display omakase-time-edit {
     margin-top: 0.5px;
   }
 }
