@@ -33,8 +33,10 @@ import {MarkerTrackProxy} from './impl/marker-track-proxy';
 import {ChromingMarkerBarHandlerProxy} from './impl/chroming-marker-bar-handler-proxy';
 import {AlertsManagerProxy} from './impl/alerts-manager-proxy';
 import {TrackUtilsProxy} from './impl/track-utils-proxy';
+import {TamsMainMediaSessionProxy} from './impl/tams-main-media-session-proxy';
 import {ThumbnailTrackProxy} from './impl/thumbnail-track-proxy';
 import {UiProxy} from './impl/ui-proxy';
+import {LivePlaybackTrackerProxy} from './impl/live-playback-tracker-proxy';
 
 export const getMessageChannelProxyMap = () => ({
   Ui: UiProxy,
@@ -44,6 +46,7 @@ export const getMessageChannelProxyMap = () => ({
   SessionStore: SessionStoreProxy,
   OmakaseTrackApi: OmakaseTrackApiProxy,
   TrackUtils: TrackUtilsProxy,
+  TamsMainMediaSession: TamsMainMediaSessionProxy,
 
   MainMedia: MainMediaProxy,
   Track: TrackProxy,
@@ -56,6 +59,8 @@ export const getMessageChannelProxyMap = () => ({
 
   ChromingDetached: ChromingDetachedProxy,
   ChromingMarkerBarHandler: ChromingMarkerBarHandlerProxy,
+
+  LivePlaybackTracker: LivePlaybackTrackerProxy,
 
   TextTrackHandler: TextTrackHandlerProxy,
   AudioHandler: AudioHandlerProxy,

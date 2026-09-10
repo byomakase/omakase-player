@@ -15,12 +15,15 @@
  */
 
 import type {MarkerState, MarkerTrackState} from '../../media/marker-track';
+import type {UiLiveModel} from '../../live/live-model';
 import {OmakaseMarkerTrackAttributes, type OmakaseMarkerBar} from './omakase-marker-bar';
 
 export class OmakaseMarkerBars extends HTMLElement {
   private _markerBars: OmakaseMarkerBar[] = [];
   private _mediaDuration?: number;
   private _containerSize?: number;
+
+  private _liveModel?: UiLiveModel | undefined;
 
   set mediaDuration(mediaDuration: number) {
     this._mediaDuration = mediaDuration;
@@ -52,16 +55,26 @@ export class OmakaseMarkerBars extends HTMLElement {
     }
   }
 
-  addMarkerBar() {
-    const markerTrack = document.createElement('omakase-marker-bar') as OmakaseMarkerBar;
-    if (this.isOmakase) {
-      markerTrack.isOmakase = true;
+  setLiveModel(model: UiLiveModel) {
+    this._liveModel = model;
+    for (const markerTrack of this._markerBars) {
+      markerTrack.setLiveModel(model);
     }
-    this.appendChild(markerTrack);
-    markerTrack.mediaDuration = this._mediaDuration ?? 0;
-    markerTrack.containerSize = this._containerSize;
-    this.markerBars.push(markerTrack);
-    return markerTrack;
+  }
+
+  addMarkerBar() {
+    const markerBar = document.createElement('omakase-marker-bar') as OmakaseMarkerBar;
+    if (this.isOmakase) {
+      markerBar.isOmakase = true;
+    }
+    if (this._liveModel) {
+      markerBar.setLiveModel(this._liveModel);
+    }
+    this.appendChild(markerBar);
+    markerBar.mediaDuration = this._mediaDuration ?? 0;
+    markerBar.containerSize = this._containerSize;
+    this.markerBars.push(markerBar);
+    return markerBar;
   }
 
   deleteMarkerBar(barId: string) {

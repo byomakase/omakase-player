@@ -32,6 +32,48 @@ export enum MainMediaType {
   HLS = 'HLS',
   MP4 = 'MP4',
   AUDIO_FILE = 'AUDIO_FILE',
+  TAMS = 'TAMS',
+}
+
+/**
+ * Live stream mode.
+ *
+ * `EVENT` — Start-Over live: a fixed start that grows towards the live edge; full history is seekable.
+ * `CONTINUOUS` — a continuously sliding live window (no fixed start; earliest segments are evicted).
+ */
+export enum LiveMode {
+  CONTINUOUS = 'CONTINUOUS',
+  EVENT = 'EVENT',
+}
+
+/**
+ * Live details for a {@link MainMedia} whose source is a live stream.
+ *
+ * `liveStartTime`/`liveEdgeDuration` describe the currently seekable window and slide forward as the
+ * manifest is reloaded (segments dropped from the front, appended at the edge). They mirror
+ * the range hls.js would hand to `MediaSource.setLiveSeekableRange`, derived from the playlist.
+ * All values are in the media element timeline (comparable to `currentTime`).
+ */
+export interface MediaLiveState {
+  /** Earliest seekable position — start of the first fragment still in the playlist. */
+  liveStartTime: number;
+  /** Live edge — end of the last fragment/part in the playlist. */
+  liveEdgeDuration: number;
+  /** Duration of all segments (including evicted ones) up to the live sync point. */
+  duration: number;
+  /** Target segment duration; useful as seek headroom above {@link liveStartTime}. */
+  targetDuration: number;
+  /**
+   * Durations of the segments at the front of the window, oldest first - the ones eviction consumes.
+   * Real durations rather than {@link targetDuration}, which a manifest is free not to honour.
+   */
+  leadingSegmentDurations: number[];
+  /** Media sequence number of the first segment in the window; identifies content across instances. */
+  startSN: number;
+  /** Continuous (sliding window) or Event (start-over) live. */
+  liveMode: LiveMode;
+  /** Wall-clock time (ms since epoch) of the last manifest reload; for stale-manifest detection. */
+  manifestUpdatedTime: number;
 }
 
 /**
@@ -69,6 +111,8 @@ export interface MainMediaState extends MediaEntityState {
   hasDrm?: boolean | undefined;
   hasVideo?: boolean | undefined;
   hasAudio?: boolean | undefined;
+  isLive?: boolean | undefined;
+  liveState?: MediaLiveState | undefined;
 }
 
 /**
@@ -174,6 +218,12 @@ export interface MainMedia extends MediaEntity {
   /** Indicates whether media has audio tracks. */
   get hasAudio(): boolean | undefined;
 
+  /** Whether the media source is a live stream. */
+  get isLive(): boolean;
+
+  /** Live details, present when {@link isLive} is `true`. */
+  get liveState(): MediaLiveState | undefined;
+
   /**
    * Partially update mutable media attributes and emit a
    * {@link MainMediaEventType.MAIN_MEDIA_UPDATED} event.
@@ -185,13 +235,18 @@ export interface MainMedia extends MediaEntity {
  * Subset of {@link MainMediaState} fields that can be updated at runtime
  * via {@link MainMedia.updateAttrs}.
  */
-export type MainMediaUpdateableAttrs = Pick<MainMediaState, 'duration' | 'frameRateModel' | 'ffomTimecodeModel' | 'initSegmentTimeOffset' | 'hasDrm' | 'hasVideo' | 'hasAudio'>;
+export type MainMediaUpdateableAttrs = Pick<
+  MainMediaState,
+  'duration' | 'frameRateModel' | 'ffomTimecodeModel' | 'initSegmentTimeOffset' | 'hasDrm' | 'hasVideo' | 'hasAudio' | 'isLive' | 'liveState'
+>;
+
+export type MediaRotationValue = 0 | 90 | 180 | 270;
 
 /**
  * Configuration provided when loading a main media source via
  * {@link OmakasePlayerApi.loadMainMedia} or {@link PlayerApi.loadMainMedia}.
  */
-export interface MainMediaLoadOptions extends Serializable {
+export interface BaseMainMediaLoadOptions extends Serializable {
   /**
    * Media frame rate. Can be a numeric value or a fraction string in the form `"numerator/denominator"`.
    */
@@ -232,7 +287,85 @@ export interface MainMediaLoadOptions extends Serializable {
    * URL for a poster image displayed before the video starts playing.
    */
   poster?: string;
+
+  /** Number of degrees by which the video should be rotated (0, 90, 180 or 270) */
+  mediaRotation?: MediaRotationValue;
+
+  /**
+   * When `true`, disables all automatic media probing / metadata HTTP requests (file format
+   * detection, HLS init segment time offset, audio channel count/codec, etc.). `mainMediaType`
+   * and/or `fileFormatType` must be provided explicitly, or loading fails — anything else that
+   * would normally be probed falls back to a default value instead.
+   */
+  forceSkipMetadataResolution?: boolean;
 }
+
+export interface HlsMainMediaLoadOptions extends BaseMainMediaLoadOptions {}
+
+export interface Mp4MainMediaLoadOptions extends BaseMainMediaLoadOptions {}
+
+export interface AudioFileMainMediaLoadOptions extends BaseMainMediaLoadOptions {}
+
+/**
+ * Load options for TAMS media.
+ *
+ * {@link timerange} and {@link BaseMainMediaLoadOptions.duration} select the playback mode:
+ *
+ * - `timerange` with start and end — VOD over that range.
+ * - `timerange` with start only (ie. `"[3600:0_"`) — start-over live ({@link LiveMode.EVENT}): a fixed
+ *   start that grows towards the flow head, which is polled for new segments.
+ * - `duration` only — sliding-window live ({@link LiveMode.CONTINUOUS}): a `duration` seconds long window
+ *   that follows the flow head, with back buffer eviction.
+ * - neither — VOD over a default window resolved from the flow timerange.
+ *
+ * `timerange` takes precedence over `duration`.
+ */
+export interface TamsMainMediaLoadOptions extends BaseMainMediaLoadOptions {
+  /**
+   * TAMS timerange to load, in TAMS timerange notation (ie. `"[0:0_600:0)"`, `"[3600:0_"`).
+   * Open bounds are resolved from the flow timerange. Takes precedence over
+   * {@link BaseMainMediaLoadOptions.duration}.
+   */
+  timerange?: string;
+
+  /**
+   * Whole hours to shift the derived FFOM timecode by, `-23` to `23`.
+   */
+  ffomTimeZoneOffset?: number;
+
+  /**
+   * Flow URLs to play alongside the flow being loaded. Allows on the fly multi flow creation as long as additional
+   * flows are compatible. This is incompatible if the main TAMS resource provided is muxed, source or a multiflow.
+   */
+  additionalFlowUrls?: string[];
+
+  /**
+   * Keeps the flows and segments the manifest was built from on the loaded media, readable through
+   * `TamsMainMedia.tamsMediaData`. Defaults to false.
+   */
+  returnTamsMediaData?: boolean;
+}
+
+export type MainMediaLoadOptionsMap = {
+  [MainMediaType.HLS]: HlsMainMediaLoadOptions;
+  [MainMediaType.MP4]: Mp4MainMediaLoadOptions;
+  [MainMediaType.AUDIO_FILE]: AudioFileMainMediaLoadOptions;
+  [MainMediaType.TAMS]: TamsMainMediaLoadOptions;
+};
+
+/**
+ * Configuration provided when loading a main media source via
+ * {@link OmakasePlayerApi.loadMainMedia} or {@link PlayerApi.loadMainMedia}.
+ */
+export type MainMediaLoadOptions = {
+  [T in keyof MainMediaLoadOptionsMap]: {
+    mainMediaType?: T;
+  } & MainMediaLoadOptionsMap[T];
+}[keyof MainMediaLoadOptionsMap];
+
+export type MainMediaLoadOptionsFor<T extends MainMediaType> = {
+  mainMediaType: T;
+} & MainMediaLoadOptionsMap[T];
 
 /**
  * Construction arguments for {@link BaseMainMedia} and its subclasses.
@@ -260,6 +393,10 @@ export interface BaseMainMediaArgs extends BaseMediaEntityArgs {
   hasVideo?: boolean | undefined;
   /** Whether media has audio. */
   hasAudio?: boolean | undefined;
+  /** Whether the media source is a live stream. */
+  isLive?: boolean | undefined;
+  /** Live details, present for live streams. */
+  liveState?: MediaLiveState | undefined;
 }
 
 export abstract class BaseMainMedia<S extends MainMediaState> extends BaseMediaEntity<S> implements MainMedia {
@@ -287,6 +424,8 @@ export abstract class BaseMainMedia<S extends MainMediaState> extends BaseMediaE
   protected _hasDrm?: boolean | undefined;
   protected _hasVideo?: boolean | undefined;
   protected _hasAudio?: boolean | undefined;
+  protected _isLive: boolean = false;
+  protected _liveState?: MediaLiveState | undefined;
 
   protected constructor(args: BaseMainMediaArgs) {
     super(args);
@@ -313,6 +452,8 @@ export abstract class BaseMainMedia<S extends MainMediaState> extends BaseMediaE
     this._hasDrm = !!args?.hasDrm;
     this._hasVideo = args.hasVideo;
     this._hasAudio = args.hasAudio;
+    this._isLive = !!args.isLive;
+    this._liveState = args.liveState;
   }
 
   loadStart() {
@@ -405,6 +546,14 @@ export abstract class BaseMainMedia<S extends MainMediaState> extends BaseMediaE
     return this._hasAudio;
   }
 
+  get isLive(): boolean {
+    return this._isLive;
+  }
+
+  get liveState(): MediaLiveState | undefined {
+    return this._liveState;
+  }
+
   get sourceFileFormatType(): FileFormatType | undefined {
     return this._sourceFileFormatType;
   }
@@ -441,6 +590,14 @@ export abstract class BaseMainMedia<S extends MainMediaState> extends BaseMediaE
       this._hasAudio = attrs.hasAudio;
     }
 
+    if (objectHasOwnProperty(attrs, 'isLive')) {
+      this._isLive = !!attrs.isLive;
+    }
+
+    if (objectHasOwnProperty(attrs, 'liveState')) {
+      this._liveState = attrs.liveState;
+    }
+
     this._onEvent$.next({
       type: MainMediaEventType.MAIN_MEDIA_UPDATED,
       data: {
@@ -471,6 +628,8 @@ export abstract class BaseMainMedia<S extends MainMediaState> extends BaseMediaE
       hasDrm: this._hasDrm,
       hasVideo: this._hasVideo,
       hasAudio: this._hasAudio,
+      isLive: this._isLive,
+      liveState: this._liveState,
     };
   }
 }

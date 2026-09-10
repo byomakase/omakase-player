@@ -16,7 +16,7 @@
 
 import {z} from 'zod';
 import {MediaTemporalFormat} from './media-temporal';
-import {MainMediaType, TrackType} from '../media';
+import {MainMediaType, type MediaRotationValue, TrackType} from '../media';
 import {AUDIO_DEFAULTS} from '../constants';
 import {PlayerTextHandlerType} from '../player';
 import {VideoKeyframeType} from '../tools/keyframe-extractor';
@@ -79,6 +79,12 @@ export class Validators {
   public static videoKeyframeType(): (value: VideoKeyframeType) => VideoKeyframeType {
     return (value: VideoKeyframeType) => {
       return z.enum(VideoKeyframeType).parse(value);
+    };
+  }
+
+  public static mediaRotation(): (value: MediaRotationValue) => MediaRotationValue {
+    return (value: MediaRotationValue) => {
+      return z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]).parse(value);
     };
   }
 }

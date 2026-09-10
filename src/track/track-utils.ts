@@ -492,8 +492,9 @@ export class TrackUtils implements TrackUtilsApi {
   private convertWithTtconv(subtitlesData: ArrayBuffer | string, inputFormat: FileFormatType, outputFormat: OutputTextFileFormatType, slewOptions?: SlewOptions): Observable<string> {
     return new Observable<string>((observer) => {
       const convertSubtitles = () => {
+        const input = subtitlesData instanceof ArrayBuffer ? new Uint8Array(subtitlesData) : subtitlesData;
         let o$ = of(
-          ttconvConvert(subtitlesData, inputFormat.toLowerCase() as InputFormat, outputFormat.toLowerCase() as OutputFormat, {
+          ttconvConvert(input, inputFormat.toLowerCase() as InputFormat, outputFormat.toLowerCase() as OutputFormat, {
             writer: {styleRegion: true, textFormatting: true},
             slewOptions,
           })

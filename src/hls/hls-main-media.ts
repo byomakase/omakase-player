@@ -47,7 +47,10 @@ export class HlsMainMedia extends BaseMainMedia<HlsMainMediaState> {
       initSegmentTimeOffset: this._initSegmentTimeOffset,
       hasDrm: this._hasDrm,
       hasVideo: this._hasVideo,
-      hasAudio: this._hasAudio
+      hasAudio: this._hasAudio,
+
+      isLive: this._isLive,
+      liveState: this._liveState,
     };
   }
 }

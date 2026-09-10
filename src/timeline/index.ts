@@ -31,3 +31,6 @@ export * from './label';
 export * from './track-lane';
 export * from './observation';
 export * from './text';
+export * from './timeline-slot-type';
+export * from './timeline-slot-api';
+export type {VerticalScrollApi, VerticalScrollEvent, VerticalScrollOptions} from './vertical-scroll';

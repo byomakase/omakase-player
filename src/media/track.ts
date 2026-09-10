@@ -179,6 +179,14 @@ export interface BaseTrackArgs extends BaseMediaEntityArgs {
 /** Base load options shared by all track types. */
 export interface BaseTrackLoadOptions {
   fileFormatType?: FileFormatType | undefined;
+
+  /**
+   * When `true`, disables all automatic media probing / metadata HTTP requests for this track
+   * (file format detection, audio channel count, etc.). `fileFormatType` must be provided
+   * explicitly, or loading fails — anything else that would normally be probed falls back to a
+   * default value instead.
+   */
+  forceSkipMetadataResolution?: boolean;
 }
 
 /**

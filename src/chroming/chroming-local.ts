@@ -48,6 +48,7 @@ import type {OmpProvider} from '../omp-provider';
 import {Ui} from '../ui';
 import {ObserverBreaker} from '../common/observer-breaker';
 import {PlayerAudioType} from '../player';
+import type {LivePlaybackTrackerApi} from '../live/live-model';
 
 export class ChromingLocal extends BaseChroming implements ChromingLocalApi {
   private _sessionStore: SessionStore;
@@ -56,7 +57,7 @@ export class ChromingLocal extends BaseChroming implements ChromingLocalApi {
   private _alertsManager: AlertsManager;
   private _ui: Ui;
 
-  constructor(ompProvider: OmpProvider, config: ChromingLocalConfig) {
+  constructor(ompProvider: OmpProvider, config: ChromingLocalConfig, livePlaybackTracker: LivePlaybackTrackerApi) {
     super({
       ...config,
       playerWindowPlaybackMode: WindowPlaybackMode.ATTACHED,
@@ -64,6 +65,8 @@ export class ChromingLocal extends BaseChroming implements ChromingLocalApi {
         return this.findThumbnailFn(trackId, time);
       },
     });
+
+    this.setLivePlaybackTracker(livePlaybackTracker);
 
     this._sessionStore = ompProvider.sessionStore;
     this._trackApi = ompProvider.omakaseTrack;

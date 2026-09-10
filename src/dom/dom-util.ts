@@ -15,16 +15,16 @@
  */
 
 export class DomUtil {
-  static getElementByIdOrFail<T>(elementId: string): T {
-    let element = this.getElementById<T>(elementId);
+  static getElementByIdOrFail<T>(elementId: string, parentElement?: HTMLElement): T {
+    let element = this.getElementById<T>(elementId, parentElement);
     if (!element) {
       throw new Error(`Cannot find element with id ${elementId}`);
     }
     return element;
   }
 
-  static getElementById<T>(elementId: string): T | undefined {
-    let element = document.getElementById(elementId);
+  static getElementById<T>(elementId: string, parentElement?: HTMLElement): T | undefined {
+    let element = parentElement ? parentElement.querySelector(`#${elementId}`) : document.getElementById(elementId);
     return element ? (element as T) : void 0;
   }
 

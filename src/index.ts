@@ -36,3 +36,4 @@ export * from './marker-list';
 export * from './ui';
 export * from './omp-provider';
 export * from './vu-meter';
+export * from './tams';

@@ -80,6 +80,7 @@ export class ChromingDetached extends BaseChroming implements ChromingDetachedAp
     this._alertsManagerProxy = remoteNode.getProxyByName('AlertsManager');
     this._mainMediaRepositoryProxy = remoteNode.getProxyByName('MainMediaRepository');
     this._uiProxy = remoteNode.getProxyByName('Ui');
+    this.setLivePlaybackTracker(remoteNode.getProxyByName('LivePlaybackTracker'));
 
     this._trackRepository.onEvent$
       .pipe(takeUntil(this._destroyBreaker.observer))

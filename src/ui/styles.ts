@@ -44,7 +44,8 @@ import {
   type MarkerStyle,
   type MarkerTrackStyle
 } from './marker-style';
-import {SCROLLBAR_STYLE_DEFAULT, type ScrollbarStyle} from '../timeline/scrollbar/scrollbar';
+import {ZOOM_SCROLLBAR_STYLE_DEFAULT, type ZoomScrollbarStyle} from '../timeline/scrollbar/zoom-scrollbar';
+import {VERTICAL_SCROLLBAR_STYLE_DEFAULT, type VerticalScrollbarStyle} from '../timeline/scrollbar/vertical-scrollbar';
 import {type ScrollbarLaneStyle, TIMELINE_SCROLLBAR_LANE_STYLE_DEFAULT} from '../timeline/scrollbar/scrollbar-lane';
 
 export type ElementStyleByName = {
@@ -67,7 +68,10 @@ export type ElementStyleByName = {
   MarkerTrackOnMarkerTrackLane: Omit<MarkerTrackStyle, keyof MarkerTrackStyle>;
   MarkerOnMarkerTrackLane: Omit<MarkerOnMarkerTrackLaneStyle, keyof MarkerTrackStyle>;
 
-  Scrollbar: ScrollbarStyle;
+  // Key stays 'Scrollbar' for public style-API backward compatibility, even though the
+  // underlying implementation class is now ZoomScrollbar.
+  Scrollbar: ZoomScrollbarStyle;
+  VerticalScrollbar: VerticalScrollbarStyle;
 
   // chroming
   MarkerOnChroming: Omit<MarkerOnChromingStyle, keyof MarkerTrackStyle>;
@@ -108,7 +112,10 @@ export const DEFAULT_ELEMENT_STYLES: {[K in ElementStyleName]: ElementStyleByNam
     ...omitKeysOf(OBSERVATION_TRACK_LANE_STYLE_DEFAULT, TIMELINE_LANE_STYLE_DEFAULT),
   },
   Scrollbar: {
-    ...SCROLLBAR_STYLE_DEFAULT,
+    ...ZOOM_SCROLLBAR_STYLE_DEFAULT,
+  },
+  VerticalScrollbar: {
+    ...VERTICAL_SCROLLBAR_STYLE_DEFAULT,
   },
   MarkerOnMarkerTrackLane: {
     ...omitKeysOf(MARKER_ON_MARKER_TRACK_LANE_STYLE_DEFAULT, MARKER_TRACK_STYLE_DEFAULT),

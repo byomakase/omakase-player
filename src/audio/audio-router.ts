@@ -242,8 +242,7 @@ export class AudioRouter implements InternalAudioRouterApi {
 
   protected _soloMuteStatesByInput: Map<number, AudioRouterSoloMuteState>;
 
-  protected _suppressMuteEvents = false;
-  protected _muteEventAllowedInputs: Set<number> | undefined = void 0;
+  protected _soloMuteStatesSnapshot: Map<number, AudioRouterSoloMuteState> | undefined = void 0;
 
   protected _connectionsByInputOutput: Map<number, Map<number, AudioRoutingConnection>>;
   protected _effectGraphsByInputOutput: Map<number, Map<number, AudioEffectGraph | undefined>>;
@@ -367,18 +366,13 @@ export class AudioRouter implements InternalAudioRouterApi {
 
   updateConnections(connections: AudioRoutingConnection[]): Observable<void> {
     return passiveObservable((observer) => {
-      connections.forEach((p) => this._updateConnection(p, false));
+      this.runSoloMuteOperation(() => {
+        connections.forEach((p) => this._updateConnection(p, false));
 
-      // router change event precedes solo/mute events when the change originates from connections
-      this.emitChange();
-
-      // only channels whose connections were actually updated may emit mute events -> previously muted channels do not emit again
-      this._muteEventAllowedInputs = new Set(connections.map((connection) => connection.path.input));
-      try {
         this._updateInputsSoloMuteState();
-      } finally {
-        this._muteEventAllowedInputs = void 0;
-      }
+
+        this.emitChange();
+      });
 
       nextCompleteObserver(observer);
     });
@@ -562,17 +556,13 @@ export class AudioRouter implements InternalAudioRouterApi {
       }
 
       const inputState = this._soloMuteStatesByInput.get(routingPath.input);
-      // mute events must not fire during solo
-      this._suppressMuteEvents = true;
-      try {
+      this.runSoloMuteOperation(() => {
         if (inputState && inputState.soloed) {
           this._unsolo(routingPath.input);
         } else {
           this._solo(routingPath.input);
         }
-      } finally {
-        this._suppressMuteEvents = false;
-      }
+      });
 
       this.emitChange();
       nextCompleteObserver(observer);
@@ -580,7 +570,6 @@ export class AudioRouter implements InternalAudioRouterApi {
   }
 
   protected _solo(inputNumber: number) {
-    const wasTargetMuted = this._soloMuteStatesByInput.get(inputNumber)?.muted ?? false;
     const inputSoloedState = [...this._soloMuteStatesByInput.values()].find((inputState) => inputState.soloed);
     if (inputSoloedState) {
       this._unsolo(inputSoloedState.inputNumber, false);
@@ -636,11 +625,6 @@ export class AudioRouter implements InternalAudioRouterApi {
       soloed: true,
       muted: false,
     });
-
-    // the soloed channel itself, if it was muted, is now unmuted - emit that even though side-effect mutes are suppressed during solo
-    if (wasTargetMuted) {
-      this.emitMuteChange(inputNumber);
-    }
   }
 
   private setInputSoloMuteState(inputNumber: number, state: AudioRouterSoloMuteState) {
@@ -650,12 +634,45 @@ export class AudioRouter implements InternalAudioRouterApi {
 
     this._soloMuteStatesByInput.set(inputNumber, state);
 
+    if (this._soloMuteStatesSnapshot) {
+      return;
+    }
+
+    if (previousMuted !== state.muted) {
+      this.emitMuteChange(inputNumber);
+    }
     if (previousSoloed !== state.soloed) {
       this.emitSoloChange(inputNumber);
     }
-    if (previousMuted !== state.muted && !this._suppressMuteEvents && (this._muteEventAllowedInputs === void 0 || this._muteEventAllowedInputs.has(inputNumber))) {
-      this.emitMuteChange(inputNumber);
+  }
+
+  /**
+   * Solo and mute changes are emitted once per operation
+   */
+  protected runSoloMuteOperation(operation: () => void): void {
+    if (this._soloMuteStatesSnapshot) {
+      operation();
+      return;
     }
+
+    this._soloMuteStatesSnapshot = new Map([...this._soloMuteStatesByInput].map(([inputNumber, state]) => [inputNumber, {...state}]));
+
+    try {
+      operation();
+    } finally {
+      const snapshot = this._soloMuteStatesSnapshot;
+      this._soloMuteStatesSnapshot = void 0;
+      this.emitSoloMuteDiff(snapshot);
+    }
+  }
+
+  protected emitSoloMuteDiff(snapshot: Map<number, AudioRouterSoloMuteState>): void {
+    const inputNumbers = [...this._soloMuteStatesByInput.keys()].sort((a, b) => a - b);
+    const mutedChanged = inputNumbers.filter((inputNumber) => (snapshot.get(inputNumber)?.muted ?? false) !== (this._soloMuteStatesByInput.get(inputNumber)?.muted ?? false));
+    const soloedChanged = inputNumbers.filter((inputNumber) => (snapshot.get(inputNumber)?.soloed ?? false) !== (this._soloMuteStatesByInput.get(inputNumber)?.soloed ?? false));
+
+    mutedChanged.forEach((inputNumber) => this.emitMuteChange(inputNumber));
+    soloedChanged.forEach((inputNumber) => this.emitSoloChange(inputNumber));
   }
 
   protected _unsolo(inputNumber: number, checkMute = true) {
@@ -691,22 +708,25 @@ export class AudioRouter implements InternalAudioRouterApi {
         throw new Error('Invalid routing path');
       }
 
-      const inputSoloedState = [...this._soloMuteStatesByInput.values()].find((inputState) => inputState.soloed);
-      if (inputSoloedState) {
-        this._unsolo(inputSoloedState.inputNumber);
+      this.runSoloMuteOperation(() => {
+        const inputSoloedState = [...this._soloMuteStatesByInput.values()].find((inputState) => inputState.soloed);
+        if (inputSoloedState) {
+          this._unsolo(inputSoloedState.inputNumber);
 
-        const inputState = this._soloMuteStatesByInput.get(routingPath.input);
-        if (inputState && !inputState.muted) {
-          this._mute(routingPath.input);
-        }
-      } else {
-        const inputState = this._soloMuteStatesByInput.get(routingPath.input);
-        if (inputState && inputState.muted) {
-          this._unmute(routingPath.input);
+          const inputState = this._soloMuteStatesByInput.get(routingPath.input);
+          if (inputState && !inputState.muted) {
+            this._mute(routingPath.input);
+          }
         } else {
-          this._mute(routingPath.input);
+          const inputState = this._soloMuteStatesByInput.get(routingPath.input);
+          if (inputState && inputState.muted) {
+            this._unmute(routingPath.input);
+          } else {
+            this._mute(routingPath.input);
+          }
         }
-      }
+      });
+
       this.emitChange();
       nextCompleteObserver(observer);
     });
@@ -785,8 +805,8 @@ export class AudioRouter implements InternalAudioRouterApi {
 
   /**
    * Recomputes solo/mute states after connections change.
-   * Solo/mute change events are emitted inline via {@link setInputSoloMuteState}/{@link resetInputSoloMuteState}.
-   * A soloed input can only be unsoloed here (never soloed), when both mute and solo can be emitted, mute(s) are emitted.
+   * Only state is written here; events are emitted by {@link runSoloMuteOperation} once the operation completes.
+   * A soloed input can only be unsoloed here (never soloed).
    */
   protected _updateInputsSoloMuteState() {
     const routingConnections = this.getRoutingConnections();

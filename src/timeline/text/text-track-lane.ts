@@ -22,8 +22,11 @@ import type {TimelineImpl} from '../timeline';
 import {TIMELINE_LANE_CONFIG_DEFAULT, type TimelineLaneStyle} from '../timeline-lane';
 import {BaseTrackLane, type TrackLaneConfig} from '../track-lane';
 import {TextCueVisualization} from './text-cue-visualization';
-import {combineLatest, Observable, Subject, takeUntil} from 'rxjs';
+import {combineLatest, filter, Observable, Subject, takeUntil} from 'rxjs';
 import {ObserverBreaker} from '../../common/observer-breaker';
+import {WindowPlaybackMode} from '../../common/window-playback';
+import {SessionEventType} from '../../session/session-event';
+import type {SessionApi} from '../../session/session-api';
 import {type ConfigAndStyle} from '../timeline-api';
 import {omitKeys} from '../../util/object-util';
 import {konvaUnlistener} from '../konva/konva-util';
@@ -73,6 +76,9 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
   protected _textCueVisualizations: Map<number, TextCueVisualization> = new Map();
   protected _squashedCueGroups: TextCue[][] = [];
   protected _cueSquashThreshold: number = 0.5;
+  protected _session?: SessionApi;
+  /** A render asked for while the window was mid-move, to be run once it settles. */
+  protected _renderPending = false;
 
   constructor(configAndStyle?: ConfigAndStyle<TextTrackLaneConfig, TextTrackLaneStyle>) {
     super(
@@ -119,10 +125,21 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
     }
   }
 
+  protected override handleStyleUpdate(): void {
+    super.handleStyleUpdate();
+
+    this._textCueVisualizations.forEach((visualization) => {
+      visualization.style = {
+        fill: this.style.textLaneItemFill,
+        opacity: this.style.textLaneItemOpacity,
+      };
+    });
+  }
+
   protected createStyledElement(): StyledElementWithId<TextTrackLaneStyle> {
     return {
       id: this._id,
-      classes: [this._ui!.resolveStyleClass('TextTrackLane')],
+      classes: [this._ui!.resolveStyleClass('TimelineLane'), this._ui!.resolveStyleClass('TextTrackLane')],
     };
   }
 
@@ -145,6 +162,19 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
 
     this._timecodedGroup.add(this._textMarkingsGroup);
 
+    this._session = ompProvider.sessionStore;
+
+    ompProvider.sessionStore.onEvent$
+      .pipe(
+        filter((event) => event.type === SessionEventType.SESSION_WINDOW_PLAYBACK_UPDATED),
+        takeUntil(this._destroyBreaker.observer)
+      )
+      .subscribe((event) => {
+        if (this.isWindowPlaybackSettled(event.data.windowPlayback.mode) && this._renderPending) {
+          this.render();
+        }
+      });
+
     this._prepared.next(true);
   }
 
@@ -153,8 +183,18 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
   }
 
   render(): void {
+    if (!this.isWindowPlaybackSettled()) {
+      this._renderPending = true;
+      return;
+    }
+    this._renderPending = false;
+
     this._squashedCueGroups = this.squashCues(this._track?.timedItemsSorted ?? []);
     this.adjustCueVisualizations();
+  }
+
+  private isWindowPlaybackSettled(mode: WindowPlaybackMode | undefined = this._session?.state.windowPlayback.mode): boolean {
+    return mode === void 0 || mode === WindowPlaybackMode.ATTACHED || mode === WindowPlaybackMode.DETACHED;
   }
 
   clearContent(): void {
@@ -225,7 +265,7 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
 
   settleLayout(): void {
     super.settleLayout();
-    let timelineTimecodedDimension = this._timeline!.getTimecodedFloatingDimension();
+    let timelineTimecodedDimension = this._timeline!.getTimecodedFloatingDimensionForLane(this.id);
     let timecodedRect = this.getTimecodedRect();
 
     this._timecodedGroup!.setAttrs({

@@ -33,6 +33,7 @@ import {
   HelpMenuGroupInsertPosition,
   type OmakaseThemeConfig,
   type VideoSafeZone,
+  VideoSafeZoneRenderingRegion,
 } from './chroming-api';
 import type {Destroyable} from '../common/capabilities';
 import {filter, Observable, Subject, takeUntil} from 'rxjs';
@@ -50,6 +51,7 @@ import type {TrackLoadOptions} from '../track';
 import type {OmpProvider} from '../omp-provider';
 import {DefaultDomController} from './themes/default-dom';
 import {OmakaseDomController} from './themes/omakase-dom';
+import type {LivePlaybackTrackerApi} from '../live/live-model';
 
 export class Chroming implements ChromingApi, Destroyable {
   protected readonly _onEvent$: Subject<ChromingEvent> = new Subject<ChromingEvent>();
@@ -65,13 +67,17 @@ export class Chroming implements ChromingApi, Destroyable {
 
   protected _destroyBreaker = new ObserverBreaker();
 
-  constructor(ompProvider: OmpProvider, config: ChromingConfig) {
+  constructor(ompProvider: OmpProvider, config: ChromingConfig, livePlaybackTracker: LivePlaybackTrackerApi) {
     this._sessionStore = ompProvider.sessionStore;
     this._config = config;
 
-    this._chromingLocal = new ChromingLocal(ompProvider, {
-      ...config,
-    });
+    this._chromingLocal = new ChromingLocal(
+      ompProvider,
+      {
+        ...config,
+      },
+      livePlaybackTracker
+    );
 
     this.wireLocal();
   }
@@ -194,8 +200,8 @@ export class Chroming implements ChromingApi, Destroyable {
     return this.getChromingInternalOrFail().addHelpMenuGroup(helpMenuGroup, insertPosition);
   }
 
-  addSafeZone(videoSafeZone: Partial<VideoSafeZone>): Observable<VideoSafeZone> {
-    return this.getChromingInternalOrFail().addSafeZone(videoSafeZone);
+  addSafeZone(videoSafeZone: Partial<VideoSafeZone>, renderingRegion = VideoSafeZoneRenderingRegion.VIDEO): Observable<VideoSafeZone> {
+    return this.getChromingInternalOrFail().addSafeZone(videoSafeZone, renderingRegion);
   }
 
   clearHelpMenuGroups(): Observable<void> {

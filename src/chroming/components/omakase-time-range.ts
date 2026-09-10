@@ -27,6 +27,7 @@ import type {UiProxy} from '../../remoting/impl/ui-proxy';
 import {DomUtil} from '../../dom/dom-util';
 import {isNullOrUndefined} from '../../util/util-functions';
 import {PlayerEventType, type PlayerInternalApi} from '../../player';
+import type {UiLiveModel} from '../../live/live-model';
 
 export const OmakaseTimeRangeAttributes = {
   NAME: 'name',
@@ -50,6 +51,7 @@ export interface OmakaseTimeRangeMarker {
   styledElement: StyledElement<MarkerStyle>;
   displayElement: HTMLDivElement;
   areaElement: HTMLDivElement;
+  markerState: MarkerState;
   trackId: MarkerTrackState['id'];
 }
 
@@ -69,8 +71,22 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
   private _markerDisplayContainer: HTMLElement;
   private _markerAreaContainer: HTMLElement;
   private _rangeElement: HTMLInputElement;
+  private _rangeElementWidth = 0;
+  private _thumbElementWidth = 12;
+  private _rangeResizeObserver: ResizeObserver;
+  private _thumbElement?: HTMLElement | null;
   private _lastPreviewTime?: number;
+  private _previewActive = false; // cursor is over the scrubber (preview showing)
+  private _previewAtLive = false; // cursor is over the ball of the scrubber
+  private _lastPreviewRangeValue: number | undefined;
   protected _destroyBreaker = new ObserverBreaker();
+
+  private _live = false;
+  private _windowStart = 0;
+  private _windowEnd = 0;
+  private _pinnedToLive = false;
+  private _pinnedToEnd = false;
+  private _liveModelApplied = false;
 
   private _markers: Map<MarkerState['id'], OmakaseTimeRangeMarker> = new Map();
   private _tracks: Map<MarkerTrackState['id'], MarkerTrackState> = new Map();
@@ -94,6 +110,7 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
       }
       #markers {
         position: absolute;
+        overflow-x: hidden;
         width: 100%;
         z-index: 1;
         height: var(--time-range-markers-height, 100%);
@@ -152,8 +169,31 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
     containerElement.appendChild(this._markerAreaContainer);
 
     this._rangeElement = this.shadowRoot!.querySelector('#range') as HTMLInputElement;
+    this._thumbElement = this.shadowRoot!.querySelector('#thumb');
     this._rangeElement.addEventListener('keydown', (e) => {
       e.preventDefault();
+    });
+
+    this._rangeElementWidth = this._rangeElement.offsetWidth;
+    this._thumbElementWidth = this._thumbElement?.offsetWidth || this._thumbElementWidth;
+    this._rangeResizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.target === this._rangeElement) {
+          this._rangeElementWidth = entry.contentRect.width;
+        } else if (entry.target === this._thumbElement) {
+          this._thumbElementWidth = entry.contentRect.width;
+        }
+      }
+    });
+    this._rangeResizeObserver.observe(this._rangeElement);
+    if (this._thumbElement) {
+      this._rangeResizeObserver.observe(this._thumbElement);
+    }
+
+    this.addEventListener('pointerleave', () => {
+      this._previewActive = false;
+      this._previewAtLive = false;
+      this._lastPreviewRangeValue = undefined;
     });
   }
 
@@ -214,6 +254,135 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
     return this.range.offsetWidth;
   }
 
+  // overrides for live only
+  override get mediaSeekableStart(): number {
+    return this._live ? this._windowStart : super.mediaSeekableStart;
+  }
+
+  override get mediaSeekableEnd(): number | undefined {
+    return this._live ? this._windowEnd : super.mediaSeekableEnd;
+  }
+
+  override get mediaDuration(): number | undefined {
+    return this._live ? this._windowEnd : super.mediaDuration;
+  }
+
+  override set mediaDuration(value: number | undefined) {
+    super.mediaDuration = value;
+  }
+
+  private _seekWindow(): {start: number; end: number} {
+    const start = Number.isFinite(this.mediaSeekableStart) ? this.mediaSeekableStart : 0;
+    const duration = this.mediaDuration;
+    const end = duration != null && Number.isFinite(duration) ? duration : (this.mediaSeekableEnd ?? 0);
+    return {start, end};
+  }
+
+  /** Maps a media time to its 0..1 range value within the current seek window (0 when the window is empty). */
+  private _fractionForTime(time: number): number {
+    const {start, end} = this._seekWindow();
+    return end > start ? Math.max(0, Math.min(1, (time - start) / (end - start))) : 0;
+  }
+
+  setLiveModel(model: UiLiveModel): void {
+    // syncPosition is not consumed here, so a tick that only moves it changes nothing to render
+    if (this._liveModelApplied && this._live === model.isLive && this._windowStart === model.windowStart && this._windowEnd === model.windowEnd && this._pinnedToLive === model.pinnedToLive) {
+      return;
+    }
+    this._liveModelApplied = true;
+    if (!model.isLive) {
+      this._releaseEndPin();
+    }
+    this._live = model.isLive;
+    this._windowStart = model.windowStart;
+    this._windowEnd = model.windowEnd;
+    this._pinnedToLive = model.pinnedToLive;
+    this._renderWindow();
+    this._refreshPreview();
+    for (const [markerId, marker] of this._markers) {
+      this.updateMarkerPosition(marker.markerState);
+    }
+  }
+
+  private _renderWindow(): void {
+    const {start, end} = this._seekWindow();
+    if (end > start) {
+      this.range.valueAsNumber = this._fractionForTime(this.mediaCurrentTime ?? 0);
+      this.updateBar();
+    }
+  }
+
+  /**
+   * Re-derives the hover popover from the last cursor position against the current window. Called on
+   * pointer move, playback progress, and manifest updates (new segment) so the popover stays correct as
+   * the scrubber recalculates. Over the thumb at live it shows the (ticking) live current time.
+   */
+  private _refreshPreview(): void {
+    if (!this._previewActive || this._lastPreviewRangeValue == null) {
+      return;
+    }
+    const {start, end} = this._seekWindow();
+    if (!(end > start)) {
+      return;
+    }
+    const rangeValue = this._lastPreviewRangeValue;
+    this._previewAtLive = this._live && this._isOverBall(rangeValue);
+    const previewTime = this._previewAtLive ? this._liveCurrentTime() : start + rangeValue * (end - start);
+    this._lastPreviewTime = previewTime;
+    this._onMouseOver$.next(previewTime);
+  }
+
+  /** True when the cursor (as a 0..1 range value) is over the thumb ("ball"), i.e. the playhead position. */
+  private _isOverBall(rangeValue: number): boolean {
+    const width = this._rangeElementWidth;
+    if (width <= 0) {
+      return false;
+    }
+    const ballHalf = this._thumbElementWidth / 2 / width;
+    return Math.abs(rangeValue - this.range.valueAsNumber) <= ballHalf;
+  }
+
+  /** Fresh live playhead time (player value at call time); falls back to the throttled attribute. */
+  private _liveCurrentTime(): number {
+    try {
+      return this._player ? this._player.getCurrentTime() : (this.mediaCurrentTime ?? 0);
+    } catch {
+      return this.mediaCurrentTime ?? 0;
+    }
+  }
+
+  private _nearStart(): boolean {
+    const currentTime = this.mediaCurrentTime;
+    if (!this._live || currentTime == null) {
+      return false;
+    }
+    return currentTime <= this._windowStart;
+  }
+
+  /**
+   * Holds the thumb at the end once it has reached it.
+   *
+   */
+  override updateBar(): void {
+    if (this._live) {
+      if (this._pinnedToEnd || this._pinnedToLive) {
+        this.range.valueAsNumber = 1;
+      } else if (this._nearStart()) {
+        this.range.valueAsNumber = 0;
+      }
+
+      if (this.range.valueAsNumber >= 1) {
+        this._pinnedToEnd = true;
+      }
+    }
+    super.updateBar();
+  }
+
+  /** Pause, stall or seek - playback is no longer simply running on at the end. */
+  private _releaseEndPin(): void {
+    this._pinnedToEnd = false;
+  }
+
   get isOmakase(): boolean {
     return this.hasAttribute(OmakaseTimeRangeAttributes.OMAKASE);
   }
@@ -232,17 +401,25 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
 
   set player(player: PlayerInternalApi) {
     this._player = player;
-    this._player.onEvent$
-      .pipe(
-        filter((event) => event.type === PlayerEventType.PLAYER_SEEKING),
-        takeUntil(this._destroyBreaker.observer)
-      )
-      .subscribe((event) => {
-        const time = event.data.toTime;
-        const duration = this._player!.getDuration();
-        this.range.valueAsNumber = time / duration;
+    this._player.onEvent$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe((event) => {
+      if (event.type === PlayerEventType.PLAYER_PAUSE || event.type === PlayerEventType.PLAYER_BUFFERING) {
+        this._releaseEndPin();
+      }
+
+      if (event.type === PlayerEventType.PLAYER_SEEKING) {
+        // A seek lands wherever it lands; reaching the end again re-pins on the next update.
+        this._releaseEndPin();
+        this.range.valueAsNumber = this._fractionForTime(event.data.toTime);
         this.updateBar();
-      });
+        this._previewAtLive = false;
+        if (this._previewActive) {
+          this._lastPreviewTime = event.data.toTime;
+          this._onMouseOver$.next(event.data.toTime);
+        }
+      } else if (event.type === PlayerEventType.PLAYER_PLAYBACK_PROGRESS) {
+        this._refreshPreview();
+      }
+    });
   }
 
   protected get _ui(): UiProxy | Ui {
@@ -327,6 +504,7 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
           styledElement,
           displayElement,
           areaElement,
+          markerState: marker,
           trackId,
         });
       });
@@ -342,8 +520,12 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
       });
   }
 
-  updateMarker(marker: MarkerState): void {
-    this.updateMarkerPosition(marker);
+  updateMarker(markerState: MarkerState): void {
+    const marker = this._markers.get(markerState.id);
+    if (marker) {
+      marker.markerState = markerState;
+      this.updateMarkerPosition(markerState);
+    }
   }
 
   removeMarker(markerId: Marker['id']): void {
@@ -378,21 +560,14 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
 
   override handleEvent(evt: Event | MouseEvent): void {
     if (evt.type === 'input') {
-      if (this._lastPreviewTime) {
-        this._onSeek$.next(this._lastPreviewTime);
-        delete this._lastPreviewTime;
-      } else {
-        const detail = this.getTimeFromRangeValue();
-        this._onSeek$.next(detail);
-      }
+      const seekTime = this._lastPreviewTime ?? this.getTimeFromRangeValue();
+      delete this._lastPreviewTime;
+      this._onSeek$.next(seekTime);
       this.updateBar();
     } else if (evt.type === 'pointermove' && evt instanceof MouseEvent) {
-      const duration = this.mediaSeekableEnd;
-      if (duration) {
-        const previewTime = this.getRangeValueFromMouseEvent(evt) * duration;
-        this._lastPreviewTime = previewTime;
-        this._onMouseOver$.next(previewTime);
-      }
+      this._previewActive = true;
+      this._lastPreviewRangeValue = this.getRangeValueFromMouseEvent(evt);
+      this._refreshPreview();
       super.handleEvent(evt);
     } else {
       super.handleEvent(evt);
@@ -414,6 +589,7 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
   }
 
   destroy(): void {
+    this._rangeResizeObserver.disconnect();
     this._destroyBreaker.destroy();
     this.remove();
   }
@@ -445,15 +621,19 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
   private createMarkerDisplayElement(marker: MarkerState, style: MarkerStyle): HTMLDivElement {
     const markerStart = this.getMarkerStart(marker);
     const markerEnd = this.getMarkerEnd(marker);
-    const mediaDuration = this.mediaDuration ?? 0;
     const markerElement = DomUtil.createElement('div');
     markerElement.classList.add(OmakaseTimeRangeDomClasses.MARKER_DISPLAY);
     markerElement.setAttribute(OmakaseTimeRangeAttributes.MARKER_ID, marker.id);
     markerElement.style.backgroundColor = style.markerColor;
-    const markerPosition = markerStart / mediaDuration;
-    const markerSize = (markerEnd - markerStart) / mediaDuration;
-    markerElement.style.width = DomUtil.getPercentValue(markerSize);
-    markerElement.style.left = DomUtil.getPercentValue(markerPosition);
+    if (this.mediaSeekableEnd) {
+      const markerPosition = (markerStart - this.mediaSeekableStart) / (this.mediaSeekableEnd - this.mediaSeekableStart);
+      const markerSize = (markerEnd - markerStart) / (this.mediaSeekableEnd - this.mediaSeekableStart);
+      markerElement.style.width = DomUtil.getPercentValue(markerSize);
+      markerElement.style.left = DomUtil.getPercentValue(markerPosition);
+    } else {
+      markerElement.style.display = 'none';
+    }
+
     const markerHalo = DomUtil.createElement('div');
     markerHalo.classList.add(OmakaseTimeRangeDomClasses.MARKER_HALO);
     markerHalo.style.backgroundColor = style.markerColor;
@@ -465,14 +645,17 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
   private createMarkerAreaElement(marker: MarkerState): HTMLDivElement {
     const markerStart = this.getMarkerStart(marker);
     const markerEnd = this.getMarkerEnd(marker);
-    const mediaDuration = this.mediaDuration ?? 0;
     const markerElement = DomUtil.createElement('div');
     markerElement.classList.add(OmakaseTimeRangeDomClasses.MARKER_AREA);
     markerElement.setAttribute(OmakaseTimeRangeAttributes.MARKER_ID, marker.id);
-    const markerPosition = markerStart / mediaDuration;
-    const markerSize = (markerEnd - markerStart) / mediaDuration;
-    markerElement.style.width = DomUtil.getPercentValue(markerSize);
-    markerElement.style.left = DomUtil.getPercentValue(markerPosition);
+    if (this.mediaSeekableEnd) {
+      const markerPosition = (markerStart - this.mediaSeekableStart) / (this.mediaSeekableEnd - this.mediaSeekableStart);
+      const markerSize = (markerEnd - markerStart) / (this.mediaSeekableEnd - this.mediaSeekableStart);
+      markerElement.style.width = DomUtil.getPercentValue(markerSize);
+      markerElement.style.left = DomUtil.getPercentValue(markerPosition);
+    } else {
+      markerElement.style.display = 'none';
+    }
     markerElement.addEventListener('mousemove', (event) => {
       this.updateFocusedMarkers(event);
     });
@@ -524,13 +707,17 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
     if (marker) {
       const markerStart = this.getMarkerStart(markerState);
       const markerEnd = this.getMarkerEnd(markerState);
-      const mediaDuration = this.mediaDuration ?? 0;
-      const markerPosition = markerStart / mediaDuration;
-      const markerSize = (markerEnd - markerStart) / mediaDuration;
-      marker.displayElement.style.width = DomUtil.getPercentValue(markerSize);
-      marker.displayElement.style.left = DomUtil.getPercentValue(markerPosition);
-      marker.areaElement.style.width = DomUtil.getPercentValue(markerSize);
-      marker.areaElement.style.left = DomUtil.getPercentValue(markerPosition);
+      if (this.mediaSeekableEnd) {
+        const markerPosition = (markerStart - this.mediaSeekableStart) / (this.mediaSeekableEnd - this.mediaSeekableStart);
+        const markerSize = (markerEnd - markerStart) / (this.mediaSeekableEnd - this.mediaSeekableStart);
+        marker.displayElement.style.removeProperty('display');
+        marker.displayElement.style.width = DomUtil.getPercentValue(markerSize);
+        marker.displayElement.style.left = DomUtil.getPercentValue(markerPosition);
+        marker.areaElement.style.width = DomUtil.getPercentValue(markerSize);
+        marker.areaElement.style.left = DomUtil.getPercentValue(markerPosition);
+      } else {
+        marker.displayElement.style.display = 'none';
+      }
     }
   }
 

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {first, forkJoin, fromEvent, Observable, Subject, take, takeUntil} from 'rxjs';
+import {first, forkJoin, fromEvent, Observable, of, Subject, take, takeUntil} from 'rxjs';
 import {MediaMetadataResolver} from '../tools';
 import {type FrameRateModel, FrameRateResolver} from '../common/frame-rate';
 import {Mp4Audio, type Mp4AudioState, Mp4Video} from './mp4-track';
@@ -25,7 +25,7 @@ import {errorCompleteObserver, nextCompleteObserver, passiveObservable} from '..
 import type {MediaMetadata} from '../tools/media-metadata-resolver';
 import type {AudioState, TextTrackState} from '../media';
 import {OpStage, OpStageStatus} from '../common/op-stage';
-import {PLAYER_CONTROLLER_DEFAULTS} from '../constants';
+import {AUDIO_DEFAULTS, PLAYER_CONTROLLER_DEFAULTS} from '../constants';
 
 export interface Mp4PlayerControllerConfig extends PlayerControllerConfig {}
 
@@ -66,7 +66,16 @@ export class Mp4PlayerController extends BasePlayerController<Mp4PlayerControlle
         metadataNames.push('firstVideoTrackFrameRate');
       }
 
-      let metadataFromResolver$ = MediaMetadataResolver.getMediaMetadata(url, metadataNames);
+      let metadataFromResolver$: Observable<MediaMetadata> = loadOptions?.forceSkipMetadataResolution
+        ? of({
+            videoTracks: undefined,
+            audioTracks: undefined,
+            firstVideoTrackInitSegmentTime: 0,
+            firstAudioTrackChannelsNumber: AUDIO_DEFAULTS.channels,
+            firstAudioTrackAudioCodec: undefined,
+            firstVideoTrackFrameRate: undefined,
+          })
+        : MediaMetadataResolver.getMediaMetadata(url, metadataNames);
 
       // once both hooks are completed finish loading
       forkJoin([mainMediaEssentialArgsHookCompleted$, tracksCreatedHookCompleted$]).subscribe(() => {
@@ -153,7 +162,6 @@ export class Mp4PlayerController extends BasePlayerController<Mp4PlayerControlle
             });
           },
           error: (error) => {
-            console.log('matkić');
             errorCompleteObserver(observer, error);
           },
         });

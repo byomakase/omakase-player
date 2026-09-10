@@ -115,7 +115,7 @@ export class ChromelessDomController extends ChromingDomController<ChromingTheme
   }
 
   setThumbnailTrack(track: ThumbnailTrackState | undefined): void {
-    return;
+    super.setThumbnailTrack(track);
   }
 
   updateFloatingTime() {
@@ -133,6 +133,7 @@ export class ChromelessDomController extends ChromingDomController<ChromingTheme
       timeFormat,
     };
     this.updateTimeFormat();
+    this.updateSimpleFullscreenTimeFormat();
   }
 
   updateTimeFormat() {

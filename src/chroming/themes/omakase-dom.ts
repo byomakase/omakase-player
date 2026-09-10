@@ -76,6 +76,7 @@ export class OmakaseDomController extends ChromingDomController<ChromingTheme.OM
   protected _previewThumbnail: OmakasePreviewThumbnail;
   protected _controlBarToggle: MediaChromeButton;
   protected _controlBarCloseButton: MediaChromeButton;
+  protected _bitcButton?: MediaChromeButton;
   protected _upperControlBar: HTMLElement;
   protected _lowerControlBar: MediaControlBar;
 
@@ -135,7 +136,7 @@ export class OmakaseDomController extends ChromingDomController<ChromingTheme.OM
       this._divActionIcons.insertAdjacentHTML(
         'afterbegin',
         `${
-          this._themeConfig.actionIcons?.includes(OmakaseThemeActionIcon.FULLSCREEN)
+          this._themeConfig.actionIcons?.includes(OmakaseThemeActionIcon.FULLSCREEN_TOGGLE)
             ? `<omakase-fullscreen-button class="${ChromingDomClasses.mediaChromeButton} omakase-player-fullscreen shadow">
                   <span slot="enter" class="${ChromingDomClasses.mediaChromeFullscreenEnter}"></span>
                   <span slot="exit" class="${ChromingDomClasses.mediaChromeFullscreenExit}"></span>
@@ -205,6 +206,7 @@ export class OmakaseDomController extends ChromingDomController<ChromingTheme.OM
     this._audioTextDropdown = this.getShadowElementByClass<OmakaseDropdown>(ChromingDomClasses.audioTextDropdown);
     this._controlBarToggle = this.getShadowElementByClass<MediaChromeButton>(ChromingDomClasses.controlBarToggle);
     this._controlBarCloseButton = this.getShadowElementByClass<MediaChromeButton>(ChromingDomClasses.closeButton);
+    this._bitcButton = this.getShadowElementByClass<MediaChromeButton>(ChromingDomClasses.bitcButton);
     this._upperControlBar = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.omakaseControlBar);
     this._lowerControlBar = this.getShadowElementByClass<MediaControlBar>(ChromingDomClasses.mediaControlBar);
     this._controlBarVuMeterContainer = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.vuMeterControlBar);
@@ -319,11 +321,15 @@ export class OmakaseDomController extends ChromingDomController<ChromingTheme.OM
                   <span class="${ChromingDomClasses.mediaChromeTrackselector}"></span>
                   <media-tooltip>Select track</media-tooltip>
               </omakase-dropdown-toggle>
+              <media-chrome-button class="${this.getControlBarClass(OmakaseThemeControl.TIME_TOGGLE)} ${ChromingDomClasses.mediaChromeButton} omakase-player-bitc">
+                  <span class="${ChromingDomClasses.mediaChromeBitcDisabled} omakase-player-bitc-icon"></span>
+                  <media-tooltip class="${ChromingDomClasses.mediaChromeBitcTooltip} omakase-player-bitc-tooltip">Show timecode</media-tooltip>
+              </media-chrome-button>
               <media-chrome-button class="${this.getControlBarClass(OmakaseThemeControl.DETACH_TOGGLE)} ${ChromingDomClasses.mediaChromeButton} omakase-player-attach-detach">
                   <span class="${this._config.playerWindowPlaybackMode === WindowPlaybackMode.DETACHED ? ChromingDomClasses.mediaChromeAttach : ChromingDomClasses.mediaChromeDetach}"></span>
                   <media-tooltip>Select track</media-tooltip>
               </media-chrome-button>
-              <omakase-fullscreen-button class="${this.getControlBarClass(OmakaseThemeControl.FULLSCREEN)} ${ChromingDomClasses.mediaChromeButton} omakase-player-fullscreen">
+              <omakase-fullscreen-button class="${this.getControlBarClass(OmakaseThemeControl.FULLSCREEN_TOGGLE)} ${ChromingDomClasses.mediaChromeButton} omakase-player-fullscreen">
                   <span slot="enter" class="${ChromingDomClasses.mediaChromeFullscreenEnter}"></span>
                   <span slot="exit" class="${ChromingDomClasses.mediaChromeFullscreenExit}"></span>
               </omakase-fullscreen-button>
@@ -350,7 +356,7 @@ export class OmakaseDomController extends ChromingDomController<ChromingTheme.OM
 
   protected createSlotsDom() {
     if (this._config.themeConfig?.htmlTemplateId) {
-      return DomUtil.getElementByIdOrFail<HTMLElement>(this._config.themeConfig?.htmlTemplateId)?.innerHTML ?? '';
+      return DomUtil.getElementById<HTMLElement>(this._config.themeConfig?.htmlTemplateId)?.innerHTML ?? '';
     } else {
       return '';
     }
@@ -362,6 +368,7 @@ export class OmakaseDomController extends ChromingDomController<ChromingTheme.OM
   }
 
   setThumbnailTrack(track: ThumbnailTrackState | undefined): void {
+    super.setThumbnailTrack(track);
     if (this._previewThumbnail) {
       this._previewThumbnail.thumbnailTrack = track;
       this._previewThumbnail.thumbnailFn = this._config.findThumbnailFn;
@@ -449,6 +456,11 @@ export class OmakaseDomController extends ChromingDomController<ChromingTheme.OM
     } else {
       DomUtil.hideElements(this._timecodeWrapper!);
     }
+    const bitcSpan = this.getShadowElementByClass<HTMLSpanElement>('omakase-player-bitc-icon');
+    const bitcTooltip = this.getShadowElementByClass<HTMLSpanElement>('omakase-player-bitc-tooltip');
+    bitcSpan!.classList.remove(bitcEnabled ? ChromingDomClasses.mediaChromeBitcDisabled : ChromingDomClasses.mediaChromeBitcEnabled);
+    bitcSpan!.classList.add(bitcEnabled ? ChromingDomClasses.mediaChromeBitcEnabled : ChromingDomClasses.mediaChromeBitcDisabled);
+    bitcTooltip!.innerHTML = bitcEnabled ? 'Hide timecode' : 'Show timecode';
   }
 
   updateControlBar() {
@@ -505,6 +517,10 @@ export class OmakaseDomController extends ChromingDomController<ChromingTheme.OM
         controlBarToggleIcon.classList.add('control-bar-disabled');
       }
     }
+  }
+
+  protected override _liveButtonContainer(): HTMLElement | undefined {
+    return this.getShadowElement<HTMLElement>('.omakase-control-bar-upper .start-container');
   }
 
   wirePlayer() {
@@ -670,6 +686,15 @@ export class OmakaseDomController extends ChromingDomController<ChromingTheme.OM
           },
         });
     }
+    if (this._bitcButton) {
+      fromEvent<MouseEvent>(this._bitcButton, 'click')
+        .pipe(takeUntil(this._playerBreaker.observer), takeUntil(this._destroyBreaker.observer))
+        .subscribe({
+          next: () => {
+            this.setFloatingTimeVisible(!this.isFloatingTimeVisible());
+          },
+        });
+    }
 
     if (this._controlBarToggle) {
       fromEvent<MouseEvent>(this._controlBarToggle, 'click')
@@ -697,6 +722,7 @@ export class OmakaseDomController extends ChromingDomController<ChromingTheme.OM
     this.updateControlBar();
     this.updateFloatingTime();
     this.updateTimeFormat();
+    this.updateSimpleFullscreenTimeFormat();
   }
 
   updateTimeFormat() {

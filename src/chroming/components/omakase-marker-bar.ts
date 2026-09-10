@@ -31,6 +31,7 @@ import {affectsStyledElement, Ui, type StyledElement} from '../../ui';
 import type {UiProxy} from '../../remoting/impl/ui-proxy';
 import Decimal from 'decimal.js';
 import {isNullOrUndefined} from '../../util/util-functions';
+import type {UiLiveModel} from '../../live/live-model';
 
 export const OmakaseMarkerTrackAttributes = {
   OMAKASE: 'omakase',
@@ -86,6 +87,12 @@ export class OmakaseMarkerBar extends HTMLElement implements ChromingMarkerBarEl
     }
   });
   private _uiOrUiProxy?: UiProxy | Ui | undefined;
+
+  private _live = false;
+  private _windowStart = 0;
+  private _windowEnd = 0;
+  private _pinnedToLive = false;
+  private _liveModelApplied = false;
 
   private _destroyBreaker = new ObserverBreaker();
 
@@ -161,6 +168,14 @@ export class OmakaseMarkerBar extends HTMLElement implements ChromingMarkerBarEl
     }
   }
 
+  get mediaSeekableStart() {
+    return this._live ? this._windowStart : 0;
+  }
+
+  get mediaSeekableEnd() {
+    return this._live ? this._windowEnd : this.mediaDuration;
+  }
+
   protected get _ui(): Ui | UiProxy {
     if (this._uiOrUiProxy === void 0) {
       throw new Error('called to early');
@@ -208,6 +223,24 @@ export class OmakaseMarkerBar extends HTMLElement implements ChromingMarkerBarEl
   show(): void {
     this._config.visible = true;
     DomUtil.showElements(this);
+  }
+
+  setLiveModel(model: UiLiveModel): void {
+    // syncPosition is not consumed here, so a tick that only moves it changes nothing to render
+    if (this._liveModelApplied && this._live === model.isLive && this._windowStart === model.windowStart && this._windowEnd === model.windowEnd && this._pinnedToLive === model.pinnedToLive) {
+      return;
+    }
+    this._liveModelApplied = true;
+    this._live = model.isLive;
+    this._windowStart = model.windowStart;
+    this._windowEnd = model.windowEnd;
+    this._pinnedToLive = model.pinnedToLive;
+    this.updateMarkers(
+      this._markers
+        .values()
+        .toArray()
+        .map((marker) => marker.state)
+    );
   }
 
   addTrack(track: MarkerTrackState) {
@@ -360,7 +393,9 @@ export class OmakaseMarkerBar extends HTMLElement implements ChromingMarkerBarEl
     }
     selectedDiv.classList.add(OmakaseMarkerTrackDomClasses.MOMENT_MARKER_SELECTED_AREA);
     markerContainer.appendChild(selectedDiv);
-    markerContainer.style.left = DomUtil.getPixelValue(((TimedItemTemporalUtil.extractStartTime(marker.temporal) ?? 0) * this._containerSize!) / this.mediaDuration);
+    markerContainer.style.left = DomUtil.getPixelValue(
+      (((TimedItemTemporalUtil.extractStartTime(marker.temporal) ?? 0) - this.mediaSeekableStart) * this._containerSize!) / (this.mediaSeekableEnd - this.mediaSeekableStart)
+    );
     markerContainer.classList.add(OmakaseMarkerTrackDomClasses.MOMENT_MARKER);
     markerContainer.setAttribute(OmakaseMarkerTrackAttributes.MARKER_ID, marker.id);
     if (isEditable) {
@@ -423,8 +458,8 @@ export class OmakaseMarkerBar extends HTMLElement implements ChromingMarkerBarEl
     markerContainer.appendChild(selectedDiv);
     const startTime = TimedItemTemporalUtil.extractStartTime(marker.temporal)!;
     const endTime = TimedItemTemporalUtil.extractEndTime(marker.temporal)!;
-    markerContainer.style.left = DomUtil.getPixelValue((startTime * this._containerSize!) / this.mediaDuration);
-    markerContainer.style.right = DomUtil.getPixelValue(this._containerSize! - (endTime * this._containerSize!) / this.mediaDuration);
+    markerContainer.style.left = DomUtil.getPixelValue(((startTime - this.mediaSeekableStart) * this._containerSize!) / (this.mediaSeekableEnd - this.mediaSeekableStart));
+    markerContainer.style.right = DomUtil.getPixelValue(this._containerSize! - ((endTime - this.mediaSeekableStart) * this._containerSize!) / (this.mediaSeekableEnd - this.mediaSeekableStart));
     markerContainer.classList.add(OmakaseMarkerTrackDomClasses.PERIOD_MARKER);
     markerContainer.setAttribute(OmakaseMarkerTrackAttributes.MARKER_ID, marker.id);
     if (isEditable) {
@@ -551,15 +586,23 @@ export class OmakaseMarkerBar extends HTMLElement implements ChromingMarkerBarEl
   private getDraggingPointMarkerTime(): MomentTemporal {
     return {
       type: TimedItemTemporalType.MOMENT,
-      time: new Decimal(this.mediaDuration * (parseFloat(this._draggingPointMarker!.style.left) / this._containerSize!)).toDecimalPlaces(3).toString(),
+      time: new Decimal(this.mediaSeekableStart + (this.mediaSeekableEnd - this.mediaSeekableStart) * (parseFloat(this._draggingPointMarker!.style.left) / this._containerSize!))
+        .toDecimalPlaces(3)
+        .toString(),
     };
   }
 
   private getDraggingPeriodMarkerTime(): SpanTemporal {
     return {
       type: TimedItemTemporalType.SPAN,
-      start: new Decimal(this.mediaDuration * (parseFloat(this._draggingPeriodMarker!.style.left) / this._containerSize!)).toDecimalPlaces(3).toString(),
-      end: new Decimal(this.mediaDuration * ((this._containerSize! - parseFloat(this._draggingPeriodMarker!.style.right)) / this._containerSize!)).toDecimalPlaces(3).toString(),
+      start: new Decimal(this.mediaSeekableStart + (this.mediaSeekableEnd - this.mediaSeekableStart) * (parseFloat(this._draggingPeriodMarker!.style.left) / this._containerSize!))
+        .toDecimalPlaces(3)
+        .toString(),
+      end: new Decimal(
+        this.mediaSeekableStart + (this.mediaSeekableEnd - this.mediaSeekableStart) * ((this._containerSize! - parseFloat(this._draggingPeriodMarker!.style.right)) / this._containerSize!)
+      )
+        .toDecimalPlaces(3)
+        .toString(),
     };
   }
 
@@ -578,7 +621,7 @@ export class OmakaseMarkerBar extends HTMLElement implements ChromingMarkerBarEl
     const markerElement = this.getMarkerElement(marker.id);
     const time = TimedItemTemporalUtil.extractStartTime(marker.temporal);
     if (markerElement && !isNullOrUndefined(time)) {
-      markerElement.style.left = DomUtil.getPixelValue((time / this.mediaDuration) * this._containerSize!);
+      markerElement.style.left = DomUtil.getPixelValue(((time - this.mediaSeekableStart) / (this.mediaSeekableEnd - this.mediaSeekableStart)) * this._containerSize!);
     }
   }
 
@@ -587,8 +630,8 @@ export class OmakaseMarkerBar extends HTMLElement implements ChromingMarkerBarEl
     const startTime = TimedItemTemporalUtil.extractStartTime(marker.temporal);
     const endTime = TimedItemTemporalUtil.extractEndTime(marker.temporal);
     if (markerElement && !isNullOrUndefined(startTime) && !isNullOrUndefined(endTime)) {
-      markerElement.style.left = DomUtil.getPixelValue((startTime / this.mediaDuration) * this._containerSize!);
-      markerElement.style.right = DomUtil.getPixelValue(this._containerSize! - (endTime / this.mediaDuration) * this._containerSize!);
+      markerElement.style.left = DomUtil.getPixelValue(((startTime - this.mediaSeekableStart) / (this.mediaSeekableEnd - this.mediaSeekableStart)) * this._containerSize!);
+      markerElement.style.right = DomUtil.getPixelValue(this._containerSize! - ((endTime - this.mediaSeekableStart) / (this.mediaSeekableEnd - this.mediaSeekableStart)) * this._containerSize!);
     }
   }
 

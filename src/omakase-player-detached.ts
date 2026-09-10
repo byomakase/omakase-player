@@ -26,7 +26,7 @@ import type {OmakasePlayerDetachedApi} from './omakase-player-api';
 import {filter, fromEvent, Observable, race, takeUntil} from 'rxjs';
 import {AuthConfig, type AuthenticationData, WindowPlaybackMode} from './common';
 import {nextCompleteObserver, passiveObservable} from './util/rxjs-util';
-import {DEFAULT_PLAYER_CHROMING, type PlayerChromingConfig} from './chroming';
+import {DEFAULT_FULLSCREEN_CHROMING_BY_THEME, DEFAULT_PLAYER_CHROMING, type PlayerChromingConfig} from './chroming';
 import {RemoteNodeEventType} from './remoting/remote-node';
 import {SessionEventType} from './session';
 import {SessionStoreProxy} from './remoting/impl/session-store-proxy';
@@ -51,7 +51,6 @@ const _configDefault: OmakasePlayerDetachedConfig = {
   ...prefixKeys(DETACHED_PLAYER_CONFIG_DEFAULT, 'player'),
 
   chromingTheme: DEFAULT_PLAYER_CHROMING.theme,
-  chromingFullscreenChroming: DEFAULT_PLAYER_CHROMING.fullscreenChroming,
 };
 
 export class OmakasePlayerDetached extends BaseOmakasePlayer implements OmakasePlayerDetachedApi {
@@ -74,6 +73,10 @@ export class OmakasePlayerDetached extends BaseOmakasePlayer implements OmakaseP
       ..._configDefault,
       ...config,
     } as OmakasePlayerDetachedConfig;
+
+    if (config?.chromingFullscreenChroming === undefined) {
+      this._config.chromingFullscreenChroming = DEFAULT_FULLSCREEN_CHROMING_BY_THEME[this._config.chromingTheme];
+    }
 
     this._playerDetached = new PlayerDetached({
       htmlElementId: this._config.playerHtmlElementId,

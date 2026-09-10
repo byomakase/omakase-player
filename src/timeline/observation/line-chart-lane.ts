@@ -33,7 +33,7 @@ import {
 } from '../../media';
 import {type ObservationTrackView} from './observation-track-view';
 import {type TimelineImpl} from '../timeline';
-import {type Color, type Size, type StyledElement, Ui} from '../../ui';
+import {type Color, type Size, Ui} from '../../ui';
 import {KonvaFactory} from '../konva/konva-factory';
 import Konva from 'konva';
 import {debounceTime, filter, Observable, Subject, takeUntil} from 'rxjs';
@@ -74,8 +74,6 @@ export interface LineChartLaneTrackConfig extends ObservationTrackLaneTrackConfi
 }
 
 export interface LineChartLaneTrackStyle {
-  paddingTop?: number;
-  paddingBottom?: number;
   baselineFill?: Color;
   baselineThickness?: Size;
   baselineDash?: Size[];
@@ -202,6 +200,31 @@ export class LineChartLane extends BaseObservationTrackLane<LineChartLaneConfig,
 
   protected override hasVisualElements(): boolean {
     return [...this._typedTrackViews.values()].some((v) => v.viewCount > 0);
+  }
+
+  /**
+   * Live-updates a track's style (measurements, baseline). Only the provided fields change;
+   * everything else keeps its current value.
+   */
+  setTrackStyle(trackId: ObservationTrack['id'], style: Partial<LineChartLaneTrackStyle>): void {
+    if (!this._tracksMap.has(trackId)) {
+      throw new Error(`Track with id ${trackId} not found`);
+    }
+
+    let config = this._trackConfigs.get(trackId);
+    if (!config) {
+      config = {};
+      this._trackConfigs.set(trackId, config);
+    }
+
+    config.style = {
+      ...config.style,
+      ...style,
+    };
+
+    if (this._canRender) {
+      this._trackViews.get(trackId)?.render(this._timeline!.getVisibleTimeRange());
+    }
   }
 
   protected override createLoadingGroupContent(width: number, height: number): Konva.Animation {
@@ -340,8 +363,8 @@ class TrackView extends BaseKonvaComponent2<Konva.Group> implements ObservationT
     if (!scale) return undefined;
     const scaleBaseline = this._config?.scaleBaseline ?? LINE_CHART_LANE_TRACK_CONFIG_DEFAULT.scaleBaseline;
     const fullHeight = this._timelineLane.style.height;
-    const paddingTop = this._config?.style?.paddingTop ?? 0;
-    const paddingBottom = this._config?.style?.paddingBottom ?? 0;
+    const paddingTop = this._timelineLane.style.paddingTop;
+    const paddingBottom = this._timelineLane.style.paddingBottom;
     const contentHeight = fullHeight - paddingTop - paddingBottom;
     const scaleSize = scale.max - scale.min;
     const clamp = (v: number) => Math.max(paddingTop, Math.min(paddingTop + contentHeight, v));
@@ -533,8 +556,6 @@ class TrackMeasurementsView extends BaseKonvaComponent2<Konva.Group> {
         scaleBaseline,
         startTime,
         style: measurementStyle,
-        ...(this._config?.style?.paddingTop !== undefined ? {paddingTop: this._config.style.paddingTop} : {}),
-        ...(this._config?.style?.paddingBottom !== undefined ? {paddingBottom: this._config.style.paddingBottom} : {}),
       });
 
       const pos = view.computePosition();
@@ -543,8 +564,8 @@ class TrackMeasurementsView extends BaseKonvaComponent2<Konva.Group> {
 
     if (polylinePoints.length >= 4) {
       const fullHeight = this._timelineLane.style.height;
-      const contentTop = this._config?.style?.paddingTop ?? 0;
-      const contentBottom = fullHeight - (this._config?.style?.paddingBottom ?? 0);
+      const contentTop = this._timelineLane.style.paddingTop;
+      const contentBottom = fullHeight - this._timelineLane.style.paddingBottom;
       const firstX: number = polylinePoints[0]!;
       const lastX: number = polylinePoints[polylinePoints.length - 2]!;
 
@@ -607,13 +628,8 @@ class TrackMeasurementsView extends BaseKonvaComponent2<Konva.Group> {
   }
 
   protected createView(observation: Observation, config: MeasurementItemViewConfig): MeasurementItemView {
-    const styledElement: StyledElement<LineChartLaneTrackStyle> = {
-      id: `${this._timelineLane.id}.${this._downsampler.sourceTrack.id}`,
-    };
-
     const measurementItemView = new MeasurementItemView({
       observationState: observation.state,
-      styledElement: styledElement,
       timelineLane: this._timelineLane,
       timeline: this._timeline!,
       ui: this._ui!,
@@ -641,8 +657,8 @@ class TrackMeasurementsView extends BaseKonvaComponent2<Konva.Group> {
 
     if (polylinePoints.length >= 4) {
       const fullHeight = this._timelineLane.style.height;
-      const contentTop = this._config?.style?.paddingTop ?? 0;
-      const contentBottom = fullHeight - (this._config?.style?.paddingBottom ?? 0);
+      const contentTop = this._timelineLane.style.paddingTop;
+      const contentBottom = fullHeight - this._timelineLane.style.paddingBottom;
       const firstX: number = polylinePoints[0]!;
       const lastX: number = polylinePoints[polylinePoints.length - 2]!;
       this._fillBelowShape?.points([...polylinePoints, lastX, contentBottom, firstX, contentBottom]);
@@ -698,8 +714,6 @@ interface MeasurementItemViewConfig {
   scaleBaseline: number;
   startTime: number;
   style?: Partial<LineChartLaneTrackMeasurementStyle> | undefined;
-  paddingTop?: number;
-  paddingBottom?: number;
 }
 
 class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
@@ -707,9 +721,6 @@ class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
 
   protected _config: MeasurementItemViewConfig;
   protected _ui: Ui;
-
-  protected _styledElement: StyledElement<LineChartLaneTrackStyle>;
-  protected _style!: LineChartLaneTrackStyle;
 
   protected _observationState: ObservationState;
   protected _observationItem: ObservationItem;
@@ -723,7 +734,6 @@ class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
   constructor(args: {
     config: MeasurementItemViewConfig;
     observationState: ObservationState;
-    styledElement: StyledElement<LineChartLaneTrackStyle>;
     timeline: TimelineImpl;
     ui: Ui;
     timelineLane: LineChartLane;
@@ -742,7 +752,6 @@ class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
     }
 
     this._observationItem = observationItem;
-    this._styledElement = args.styledElement;
 
     this._group = KonvaFactory.createGroup();
 
@@ -805,8 +814,8 @@ class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
   computePosition(): {x: number; y: number} {
     const x = this._timeline.timeToTimelinePosition(this._config.startTime);
     const fullHeight = this._timelineLane.style.height;
-    const paddingTop = this._config.paddingTop ?? 0;
-    const paddingBottom = this._config.paddingBottom ?? 0;
+    const paddingTop = this._timelineLane.style.paddingTop;
+    const paddingBottom = this._timelineLane.style.paddingBottom;
     const contentHeight = fullHeight - paddingTop - paddingBottom;
     const scale = this._config.scale;
     const scaleSize = scale.max - scale.min;

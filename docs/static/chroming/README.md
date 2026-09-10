@@ -140,7 +140,18 @@ omakasePlayer.chroming.setThemeConfig({
 | `chromingWatermark`           | Watermark text or SVG content                                     | `string`                                                           | No       | Yes       | Can be plain text or SVG XML content                                               |
 | `chromingWatermarkVisibility` | Controls watermark visibility during playback                     | `WatermarkVisibility.ALWAYS_ON` \| `WatermarkVisibility.AUTO_HIDE` | No       | No        | Default is `ALWAYS_ON`                                                             |
 | `chromingStyleUrl`            | URL(s) for custom CSS styling                                     | `string` \| `string[]`                                             | No       | No        | Can be a single URL or array of URLs                                               |
-| `chromingFullscreenChroming`  | Controls whether fullscreen uses custom or browser video controls | `FullscreenChroming.ENABLED` \| `FullscreenChroming.DISABLED`      | No       | No        | Default is `ENABLED` for most themes                                               |
+| `chromingFullscreenChroming`  | Controls whether fullscreen uses custom or browser video controls | `FullscreenChroming.ENABLED` \| `FullscreenChroming.DISABLED` \| `FullscreenChroming.SIMPLE` | No       | No        | Default depends on `chromingTheme` - see below                                     |
+
+`chromingFullscreenChroming` defaults, per theme, when not explicitly set:
+
+| Theme                              | Default `chromingFullscreenChroming` |
+| ----------------------------------- | ------------------------------------- |
+| `ChromingTheme.DEFAULT`             | `FullscreenChroming.ENABLED`          |
+| `ChromingTheme.OMAKASE`             | `FullscreenChroming.ENABLED`          |
+| `ChromingTheme.STAMP`               | `FullscreenChroming.SIMPLE`           |
+| `ChromingTheme.CHROMELESS`          | `FullscreenChroming.DISABLED`         |
+| `ChromingTheme.AUDIO`               | `FullscreenChroming.DISABLED`         |
+| `ChromingTheme.CUSTOM`              | `FullscreenChroming.DISABLED`         |
 
 ---
 
@@ -168,7 +179,7 @@ The DEFAULT theme provides a comprehensive set of controls including a control b
 | Field | Description | Type | Updatable | Default |
 | -------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `controlBarVisibility` | Controls visibility of the control bar | `ControlBarVisibility.ENABLED` \| `ControlBarVisibility.DISABLED` \| `ControlBarVisibility.FULLSCREEN_ONLY` | Yes | `ENABLED` |
-| `controlBar` | Array of enabled controls in the control bar | `DefaultThemeControl[]` - Options: `PLAY`, `FRAME_FORWARD`, `TEN_FRAMES_FORWARD`, `FRAME_BACKWARD`, `TEN_FRAMES_BACKWARD`, `TIME_TOGGLE`, `FULLSCREEN`, `TEXT_TOGGLE`, `VOLUME`, `SCRUBBER`, `TRACK_SELECTOR`, `PLAYBACK_RATE`, `DETACH_TOGGLE`, `ROUTER`, `VU_METER`, `VU_METER_TOGGLE` | Yes | `PLAY`, `FRAME_FORWARD`, `TEN_FRAMES_FORWARD`, `FRAME_BACKWARD`, `TEN_FRAMES_BACKWARD`, `TIME_TOGGLE`, `DETACH_TOGGLE`, `FULLSCREEN`, `TEXT_TOGGLE`, `VOLUME`, `SCRUBBER`, `TRACK_SELECTOR`, `PLAYBACK_RATE` |
+| `controlBar` | Array of enabled controls in the control bar | `DefaultThemeControl[]` - Options: `PLAY`, `FRAME_FORWARD`, `TEN_FRAMES_FORWARD`, `FRAME_BACKWARD`, `TEN_FRAMES_BACKWARD`, `TIME_TOGGLE`, `FULLSCREEN_TOGGLE`, `TEXT_TOGGLE`, `VOLUME`, `SCRUBBER`, `TRACK_SELECTOR`, `PLAYBACK_RATE`, `DETACH_TOGGLE`, `ROUTER`, `VU_METER`, `VU_METER_TOGGLE` | Yes | `PLAY`, `FRAME_FORWARD`, `TEN_FRAMES_FORWARD`, `FRAME_BACKWARD`, `TEN_FRAMES_BACKWARD`, `TIME_TOGGLE`, `DETACH_TOGGLE`, `FULLSCREEN_TOGGLE`, `TEXT_TOGGLE`, `VOLUME`, `SCRUBBER`, `TRACK_SELECTOR`, `PLAYBACK_RATE` |
 | `floatingControls` | Floating controls shown during playback | `DefaultThemeFloatingControl[]` - Options: `ACTION_ICONS`, `PLAYBACK_CONTROLS`, `TIME`, `VU_METER` | No | `ACTION_ICONS`, `PLAYBACK_CONTROLS` |
 | `alwaysOnFloatingControls` | Floating controls always visible (even when idle) | `DefaultThemeFloatingControl[]` - Options: `ACTION_ICONS`, `PLAYBACK_CONTROLS`, `TIME`, `VU_METER` | No | `VU_METER` |
 | `actionIcons` | Action icons to display | `DefaultThemeActionIcon[]` - Options: `HELP_MENU`, `TRACK_SELECTOR`, `ROUTER` | No | `HELP_MENU` |
@@ -195,7 +206,7 @@ let omakasePlayer = new OmakasePlayer({
   chromingWatermark: 'DEMO_SAMPLE',
   chromingThemeConfig: {
     controlBarVisibility: ControlBarVisibility.ENABLED,
-    controlBar: [DefaultThemeControl.PLAY, DefaultThemeControl.SCRUBBER, DefaultThemeControl.VOLUME, DefaultThemeControl.TRACK_SELECTOR, DefaultThemeControl.FULLSCREEN],
+    controlBar: [DefaultThemeControl.PLAY, DefaultThemeControl.SCRUBBER, DefaultThemeControl.VOLUME, DefaultThemeControl.TRACK_SELECTOR, DefaultThemeControl.FULLSCREEN_TOGGLE],
     trackSelectorAutoClose: false,
   },
 });
@@ -269,10 +280,11 @@ The STAMP theme is a compact, floating-control focused theme designed for micro-
 | -------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | --------- | -------------------------------------- |
 | `floatingControls`         | Floating controls shown during playback                                         | `StampThemeFloatingControl[]` - Options: `PROGRESS_BAR`, `TIME`, `PLAYBACK_CONTROLS`, `ACTION_ICONS`          | No        | All controls                           |
 | `alwaysOnFloatingControls` | Floating controls always visible                                                | `StampThemeFloatingControl[]` - Options: `PROGRESS_BAR`, `TIME`, `PLAYBACK_CONTROLS`, `ACTION_ICONS`          | No        | `PROGRESS_BAR`, `TIME`, `ACTION_ICONS` |
-| `actionIcons`              | Action icons to display                                                         | `StampThemeActionIcon[]` - Options: `FULLSCREEN`, `AUDIO_TOGGLE`                                              | No        | `AUDIO_TOGGLE`                         |
+| `actionIcons`              | Action icons to display                                                         | `StampThemeActionIcon[]` - Options: `FULLSCREEN_TOGGLE`, `AUDIO_TOGGLE`                                       | No        | `AUDIO_TOGGLE`                         |
 | `stampScale`               | How video fills the container                                                   | `StampThemeScale.FILL` \| `StampThemeScale.FIT`                                                               | Yes       | `FIT`                                  |
 | `timeFormat`               | Format for time display                                                         | `ChromingTimeFormat.TIMECODE` \| `ChromingTimeFormat.COUNTDOWN_MEDIA_TIME` \| `ChromingTimeFormat.MEDIA_TIME` | Yes       | `MEDIA_TIME`                           |
 | `timeInteractive`          | Whether the time display can be used for seeking (activated by double-clicking) | `boolean`                                                                                                     | Yes       | `false`                                |
+| `themeVariant`             | Look and feel variant for playback/action icons and panel colors (captions, timecode, progress bar) | `StampThemeVariant.DEFAULT` \| `StampThemeVariant.OMAKASE`                                     | No        | `DEFAULT`                              |
 | `htmlTemplateId`           | ID of custom HTML template for override/slots                                   | `string`                                                                                                      | No        | -                                      |
 
 ### Stamp Theme Example
@@ -284,6 +296,7 @@ let omakasePlayer = new OmakasePlayer({
     alwaysOnFloatingControls: [StampThemeFloatingControl.PLAYBACK_CONTROLS],
     stampScale: StampThemeScale.FIT,
     timeFormat: ChromingTimeFormat.TIMECODE,
+    themeVariant: StampThemeVariant.OMAKASE,
   },
 });
 ```
@@ -299,10 +312,10 @@ The OMAKASE theme is a minimalist theme designed for scenarios where complex con
 | Field | Description | Type | Updatable | Default |
 | -------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `controlBarVisibility` | Control bar visibility | `OmakaseControlBarVisibility.ENABLED` \| `OmakaseControlBarVisibility.DISABLED` \| `OmakaseControlBarVisibility.ALWAYS_ON` | Yes | `ENABLED` |
-| `controlBar` | Enabled controls in control bar | `OmakaseThemeControl[]` - Options: `PLAY`, `FRAME_FORWARD`, `TEN_FRAMES_FORWARD`, `FRAME_BACKWARD`, `TEN_FRAMES_BACKWARD`, `FULLSCREEN`, `VOLUME`, `TRACK_SELECTOR`, `PLAYBACK_RATE`, `DETACH_TOGGLE`, `CLOSE`, `TIME_TOGGLE`, `ROUTER`, `VU_METER`, `VU_METER_TOGGLE` | Yes | `PLAY`, `FRAME_BACKWARD`, `TEN_FRAMES_BACKWARD`, `FRAME_FORWARD`, `TEN_FRAMES_FORWARD`, `VOLUME`, `PLAYBACK_RATE`, `TRACK_SELECTOR`, `FULLSCREEN`, `DETACH_TOGGLE`, `CLOSE`, `TIME_TOGGLE` |
+| `controlBar` | Enabled controls in control bar | `OmakaseThemeControl[]` - Options: `PLAY`, `FRAME_FORWARD`, `TEN_FRAMES_FORWARD`, `FRAME_BACKWARD`, `TEN_FRAMES_BACKWARD`, `FULLSCREEN_TOGGLE`, `VOLUME`, `TRACK_SELECTOR`, `PLAYBACK_RATE`, `DETACH_TOGGLE`, `CLOSE`, `TIME_TOGGLE`, `ROUTER`, `VU_METER`, `VU_METER_TOGGLE` | Yes | `PLAY`, `FRAME_BACKWARD`, `TEN_FRAMES_BACKWARD`, `FRAME_FORWARD`, `TEN_FRAMES_FORWARD`, `VOLUME`, `PLAYBACK_RATE`, `TRACK_SELECTOR`, `FULLSCREEN_TOGGLE`, `DETACH_TOGGLE`, `CLOSE`, `TIME_TOGGLE` |
 | `floatingControls` | Floating controls shown during playback | `OmakaseThemeFloatingControl[]` - Options: `PROGRESS_BAR`, `TIME`, `PLAYBACK_CONTROLS`, `ACTION_ICONS`, `VU_METER` | No | `PLAYBACK_CONTROLS`, `PROGRESS_BAR`, `TIME`, `ACTION_ICONS` |
 | `alwaysOnFloatingControls` | Floating controls always visible | `OmakaseThemeFloatingControl[]` - Options: `PROGRESS_BAR`, `TIME`, `PLAYBACK_CONTROLS`, `ACTION_ICONS`, `VU_METER` | No | `TIME`, `PROGRESS_BAR`, `VU_METER` |
-| `actionIcons` | Action icons to display | `OmakaseThemeActionIcon[]` - Options: `HELP_MENU`, `FULLSCREEN`, `AUDIO_TOGGLE`, `VOLUME`, `CONTROL_BAR_TOGGLE` | No | `HELP_MENU`, `AUDIO_TOGGLE`, `FULLSCREEN` |
+| `actionIcons` | Action icons to display | `OmakaseThemeActionIcon[]` - Options: `HELP_MENU`, `FULLSCREEN_TOGGLE`, `AUDIO_TOGGLE`, `VOLUME`, `CONTROL_BAR_TOGGLE` | No | `HELP_MENU`, `AUDIO_TOGGLE`, `FULLSCREEN_TOGGLE` |
 | `timeFormat` | Format for time display | `ChromingTimeFormat.TIMECODE` \| `ChromingTimeFormat.MEDIA_TIME` | Yes | `TIMECODE` |
 | `timeInteractive` | Whether the time display can be used for seeking (activated by double-clicking) | `boolean` | Yes | `false` |
 | `progressBarPosition` | Position of the control bar relative to the video | `OmakaseProgressBarPosition.OVER_VIDEO` \| `OmakaseProgressBarPosition.UNDER_VIDEO` | Yes | `OVER_VIDEO` |

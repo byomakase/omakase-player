@@ -59,6 +59,24 @@ export interface ParsedVttCue {
   data?: OmakaseVttCueData | undefined;
 }
 
+/**
+ * `X-TIMESTAMP-MAP` as written in a segmented WebVTT file, in seconds.
+ *
+ * `local` is the cue time the map anchors at; `mpegts` is the presentation time it anchors to,
+ * converted from the 90kHz clock the header carries it on.
+ */
+export interface VttTimestampMap {
+  local: number;
+  mpegts: number;
+}
+
+const VTT_TIMESTAMP_MAP_PATTERN = /^X-TIMESTAMP-MAP=.*$/m;
+const VTT_TIMESTAMP_MAP_LINE_PATTERN = /^X-TIMESTAMP-MAP=.*$\r?\n?/m;
+const VTT_TIMESTAMP_MAP_LOCAL_PATTERN = /LOCAL:(\d{2,}):([0-5]\d):([0-5]\d[.,]\d{1,3})/;
+const VTT_TIMESTAMP_MAP_MPEGTS_PATTERN = /MPEGTS:(\d+)/;
+
+const MPEGTS_CLOCK_HZ = 90000;
+
 export class VttUtil {
   static parseVtt(vttText: string): ParsedVttFile {
     let parsedVttFile: ParsedVttFile = webvtt.parse(vttText, webvttParseOptions);
@@ -91,6 +109,40 @@ export class VttUtil {
       }
     }
     return void 0;
+  }
+
+  static parseTimestampMap(vttText: string): VttTimestampMap | undefined {
+    let header = vttText.match(VTT_TIMESTAMP_MAP_PATTERN)?.[0];
+    if (!header) {
+      return void 0;
+    }
+
+    let local = header.match(VTT_TIMESTAMP_MAP_LOCAL_PATTERN);
+    if (!local) {
+      return void 0;
+    }
+
+    let mpegts = header.match(VTT_TIMESTAMP_MAP_MPEGTS_PATTERN);
+
+    return {
+      local: Number(local[1]) * 3600 + Number(local[2]) * 60 + Number(local[3]!.replace(',', '.')),
+      mpegts: mpegts ? Number(mpegts[1]) / MPEGTS_CLOCK_HZ : 0,
+    };
+  }
+
+  static stripTimestampMap(vttText: string): string {
+    return vttText.replace(VTT_TIMESTAMP_MAP_LINE_PATTERN, '');
+  }
+
+  /**
+   * Seconds to add to a segment's cue times to place them on the media timeline.
+   *
+   * `LOCAL` names the cue time the map anchors at, so it is subtracted, matching what hls.js does
+   * while rendering. `MPEGTS` is not applied: it is meaningful only against the stream's initial PTS,
+   * which the playback engine holds and this does not.
+   */
+  static resolveCueTimeOffset(timestampMap: VttTimestampMap | undefined): number {
+    return -(timestampMap?.local ?? 0);
   }
 }
 

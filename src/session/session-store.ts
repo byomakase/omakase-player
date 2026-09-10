@@ -22,7 +22,7 @@ import {deepMerge} from '../util/util-functions';
 import {type WindowPlayback, WindowPlaybackMode} from '../common';
 import {type SessionEvent, SessionEventType} from './session-event';
 import {type MainMedia, type MainMediaState, MainMediaType, type MediaEntityState, type Track} from '../media';
-import type {PlayerAudioState, PlayerPlayback, PlayerTextState} from '../player';
+import type {LiveTimelineAnchor, PlayerAudioState, PlayerLiveState, PlayerPlayback, PlayerTextState} from '../player';
 import type {ChromingState} from '../chroming';
 import {freeObserver, nextCompleteObserver} from '../util/rxjs-util';
 import {CryptoUtil} from '../util/crypto-util';
@@ -70,6 +70,12 @@ export interface PlayerSession extends Serializable {
   audio: PlayerAudioState | undefined;
   /** Current text track state, or `undefined` if text is not initialized. */
   text: PlayerTextState | undefined;
+  /** Set while live media is loaded, so a window resuming the session lands on the same timeline. */
+  liveTimelineAnchor: LiveTimelineAnchor | undefined;
+  /**
+   * Runtime live state, present while live media is playing.
+   */
+  liveState: PlayerLiveState | undefined;
 }
 
 export type ChromingSession = ChromingState;
@@ -215,6 +221,17 @@ export class SessionStore implements SessionApi, Destroyable {
       ...this.state,
     };
     state.player.playback.currentTime = currentTime;
+    this._sessionState$.next(state);
+  }
+
+  updatePlayerLiveState(liveState: PlayerLiveState | undefined): void {
+    if (!this.state.player) {
+      throw new Error(`Player is undefined. Use setPlayer() before calling updatePlayerLiveState()`);
+    }
+    let state = {
+      ...this.state,
+    };
+    state.player.liveState = liveState;
     this._sessionState$.next(state);
   }
 

@@ -23,6 +23,7 @@ import {OmakaseTrackApiImpl} from './track/omakase-track';
 import {Ui} from './ui';
 import {AudioEffectsRegistry} from './audio';
 import {MediaDeserializer} from './media/media-deserializer';
+import {MainMediaSessionManager} from './media/main-media-session-manager';
 import {SlateProvider} from './media';
 import type {Destroyable} from './common/capabilities';
 
@@ -31,6 +32,7 @@ export class OmpProvider implements Destroyable {
   readonly sessionStore: SessionStore;
   readonly trackRepository: TrackRepository;
   readonly mainMediaRepository: MainMediaRepository;
+  readonly mainMediaSessionManager: MainMediaSessionManager;
   readonly trackUtils: TrackUtils;
   readonly omakaseTrack: OmakaseTrackApiImpl;
   readonly ui: Ui;
@@ -42,6 +44,7 @@ export class OmpProvider implements Destroyable {
     this.alertsManager = new AlertsManager();
     this.trackRepository = new TrackRepository();
     this.mainMediaRepository = new MainMediaRepository(this.trackRepository);
+    this.mainMediaSessionManager = new MainMediaSessionManager(this.trackRepository);
     this.sessionStore = new SessionStore(this.alertsManager);
     this.trackUtils = new TrackUtils(this.trackRepository);
     this.omakaseTrack = new OmakaseTrackApiImpl(this.trackRepository, this.trackUtils);
@@ -54,6 +57,7 @@ export class OmpProvider implements Destroyable {
   destroy() {
     this.sessionStore.destroy();
     this.omakaseTrack.destroy();
+    this.mainMediaSessionManager.destroy();
     this.mainMediaRepository.destroy();
     this.trackRepository.destroy();
     this.trackUtils.destroy();

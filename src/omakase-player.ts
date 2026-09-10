@@ -29,7 +29,7 @@ import {WindowUtil} from './util/window-util';
 import './../style/omakase-player.scss';
 import type {OmakasePlayerApi} from './omakase-player-api';
 import {Chroming} from './chroming/chroming';
-import {type ChromingApi, type ChromingDetachedApi, type ChromingInternalApi, DEFAULT_PLAYER_CHROMING, type PlayerChromingConfig} from './chroming';
+import {type ChromingApi, type ChromingDetachedApi, type ChromingInternalApi, DEFAULT_FULLSCREEN_CHROMING_BY_THEME, DEFAULT_PLAYER_CHROMING, type PlayerChromingConfig} from './chroming';
 import type {OmakaseTrackApi} from './track';
 import {BaseOmakasePlayer} from './base-omakase-player';
 import {HostRemoteNode} from './remoting/host-remote-node';
@@ -59,7 +59,6 @@ const _configDefault: OmakasePlayerConfig = {
   ...prefixKeys(PLAYER_LOCAL_CONFIG_DEFAULT, 'player'),
 
   chromingTheme: DEFAULT_PLAYER_CHROMING.theme,
-  chromingFullscreenChroming: DEFAULT_PLAYER_CHROMING.fullscreenChroming,
 };
 
 export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi {
@@ -92,6 +91,10 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
       ...config,
     } as OmakasePlayerConfig;
 
+    if (config?.chromingFullscreenChroming === undefined) {
+      this._config.chromingFullscreenChroming = DEFAULT_FULLSCREEN_CHROMING_BY_THEME[this._config.chromingTheme];
+    }
+
     AuthConfig.authentication = this._config.authentication;
 
     this._session = this._ompProvider.sessionStore;
@@ -107,22 +110,27 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
       textMainTracksHandler: this._config.playerTextMainTracksHandler,
       ...(this._config.playerControllerConfig ? {controllerConfig: this._config.playerControllerConfig} : {}),
     });
-    this._chroming = new Chroming(this._ompProvider, {
-      playerHtmlElementId: this._config.playerHtmlElementId,
-      playerDetachable: this._session.state.isDetachable,
-      theme: this._config.chromingTheme,
-      themeConfig: this._config.chromingThemeConfig,
-      watermark: this._config.chromingWatermark,
-      watermarkVisibility: this._config.chromingWatermarkVisibility,
-      fullscreenChroming: this._config.chromingFullscreenChroming,
-      styleUrl: this._config.chromingStyleUrl,
-      requestDetachFn: () => {
-        this._session.requestWindowPlaybackModeChange(WindowPlaybackMode.DETACHED);
+
+    this._chroming = new Chroming(
+      this._ompProvider,
+      {
+        playerHtmlElementId: this._config.playerHtmlElementId,
+        playerDetachable: this._session.state.isDetachable,
+        theme: this._config.chromingTheme,
+        themeConfig: this._config.chromingThemeConfig,
+        watermark: this._config.chromingWatermark,
+        watermarkVisibility: this._config.chromingWatermarkVisibility,
+        fullscreenChroming: this._config.chromingFullscreenChroming,
+        styleUrl: this._config.chromingStyleUrl,
+        requestDetachFn: () => {
+          this._session.requestWindowPlaybackModeChange(WindowPlaybackMode.DETACHED);
+        },
+        requestAttachFn: () => {
+          this._session.requestWindowPlaybackModeChange(WindowPlaybackMode.ATTACHED);
+        },
       },
-      requestAttachFn: () => {
-        this._session.requestWindowPlaybackModeChange(WindowPlaybackMode.ATTACHED);
-      },
-    });
+      this._player.livePlaybackTracker
+    );
     this._player.setChromingInternal(this._chroming.chromingLocal);
     this._chroming.setPlayerInternal(this._player.playerLocal);
     this._ompProvider.omakaseTrack.setPlayerInternal(this._player.playerLocal);
@@ -212,7 +220,7 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
         this._detachingBreaker.break();
         this._session.updateWindowPlaybackMode(WindowPlaybackMode.DETACHING);
 
-        let remoteNode = new HostRemoteNode(this._config.detachedBroadcastChannelId!, this._ompProvider);
+        let remoteNode = new HostRemoteNode(this._config.detachedBroadcastChannelId!, this._ompProvider, this._player.livePlaybackTracker);
         this._remoteNode = remoteNode;
 
         let remoteNodeConnected = () => {

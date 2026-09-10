@@ -28,6 +28,7 @@ import {ObserverBreaker} from '../common/observer-breaker';
 import {
   ChromingTheme,
   type ChromingThemeConfigMap,
+  ChromingTimeFormat,
   ChromingTrackDestination,
   type ChromingVuMeterConfig,
   ChromingVuMeterPosition,
@@ -40,6 +41,7 @@ import {
   type PlayerChromingThemeConfig,
   type VideoSafeZone,
   type VideoSafeZoneCreate,
+  VideoSafeZoneRenderingRegion,
   WatermarkVisibility,
 } from './chroming-api';
 import {StringUtil} from '../util/string-util';
@@ -49,13 +51,27 @@ import playerChromingStyle from '../../style/player-chroming/player-chroming.css
 import mediaCaptionsStyle from '../../node_modules/media-captions/styles/captions.css?raw';
 import {BrowserProvider} from '../common/browser-provider';
 import {type DomMediaElementConfig, HTMLVideoElementEvent} from '../dom/dom-media-element';
-import {WindowPlaybackMode} from '../common';
+import {MediaTemporalFormat, WindowPlaybackMode} from '../common';
 import {errorCompleteObserver, freeObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
 import {Fullscreen} from '../common/fullscreen';
 import type {Alert, AlertState} from '../session/alerts-api';
-import {OmakaseDropdown, OmakaseDropdownList, OmakaseMarkerBar, OmakaseMarkerTrack, OmakaseTimeDisplay, OmakaseTimeRange} from './components';
-import {MainMediaType, type AudioState, type MarkerState, type MarkerTrackState, type TextTrackState, type ThumbnailState, type ThumbnailTrackState} from '../media';
+import {
+  OmakaseDropdown,
+  OmakaseDropdownList,
+  OmakaseFullscreenButton,
+  OmakaseLiveButton,
+  OmakaseMarkerBar,
+  OmakaseMarkerTrack,
+  OmakaseMuteButton,
+  OmakasePlayButton,
+  OmakasePreviewThumbnail,
+  OmakaseTimeDisplay,
+  OmakaseTimeRange,
+  OmakaseVolumeRange,
+} from './components';
+import {MainMediaType, type AudioState, type MarkerState, type MarkerTrackState, type MediaRotationValue, type TextTrackState, type ThumbnailState, type ThumbnailTrackState} from '../media';
 import {ChromingUtil} from './chroming-util';
+import {UI_LIVE_MODEL_NOT_LIVE, type UiLiveModel} from '../live/live-model';
 import type {OmakaseRouterVisualization} from './components/omakase-router-visualization';
 import type {AudioHandlerApi} from '../audio';
 import {type VideoKeyframe, VideoKeyframeExtractor, type VideoKeyframeOptions} from '../tools/keyframe-extractor';
@@ -93,11 +109,18 @@ export const ChromingDomClasses = {
   mediaController: 'omakase-media-controller',
   mediaTheme: 'omakase-media-theme',
   playerFullscreen: 'omakase-player-fullscreen',
+  fullscreenChromingDisabled: 'omakase-fullscreen-chroming-disabled',
+  simpleFullscreen: 'omakase-simple-fullscreen',
+  simpleFullscreenMiddle: 'omakase-simple-fullscreen-middle',
+  simpleFullscreenCenter: 'omakase-simple-fullscreen-center',
+  simpleFullscreenTimecode: 'omakase-simple-fullscreen-timecode',
 
   backgroundImage: 'omakase-background-image',
   backgroundLogo: 'omakase-background-logo',
 
   safeZoneWrapper: 'omakase-video-safe-zone-wrapper',
+  safeZoneWrapperPlayerRegion: 'omakase-video-safe-zone-wrapper-player-region',
+  safeZoneWrapperVideoRegion: 'omakase-video-safe-zone-wrapper-video-region',
   safeZone: 'omakase-video-safe-zone',
   watermarkWrapper: 'omakase-watermark-wrapper',
   watermark: 'omakase-watermark',
@@ -162,6 +185,7 @@ export const ChromingDomClasses = {
   omakaseControlBar: 'omakase-control-bar',
   timecodeContainer: 'timecode-container',
   timecodeWrapper: 'omakase-timecode-wrapper',
+  stampBottomRow: 'omakase-stamp-bottom-row',
   timecodeFormatTimecode: 'omakase-timecode-format-timecode',
   timecodeFormatStandard: 'omakase-timecode-format-standard',
   audioTextDropdown: 'omakase-audio-text-dropdown',
@@ -192,6 +216,7 @@ export const ChromingDomClasses = {
   mediaPillarbox: 'media-pillarbox',
   mediaLetterbox: 'media-letterbox',
   mediaHasVideo: 'media-has-video',
+  mediaVideoRotated: 'media-video-rotated',
 
   audioRouter: 'media-chrome-router',
   audioRouterDefault: 'media-chrome-router-default',
@@ -210,6 +235,8 @@ export const ChromingDomClasses = {
 
   withControlBar: 'with-control-bar',
   withControlBarVuMeter: 'with-control-bar-vu-meter',
+
+  omakaseLiveButton: 'omakase-live-button',
 };
 
 export abstract class ChromingDomController<T extends ChromingTheme> implements PlayerDomController, Destroyable {
@@ -218,6 +245,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
   protected _config: ChromingDomConfig<T>;
   protected _playerInternal: PlayerInternalApi | undefined;
   protected _mainMediaType: MainMediaType | undefined;
+  protected _mediaRotation: MediaRotationValue = 0;
 
   protected _themeElement: MediaThemeElement;
   protected _videoElementId: string;
@@ -232,7 +260,8 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
   protected _divButtonOverlayReplay: HTMLElement;
   protected _divButtonOverlayAttach: HTMLElement;
   protected _divWatermark: HTMLElement;
-  protected _divSafeZoneWrapper: HTMLElement;
+  protected _divSafeZoneWrapperPlayerRegion: HTMLElement;
+  protected _divSafeZoneWrapperVideoRegion: HTMLElement;
   protected _divBackground: HTMLElement;
   protected _divPlaybackButtons: HTMLElement;
   protected _autoHidePlaybackButtons = true;
@@ -250,6 +279,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
 
   protected _markerBar?: OmakaseMarkerBar;
   protected _timeRange?: OmakaseTimeRange;
+  protected _liveButton?: OmakaseLiveButton | undefined;
   protected _attachDetachButton?: MediaChromeButton;
 
   protected _vuMeterToggle?: MediaChromeButton;
@@ -279,6 +309,9 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
   protected _seekingToTime?: number;
   protected _seekAnimationDelay = 100;
 
+  /** Last thumbnail track handed to setThumbnailTrack(), kept so the simple-fullscreen preview (mounted lazily on fullscreen entry) can be wired with current data. */
+  protected _thumbnailTrack: ThumbnailTrackState | undefined;
+
   private _showTemporaryOnMouseMoveTimeoutId?: ReturnType<typeof setTimeout>;
   private _showTemporaryBackgroundTimeoutId?: ReturnType<typeof setTimeout>;
   private _showSeekLoadingAnimationTimeoutId?: ReturnType<typeof setTimeout>;
@@ -297,6 +330,11 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
   protected _fullscreenChangeHandler: () => void;
   protected _documentClickListener: ((event: MouseEvent) => void) | undefined;
 
+  /** Wires up (on entry) / tears down (on exit) the simple-fullscreen control bar's player bindings. */
+  private _simpleFullscreenBreaker = new ObserverBreaker();
+
+  protected uiLiveModel: UiLiveModel | undefined = undefined;
+
   protected constructor(config: ChromingDomConfig<T>) {
     this._config = config;
 
@@ -308,7 +346,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
 
     ChromingUtil.observeElementResize(this._htmlElement);
 
-    this._videoElementId = CryptoUtil.uuid();
+    this._videoElementId = 'video-' + CryptoUtil.uuid();
 
     this._htmlElement.innerHTML = `
         ${this.createTemplateDom()}
@@ -329,7 +367,8 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     this._divButtonOverlayReplay = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.buttonOverlayReplay);
     this._divButtonOverlayAttach = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.buttonOverlayAttach);
     this._divWatermark = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.watermark);
-    this._divSafeZoneWrapper = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.safeZoneWrapper);
+    this._divSafeZoneWrapperPlayerRegion = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.safeZoneWrapperPlayerRegion);
+    this._divSafeZoneWrapperVideoRegion = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.safeZoneWrapperVideoRegion);
     this._textMediaCaptionsElement = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.mediaCaptions);
     this._textImscElement = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.imsc);
     this._divBackground = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.backgroundImage);
@@ -358,9 +397,13 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
       if (Fullscreen.isFullscreen()) {
         this._mediaControllerElement.classList.add(ChromingDomClasses.playerFullscreen);
         this._themeElement.setAttribute('fullscreen', '');
+        if (this._config?.fullscreenChroming === FullscreenChroming.SIMPLE) {
+          queueMicrotask(() => this._wireSimpleFullscreen());
+        }
       } else {
         this._mediaControllerElement.classList.remove(ChromingDomClasses.playerFullscreen);
         this._themeElement.removeAttribute('fullscreen');
+        this._simpleFullscreenBreaker.break();
       }
     };
 
@@ -385,7 +428,10 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
 
   abstract setThemeConfig(themeConfig: Partial<ChromingThemeConfigMap[T]>): void;
 
-  abstract setThumbnailTrack(track: ThumbnailTrackState | undefined): void;
+  setThumbnailTrack(track: ThumbnailTrackState | undefined): void {
+    this._thumbnailTrack = track;
+    this._updateSimpleFullscreenThumbnail();
+  }
 
   abstract get theme(): T;
 
@@ -424,29 +470,29 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     if (!this._mainMediaVideoElement.poster) {
       DomUtil.hideElements(this._divBackground);
     }
-    const {videoWidth, videoHeight} = this._mainMediaVideoElement;
-    if (videoWidth && videoHeight) {
-      this._themeElement.style.setProperty('--video-aspect-ratio', `${videoWidth / videoHeight}`);
-      this.updateCssClassesAndVariables();
-    }
+    this.updateCssClassesAndVariables();
     this.wireVuMeters();
     this.updateFloatingVuMeterToggle(this._playerInternal!.audioInternal.state);
   }
 
   private updateCssClassesAndVariables() {
     const {videoWidth, videoHeight} = this._mainMediaVideoElement;
-    const {offsetHeight, offsetWidth} = this._themeElement;
+    const {offsetHeight, offsetWidth} = this._mediaControllerElement;
     const comparisonTreshhold = 0.01;
-    if (videoWidth && videoHeight) {
-      this._themeElement.style.setProperty('--video-letterbox-height', `${Math.max((offsetHeight - offsetWidth * (videoHeight / videoWidth)) / 2, 0)}px`);
+    const rotated = this._mediaRotation === 90 || this._mediaRotation === 270;
+    const effectiveVideoWidth = rotated ? videoHeight : videoWidth;
+    const effectiveVideoHeight = rotated ? videoWidth : videoHeight;
+    if (effectiveVideoWidth && effectiveVideoHeight) {
+      this._themeElement.style.setProperty('--video-aspect-ratio', `${effectiveVideoWidth / effectiveVideoHeight}`);
+      this._themeElement.style.setProperty('--video-letterbox-height', `${Math.max((offsetHeight - offsetWidth * (effectiveVideoHeight / effectiveVideoWidth)) / 2, 0)}px`);
       this._themeElement.style.setProperty('--player-width', `${offsetWidth}`);
       this._themeElement.style.setProperty('--player-height', `${offsetHeight}`);
-      if (offsetWidth / offsetHeight > videoWidth / videoHeight + comparisonTreshhold) {
+      if (offsetWidth / offsetHeight > effectiveVideoWidth / effectiveVideoHeight + comparisonTreshhold) {
         this._mediaControllerElement.classList.remove(ChromingDomClasses.mediaLetterbox);
         this._mediaControllerElement.classList.add(ChromingDomClasses.mediaPillarbox);
         this._themeElement.classList.remove(ChromingDomClasses.mediaLetterbox);
         this._themeElement.classList.add(ChromingDomClasses.mediaPillarbox);
-      } else if (offsetWidth / offsetHeight < videoWidth / videoHeight - comparisonTreshhold) {
+      } else if (offsetWidth / offsetHeight < effectiveVideoWidth / effectiveVideoHeight - comparisonTreshhold) {
         this._mediaControllerElement.classList.remove(ChromingDomClasses.mediaPillarbox);
         this._mediaControllerElement.classList.add(ChromingDomClasses.mediaLetterbox);
         this._themeElement.classList.remove(ChromingDomClasses.mediaPillarbox);
@@ -476,6 +522,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
 
   prepareForAttaching(hasMainMedia: boolean): void {
     this._divAlerts.innerHTML = '';
+    this.setLiveModel(UI_LIVE_MODEL_NOT_LIVE);
     this._mediaControllerElement.classList.remove('omakase-player-detached');
     DomUtil.hideElements(this._divButtonOverlayAttach);
     if (hasMainMedia) {
@@ -485,6 +532,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
   }
 
   prepareForDetaching(): void {
+    this.setLiveModel(UI_LIVE_MODEL_NOT_LIVE);
     this._mediaControllerElement.classList.add('omakase-player-detached');
     DomUtil.showElements(this._divButtonOverlayAttach);
   }
@@ -497,6 +545,43 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     this.resetMainMediaVideoElement();
     this._playerInternal = playerInternal;
     this.wirePlayer();
+  }
+
+  setLiveModel(model: UiLiveModel): void {
+    this.uiLiveModel = model;
+    this._timeRange?.setLiveModel(model);
+    this._markerBar?.setLiveModel(model);
+    this._syncLiveButton(model);
+  }
+
+  /**
+   * Themes that show a "go to live" button override this to return the element the button mounts into.
+   * Returning undefined (the default) means the theme has no live button.
+   */
+  protected _liveButtonContainer(): HTMLElement | undefined {
+    return undefined;
+  }
+
+  private _syncLiveButton(model: UiLiveModel): void {
+    if (model.isLive) {
+      const container = this._liveButtonContainer();
+      if (!container) {
+        return; // theme opts out of a live button
+      }
+      if (!this._liveButton) {
+        const liveButton = document.createElement('omakase-live-button') as OmakaseLiveButton;
+        liveButton.className = `${ChromingDomClasses.mediaChromeButton} ${ChromingDomClasses.omakaseLiveButton}`;
+        if (this._playerInternal) {
+          liveButton.player = this._playerInternal;
+        }
+        container.appendChild(liveButton);
+        this._liveButton = liveButton;
+      }
+      this._liveButton.setLiveModel(model);
+    } else if (this._liveButton) {
+      this._liveButton.remove();
+      this._liveButton = undefined;
+    }
   }
 
   setMainMediaType(type: MainMediaType) {
@@ -517,9 +602,22 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     }
   }
 
+  get mediaRotation(): MediaRotationValue {
+    return this._mediaRotation;
+  }
+
+  setMediaRotation(mediaRotation: MediaRotationValue) {
+    this._mediaRotation = mediaRotation;
+    const rotated = mediaRotation === 90 || mediaRotation === 270;
+    this._mediaControllerElement.classList.toggle(ChromingDomClasses.mediaVideoRotated, rotated);
+    this._themeElement.classList.toggle(ChromingDomClasses.mediaVideoRotated, rotated);
+    this._themeElement.style.setProperty('--video-rotation-deg', `${mediaRotation}deg`);
+    this.updateCssClassesAndVariables();
+  }
+
   createMainMediaVideoElement() {
     this._themeElement.innerHTML = `<video id="${this._videoElementId}" class="${ChromingDomClasses.video}" slot="media" ${StringUtil.isNonEmpty(this._config.mediaElement?.crossOrigin) ? `crossorigin="${this._config.mediaElement?.crossOrigin}"` : ``}></video>`;
-    this._mainMediaVideoElement = DomUtil.getElementByIdOrFail<HTMLVideoElement>(this._videoElementId);
+    this._mainMediaVideoElement = DomUtil.getElementByIdOrFail<HTMLVideoElement>(this._videoElementId, this._themeElement);
   }
 
   createTemplateDom() {
@@ -528,12 +626,55 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
         <style>${mediaCaptionsStyle}</style>
         <style>${playerChromingStyle}</style>
         ${this._config?.styleUrl ? styleUrls.map((url) => `<link rel="stylesheet" href="${url}"></link>`) : ''}
-        <media-controller class="${ChromingDomClasses.mediaController}" nohotkeys gesturesdisabled>
+        <media-controller class="${ChromingDomClasses.mediaController} ${this._config?.fullscreenChroming === FullscreenChroming.SIMPLE ? ChromingDomClasses.fullscreenChromingDisabled : ''}" nohotkeys gesturesdisabled>
           <div class="${ChromingDomClasses.backgroundImage}">
             <div class="${ChromingDomClasses.backgroundLogo}"></div>
           </div>
           <slot name="media" slot="media"></slot>
-          <div class="${ChromingDomClasses.safeZoneWrapper}" noautohide></div>
+          ${
+            this._config?.fullscreenChroming === FullscreenChroming.SIMPLE
+              ? `<template if="fullscreen">
+                  <div class="${ChromingDomClasses.simpleFullscreen}">
+                    <omakase-time-range>
+                      <div slot="preview" class="${ChromingDomClasses.mediaChromePreviewWrapper}">
+                        <omakase-preview-thumbnail class="${ChromingDomClasses.mediaChromePreviewThumbnail}"></omakase-preview-thumbnail>
+                        <omakase-time-display format="${this.getSimpleFullscreenTimeFormat() === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard'}" ${this.getSimpleFullscreenTimeFormat() === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME ? 'countdown ' : ''} class="${ChromingDomClasses.mediaChromePreviewTimecode}"></omakase-time-display>
+                      </div>
+                    </omakase-time-range>
+                    <div class="${ChromingDomClasses.simpleFullscreenMiddle}">
+                      <div class="volume-container">
+                        <omakase-mute-button class="${ChromingDomClasses.mediaChromeButton} shadow">
+                          <span slot="high" class="${ChromingDomClasses.mediaChromeAudioHigh}"></span>
+                          <span slot="medium" class="${ChromingDomClasses.mediaChromeAudioMedium}"></span>
+                          <span slot="low" class="${ChromingDomClasses.mediaChromeAudioLow}"></span>
+                          <span slot="off" class="${ChromingDomClasses.mediaChromeAudioMute}"></span>
+                        </omakase-mute-button>
+                        <omakase-volume-range></omakase-volume-range>
+                      </div>
+                      <div class="${ChromingDomClasses.simpleFullscreenCenter}">
+                        <media-chrome-button class="${ChromingDomClasses.mediaChromeButton} ${ChromingDomClasses.frameBackwardsButton}">
+                          <span class="${ChromingDomClasses.mediaRewindButton}"></span>
+                        </media-chrome-button>
+                        <omakase-play-button class="${ChromingDomClasses.mediaChromeButton}">
+                          <span slot="play" class="${ChromingDomClasses.mediaChromePlay}"></span>
+                          <span slot="pause" class="${ChromingDomClasses.mediaChromePause}"></span>
+                        </omakase-play-button>
+                        <media-chrome-button class="${ChromingDomClasses.mediaChromeButton} ${ChromingDomClasses.frameForwardButton}">
+                          <span class="${ChromingDomClasses.mediaForwardButton}"></span>
+                        </media-chrome-button>
+                      </div>
+                      <omakase-fullscreen-button class="${ChromingDomClasses.mediaChromeButton}">
+                        <span slot="enter" class="${ChromingDomClasses.mediaChromeFullscreenEnter}"></span>
+                        <span slot="exit" class="${ChromingDomClasses.mediaChromeFullscreenExit}"></span>
+                      </omakase-fullscreen-button>
+                    </div>
+                    <omakase-time-display withduration format="${this.getSimpleFullscreenTimeFormat() === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard'}" ${this.getSimpleFullscreenTimeFormat() === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME ? 'countdown ' : ''} class="${ChromingDomClasses.simpleFullscreenTimecode}"></omakase-time-display>
+                  </div>
+                </template>`
+              : ''
+          }
+          <div class="${ChromingDomClasses.safeZoneWrapper} ${ChromingDomClasses.safeZoneWrapperPlayerRegion}" noautohide></div>
+          <div class="${ChromingDomClasses.safeZoneWrapper} ${ChromingDomClasses.safeZoneWrapperVideoRegion}" noautohide></div>
           <div class="${ChromingDomClasses.watermarkWrapper}" ${this._config?.watermarkVisibility === WatermarkVisibility.AUTO_HIDE ? '' : 'noautohide'}>
             <div class="${ChromingDomClasses.watermark}"></div>
           </div>
@@ -695,6 +836,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     if (this._fullscreenChangeHandler) {
       Fullscreen.off('change', this._fullscreenChangeHandler);
     }
+    this._simpleFullscreenBreaker.destroy();
     if (this._documentClickListener) {
       document.removeEventListener('click', this._documentClickListener);
     }
@@ -905,6 +1047,10 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
           },
         });
     }
+
+    if (this.uiLiveModel) {
+      this._syncLiveButton(this.uiLiveModel);
+    }
   }
 
   protected wireAudioTextDropdown(audioTextDropdown: OmakaseDropdown) {
@@ -985,10 +1131,11 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
   }
 
   clearSafeZones(): void {
-    this._divSafeZoneWrapper.innerHTML = '';
+    this._divSafeZoneWrapperPlayerRegion.innerHTML = '';
+    this._divSafeZoneWrapperVideoRegion.innerHTML = '';
   }
 
-  addSafeZone(videoSafeZone: VideoSafeZoneCreate, allVideoSafeZones: VideoSafeZone[]): VideoSafeZone {
+  addSafeZone(videoSafeZone: VideoSafeZoneCreate, allVideoSafeZones: VideoSafeZone[], renderingRegion: VideoSafeZoneRenderingRegion = VideoSafeZoneRenderingRegion.VIDEO): VideoSafeZone {
     let newVideoSafeZone: VideoSafeZone = {
       id: StringUtil.isEmpty(videoSafeZone.id) ? CryptoUtil.uuid() : videoSafeZone.id!,
       htmlId: StringUtil.isEmpty(videoSafeZone.htmlId) ? `omakase-video-safe-zone-${allVideoSafeZones.length + 1}` : videoSafeZone.htmlId!,
@@ -999,6 +1146,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
         videoSafeZone.topRightBottomLeftPercent[2] ? videoSafeZone.topRightBottomLeftPercent[2] : 0,
         videoSafeZone.topRightBottomLeftPercent[3] ? videoSafeZone.topRightBottomLeftPercent[3] : 0,
       ],
+      renderingRegion,
     };
 
     let htmlElement: HTMLElement = DomUtil.createElement<'div'>('div');
@@ -1009,7 +1157,8 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     htmlElement.style.bottom = `${newVideoSafeZone.topRightBottomLeftPercent[2]}%`;
     htmlElement.style.left = `${newVideoSafeZone.topRightBottomLeftPercent[3]}%`;
 
-    this._divSafeZoneWrapper.append(htmlElement);
+    const wrapper = renderingRegion === VideoSafeZoneRenderingRegion.PLAYER ? this._divSafeZoneWrapperPlayerRegion : this._divSafeZoneWrapperVideoRegion;
+    wrapper.append(htmlElement);
 
     return newVideoSafeZone;
   }
@@ -1062,7 +1211,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
                 errorCompleteObserver(observer, error);
               });
           } else {
-            Fullscreen.requestFullscreen(this._config?.fullscreenChroming === FullscreenChroming.ENABLED ? this._mediaControllerElement : this._mainMediaVideoElement)
+            Fullscreen.requestFullscreen(this._config?.fullscreenChroming === FullscreenChroming.DISABLED ? this._mainMediaVideoElement : this._mediaControllerElement)
               .then(() => {
                 nextCompleteObserver(observer);
               })
@@ -1079,6 +1228,104 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
         observer.error(e);
       }
     });
+  }
+
+  protected getSimpleFullscreenTimeFormat(): ChromingTimeFormat | undefined {
+    const themeConfig = this.themeConfig ?? this._config.themeConfig;
+    return themeConfig && 'timeFormat' in themeConfig ? (themeConfig as {timeFormat?: ChromingTimeFormat}).timeFormat : undefined;
+  }
+
+  protected applySimpleFullscreenTimeFormat(timeDisplay: OmakaseTimeDisplay): void {
+    const timeFormat = this.getSimpleFullscreenTimeFormat();
+    timeDisplay.displayFormat = timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard';
+    timeDisplay.isCountdown = timeFormat === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME;
+  }
+
+  protected updateSimpleFullscreenTimeFormat(): void {
+    const timeDisplays = this._themeElement.shadowRoot?.querySelectorAll(`.${ChromingDomClasses.simpleFullscreen} omakase-time-display`) as NodeListOf<OmakaseTimeDisplay> | undefined;
+    timeDisplays?.forEach((timeDisplay) => this.applySimpleFullscreenTimeFormat(timeDisplay));
+
+    const currentTimeDisplay = this._themeElement.shadowRoot?.querySelector(`.${ChromingDomClasses.simpleFullscreenTimecode}`) as OmakaseTimeDisplay | undefined;
+    currentTimeDisplay?.updateTime();
+  }
+
+  /** Re-applies the current thumbnail track to the simple-fullscreen preview thumbnail, if it's currently mounted (i.e. we're in fullscreen). */
+  private _updateSimpleFullscreenThumbnail(): void {
+    const previewThumbnail = this._themeElement.shadowRoot?.querySelector(`.${ChromingDomClasses.simpleFullscreen} omakase-preview-thumbnail`) as OmakasePreviewThumbnail | undefined;
+    if (previewThumbnail) {
+      previewThumbnail.thumbnailTrack = this._thumbnailTrack;
+      previewThumbnail.thumbnailFn = this._config.findThumbnailFn;
+    }
+  }
+
+  private _wireSimpleFullscreen(): void {
+    const playerInternal = this._playerInternal;
+    if (!playerInternal) {
+      return;
+    }
+
+    const simpleFullscreenQuery = <T extends Element>(selector: string) => this._themeElement.shadowRoot?.querySelector(`.${ChromingDomClasses.simpleFullscreen} ${selector}`) as T | undefined;
+
+    const playButton = simpleFullscreenQuery<OmakasePlayButton>('omakase-play-button');
+    const timeRange = simpleFullscreenQuery<OmakaseTimeRange>('omakase-time-range');
+    const fullscreenButton = simpleFullscreenQuery<OmakaseFullscreenButton>('omakase-fullscreen-button');
+    const muteButton = simpleFullscreenQuery<OmakaseMuteButton>('omakase-mute-button');
+    const volumeRange = simpleFullscreenQuery<OmakaseVolumeRange>('omakase-volume-range');
+    const timeDisplay = simpleFullscreenQuery<OmakaseTimeDisplay>(`.${ChromingDomClasses.simpleFullscreenTimecode}`);
+    const previewTimecode = simpleFullscreenQuery<OmakaseTimeDisplay>(`.${ChromingDomClasses.mediaChromePreviewTimecode}`);
+    const previewThumbnail = simpleFullscreenQuery<OmakasePreviewThumbnail>('omakase-preview-thumbnail');
+    const frameBackwardButton = simpleFullscreenQuery<MediaChromeButton>(`.${ChromingDomClasses.frameBackwardsButton}`);
+    const frameForwardButton = simpleFullscreenQuery<MediaChromeButton>(`.${ChromingDomClasses.frameForwardButton}`);
+
+    if (!playButton || !timeRange || !fullscreenButton || !muteButton || !volumeRange || !timeDisplay || !frameBackwardButton || !frameForwardButton) {
+      return;
+    }
+
+    playButton.player = playerInternal;
+    fullscreenButton.player = playerInternal;
+    timeRange.player = playerInternal;
+    muteButton.player = playerInternal;
+    volumeRange.player = playerInternal;
+    timeDisplay.player = playerInternal;
+    this.applySimpleFullscreenTimeFormat(timeDisplay);
+    // .player only repaints on the next PLAYER_PLAYBACK_PROGRESS tick, which doesn't fire while
+    // paused, and this element is created after PLAYER_MAIN_MEDIA_LOADED already fired - so it'd
+    // otherwise stay blank until playback starts
+    timeDisplay.updateTime();
+
+    if (previewTimecode) {
+      previewTimecode.player = playerInternal;
+      previewTimecode.timeRange = timeRange;
+      this.applySimpleFullscreenTimeFormat(previewTimecode);
+    }
+
+    if (previewThumbnail) {
+      previewThumbnail.timeRange = timeRange;
+      previewThumbnail.thumbnailTrack = this._thumbnailTrack;
+      previewThumbnail.thumbnailFn = this._config.findThumbnailFn;
+    }
+
+    timeRange.onSeek$.pipe(takeUntil(this._simpleFullscreenBreaker.observer)).subscribe({
+      next: (time) => {
+        playerInternal.seekTo(time);
+      },
+    });
+
+    fromEvent<MouseEvent>(frameBackwardButton, 'click')
+      .pipe(takeUntil(this._simpleFullscreenBreaker.observer))
+      .subscribe(() => {
+        playerInternal.pause().subscribe(() => {
+          playerInternal.seekFromCurrentTime(-1, MediaTemporalFormat.FRAME_COUNT);
+        });
+      });
+
+    fromEvent<MouseEvent>(frameForwardButton, 'click')
+      .pipe(takeUntil(this._simpleFullscreenBreaker.observer))
+      .subscribe(() => {
+        playerInternal.pause().subscribe(() => {
+          playerInternal.seekFromCurrentTime(1, MediaTemporalFormat.FRAME_COUNT);
+        });
+      });
   }
 
   enablePiP(): Observable<void> {

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {TIMELINE_LANE_CONFIG_DEFAULT, type TimelineLaneStyle} from '../timeline-lane';
+import {TIMELINE_LANE_CONFIG_DEFAULT} from '../timeline-lane';
 import {type ObservationState, type ObservationTrack} from '../../media';
 import {type StyledElementWithId} from '../../ui';
 import {debounceTime, filter, merge, Subject, takeUntil} from 'rxjs';
@@ -26,10 +26,10 @@ import {KonvaFactory} from '../konva/konva-factory';
 import Konva from 'konva';
 import {type ObservationTrackView} from './observation-track-view';
 import {freeObserver} from '../../util/rxjs-util';
-import {BaseMultiTrackLane, type MultiTrackLaneTrackConfig, type TrackLaneConfig} from '../track-lane';
+import {BaseMultiTrackLane, type MultiTrackLaneStyle, type MultiTrackLaneTrackConfig, type TrackLaneConfig} from '../track-lane';
 import type {DownsampleOptions} from '../../track';
 
-export interface ObservationTrackLaneStyle extends TimelineLaneStyle {}
+export interface ObservationTrackLaneStyle extends MultiTrackLaneStyle {}
 
 export interface ObservationTrackLaneConfig extends TrackLaneConfig {
   downsampleOptions?: DownsampleOptions;

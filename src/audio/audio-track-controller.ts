@@ -374,6 +374,10 @@ export class MediaElementAudioTrackController extends BaseAudioTrackController {
         nextCompleteObserver(mediaMetadata$, {
           firstAudioTrackChannelsNumber: this._trackState.channels,
         });
+      } else if (this._trackState.loadOptions?.forceSkipMetadataResolution) {
+        nextCompleteObserver(mediaMetadata$, {
+          firstAudioTrackChannelsNumber: AUDIO_DEFAULTS.channels,
+        });
       } else {
         MediaMetadataResolver.getMediaMetadata(url, ['firstAudioTrackChannelsNumber']).subscribe({
           next: (mediaMetadata) => {

@@ -226,7 +226,7 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
 
   protected createSlotsDom() {
     if (this._config.themeConfig?.htmlTemplateId) {
-      return DomUtil.getElementByIdOrFail<HTMLElement>(this._config.themeConfig?.htmlTemplateId)?.innerHTML ?? '';
+      return DomUtil.getElementById<HTMLElement>(this._config.themeConfig?.htmlTemplateId)?.innerHTML ?? '';
     } else {
       return '';
     }
@@ -270,6 +270,7 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
   }
 
   setThumbnailTrack(track: ThumbnailTrackState | undefined) {
+    super.setThumbnailTrack(track);
     if (this._previewThumbnail) {
       this._previewThumbnail.thumbnailTrack = track;
       this._previewThumbnail.thumbnailFn = this._config.findThumbnailFn;
@@ -303,6 +304,10 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
         this._textDropdownToggle.querySelector('media-chrome-button')?.setAttribute(OmakaseDropdownToggleAttributes.DISABLED, '');
       }
     }
+  }
+
+  protected override _liveButtonContainer(): HTMLElement | undefined {
+    return this.getShadowElement<HTMLElement>('.lower-control-bar .start-container');
   }
 
   wirePlayer() {
@@ -431,6 +436,7 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
       timeFormat,
     };
     this.updateTimeFormat();
+    this.updateSimpleFullscreenTimeFormat();
   }
 
   updateTimeFormat() {

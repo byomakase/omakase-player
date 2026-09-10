@@ -71,6 +71,7 @@ export class CustomDomController extends ChromingDomController<ChromingTheme.CUS
   }
 
   setThumbnailTrack(track: ThumbnailTrackState | undefined): void {
+    super.setThumbnailTrack(track);
     if (this._previewThumbnails) {
       for (const previewThumbnail of this._previewThumbnails) {
         previewThumbnail.thumbnailTrack = track;

@@ -63,6 +63,11 @@ export interface KonvaFlexGroupContentNodeConfig {
   konvaNode: Konva.Group;
   konvaBgNode?: Konva.Rect;
   clip?: boolean;
+  // Set false when a caller manages konvaBgNode's height itself (e.g. to a taller,
+  // scrollable content height than this group's own Yoga box) — see TimelineSlot's
+  // left/right pane bg rects, whose height must survive Yoga layout passes that happen
+  // after TimelineSlot.settleLayout() has set the correct value. Width still auto-syncs.
+  bgSyncHeight?: boolean;
 }
 
 export class KonvaFlexGroupContentNode implements FlexGroupContentNode<KonvaFlexContentNode> {
@@ -101,7 +106,7 @@ export class KonvaFlexGroupContentNode implements FlexGroupContentNode<KonvaFlex
     if (this._konvaBgNode) {
       this._konvaBgNode.setAttrs({
         width: layout.width,
-        height: layout.height,
+        ...(this._config.bgSyncHeight === false ? {} : {height: layout.height}),
       });
     }
   }

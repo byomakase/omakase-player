@@ -96,6 +96,7 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
 
   private _tickDivisionWidth?: number;
   private _tickTotalDivisions?: number;
+  private _tickDuration?: number;
 
   private _timecodedEventCatcher?: Konva.Rect;
   private _ticksGroup?: Konva.Group;
@@ -110,7 +111,7 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
   protected createStyledElement(): StyledElementWithId<ScrubberLaneStyle> {
     return {
       id: this._id,
-      classes: [this._ui!.resolveStyleClass('ScrubberLane')],
+      classes: [this._ui!.resolveStyleClass('TimelineLane'), this._ui!.resolveStyleClass('ScrubberLane')],
     };
   }
 
@@ -251,8 +252,16 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
 
     let newDivisionWidth = this.resolveTimeDivisionWidth(timelineWidth, tickMinDivisionWidth, tickDivisor, tickDivisor);
     let newTotalDivisions = new Decimal(timelineWidth).div(newDivisionWidth).round().toNumber();
+    let newDuration = this._player!.getDuration();
 
-    let strategy: 'create' | 'move' = forceCreate || this._ticksGroup!.getChildren().length < 1 || !this._tickTotalDivisions || this._tickTotalDivisions !== newTotalDivisions ? 'create' : 'move';
+    // A tick's displayed timecode is only stable across a pure zoom (constant duration) — the
+    // pixel position moves but represents the same time as long as the division bucket (count)
+    // is unchanged. A duration change breaks that invariant even when the division count happens
+    // to land in the same bucket, so it must also force a full recreate to refresh the labels.
+    let strategy: 'create' | 'move' =
+      forceCreate || this._ticksGroup!.getChildren().length < 1 || !this._tickTotalDivisions || this._tickTotalDivisions !== newTotalDivisions || this._tickDuration !== newDuration
+        ? 'create'
+        : 'move';
 
     if (strategy === 'create') {
       this.clearContent();
@@ -260,6 +269,7 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
 
     this._tickDivisionWidth = newDivisionWidth;
     this._tickTotalDivisions = newTotalDivisions;
+    this._tickDuration = newDuration;
 
     let tickGroupY = 0;
     let firstTextLeftPadding = 2;

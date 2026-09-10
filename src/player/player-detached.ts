@@ -15,9 +15,26 @@
  */
 
 import {concat, filter, forkJoin, from, mergeMap, Observable, Subject, switchMap, takeUntil, tap} from 'rxjs';
-import {type AudioState, type AudioUpdateableAttrs, type MainMedia, type MainMediaErrorEventData, MainMediaEventType, type MainMediaState, Relation, RelationType, type TextTrackState, type TextTrackUpdateableAttrs, type Track, TrackEventType, TrackType,} from '../media';
+import {
+  type AudioState,
+  type AudioUpdateableAttrs,
+  type MainMedia,
+  type MainMediaErrorEventData,
+  MainMediaEventType,
+  type MainMediaState,
+  MainMediaType,
+  type MediaRotationValue,
+  Relation,
+  RelationType,
+  type TextTrackState,
+  type TextTrackUpdateableAttrs,
+  type Track,
+  TrackEventType,
+  TrackType,
+} from '../media';
 import {OpStageStatus} from '../common/op-stage';
 import {describedObservable, errorCompleteObserver, freeObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
+import {isNullOrUndefined} from '../util/util-functions';
 import {ObserverBreaker} from '../common/observer-breaker';
 import {PlayerControllerFactory} from './player-controller-factory';
 import {type PlayerEvent, PlayerEventType} from './player-event';
@@ -26,7 +43,7 @@ import {MediaTemporalFormat, type MediaTemporalFormatValueMap} from '../common';
 import {Validators} from '../common/validators';
 import {COMMON_PLAYER_CONFIG_DEFAULT, type PlayerDetachedApi, type PlayerDetachedConfig} from './player-api';
 import type {Destroyable} from '../common/capabilities';
-import {type MainMediaEssentialArgsHookType, type PlayerController, PlayerControllerEventType} from './player-controller-api';
+import {type MainMediaEssentialArgsHookType, type PlayerController, PlayerControllerEventType, type PlayerLiveState, toMediaLiveState} from './player-controller-api';
 import {PlayerAudioEventType, type PlayerAudioInternalApi} from './player-audio-api';
 import {PlayerAudioInternal} from './player-audio';
 import {MainMediaRepositoryProxy} from '../remoting/impl/main-media-repository-proxy';
@@ -43,6 +60,8 @@ import {PLAYER_PLAYBACK_DEFAULT} from '../constants';
 import {PlayerTextHandlerType, type PlayerTextTrackLoadOptions} from './player-text-track';
 import type {RemoteNode} from '../remoting/remote-node';
 import type {TrackUtilsProxy} from '../remoting/impl/track-utils-proxy';
+import {MediaFactory} from '../media/media-factory';
+import type {MainMediaSessionRemote} from '../remoting/main-media-session-remote';
 import type {AlertsManagerProxy} from '../remoting/impl/alerts-manager-proxy';
 import type {TrackLoadOptions} from '../track';
 import type {VideoKeyframe, VideoKeyframeOptions} from '../tools/keyframe-extractor';
@@ -64,12 +83,15 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
   private _config: PlayerDetachedConfig;
 
   private _mainMediaState: MainMediaState | undefined;
+  private _wiredDuration: number | undefined;
+  private _latestLiveState: PlayerLiveState | undefined;
   private _playerPlayback: PlayerPlayback;
 
   private _playerAudioInternal: PlayerAudioInternal;
   private _playerTextInternal: PlayerTextInternal;
 
   private _playerController: PlayerController | undefined;
+  private _mainMediaSessionRemote: MainMediaSessionRemote | undefined;
   private _chromingInternal: ChromingInternalApi | undefined;
 
   private _loadMainMediaBreaker = new ObserverBreaker();
@@ -97,6 +119,18 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
 
   setChromingInternal(chromingInternal: ChromingInternalApi): void {
     this._chromingInternal = chromingInternal;
+  }
+
+  private connectMainMediaSessionRemote(mainMediaState: MainMediaState): void {
+    this.destroyMainMediaSessionRemote();
+
+    this._mainMediaSessionRemote = MediaFactory.createMainMediaSessionRemote(mainMediaState.mainMediaType);
+    this._mainMediaSessionRemote?.connect(this._remoteNode!);
+  }
+
+  private destroyMainMediaSessionRemote(): void {
+    this._mainMediaSessionRemote?.destroy();
+    this._mainMediaSessionRemote = void 0;
   }
 
   setRemoteProxies(remoteNode: RemoteNode) {
@@ -141,6 +175,7 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
     if (this._playerController) {
       this._playerController.destroy();
       this._playerController = void 0;
+      this._latestLiveState = void 0;
     }
 
     this._playerAudioInternal.teardown();
@@ -150,179 +185,190 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
       if (playerSession.mainMediaId) {
         this._mainMediaRepository!.getOrFail(playerSession.mainMediaId).subscribe({
           next: (mainMediaState) => {
-          if (!mainMediaState) {
-            throw new Error(`MainMedia not found`);
-          }
+            if (!mainMediaState) {
+              throw new Error(`MainMedia not found`);
+            }
 
-          if (mainMediaState.loadStage.status !== OpStageStatus.SUCCESS) {
-            throw new Error(`MainMedia not loaded`);
-          }
+            if (mainMediaState.loadStage.status !== OpStageStatus.SUCCESS) {
+              throw new Error(`MainMedia not loaded`);
+            }
 
-          if (!this._chromingInternal) {
-            throw new Error(`Chroming not set`);
-          }
-          let playerController = PlayerControllerFactory.create(mainMediaState.mainMediaType, this._chromingInternal.domController, this._config.controllerConfig?.[mainMediaState.mainMediaType]);
+            if (!this._chromingInternal) {
+              throw new Error(`Chroming not set`);
+            }
 
-          let restoreMainMediaSession$ = describeMe(
-            `Restore main media session`,
-            playerController.restoreMainMediaSession({
-              mainMedia: mainMediaState,
-              mainMediaLoadedHook: () => {
-                return new Observable((o) => {
-                  this._playerController = playerController;
+            this.connectMainMediaSessionRemote(mainMediaState);
 
-                  this._mainMediaState = mainMediaState;
+            let playerController = PlayerControllerFactory.create(mainMediaState.mainMediaType, this._chromingInternal.domController, this._config.controllerConfig?.[mainMediaState.mainMediaType]);
 
-                  this._sessionStore!.setPlayer(this.playerSession).subscribe(() => {
-                    this._playerAudioInternal.setup(playerController, mainMediaState);
-                    this._playerTextInternal.setup(playerController, mainMediaState, this._config.textMainTracksHandler);
+            let restoreMainMediaSession$ = describeMe(
+              `Restore main media session`,
+              playerController.restoreMainMediaSession({
+                mainMedia: mainMediaState,
+                liveTimelineAnchor: playerSession.liveTimelineAnchor,
+                mainMediaSessionController: this._mainMediaSessionRemote,
+                mainMediaLoadedHook: () => {
+                  return new Observable((o) => {
+                    this._playerController = playerController;
 
-                    this.wireEvents().subscribe(() => {
-                      nextCompleteObserver(o);
+                    this._mainMediaState = mainMediaState;
+
+                    this._playerPlayback.mediaRotation = mainMediaState.mainMediaType === MainMediaType.AUDIO_FILE ? 0 : playerSession.playback.mediaRotation;
+
+                    this._sessionStore!.setPlayer(this.playerSession).subscribe(() => {
+                      this._playerAudioInternal.setup(playerController, mainMediaState);
+                      this._playerTextInternal.setup(playerController, mainMediaState, PlayerInternalUtil.resolveTextMainTracksHandler(this._config.textMainTracksHandler, mainMediaState));
+
+                      this.wireEvents().subscribe(() => {
+                        this._onEvent$.next({
+                          type: PlayerEventType.PLAYER_MEDIA_ROTATION_UPDATE,
+                          data: {mediaRotation: this._playerPlayback.mediaRotation},
+                        });
+                        nextCompleteObserver(o);
+                      });
                     });
                   });
+                },
+              })
+            );
+
+            let sidecarAudios$ = describeMe(
+              `Sidecar audios`,
+              new Observable((o) => {
+                let load$ = describeMe(
+                  `Load sidecar audio`,
+                  new Observable((o1) => {
+                    this._trackRepository!.find().subscribe((tracks) => {
+                      // find tracks that are not part of main media
+                      let sidecarTracks = tracks
+                        .filter(
+                          (p) =>
+                            p.trackType === TrackType.AUDIO &&
+                            p.loadStage.status === OpStageStatus.SUCCESS &&
+                            !p.relations.find((relation) => relation.relationType === RelationType.PART_OF && relation.entityId === mainMediaState.id)
+                        )
+                        .map((p) => p as AudioState);
+
+                      if (sidecarTracks) {
+                        this.restoreLoadSidecarAudios(sidecarTracks).subscribe(() => {
+                          nextCompleteObserver(o1);
+                        });
+                      } else {
+                        nextCompleteObserver(o1);
+                      }
+                    });
+                  }),
+                  1
+                );
+
+                let restore$ = describeMe(
+                  `Restore audio state`,
+                  new Observable((o2) => {
+                    if (playerSession.audio) {
+                      this._playerAudioInternal.restoreState(playerSession.audio).subscribe(() => {
+                        nextCompleteObserver(o2);
+                      });
+                    } else {
+                      nextCompleteObserver(o2);
+                    }
+                  }),
+                  1
+                );
+
+                concat(load$, restore$).subscribe({
+                  complete: () => {
+                    nextCompleteObserver(o);
+                  },
                 });
+              })
+            );
+
+            let sidecarTextTracks$ = describeMe(
+              `Sidecar text`,
+              new Observable((o) => {
+                let load$ = describeMe(
+                  `Load sidecar text`,
+                  new Observable((o1) => {
+                    this._trackRepository!.find().subscribe((tracks) => {
+                      // find tracks that are not part of main media
+                      let sidecarTracks = tracks
+                        .filter(
+                          (p) =>
+                            p.trackType === TrackType.TEXT_TRACK &&
+                            p.loadStage.status === OpStageStatus.SUCCESS &&
+                            !p.relations.find((relation) => relation.relationType === RelationType.PART_OF && relation.entityId === mainMediaState.id)
+                        )
+                        .map((p) => p as TextTrackState);
+
+                      if (sidecarTracks) {
+                        this.restoreLoadSidecarTextTracks(sidecarTracks, playerSession.text).subscribe(() => {
+                          nextCompleteObserver(o1);
+                        });
+                      } else {
+                        nextCompleteObserver(o1);
+                      }
+                    });
+                  }),
+                  1
+                );
+
+                let restore$ = describeMe(
+                  `Restore text state`,
+                  new Observable((o2) => {
+                    if (playerSession.text) {
+                      this._playerTextInternal.restoreState(playerSession.text).subscribe(() => {
+                        nextCompleteObserver(o2);
+                      });
+                    } else {
+                      nextCompleteObserver(o2);
+                    }
+                  }),
+                  1
+                );
+
+                concat(load$, restore$).subscribe({
+                  complete: () => {
+                    nextCompleteObserver(o);
+                  },
+                });
+              })
+            );
+
+            let playback$ = describeMe(
+              `Playback`,
+              PlayerInternalUtil.restorePlayback(this, playerSession, (message) => {
+                this._alertsManager?.info(message);
+              })
+            );
+
+            describedObservable(
+              `Restore player session`,
+              new Observable((o) => {
+                concat(restoreMainMediaSession$, sidecarAudios$, sidecarTextTracks$, playback$).subscribe({
+                  complete: () => {
+                    this._onEvent$.next({
+                      type: PlayerEventType.PLAYER_SESSION_RESTORED,
+                      data: {
+                        playerSession: this.playerSession,
+                      },
+                    });
+                    nextCompleteObserver(o);
+                  },
+                  error: (err) => {
+                    errorCompleteObserver(o, err);
+                  },
+                });
+              })
+            ).subscribe({
+              complete: () => {
+                nextCompleteObserver(observer);
               },
-            })
-          );
-
-          let sidecarAudios$ = describeMe(
-            `Sidecar audios`,
-            new Observable((o) => {
-              let load$ = describeMe(
-                `Load sidecar audio`,
-                new Observable((o1) => {
-                  this._trackRepository!.find().subscribe((tracks) => {
-                    // find tracks that are not part of main media
-                    let sidecarTracks = tracks
-                      .filter(
-                        (p) =>
-                          p.trackType === TrackType.AUDIO &&
-                          p.loadStage.status === OpStageStatus.SUCCESS &&
-                          !p.relations.find((relation) => relation.relationType === RelationType.PART_OF && relation.entityId === mainMediaState.id)
-                      )
-                      .map((p) => p as AudioState);
-
-                    if (sidecarTracks) {
-                      this.restoreLoadSidecarAudios(sidecarTracks).subscribe(() => {
-                        nextCompleteObserver(o1);
-                      });
-                    } else {
-                      nextCompleteObserver(o1);
-                    }
-                  });
-                }),
-                1
-              );
-
-              let restore$ = describeMe(
-                `Restore audio state`,
-                new Observable((o2) => {
-                  if (playerSession.audio) {
-                    this._playerAudioInternal.restoreState(playerSession.audio).subscribe(() => {
-                      nextCompleteObserver(o2);
-                    });
-                  } else {
-                    nextCompleteObserver(o2);
-                  }
-                }),
-                1
-              );
-
-              concat(load$, restore$).subscribe({
-                complete: () => {
-                  nextCompleteObserver(o);
-                },
-              });
-            })
-          );
-
-          let sidecarTextTracks$ = describeMe(
-            `Sidecar text`,
-            new Observable((o) => {
-              let load$ = describeMe(
-                `Load sidecar text`,
-                new Observable((o1) => {
-                  this._trackRepository!.find().subscribe((tracks) => {
-                    // find tracks that are not part of main media
-                    let sidecarTracks = tracks
-                      .filter(
-                        (p) =>
-                          p.trackType === TrackType.TEXT_TRACK &&
-                          p.loadStage.status === OpStageStatus.SUCCESS &&
-                          !p.relations.find((relation) => relation.relationType === RelationType.PART_OF && relation.entityId === mainMediaState.id)
-                      )
-                      .map((p) => p as TextTrackState);
-
-                    if (sidecarTracks) {
-                      this.restoreLoadSidecarTextTracks(sidecarTracks, playerSession.text).subscribe(() => {
-                        nextCompleteObserver(o1);
-                      });
-                    } else {
-                      nextCompleteObserver(o1);
-                    }
-                  });
-                }),
-                1
-              );
-
-              let restore$ = describeMe(
-                `Restore text state`,
-                new Observable((o2) => {
-                  if (playerSession.text) {
-                    this._playerTextInternal.restoreState(playerSession.text).subscribe(() => {
-                      nextCompleteObserver(o2);
-                    });
-                  } else {
-                    nextCompleteObserver(o2);
-                  }
-                }),
-                1
-              );
-
-              concat(load$, restore$).subscribe({
-                complete: () => {
-                  nextCompleteObserver(o);
-                },
-              });
-            })
-          );
-
-          let playback$ = describeMe(
-            `Playback`,
-            PlayerInternalUtil.restorePlayback(this, playerSession, (message) => {
-              this._alertsManager?.info(message);
-            })
-          );
-
-          describedObservable(
-            `Restore player session`,
-            new Observable((o) => {
-              concat(restoreMainMediaSession$, sidecarAudios$, sidecarTextTracks$, playback$).subscribe({
-                complete: () => {
-                  this._onEvent$.next({
-                    type: PlayerEventType.PLAYER_SESSION_RESTORED,
-                    data: {
-                      playerSession: this.playerSession,
-                    },
-                  });
-                  nextCompleteObserver(o);
-                },
-                error: (err) => {
-                  errorCompleteObserver(o, err);
-                },
-              });
-            })
-          ).subscribe({
-            complete: () => {
-              nextCompleteObserver(observer);
-            },
-            error: (err) => {
-              errorCompleteObserver(observer, err);
-            },
-          });
-        },
-      });
+              error: (err) => {
+                errorCompleteObserver(observer, err);
+              },
+            });
+          },
+        });
       } else {
         describedObservable(
           `Restore player session`,
@@ -412,6 +458,12 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
               },
             });
 
+            this._playerPlayback.mediaRotation = mainMediaState.mainMediaType === MainMediaType.AUDIO_FILE ? 0 : (mainMediaState.loadOptions?.mediaRotation ?? 0);
+            this._onEvent$.next({
+              type: PlayerEventType.PLAYER_MEDIA_ROTATION_UPDATE,
+              data: {mediaRotation: this._playerPlayback.mediaRotation},
+            });
+
             mainMediaProxy
               .loadStart()
               .pipe(takeUntil(this._loadMainMediaBreaker.observer))
@@ -420,6 +472,9 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
                   if (!this._chromingInternal) {
                     throw new Error(`Chroming not set`);
                   }
+
+                  this.connectMainMediaSessionRemote(mainMediaState);
+
                   let playerController = PlayerControllerFactory.create(
                     mainMediaState.mainMediaType,
                     this._chromingInternal.domController,
@@ -428,10 +483,12 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
 
                   playerController
                     .loadMainMedia({
+                      providedMainMedia: mainMediaState,
                       url: SourceUtil.resolveUrlFromSourceState(mainMediaState.source),
                       loadOptions: mainMediaState.loadOptions,
                       mainMediaEssentialArgsHook,
                       tracksCreatedHook,
+                      mainMediaSessionController: this._mainMediaSessionRemote,
                     })
                     .pipe(takeUntil(this._loadMainMediaBreaker.observer))
                     .subscribe({
@@ -445,7 +502,7 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
                             concat(this.wireEvents()).subscribe({
                               complete: () => {
                                 this._playerAudioInternal.setup(playerController, mainMediaState);
-                                this._playerTextInternal.setup(playerController, mainMediaState, this._config.textMainTracksHandler);
+                                this._playerTextInternal.setup(playerController, mainMediaState, PlayerInternalUtil.resolveTextMainTracksHandler(this._config.textMainTracksHandler, mainMediaState));
 
                                 this.loadMainTextTracksAsSidecars(mainMediaState);
 
@@ -473,31 +530,34 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
    * Preloads all text tracks from the main media state as sidecar tracks.
    */
   protected loadMainTextTracksAsSidecars(mainMediaState: MainMediaState) {
-    let preloadTextTrackHandlers = this._config.textMainTracksHandler.filter((p) => p !== PlayerTextHandlerType.EMBEDDED);
+    let preloadTextTrackHandlers = PlayerInternalUtil.resolveTextMainTracksHandler(this._config.textMainTracksHandler, mainMediaState).filter((p) => p !== PlayerTextHandlerType.EMBEDDED);
+    let textTracks = mainMediaState.tracks.filter((p): p is TextTrackState => p.trackType === TrackType.TEXT_TRACK);
+
+    if (preloadTextTrackHandlers.length === 0 && textTracks.length > 0) {
+      console.log('Using embedded text track rendering');
+    }
+
     if (preloadTextTrackHandlers.length > 0) {
-      let textTracks = mainMediaState.tracks.filter((p): p is TextTrackState => p.trackType === TrackType.TEXT_TRACK);
       let defaultTextTrack = textTracks.findLast((p) => p.default);
       preloadTextTrackHandlers.forEach((preloadTextTrackHandler) => {
         from(textTracks)
           .pipe(
             mergeMap((textTrack) =>
-              this._trackUtils!
-                .preloadTrack(textTrack.id)
-                .pipe(
-                  takeUntil(this._loadMainMediaBreaker.observer),
-                  switchMap((track) =>
-                    this.loadSidecarTrack(track.id, {
-                      trackType: TrackType.TEXT_TRACK,
-                      handlerType: preloadTextTrackHandler,
-                    }).pipe(
-                      tap(() => {
-                        if (defaultTextTrack?.id === textTrack.id) {
-                          this.textInternal.switchTrack(track.id).subscribe();
-                        }
-                      })
-                    )
+              this._trackUtils!.preloadTrack(textTrack.id).pipe(
+                takeUntil(this._loadMainMediaBreaker.observer),
+                switchMap((track) =>
+                  this.loadSidecarTrack(track.id, {
+                    trackType: TrackType.TEXT_TRACK,
+                    handlerType: preloadTextTrackHandler,
+                  }).pipe(
+                    tap(() => {
+                      if (defaultTextTrack?.id === textTrack.id) {
+                        this.textInternal.switchTrack(track.id).subscribe();
+                      }
+                    })
                   )
                 )
+              )
             ),
             takeUntil(this._loadMainMediaBreaker.observer)
           )
@@ -525,8 +585,33 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
 
       this._mainMediaRepository!.getOrFail(this._mainMediaState!.id).subscribe((mainMediaState) => {
         this._playerController!.wireEvents(mainMediaState);
+        this._wiredDuration = mainMediaState.duration;
 
         let mainMediaProxy = this._remoteNode!.getOrCreateProxy('MainMedia', mainMediaState.id);
+
+        this._mainMediaRepository!.onMainMediaEvent$.pipe(takeUntil(this._wiredEventsBreaker.observer), takeUntil(this._loadMainMediaBreaker.observer)).subscribe({
+          next: (event) => {
+            if (event.type === MainMediaEventType.MAIN_MEDIA_UPDATED) {
+              // The player controller's own duration/temporal-conversion state is only refreshed
+              // by wireEvents() — re-sync it here, before relaying, whenever duration changed,
+              // regardless of which caller mutated it (not just the PLAYER_CONTROLLER_DURATION_UPDATE
+              // case below). Otherwise consumers of PLAYER_MAIN_MEDIA_UPDATED (e.g. Timeline) would
+              // recompute against a stale duration on this same relay.
+              let newDuration = event.data.mainMediaState.duration;
+              if (!isNullOrUndefined(newDuration) && newDuration !== this._wiredDuration) {
+                this._wiredDuration = newDuration;
+                this._playerController!.wireEvents(event.data.mainMediaState);
+              }
+
+              this._onEvent$.next({
+                type: PlayerEventType.PLAYER_MAIN_MEDIA_UPDATED,
+                data: {
+                  mainMediaState: event.data.mainMediaState,
+                },
+              });
+            }
+          },
+        });
 
         this._playerController!.onEvent$.pipe(takeUntil(this._wiredEventsBreaker.observer))
           .pipe(takeUntil(this._loadMainMediaBreaker.observer))
@@ -534,21 +619,39 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
             next: (event) => {
               switch (event.type) {
                 case PlayerControllerEventType.PLAYER_CONTROLLER_DURATION_UPDATE:
+                  // updateAttributes() below causes the attached side's MainMedia to emit
+                  // MAIN_MEDIA_UPDATED, forwarded here via onMainMediaEvent$ and re-synced +
+                  // relayed as PLAYER_MAIN_MEDIA_UPDATED by the generic relay wired above —
+                  // no need to call wireEvents() or emit here too.
                   mainMediaProxy
                     .updateAttributes({
                       duration: event.data.duration,
                     })
-                    .subscribe(() => {
-                      this._mainMediaRepository!.getOrFail(this._mainMediaState!.id).subscribe((mainMediaState) => {
-                        this._playerController!.wireEvents(mainMediaState);
-                        this._onEvent$.next({
-                          type: PlayerEventType.PLAYER_MAIN_MEDIA_UPDATED,
-                          data: {
-                            mainMediaState: this._mainMediaState!,
-                          },
+                    .subscribe();
+                  break;
+
+                case PlayerControllerEventType.PLAYER_CONTROLLER_LIVE_STATE_UPDATE:
+                  this._latestLiveState = event.data.liveState;
+                  if (event.data.manifestChanged) {
+                    mainMediaProxy
+                      .updateAttributes({
+                        isLive: !!event.data.liveState,
+                        liveState: event.data.liveState ? toMediaLiveState(event.data.liveState) : void 0,
+                      })
+                      .subscribe(() => {
+                        this._mainMediaRepository!.getOrFail(this._mainMediaState!.id).subscribe((mainMediaState) => {
+                          this._mainMediaState = mainMediaState;
                         });
                       });
-                    });
+
+                    this._sessionStore!.updatePlayer({liveTimelineAnchor: this.playerSession.liveTimelineAnchor});
+                  }
+                  this._onEvent$.next({
+                    type: PlayerEventType.PLAYER_LIVE_STATE_UPDATE,
+                    data: {
+                      liveState: event.data.liveState,
+                    },
+                  });
                   break;
 
                 case PlayerControllerEventType.PLAYER_CONTROLLER_MEDIA_ELEMENT_PLAYBACK_CHANGE:
@@ -737,6 +840,9 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
 
     this._playerController?.destroy();
     this._playerController = void 0;
+    this._latestLiveState = void 0;
+
+    this.destroyMainMediaSessionRemote();
   }
 
   unloadMainMedia(): Observable<void> {
@@ -823,6 +929,20 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
     });
   }
 
+  seekToLive(): Observable<boolean> {
+    this.checkIsMediaLoaded();
+    return passiveObservable<boolean>((observer) => {
+      this._playerController!.seekToLive().subscribe({
+        next: (result) => {
+          nextCompleteObserver(observer, result);
+        },
+        error: (err) => {
+          errorCompleteObserver(observer, err);
+        },
+      });
+    });
+  }
+
   seekFromCurrentTime(value: MediaTemporalFormatValueMap[MediaTemporalFormat], format: MediaTemporalFormat = MediaTemporalFormat.SECONDS): Observable<boolean> {
     format = Validators.mediaTemporalFormat()(format);
     this.checkIsMediaLoaded();
@@ -853,6 +973,24 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
           errorCompleteObserver(observer, err);
         },
       });
+    });
+  }
+
+  setMediaRotation(mediaRotation: MediaRotationValue): Observable<void> {
+    return passiveObservable((observer) => {
+      if (this._mainMediaState?.mainMediaType === MainMediaType.AUDIO_FILE) {
+        nextCompleteObserver(observer);
+        return;
+      }
+      this._playerPlayback.mediaRotation = mediaRotation;
+      this._sessionStore!.updatePlayer({
+        playback: this._playerPlayback,
+      });
+      this._onEvent$.next({
+        type: PlayerEventType.PLAYER_MEDIA_ROTATION_UPDATE,
+        data: {mediaRotation},
+      });
+      nextCompleteObserver(observer);
     });
   }
 
@@ -931,7 +1069,7 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
         let loaders$ = trackStates.map((p) => {
           let loadOptions: PlayerTextTrackLoadOptions | undefined;
           if (playerTextState) {
-            let playerTextTrackState = [...playerTextState.tracks[PlayerTextType.MAIN], ...playerTextState.tracks[PlayerTextType.SIDECAR]].find(ptts => ptts.trackId === p.id);
+            let playerTextTrackState = [...playerTextState.tracks[PlayerTextType.MAIN], ...playerTextState.tracks[PlayerTextType.SIDECAR]].find((ptts) => ptts.trackId === p.id);
             loadOptions = playerTextTrackState?.loadOptions;
           }
           return this.loadSidecarTextTrack(p, loadOptions);
@@ -1027,6 +1165,9 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
 
     this._playerController?.destroy();
     this._playerController = void 0;
+    this._latestLiveState = void 0;
+
+    this.destroyMainMediaSessionRemote();
 
     this._playerAudioInternal.destroy();
     this._playerTextInternal.destroy();
@@ -1048,6 +1189,8 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
       playback: this._playerPlayback,
       audio: this._playerAudioInternal.state,
       text: this._playerTextInternal.state,
+      liveTimelineAnchor: PlayerInternalUtil.resolveLiveTimelineAnchor(this._latestLiveState ?? this._mainMediaState?.liveState),
+      liveState: this._latestLiveState,
     };
   }
 }

@@ -22,6 +22,7 @@ import {
   StampThemeActionIcon,
   StampThemeFloatingControl,
   StampThemeScale,
+  StampThemeVariant,
   ChromingTimeFormat,
   type StampThemeConfig,
   type StampThemeConfigUpdateableAttrs,
@@ -34,6 +35,8 @@ import {OmakaseTimeDisplayAttributes} from '../components/omakase-time-display';
 import {isNullOrUndefined} from '../../util/util-functions';
 
 export class StampDomController extends ChromingDomController<ChromingTheme.STAMP> {
+  static readonly OMAKASE_VARIANT_CLASS = 'stamp-theme-variant-omakase';
+
   protected _themeConfig: StampThemeConfig;
 
   protected _currentTimecode?: OmakaseTimeDisplay;
@@ -51,6 +54,9 @@ export class StampDomController extends ChromingDomController<ChromingTheme.STAM
     };
 
     this._mediaControllerElement.classList.add('media-controller-stamp');
+    if (this._themeConfig.themeVariant === StampThemeVariant.OMAKASE) {
+      this._mediaControllerElement.classList.add(StampDomController.OMAKASE_VARIANT_CLASS);
+    }
     this._mediaControllerElement.insertAdjacentHTML('beforeend', this.addControlBar());
 
     this._divActionIcons.insertAdjacentHTML(
@@ -66,7 +72,7 @@ export class StampDomController extends ChromingDomController<ChromingTheme.STAM
           : ''
       }
             ${
-              this._themeConfig.floatingControls?.includes(StampThemeFloatingControl.ACTION_ICONS) && this._themeConfig.actionIcons?.includes(StampThemeActionIcon.FULLSCREEN)
+              this._themeConfig.floatingControls?.includes(StampThemeFloatingControl.ACTION_ICONS) && this._themeConfig.actionIcons?.includes(StampThemeActionIcon.FULLSCREEN_TOGGLE)
                 ? `<omakase-fullscreen-button class="${ChromingDomClasses.mediaChromeButton} omakase-player-fullscreen shadow">
                       <span slot="enter" class="${ChromingDomClasses.mediaChromeFullscreenEnter}"></span>
                       <span slot="exit" class="${ChromingDomClasses.mediaChromeFullscreenExit}"></span>
@@ -77,14 +83,19 @@ export class StampDomController extends ChromingDomController<ChromingTheme.STAM
 
     this._textMediaCaptionsElement.insertAdjacentHTML(
       'beforebegin',
-      `<div slot="centered-chrome" ${
-        this._themeConfig.alwaysOnFloatingControls?.includes(StampThemeFloatingControl.TIME) ? 'noautohide' : ''
-      } class="${ChromingDomClasses.timecodeWrapper} omakase-timecode-format-${this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard'} omakase-timecode-${
-        this._themeConfig.floatingControls?.includes(StampThemeFloatingControl.PROGRESS_BAR) ? 'with' : 'without'
-      }-progress-bar">
-            <omakase-time-display ${this._themeConfig.timeInteractive ? 'editable' : ''} class="${ChromingDomClasses.mediaChromeCurrentTimecode}" showduration format="${this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard'}" ${this._themeConfig.timeFormat === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME ? 'countdown ' : ''}></omakase-time-display>
+      `<div class="${ChromingDomClasses.stampBottomRow}" noautohide>
+            <div ${
+              this._themeConfig.alwaysOnFloatingControls?.includes(StampThemeFloatingControl.TIME) ? 'noautohide' : ''
+            } class="${ChromingDomClasses.timecodeWrapper} omakase-timecode-format-${this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard'} omakase-timecode-${
+              this._themeConfig.floatingControls?.includes(StampThemeFloatingControl.PROGRESS_BAR) ? 'with' : 'without'
+            }-progress-bar">
+                <omakase-time-display ${this._themeConfig.timeInteractive ? 'editable' : ''} class="${ChromingDomClasses.mediaChromeCurrentTimecode}" showduration format="${this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard'}" ${this._themeConfig.timeFormat === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME ? 'countdown ' : ''}></omakase-time-display>
+            </div>
         </div>`
     );
+
+    const stampBottomRow = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.stampBottomRow);
+    stampBottomRow.insertBefore(this._textMediaCaptionsElement, stampBottomRow.firstElementChild);
 
     if (this._themeConfig.floatingControls?.includes(StampThemeFloatingControl.PROGRESS_BAR)) {
       this._textMediaCaptionsElement.classList.add('with-progress-bar');
@@ -129,7 +140,7 @@ export class StampDomController extends ChromingDomController<ChromingTheme.STAM
 
   protected createSlotsDom() {
     if (this._config.themeConfig?.htmlTemplateId) {
-      return DomUtil.getElementByIdOrFail<HTMLElement>(this._config.themeConfig?.htmlTemplateId)?.innerHTML ?? '';
+      return DomUtil.getElementById<HTMLElement>(this._config.themeConfig?.htmlTemplateId)?.innerHTML ?? '';
     } else {
       return '';
     }
@@ -141,7 +152,7 @@ export class StampDomController extends ChromingDomController<ChromingTheme.STAM
   }
 
   setThumbnailTrack(track: ThumbnailTrackState | undefined): void {
-    return;
+    super.setThumbnailTrack(track);
   }
 
   setThemeConfig(themeConfig: Partial<StampThemeConfigUpdateableAttrs>) {
@@ -254,6 +265,7 @@ export class StampDomController extends ChromingDomController<ChromingTheme.STAM
       timeFormat,
     };
     this.updateTimeFormat();
+    this.updateSimpleFullscreenTimeFormat();
   }
 
   updateTimeFormat() {

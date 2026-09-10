@@ -63,8 +63,8 @@ export class ChromingDetachedMessageChannelBinding extends BaseMessageChannelBin
       .receiveAndSendResponse('addSafeZone')
       .pipe(takeUntil(this._destroyBreaker.observer))
       .subscribe({
-        next: ([[safeZone], sendResponseHook]) => {
-          sendResponseHook(this._chromingDetached.addSafeZone(safeZone));
+        next: ([[safeZone, renderingRegion], sendResponseHook]) => {
+          sendResponseHook(this._chromingDetached.addSafeZone(safeZone, renderingRegion));
         },
       });
 

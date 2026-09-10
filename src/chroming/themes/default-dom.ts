@@ -299,7 +299,7 @@ export class DefaultDomController extends ChromingDomController<ChromingTheme.DE
                     <span class="${this._config.playerWindowPlaybackMode === WindowPlaybackMode.DETACHED ? ChromingDomClasses.mediaChromeAttach : ChromingDomClasses.mediaChromeDetach}"></span>
                     <media-tooltip>${this._config.playerWindowPlaybackMode === WindowPlaybackMode.DETACHED ? 'Attach player' : 'Detach player'}</media-tooltip>
                 </media-chrome-button>
-                <omakase-fullscreen-button class="${this.getControlBarClass(DefaultThemeControl.FULLSCREEN)} ${ChromingDomClasses.mediaChromeButton} omakase-player-fullscreen">
+                <omakase-fullscreen-button class="${this.getControlBarClass(DefaultThemeControl.FULLSCREEN_TOGGLE)} ${ChromingDomClasses.mediaChromeButton} omakase-player-fullscreen">
                     <span slot="enter" class="${ChromingDomClasses.mediaChromeFullscreenEnter}"></span>
                     <span slot="exit" class="${ChromingDomClasses.mediaChromeFullscreenExit}"></span>
                 </omakase-fullscreen-button>
@@ -318,7 +318,7 @@ export class DefaultDomController extends ChromingDomController<ChromingTheme.DE
 
   protected createSlotsDom() {
     if (this._config.themeConfig?.htmlTemplateId) {
-      return DomUtil.getElementByIdOrFail<HTMLElement>(this._config.themeConfig?.htmlTemplateId)?.innerHTML ?? '';
+      return DomUtil.getElementById<HTMLElement>(this._config.themeConfig?.htmlTemplateId)?.innerHTML ?? '';
     } else {
       return '';
     }
@@ -377,6 +377,7 @@ export class DefaultDomController extends ChromingDomController<ChromingTheme.DE
       timeFormat,
     };
     this.updateTimeFormat();
+    this.updateSimpleFullscreenTimeFormat();
   }
 
   updateTimeFormat() {
@@ -471,10 +472,15 @@ export class DefaultDomController extends ChromingDomController<ChromingTheme.DE
   }
 
   setThumbnailTrack(track: ThumbnailTrackState | undefined) {
+    super.setThumbnailTrack(track);
     if (this._previewThumbnail) {
       this._previewThumbnail.thumbnailTrack = track;
       this._previewThumbnail.thumbnailFn = this._config.findThumbnailFn;
     }
+  }
+
+  protected override _liveButtonContainer(): HTMLElement | undefined {
+    return this.getShadowElement<HTMLElement>('.lower-control-bar .start-container');
   }
 
   wirePlayer() {

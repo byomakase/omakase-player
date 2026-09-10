@@ -265,7 +265,9 @@ export class RouterVisualizationComponent extends RouterVisualizationBase {
     tr.appendChild(th1);
     for (const output of this._outputs!) {
       const th = document.createElement('th');
-      th.innerHTML = output;
+      const outputDiv = document.createElement('div');
+      outputDiv.innerText = output;
+      th.appendChild(outputDiv);
       tr.appendChild(th);
     }
     const th3 = document.createElement('th');

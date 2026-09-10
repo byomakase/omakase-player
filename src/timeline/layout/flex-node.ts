@@ -17,7 +17,7 @@
 import {z} from 'zod';
 import type {Destroyable} from '../../common/capabilities';
 import {CryptoUtil} from '../../util/crypto-util';
-import {isNullOrUndefined, nullifier} from '../../util/util-functions';
+import {isNullOrUndefined} from '../../util/util-functions';
 import type {Config, Edge, Node} from 'yoga-layout';
 import {YogaProvider} from './yoga-provider';
 import {yogaLiberator} from './yoga-util';
@@ -102,6 +102,8 @@ export interface FlexNode<T extends FlexContentNode> extends Destroyable {
 
   setMargins(margins: FlexSpacing[]): void;
 
+  setPaddings(paddings: FlexSpacing[]): void;
+
   getLayout(): Layout;
 
   refreshLayout(): void;
@@ -159,6 +161,14 @@ export abstract class BaseFlexNode<C extends FlexNodeConfig, T extends FlexConte
   protected _yogaConfig: Config;
   protected _yogaNode: Node;
 
+  /**
+   * Whether the yoga handles below have already been freed.
+   *
+   * They are wasm pointers, and freeing one twice corrupts the allocator rather than throwing - the
+   * crash surfaces later, from whichever unrelated node is handed the reused address.
+   */
+  protected _destroyed = false;
+
   protected constructor(config: C, contentNode: T) {
     this._config = config;
     this._yogaConfig = YogaProvider.instance().yoga.Config.create();
@@ -183,10 +193,7 @@ export abstract class BaseFlexNode<C extends FlexNodeConfig, T extends FlexConte
     }
 
     if (this._config.paddings && this._config.paddings.length > 0) {
-      this._config.paddings.forEach((padding) => {
-        let yogaFlexEdge: Edge = YogaProvider.instance().yoga[padding.flexEdge];
-        this._yogaNode.setPadding(yogaFlexEdge, padding.value);
-      });
+      this.setPaddingsInternal(this._config.paddings);
     }
 
     if (!isNullOrUndefined(this._config.width)) {
@@ -306,6 +313,13 @@ export abstract class BaseFlexNode<C extends FlexNodeConfig, T extends FlexConte
     });
   }
 
+  protected setPaddingsInternal(paddings: {value: number; flexEdge: FlexEdge}[]) {
+    paddings.forEach((padding) => {
+      let yogaFlexEdge: Edge = YogaProvider.instance().yoga[padding.flexEdge];
+      this._yogaNode.setPadding(yogaFlexEdge, padding.value);
+    });
+  }
+
   protected setPositionsInternal(positions: {value: number; flexEdge: FlexEdge}[]) {
     positions.forEach((position) => {
       let yogaFlexEdge: Edge = YogaProvider.instance().yoga[position.flexEdge];
@@ -366,6 +380,13 @@ export abstract class BaseFlexNode<C extends FlexNodeConfig, T extends FlexConte
     }
   }
 
+  setPaddings(paddings: FlexSpacing[], refreshLayout: boolean = true): void {
+    this.setPaddingsInternal(paddings);
+    if (refreshLayout) {
+      this.refreshLayoutFromRoot();
+    }
+  }
+
   setPositions(positions: FlexSpacing[]): void {
     this.setPositionsInternal(positions);
     this.refreshLayoutFromRoot();
@@ -386,9 +407,16 @@ export abstract class BaseFlexNode<C extends FlexNodeConfig, T extends FlexConte
     try {
       yogaLiberator(this._yogaNode, this._yogaConfig);
 
-      this._contentNode.destroy();
+      // Drop the wasm handles once freed, so any stale reference to this node/group - ours or an
+      // external one that outlives destroy() - fails loudly (undefined access) instead of silently
+      // touching a freed/reused wasm address.
 
-      nullifier(this._contentNode, this._yogaNode, this._yogaConfig);
+      // @ts-ignore
+      this._yogaNode = void 0;
+      // @ts-ignore
+      this._yogaConfig = void 0;
+      // @ts-ignore
+      this._contentNode = void 0;
     } catch (e) {
       console.error(e);
     }

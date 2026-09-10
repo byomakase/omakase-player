@@ -40,6 +40,7 @@ import {TIMELINE} from '../constants';
 
 export interface TimelineLaneStyle {
   height: number;
+  marginTop: number;
   marginBottom: number;
   backgroundFill: Color;
   backgroundOpacity: Size;
@@ -225,6 +226,9 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
       this._descriptionTextLabel.style = {
         fontFamily: this._timeline?.style.textFontFamily,
         fontStyle: this._style.descriptionTextFontStyle ?? this._timeline?.style.textFontStyle,
+        fill: this._style.descriptionTextFill,
+        fontSize: this._style.descriptionTextFontSize,
+        offsetY: this._style.descriptionTextYOffset,
       };
     }
 
@@ -258,6 +262,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
       height: this._config.minimized ? 0 : this._style!.height,
       width: '100%',
       margins: FlexSpacingBuilder.create()
+        .spacing(this._style!.marginTop ? this._style!.marginTop : 0, 'EDGE_TOP')
         .spacing(this._style!.marginBottom ? this._style!.marginBottom : 0, 'EDGE_BOTTOM')
         .build(),
       justifyContent: 'JUSTIFY_FLEX_START',
@@ -351,6 +356,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
       width: '100%',
       clip: true,
       margins: FlexSpacingBuilder.create()
+        .spacing(this._style!.marginTop ? this._style!.marginTop : 0, 'EDGE_TOP')
         .spacing(this._style!.marginBottom ? this._style!.marginBottom : 0, 'EDGE_BOTTOM')
         .build(),
       justifyContent: 'JUSTIFY_FLEX_START',
@@ -368,6 +374,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
   updateLayoutDimensions(refreshLayout: boolean = true) {
     [this.mainLeftFlexGroup, this.mainRightFlexGroup].forEach((p) => {
       let marginFlexSpacing = FlexSpacingBuilder.create()
+        .spacing(this.style.marginTop ? this.style.marginTop : 0, 'EDGE_TOP')
         .spacing(this.style.marginBottom ? this.style.marginBottom : 0, 'EDGE_BOTTOM')
         .build();
 
@@ -432,8 +439,9 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
    * @internal
    */
   _minimize(refreshLayout: boolean = true) {
-    this.setStyle({
+    this.applyStyle({
       height: 0,
+      marginTop: 0,
       marginBottom: 0,
     } as Partial<S>);
     this.updateLayoutDimensions(refreshLayout);
@@ -446,8 +454,9 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
     this.checkIsPrepared();
 
     if (this._initialStyle) {
-      this.setStyle({
+      this.applyStyle({
         height: this._initialStyle.height,
+        marginTop: this._initialStyle.marginTop ? this._initialStyle.marginTop : 0,
         marginBottom: this._initialStyle.marginBottom ? this._initialStyle.marginBottom : 0,
       } as Partial<S>);
       this.updateLayoutDimensions(refreshLayout);
@@ -503,6 +512,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
 
     return passiveObservable((observer) => {
       let layout = this.mainLeftFlexGroup.getLayout();
+      let marginTop = this.style.marginTop ? this.style.marginTop : 0;
       let marginBottom = this.style.marginBottom ? this.style.marginBottom : 0;
       animate({
         duration: args.duration ? args.duration : TIMELINE.easingDuration,
@@ -510,10 +520,12 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
         endValue: 0,
         onUpdateHandler: (frame, value) => {
           let newHeight = Math.round(value);
+          let newMarginTop = new Decimal(marginTop).mul(newHeight).div(this.style.height).toDecimalPlaces(0).toNumber();
           let newMargin = new Decimal(marginBottom).mul(newHeight).div(this.style.height).toDecimalPlaces(0).toNumber();
 
-          this.setStyle({
+          this.applyStyle({
             height: newHeight,
+            marginTop: newMarginTop,
             marginBottom: newMargin,
           } as Partial<S>);
           this.updateLayoutDimensions();
@@ -531,6 +543,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
 
     return passiveObservable((observer) => {
       if (this._initialStyle) {
+        let marginTop = this.style.marginTop ? this.style.marginTop : 0;
         let marginBottom = this.style.marginBottom ? this.style.marginBottom : 0;
         animate({
           duration: args.duration ? args.duration : TIMELINE.easingDuration,
@@ -538,10 +551,12 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
           endValue: this._initialStyle.height, // revert to inital style from config
           onUpdateHandler: (frame, value) => {
             let newHeight = Math.round(value);
+            let newMarginTop = new Decimal(marginTop).mul(newHeight).div(this.style.height).toDecimalPlaces(0).toNumber();
             let newMargin = new Decimal(marginBottom).mul(newHeight).div(this.style.height).toDecimalPlaces(0).toNumber();
 
-            this.setStyle({
+            this.applyStyle({
               height: newHeight,
+              marginTop: newMarginTop,
               marginBottom: newMargin,
             } as Partial<S>);
             this.updateLayoutDimensions();
@@ -570,7 +585,12 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
     return this._style!;
   }
 
-  setStyle(style: Partial<S>) {
+  /**
+   * Updates the style rule and re-applies paint (fills, fonts, etc.) without touching layout.
+   * Internal callers that manage their own layout settling (minimize/maximize) use this
+   * directly; {@link setStyle} builds on it and also resizes the lane.
+   */
+  protected applyStyle(style: Partial<S>): void {
     this.checkIsPrepared();
     this._ui!.updateStyleRule({
       id: this._styledElement!.id,
@@ -579,6 +599,11 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
       },
     });
     this.handleStyleUpdate();
+  }
+
+  setStyle(style: Partial<S>) {
+    this.applyStyle(style);
+    this.updateLayoutDimensions(true);
   }
 
   updateAttrs(attrs: TimelineLaneUpdateableAttrs): void {
@@ -603,7 +628,24 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
     this._loadingGroup?.destroy();
 
     this._mainLeftFlexGroup?.destroy();
+    // @ts-ignore
+    this._mainLeftFlexGroup = void 0;
+
     this._mainRightFlexGroup?.destroy();
+    // @ts-ignore
+    this._mainRightFlexGroup = void 0;
+
+    this._mainLeftDescription?.destroy();
+    // @ts-ignore
+    this._mainLeftDescription = void 0;
+
+    this._mainLeftStartJustified?.destroy()
+    // @ts-ignore
+    this._mainLeftStartJustified = void 0;
+
+    this._mainLeftEndJustified?.destroy();
+    // @ts-ignore
+    this._mainLeftEndJustified = void 0;
 
     this._uiBreaker.destroy();
     this._destroyBreaker.destroy();

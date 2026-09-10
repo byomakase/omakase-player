@@ -30,10 +30,16 @@ import {
   TrackType,
 } from './index';
 import {Validators} from '../common/validators';
-import {HlsMainMedia} from '../hls';
+import {HlsMainMedia, HlsMainMediaSessionController} from '../hls';
+import type {TrackRepository} from '../repository';
 import {type Source, UrlSource} from '../source';
 import {Mp4MainMedia} from '../mp4';
 import {AudioMainMedia} from '../audio/audio-file-main-media';
+import {TamsMainMedia} from '../tams/tams-main-media';
+import {TamsMainMediaSessionController} from '../tams/tams-main-media-session-controller';
+import {TamsMainMediaSessionRemote} from '../remoting/impl/tams-main-media-session-remote';
+import type {MainMediaSessionController} from './main-media-session-controller';
+import type {MainMediaSessionRemote} from '../remoting/main-media-session-remote';
 import {MarkerTrack} from './marker-track';
 import {ThumbnailTrack} from './thumbnail-track';
 import {OmakaseTools, type OmakaseToolsApi} from '../tools/omakase-tools-api';
@@ -50,6 +56,8 @@ export class MediaFactory {
     [MainMediaType.HLS]: [FileFormatType.HLS],
     [MainMediaType.MP4]: [FileFormatType.MP4, FileFormatType.MOV],
     [MainMediaType.AUDIO_FILE]: [...FileFormat.AUDIO.map((p) => p.type)],
+    // TAMS is bridged to HLS internally
+    [MainMediaType.TAMS]: [FileFormatType.HLS],
   };
 
   private static readonly TRACK_TYPE_FORMATS: Partial<Record<TrackType, readonly FileFormatType[]>> = {
@@ -75,9 +83,31 @@ export class MediaFactory {
             });
           case MainMediaType.AUDIO_FILE:
             return new AudioMainMedia({source: urlSource, sourceFileFormatType, loadOptions});
+          case MainMediaType.TAMS:
+            return new TamsMainMedia({source: urlSource, sourceFileFormatType, loadOptions});
         }
       })
     );
+  }
+
+  static createMainMediaSessionController(mainMedia: MainMedia, trackRepository: TrackRepository): MainMediaSessionController | undefined {
+    switch (mainMedia.mainMediaType) {
+      case MainMediaType.TAMS:
+        return new TamsMainMediaSessionController(mainMedia as TamsMainMedia, trackRepository);
+      case MainMediaType.HLS:
+        return new HlsMainMediaSessionController(mainMedia, trackRepository);
+      default:
+        return undefined;
+    }
+  }
+
+  static createMainMediaSessionRemote(mainMediaType: MainMediaType): MainMediaSessionRemote | undefined {
+    switch (mainMediaType) {
+      case MainMediaType.TAMS:
+        return new TamsMainMediaSessionRemote();
+      default:
+        return undefined;
+    }
   }
 
   static resolveMainMediaType(urlSource: UrlSource, loadOptions?: MainMediaLoadOptions | undefined): Observable<{mainMediaType: MainMediaType; fileFormat: FileFormat}> {
@@ -87,6 +117,12 @@ export class MediaFactory {
       throw new Error(`Cannot resolve fileFormat from fileFormatType: ${fileFormatType}`);
     }
     const mainMediaType = loadOptions?.mainMediaType;
+
+    // TAMS is loaded from an API URL (a flow/source endpoint), which is not a probeable
+    // media file. It is bridged to HLS internally, so resolve directly without probing.
+    if (mainMediaType === MainMediaType.TAMS) {
+      return of({mainMediaType: MainMediaType.TAMS, fileFormat: FileFormat.fromType(FileFormatType.HLS)!});
+    }
 
     // Validate fileFormat against mainMediaType if both are known
     if (fileFormat && mainMediaType && !this.MAIN_MEDIA_TYPE_FORMATS[mainMediaType].includes(fileFormat.type)) {
@@ -100,6 +136,11 @@ export class MediaFactory {
         throw new Error(`Cannot resolve mainMediaType from fileFormatType: ${fileFormatType}`);
       }
       return of({mainMediaType: resolvedMainMediaType, fileFormat});
+    }
+
+    // fileFormatType wasn't provided, and metadata resolution (probing) is disabled — nothing left to resolve it from
+    if (loadOptions?.forceSkipMetadataResolution) {
+      throw new Error(`Cannot resolve fileFormat for: ${JSON.stringify(urlSource.state)} — forceSkipMetadataResolution is set and fileFormatType/mainMediaType were not provided`);
     }
 
     // probe to resolve fileFormat
@@ -195,6 +236,12 @@ export class MediaFactory {
     if (!urlSource) {
       throw new Error(`Cannot resolve fileFormat: urlSource is required when fileFormatType is not provided`);
     }
+
+    // fileFormatType wasn't provided, and metadata resolution (probing) is disabled — nothing left to resolve it from
+    if (loadOptions?.forceSkipMetadataResolution) {
+      throw new Error(`Cannot resolve fileFormat for: ${JSON.stringify(urlSource.state)} — forceSkipMetadataResolution is set and fileFormatType was not provided`);
+    }
+
     return this._tools.probe(urlSource.url).pipe(
       map((mediaProbeResult) => {
         const probedFileFormat = mediaProbeResult?.fileFormat;

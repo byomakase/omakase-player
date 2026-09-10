@@ -24,6 +24,7 @@ export type PlayerPlaybackEngineMapping = {
   [MainMediaType.HLS]: HlsPlayerPlaybackEngine;
   [MainMediaType.MP4]: Mp4PlayerPlaybackEngine;
   [MainMediaType.AUDIO_FILE]: AudioFilePlayerPlaybackEngine;
+  [MainMediaType.TAMS]: HlsPlayerPlaybackEngine;
 };
 
 export interface PlayerPlaybackEngine {}

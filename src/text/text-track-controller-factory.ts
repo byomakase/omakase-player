@@ -35,6 +35,10 @@ export class TextTrackControllerFactory {
       }
     }
 
+    if (handlerType === PlayerTextHandlerType.NATIVE && playerController.mediaRotation !== 0) {
+      console.warn('mediaRotation is set while a text track using PlayerTextHandlerType.NATIVE is being used; captions will visually rotate along with the video.');
+    }
+
     switch (handlerType) {
       case PlayerTextHandlerType.NATIVE:
         return new NativeTextTrackController(trackState as TextTrackState, playerController, loadOptions?.fileFormatType);

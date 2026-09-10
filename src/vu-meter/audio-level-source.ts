@@ -50,6 +50,8 @@ export type AudioLevelEvent = {
 
 export interface AudioLevelSourceApi extends Destroyable {
   onEvent$: Observable<AudioLevelEvent>;
+
+  get channelCount(): number | undefined;
 }
 
 export abstract class AudioLevelSource implements AudioLevelSourceApi {
@@ -59,6 +61,8 @@ export abstract class AudioLevelSource implements AudioLevelSourceApi {
   get onEvent$() {
     return this._onEvent$.asObservable();
   }
+
+  abstract get channelCount(): number | undefined;
 
   protected getBaseLog(x: number, y: number): number {
     return Math.log(y) / Math.log(x);

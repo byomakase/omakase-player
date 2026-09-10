@@ -14,43 +14,15 @@
  * limitations under the License.
  */
 
-import {
-  type AudioState,
-  type MainMediaState,
-  type MainMediaUpdateableAttrs,
-  type TextTrackState,
-  type Track
-} from '../media';
-import {
-  BehaviorSubject,
-  concat,
-  delay,
-  filter,
-  forkJoin,
-  fromEvent,
-  interval,
-  map,
-  Observable,
-  of,
-  Subject,
-  switchMap,
-  take,
-  takeUntil,
-  tap,
-  timeout
-} from 'rxjs';
+import {type AudioState, type MainMediaState, type MainMediaUpdateableAttrs, type MediaRotationValue, type TextTrackState, type Track} from '../media';
+import {BehaviorSubject, concat, delay, filter, forkJoin, fromEvent, interval, map, Observable, of, Subject, switchMap, take, takeUntil, tap, timeout} from 'rxjs';
 import {ObserverBreaker} from '../common/observer-breaker';
 import {isNullOrUndefined} from '../util/util-functions';
 import Decimal from 'decimal.js';
 import {MediaElementPlayback, type MediaElementPlaybackState} from '../common/media-element-playback';
 import {Validators} from '../common/validators';
 import {z} from 'zod';
-import {
-  describedObservable,
-  errorCompleteObserver,
-  freeObserver,
-  nextCompleteObserver,
-} from '../util/rxjs-util';
+import {describedObservable, errorCompleteObserver, freeObserver, nextCompleteObserver} from '../util/rxjs-util';
 import {MediaTemporalConverter, MediaTemporalFormat, type MediaTemporalFormatValueMap} from '../common';
 import {
   type LoadMainMediaArgsType,
@@ -59,6 +31,7 @@ import {
   PlayerControllerEventType,
   type PlayerControllerPlaybackProgressEventData,
   type PlayerDomController,
+  type PlayerLiveState,
   type RestoreMainMediaSessionArgsType,
 } from './player-controller-api';
 import {PLAYER_CONTROLLER_DEFAULTS} from '../constants';
@@ -203,7 +176,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
       ffomTimecodeModel: mainMediaState.ffomTimecodeModel,
       initSegmentTimeOffset: mainMediaState.initSegmentTimeOffset,
       hasVideo: mainMediaState.hasVideo,
-      hasAudio: mainMediaState.hasAudio
+      hasAudio: mainMediaState.hasAudio,
     });
 
     this.checkMainMediaEssentials();
@@ -225,7 +198,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
     // (e.g. play() was called during the load window, or a durationchange fired mid-playback).
     // The `playing` DOM event won't re-fire, so we must set the state here.
     if (this.isPlaying()) {
-      this.setPlaying()
+      this.setPlaying();
     }
   }
 
@@ -254,7 +227,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
               data: this.createMediaControllerPlayEvent(),
             });
 
-            if (this._getCurrentVideoTime() >= this.getDuration()) {
+            if (this._getCurrentVideoTime() >= this.getDuration() && !this.isLive()) {
               this._onEvent$.next({
                 type: PlayerControllerEventType.PLAYER_CONTROLLER_ENDED,
                 data: this.createMediaControllerPlayEvent(),
@@ -340,14 +313,14 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
       .pipe(filter((p) => p.type === PlayerControllerEventType.PLAYER_CONTROLLER_PLAY))
       .pipe(takeUntil(this._mediaEventBreaker.observer))
       .subscribe((event) => {
-        this.setPlaying()
+        this.setPlaying();
       });
 
     this.onEvent$
       .pipe(filter((p) => p.type === PlayerControllerEventType.PLAYER_CONTROLLER_PAUSE))
       .pipe(takeUntil(this._mediaEventBreaker.observer))
       .subscribe((event) => {
-        this.setPaused()
+        this.setPaused();
       });
 
     this.onEvent$
@@ -475,6 +448,8 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
           loadOptions: args.mainMedia.loadOptions,
           mainMediaEssentialArgsHook: (args: MainMediaUpdateableAttrs) => new Observable((o) => nextCompleteObserver(o)),
           tracksCreatedHook: (tracks: Track[]) => new Observable((o) => nextCompleteObserver(o)),
+          liveTimelineAnchor: args.liveTimelineAnchor,
+          mainMediaSessionController: args.mainMediaSessionController,
         }).subscribe({
           next: () => {
             args.mainMediaLoadedHook().subscribe({
@@ -892,28 +867,33 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
    * @private
    */
   private _seekToEnd(): Observable<boolean> {
-    let duration = this.getDuration();
-    console.debug(`%c seekToEnd: ${duration}`, 'color: salmon');
-    return this.seekTimeWithoutSync(duration, false, false).pipe(
-      switchMap(() => {
-        duration = this.getDuration(); // we want fresh value
-        let timeInLastFrame = duration - this._syncFrameNudgeTime;
-        console.debug(`Seek to before last frame ends`);
-        return this.seekTimeWithoutSync(timeInLastFrame, false, false).pipe(
-          switchMap(() => {
-            console.debug(`Seek to align video.currentTime and video.duration`);
-            return this.seekTimeWithoutSync(duration, true, true).pipe(
-              tap(() => {
-                this._onEvent$.next({
-                  type: PlayerControllerEventType.PLAYER_CONTROLLER_ENDED,
-                  data: this.createMediaControllerPlayEvent(),
-                });
-              })
-            );
-          })
-        );
-      })
-    );
+    if (this.isLive()) {
+      //@matko: this causes an stack overflow error, recursion
+      return this.seekTimeWithoutSync(this.getDuration());
+    } else {
+      let duration = this.getDuration();
+      console.debug(`%c seekToEnd: ${duration}`, 'color: salmon');
+      return this.seekTimeWithoutSync(duration, false, false).pipe(
+        switchMap(() => {
+          duration = this.getDuration(); // we want fresh value
+          let timeInLastFrame = duration - this._syncFrameNudgeTime;
+          console.debug(`Seek to before last frame ends`);
+          return this.seekTimeWithoutSync(timeInLastFrame, false, false).pipe(
+            switchMap(() => {
+              console.debug(`Seek to align video.currentTime and video.duration`);
+              return this.seekTimeWithoutSync(duration, true, true).pipe(
+                tap(() => {
+                  this._onEvent$.next({
+                    type: PlayerControllerEventType.PLAYER_CONTROLLER_ENDED,
+                    data: this.createMediaControllerPlayEvent(),
+                  });
+                })
+              );
+            })
+          );
+        })
+      );
+    }
   }
 
   /**
@@ -1063,11 +1043,33 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
     }
   }
 
+  seekToLive(): Observable<boolean> {
+    return of(false);
+  }
+
+  /**
+   * Whether the controller currently considers playback to be a live stream. Base default is
+   * `false` — VOD-only controllers (MP4, audio file) never override this. {@link _seekToEnd} uses
+   * it to skip the fixed-duration "align with final frame + emit ENDED" dance for live streams,
+   * where "the end" is really just the live edge, not a fixed boundary.
+   */
+  protected isLive(): boolean {
+    return false;
+  }
+
+  /**
+   * Base default is `undefined` — VOD-only controllers (MP4, audio file) never override this.
+   * {@link PlayerController.resolveLiveState}
+   */
+  resolveLiveState(): PlayerLiveState | undefined {
+    return void 0;
+  }
+
   private seekToTime(contentTime: number): Observable<boolean> {
     return this._seekToVideoTime(contentTime + (this._mainMediaState?.initSegmentTimeOffset ?? 0));
   }
 
-  private _seekToVideoTime(time: number): Observable<boolean> {
+  protected _seekToVideoTime(time: number): Observable<boolean> {
     // console.debug(`%cseekToTime: ${time}`, 'color: purple');
 
     time = Validators.mediaTime()(time);
@@ -1148,12 +1150,12 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
     return this._mediaTemporalConverter!.convert(this.getDuration(), MediaTemporalFormat.SECONDS, MediaTemporalFormat.FRAME_COUNT);
   }
 
-  private constrainSeekTime(time: number): number {
+  protected constrainSeekTime(time: number): number {
     let duration = this.getDuration();
     return time < 0 ? 0 : time > duration ? duration : time;
   }
 
-  private constrainSeekFrame(frame: number): number {
+  protected constrainSeekFrame(frame: number): number {
     return frame < 0 ? 0 : frame > this.getTotalFrames() ? this.getTotalFrames() : frame;
   }
 
@@ -1226,7 +1228,11 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
                     finishSeek();
                   });
                 } else {
-                  // video is playing, no need to sync frames if video is near the end, it will be done in onPause finalization when video finally ends
+                  // LIVE only
+                  if (this._mainMediaState?.isLive) {
+                    finalizeSeek();
+                    finishSeek();
+                  }
                 }
               } else {
                 this.syncVideoFrames(syncConditions).subscribe(() => {
@@ -1331,7 +1337,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
     this.checkMainMediaEssentials();
     return (
       this.getCurrentTime() > 0 &&
-      this._getCurrentVideoTime() < this.getDuration() &&
+      (this.isLive() || this._getCurrentVideoTime() < this.getDuration()) &&
       !this._playerDomController.mainMediaVideoElement.paused && // caution: when using default HTML video controls, when seeking while playing - video is actually paused for a moment
       !this._playerDomController.mainMediaVideoElement.ended &&
       this._playerDomController.mainMediaVideoElement.readyState > this._playerDomController.mainMediaVideoElement.HAVE_CURRENT_DATA
@@ -1361,7 +1367,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
         this._checkAndCancelPausing();
 
         let startPlay = () => {
-           // first start request video frame callback cycle
+          // first start request video frame callback cycle
           this._playerDomController.mainMediaVideoElement
             .play()
             .then(() => {
@@ -1521,5 +1527,9 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
 
   get createMediaElementSourceEnabled(): boolean {
     return this._createMediaElementSourceEnabled;
+  }
+
+  get mediaRotation(): MediaRotationValue {
+    return this._playerDomController.mediaRotation;
   }
 }

@@ -18,3 +18,6 @@ export * from './hls-track';
 export * from './hls-main-media';
 export * from './hls-player-controller';
 export * from './hls-player-playback-engine';
+export * from './hls-main-media-session-controller';
+export * from './hls-segmented-vtt-timed-items-fetcher';
+export * from './hls-text-track-cue-readers';

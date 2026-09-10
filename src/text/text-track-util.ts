@@ -16,7 +16,7 @@
 
 import Decimal from 'decimal.js';
 import {MediaTimeConverter, type MediaTimeModel} from '../common/media-time';
-import {FallbackFormat, type MainMedia, type OutputTextFileFormatType, type SlewOptions, type TextTrackConversionOptions, TimeReference, type Track} from '../media';
+import {FallbackFormat, type MainMedia, MainMediaType, type OutputTextFileFormatType, type SlewOptions, type TextTrackConversionOptions, TimeReference, type Track} from '../media';
 import {FrameRateResolver} from '../common/frame-rate';
 import {isNullOrUndefined} from '../util/util-functions';
 import {FileFormatType, MediaTemporalConverter, type MediaTemporalConverterArgs, MediaTemporalFormat} from '../common';
@@ -41,6 +41,14 @@ export class TextTrackUtil {
   private static _srtCueTimingRegex: RegExp = /^((\d{2,}):(\d{2}):(\d{2}),(\d{3}))\s+-->\s+((\d{2,}):(\d{2}):(\d{2}),(\d{3}))(\s+.*)?$/;
   private static _minBeginTime = 0;
   private static _minEndTime = 0.001;
+
+  /**
+   * Whether a media's own text tracks are rendered by the playback engine rather than by a handler of
+   * ours.
+   */
+  static rendersTextNatively(mainMedia: {isLive?: boolean | undefined; mainMediaType: MainMediaType} | undefined): boolean {
+    return !!mainMedia?.isLive || mainMedia?.mainMediaType === MainMediaType.TAMS;
+  }
 
   static slewImscContent(content: string, slewOptions: SlewOptions): string {
     const document = this.parseImscContent(content);

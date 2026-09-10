@@ -90,6 +90,15 @@ export function gradientAnimation(config: GradientAnimationConfig): Konva.Animat
 
 export function animate(config: AnimateConfig) {
   if (config.startValue === config.endValue) {
+    // Nothing to animate, but callers (e.g. scrollToPositionEased) rely on onUpdateHandler/
+    // onCompleteHandler firing to resolve their observable — skipping them left callers like
+    // syncTimelineWithPlayhead's in-progress latch stuck forever whenever the requested target
+    // already equals the current (often clamped) value.
+    const frame: IFrame = {time: config.duration, timeDiff: 0, lastTime: config.duration, frameRate: 0};
+    config.onUpdateHandler(frame, config.endValue);
+    if (config.onCompleteHandler) {
+      config.onCompleteHandler(frame, config.endValue);
+    }
     return;
   }
 

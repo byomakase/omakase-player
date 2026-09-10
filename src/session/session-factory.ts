@@ -38,6 +38,8 @@ export class SessionFactory {
   static createEmptyPlayerSession(): PlayerSession {
     return {
       mainMediaId: void 0,
+      liveTimelineAnchor: void 0,
+      liveState: void 0,
       playback: {
         playing: false,
         paused: true,
@@ -52,6 +54,8 @@ export class SessionFactory {
         playbackRate: PLAYER_CONTROLLER_DEFAULTS.playbackRate,
 
         bufferedTimeRanges: [],
+
+        mediaRotation: 0,
       },
       audio: void 0,
       text: void 0,

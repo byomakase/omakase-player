@@ -114,7 +114,6 @@ export class VuMeter implements Destroyable, VuMeterApi {
       this.wireSource(this._source);
     } else if (args.player || args.audioType || args.tracks) {
       this._source = VuMeterFactory.createAudioLevelSource(args);
-      this.resolveChannelCount(args);
       this.wireSource(this._source);
     }
   }
@@ -179,18 +178,12 @@ export class VuMeter implements Destroyable, VuMeterApi {
     this._container.appendChild(this._vuMeterComponent);
   }
 
-  private resolveChannelCount(args: VuMeterArgs) {
-    if (!this._config.channels && args.tracks) {
-      const track: Track | undefined = typeof args.tracks === 'string' ? args.player?.track.get(args.tracks) : (args.tracks as Track);
-      if (track?.trackType === TrackType.AUDIO && (track as AudioFile).channels) {
-        this._config.channels = (track as AudioFile).channels;
-      }
-    }
-  }
-
   private wireSource(source: AudioLevelSourceApi) {
     this._vuMeterComponent.setSource(source);
     if (!this._config.channels) {
+      if (source.channelCount) {
+        this._vuMeterComponent.channelCount = source.channelCount;
+      }
       source.onEvent$
         .pipe(
           filter((event) => event.type === AudioLevelEventType.CHANNEL_COUNT_CHANGE),

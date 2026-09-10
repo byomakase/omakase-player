@@ -77,7 +77,7 @@ export abstract class BaseTimelineNode<C extends TimelineNodeConfig<S>, S extend
       ...config,
     });
 
-    this._group = KonvaFactory.createGroup();
+    this._group = KonvaFactory.createGroup({listening: this.config.listening ?? true});
 
     this._bgRect = KonvaFactory.createRect({
       fill: this.style.backgroundFill,
@@ -205,6 +205,7 @@ export class TextLabel extends BaseTimelineNode<TextLabelConfig, TextLabelStyle>
     });
 
     this._konvaText = KonvaFactory.createText({
+      listening: this.config.listening ?? true,
       text: this.config.text,
       fontSize: this.style.fontSize,
       fontFamily: this.style.fontFamily,

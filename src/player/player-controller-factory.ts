@@ -19,6 +19,7 @@ import {HlsPlayerController, type HlsPlayerControllerConfig} from '../hls';
 import type {PlayerController, PlayerDomController} from './player-controller-api';
 import {Mp4PlayerController, type Mp4PlayerControllerConfig} from '../mp4';
 import {AudioFilePlayerController, type AudioFilePlayerControllerConfig} from '../audio/audio-file-player-controller';
+import {TamsPlayerController} from '../tams/tams-player-controller';
 import type {PlayerControllerConfigMap} from './player-api';
 
 export class PlayerControllerFactory {
@@ -30,6 +31,8 @@ export class PlayerControllerFactory {
         return new Mp4PlayerController(playerDomController, config as Mp4PlayerControllerConfig);
       case MainMediaType.AUDIO_FILE:
         return new AudioFilePlayerController(playerDomController, config as AudioFilePlayerControllerConfig);
+      case MainMediaType.TAMS:
+        return new TamsPlayerController(playerDomController, config as Partial<HlsPlayerControllerConfig>);
       default:
         throw new Error(`Unsupported media type: ${mainMediaType}`);
     }

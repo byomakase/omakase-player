@@ -21,6 +21,22 @@ export class YogaUtil {
     nodes.forEach((node: Node | Config) => {
       if (node) {
         try {
+          // Detach from parent before freeing. If we free a node while it is still
+          // registered as a child of another node, the parent retains a dangling C++
+          // pointer. Yoga's WASM allocator may reuse that address for a new node,
+          // causing the new node to appear to already have a parent, which makes
+          // subsequent insertChild calls throw a BindingError.
+          const yogaNode = node as Node;
+          if (typeof yogaNode.getParent === 'function') {
+            const parent = yogaNode.getParent();
+            if (parent !== null && parent !== undefined) {
+              try {
+                parent.removeChild(yogaNode);
+              } catch {
+                // ignore — parent may already be freed
+              }
+            }
+          }
           node.free();
         } catch (e) {
           // console.error(e);

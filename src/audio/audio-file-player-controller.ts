@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-import {first, forkJoin, fromEvent, Observable, Subject, take, takeUntil} from 'rxjs';
+import {first, forkJoin, fromEvent, Observable, of, Subject, take, takeUntil} from 'rxjs';
 
 import {MediaMetadataResolver} from '../tools';
+import type {MediaMetadata} from '../tools/media-metadata-resolver';
 import {errorCompleteObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
 import {type AudioTrackIdentifier, BasePlayerController, type PlayerControllerConfig, type TextTrackIdentifier} from '../player/player-controller';
 import type {LoadMainMediaArgsType, PlayerDomController} from '../player';
@@ -24,7 +25,7 @@ import {AudioFile, type AudioState, type TextTrackState} from '../media';
 import {OpStage, OpStageStatus} from '../common/op-stage';
 import {FrameRateResolver} from '../common/frame-rate';
 import {TimecodeConverter, type TimecodeModel} from '../common/timecode';
-import {PLAYER_CONTROLLER_DEFAULTS} from '../constants';
+import {AUDIO_DEFAULTS, PLAYER_CONTROLLER_DEFAULTS} from '../constants';
 
 export interface AudioFilePlayerControllerConfig extends PlayerControllerConfig {}
 
@@ -63,7 +64,9 @@ export class AudioFilePlayerController extends BasePlayerController<AudioFilePla
       let mainMediaEssentialArgsHookCompleted$ = new Subject<void>();
       let tracksCreatedHookCompleted$ = new Subject<void>();
 
-      let metadataFromResolver$ = MediaMetadataResolver.getMediaMetadata(args.url, ['firstAudioTrackChannelsNumber', 'firstAudioTrackAudioCodec']);
+      let metadataFromResolver$: Observable<Pick<MediaMetadata, 'firstAudioTrackChannelsNumber' | 'firstAudioTrackAudioCodec'>> = loadOptions?.forceSkipMetadataResolution
+        ? of({firstAudioTrackChannelsNumber: AUDIO_DEFAULTS.channels, firstAudioTrackAudioCodec: undefined})
+        : MediaMetadataResolver.getMediaMetadata(args.url, ['firstAudioTrackChannelsNumber', 'firstAudioTrackAudioCodec']);
 
       // once both hooks are completed finish loading
       forkJoin([mainMediaEssentialArgsHookCompleted$, tracksCreatedHookCompleted$]).subscribe(() => {

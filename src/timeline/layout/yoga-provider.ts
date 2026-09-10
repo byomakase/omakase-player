@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {from, map, Observable} from 'rxjs';
+import {from, Observable} from 'rxjs';
 import type {Yoga} from 'yoga-layout/load';
 import {loadYoga} from 'yoga-layout/load';
 
@@ -22,6 +22,9 @@ export class YogaProvider {
   private static _instance: YogaProvider;
 
   private static _yoga: Yoga | undefined;
+
+  // Shared in-flight Promise so concurrent init() calls don't spawn multiple WASM instances.
+  private static _loadingPromise: Promise<void> | undefined;
 
   private constructor() {}
 
@@ -33,11 +36,23 @@ export class YogaProvider {
   }
 
   init(): Observable<void> {
-    return from(loadYoga()).pipe(
-      map((loadYogaResult) => {
-        YogaProvider._yoga = loadYogaResult;
-      })
-    );
+    if (YogaProvider._yoga) {
+      console.debug('[YogaProvider] init() — reusing already-loaded yoga instance');
+      return new Observable<void>((observer) => {
+        observer.next();
+        observer.complete();
+      });
+    }
+    if (!YogaProvider._loadingPromise) {
+      // console.debug('[YogaProvider] init() — starting yoga WASM load', new Error('init() call stack').stack);
+      YogaProvider._loadingPromise = loadYoga().then((result) => {
+        YogaProvider._yoga = result;
+        console.debug('[YogaProvider] yoga WASM loaded successfully');
+      });
+    } else {
+      console.debug('[YogaProvider] init() — yoga already loading, awaiting shared promise', new Error('second init() call stack').stack);
+    }
+    return from(YogaProvider._loadingPromise);
   }
 
   get yoga(): Yoga {

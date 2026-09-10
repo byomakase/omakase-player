@@ -26,6 +26,7 @@ import {
   ChromingTimeFormat,
   type VideoSafeZone,
   type VideoSafeZoneCreate,
+  VideoSafeZoneRenderingRegion,
   type ChromingThemeTypes,
   type ChromingVuMeterConfig,
   ChromingVuMeterPosition,
@@ -37,6 +38,7 @@ import {type ChromingEvent, ChromingEventType} from './chroming-event';
 import {ObserverBreaker} from '../common/observer-breaker';
 import {PlayerAudioEventType, PlayerAudioMode, PlayerAudioType, PlayerEventType, PlayerTextEventType, type PlayerInternalApi} from '../player';
 import {ChromingDomController, type ChromingAudioTrack} from './chroming-dom';
+import {LivePlaybackTracker, type LivePlaybackTrackerApi} from '../live/live-model';
 import {ChromingDomFactory} from './chroming-factory';
 import {DefaultDomController} from './themes/default-dom';
 import type {ChromingSession} from '../session';
@@ -52,9 +54,9 @@ import {
   type ChromingMarkerBarHandlerApi,
   type ChromingMarkerBarState,
 } from './chroming-marker-bar';
-import {MarkerTrack, type MarkerState, type MarkerTrackState, type MarkerUpdateableAttrs} from '../media/marker-track';
+import {type MarkerState, type MarkerTrackState, type MarkerUpdateableAttrs} from '../media/marker-track';
 import type {TrackRepositoryEvent} from '../repository';
-import {ThumbnailTrack, type ThumbnailTrackState, type Track, TrackType} from '../media';
+import {MainMediaType, type ThumbnailTrackState, type Track, TrackType} from '../media';
 import {StampDomController} from './themes/stamp-dom';
 import {OmakaseDomController} from './themes/omakase-dom';
 import type {Ui} from '../ui';
@@ -72,6 +74,7 @@ export abstract class BaseChroming implements ChromingInternalApi, Destroyable {
   private _watermark: string | undefined;
   private _helpMenuGroups: HelpMenuGroup[] = [];
   private _videoSafeZones: VideoSafeZone[] = [];
+  private _mainMediaType: MainMediaType | undefined;
 
   protected _thumbnailTrackId: Track['id'] | undefined;
   protected _markerTrackHandlers: {
@@ -80,6 +83,8 @@ export abstract class BaseChroming implements ChromingInternalApi, Destroyable {
   };
 
   protected _domController: ChromingDomController<ChromingThemeTypes>;
+  protected _livePlaybackTracker: LivePlaybackTrackerApi | undefined;
+  protected _liveModelBreaker = new ObserverBreaker();
 
   protected constructor(config: ChromingInternalConfig) {
     this._config = config;
@@ -173,6 +178,17 @@ export abstract class BaseChroming implements ChromingInternalApi, Destroyable {
     }
   }
 
+  setLivePlaybackTracker(livePlaybackTracker: LivePlaybackTrackerApi) {
+    this._liveModelBreaker.break();
+    this._livePlaybackTracker = livePlaybackTracker;
+    livePlaybackTracker.onChange$
+      .pipe(takeUntil(this._liveModelBreaker.observer))
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe((model) => {
+        this._domController.setLiveModel(model);
+      });
+  }
+
   setPlayerInternal(playerInternal: PlayerInternalApi) {
     this._playerInternal = playerInternal;
     this._domController.setPlayer(playerInternal);
@@ -182,7 +198,16 @@ export abstract class BaseChroming implements ChromingInternalApi, Destroyable {
         filter((event) => event.type === PlayerEventType.PLAYER_MAIN_MEDIA_LOADING)
       )
       .subscribe((event) => {
-        this._domController.setMainMediaType(event.data.mainMediaState.mainMediaType);
+        this._mainMediaType = event.data.mainMediaState.mainMediaType;
+        this._domController.setMainMediaType(this._mainMediaType);
+      });
+    this._playerInternal.onEvent$
+      .pipe(
+        takeUntil(this._destroyBreaker.observer),
+        filter((event) => event.type === PlayerEventType.PLAYER_MEDIA_ROTATION_UPDATE)
+      )
+      .subscribe((event) => {
+        this._domController.setMediaRotation(event.data.mediaRotation);
       });
     this._playerInternal.audioInternal.onEvent$
       .pipe(
@@ -496,19 +521,19 @@ export abstract class BaseChroming implements ChromingInternalApi, Destroyable {
       this._videoSafeZones = videoSafeZones;
       this._domController.clearSafeZones();
       for (const safeZone of this._videoSafeZones) {
-        this._domController.addSafeZone(safeZone, this._videoSafeZones);
+        this._domController.addSafeZone(safeZone, this._videoSafeZones, safeZone.renderingRegion ?? VideoSafeZoneRenderingRegion.VIDEO);
       }
       this.emitSafeZonesChange();
       nextCompleteObserver(observer);
     });
   }
 
-  addSafeZone(videoSafeZone: VideoSafeZoneCreate): Observable<VideoSafeZone> {
+  addSafeZone(videoSafeZone: VideoSafeZoneCreate, renderingRegion: VideoSafeZoneRenderingRegion = VideoSafeZoneRenderingRegion.VIDEO): Observable<VideoSafeZone> {
     return passiveObservable((observer) => {
       if (this._videoSafeZones.find((p) => p.id === videoSafeZone.id)) {
         errorCompleteObserver(observer, `Safe zone with id ${videoSafeZone.id} already exists`);
       } else {
-        let newVideoSafeZone = this._domController.addSafeZone(videoSafeZone, this._videoSafeZones);
+        let newVideoSafeZone = this._domController.addSafeZone(videoSafeZone, this._videoSafeZones, renderingRegion);
 
         this._videoSafeZones.push(newVideoSafeZone);
 
@@ -799,6 +824,7 @@ export abstract class BaseChroming implements ChromingInternalApi, Destroyable {
   }
 
   destroy(): void {
+    this._liveModelBreaker.destroy();
     this._destroyBreaker.destroy();
 
     if (this._markerTrackHandlers[ChromingTrackDestination.PROGRESS_BAR]) {

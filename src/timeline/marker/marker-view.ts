@@ -23,6 +23,7 @@ import Decimal from 'decimal.js';
 import {ColorUtil} from '../../util/color-util';
 import {KonvaFactory} from '../konva/konva-factory';
 import {TimelineImpl} from '../timeline';
+import {TimelineSlotType} from '../timeline-slot-type';
 import {type MarkerOnMarkerTrackLaneStyle, MarkerTrackLane} from './marker-track-lane';
 import type {KonvaEventObject} from 'konva/lib/Node';
 import {affectsStyledElement, type StyledElement, Ui} from '../../ui';
@@ -418,32 +419,51 @@ abstract class BaseMarkerViewInnerComponent extends BaseKonvaComponent2<Konva.Gr
       throw new Error(`Marker not attached to timeline`);
     }
 
-    let timelineTimecodedRect = this._timeline.getTimecodedFloatingDimension();
+    let timelineTimecodedRect = this._timeline.getTimecodedFloatingDimensionForLane(this._markerTrackLane.id);
     let timecodedRect = this._markerTrackLane.getTimecodedRect();
 
     switch (this._style.markerRenderType) {
-      case 'default':
+      case 'default': {
+        const paddingTop = this._markerTrackLane.style.paddingTop;
+        const paddingBottom = this._markerTrackLane.style.paddingBottom;
+        const contentHeight = Math.max(0, timecodedRect.height - paddingTop - paddingBottom);
         return {
           area: {
-            y: timecodedRect.y,
-            height: timecodedRect.height,
+            y: timecodedRect.y + paddingTop,
+            height: contentHeight,
           },
           handle: {
-            y: timecodedRect.height / 2,
+            y: contentHeight / 2,
             height: 0,
           },
         };
-      case 'spanning-over-all-lanes':
+      }
+      case 'spanning-over-all-lanes': {
+        // MAIN is clipped to its own (scrollable) bounds, so its spanning markers stay confined
+        // to MAIN's own content height. HEADER/FOOTER are unclipped (see MarkerTrackLane.
+        // prepareForTimeline), so their spanning markers instead cover the HEADER+MAIN+FOOTER
+        // content region — translated into this slot's own local coordinates via its absolute
+        // canvas offset. That region starts at the outer padding's top edge, not canvas y=0, and
+        // is only as tall as the content itself (see getSpanningContentTop/-Height), so it doesn't
+        // bleed into the padding above HEADER or below FOOTER.
+        const isMain = this._timeline.getLaneSlotType(this._markerTrackLane.id) === TimelineSlotType.MAIN;
+        const area = isMain
+          ? {y: 0, height: timelineTimecodedRect.height}
+          : {y: this._timeline.getSpanningContentTop() - this._timeline.getLaneSlotAbsoluteTop(this._markerTrackLane.id), height: this._timeline.getSpanningContentHeight()};
+        // Consumers combine these as area.y + handle.y to get the handle's final position (see
+        // MarkerViewHandleComponent.setPosition() and getHandleAreaVerticals()) — so handle.y must
+        // offset whatever area.y is, not assume it's always 0. The lane's own row center is
+        // timecodedRect.y + timecodedRect.height / 2 regardless of slot; subtracting area.y here
+        // cancels it back out so that sum lands on the row center either way.
+        const rowCenterY = timecodedRect.y + timecodedRect.height / 2;
         return {
-          area: {
-            y: 0,
-            height: timelineTimecodedRect.height,
-          },
+          area,
           handle: {
-            y: timecodedRect.y + timecodedRect.height / 2,
+            y: rowCenterY - area.y,
             height: 0,
           },
         };
+      }
       default:
         throw new Error(`Unsupported timeline render type: ${this._style.markerRenderType}`);
     }

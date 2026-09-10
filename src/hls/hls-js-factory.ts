@@ -14,14 +14,75 @@
  * limitations under the License.
  */
 
-import Hls from 'hls.js';
+import Hls, {type HlsConfig} from 'hls.js';
 import type {HlsPlayerControllerConfig} from './hls-player-controller';
+
+/**
+ * Keeps a live subtitle playlist lined up with main while `config.timelineOffset` is in play, which is
+ * what hls.js intends to do and gets wrong. Possible upstream bug, maybe worth reporting so that we can remove this
+ * in the future
+ */
+function createSubtitleStreamController() {
+  const base = Hls.DefaultConfig.subtitleStreamController;
+
+  if (!base) {
+    return void 0;
+  }
+
+  class OmpSubtitleStreamController extends base {}
+  const superOnSubtitleTrackLoaded = (base.prototype as any).onSubtitleTrackLoaded;
+
+  (OmpSubtitleStreamController.prototype as any).onSubtitleTrackLoaded = function (this: any, event: any, data: any) {
+    const details = data.details;
+    const timelineOffset = details?.appliedTimelineOffset ?? 0;
+    const alignsByProgramDateTime = !!details?.hasProgramDateTime && !!this.mainDetails?.hasProgramDateTime;
+
+    const result = superOnSubtitleTrackLoaded.call(this, event, data);
+
+    const firstFragment = details?.fragments?.[0];
+    const surplus = !!firstFragment && firstFragment.start !== firstFragment.playlistOffset + timelineOffset;
+
+    // modify only on LIVE - VoD HLS untouched
+    if (surplus && timelineOffset && details.live && !alignsByProgramDateTime) {
+      // add timelineOffset that hls.js does not
+      details.fragments.forEach((fragment: any) => fragment.setStart(fragment.start - timelineOffset));
+    }
+
+    return result;
+  };
+
+  return OmpSubtitleStreamController;
+}
+
+const SUBTITLE_STREAM_CONTROLLER = createSubtitleStreamController();
 
 export class HlsJsFactory {
   static createHls(hlsPlayerControllerConfig: HlsPlayerControllerConfig) {
-    let hls = new Hls(hlsPlayerControllerConfig.hlsConfig);
+    let hls = new Hls(this.resolveHlsConfig(hlsPlayerControllerConfig.hlsConfig));
     this.overrideMethods(hls, hlsPlayerControllerConfig);
     return hls;
+  }
+
+  /**
+   * Live subtitle alignment depends on {@link createSubtitleStreamController}, so it is forced over
+   * whatever was configured.
+   */
+  private static resolveHlsConfig(hlsConfig: Partial<HlsConfig>): Partial<HlsConfig> {
+    if (!SUBTITLE_STREAM_CONTROLLER) {
+      return hlsConfig;
+    }
+
+    const configured = hlsConfig.subtitleStreamController;
+    const isConfiguredDeliberately = !!configured && configured !== Hls.DefaultConfig.subtitleStreamController && configured !== SUBTITLE_STREAM_CONTROLLER;
+
+    if (isConfiguredDeliberately) {
+      console.warn(`hlsConfig.subtitleStreamController is ignored, OmakasePlayer provides its own`);
+    }
+
+    return {
+      ...hlsConfig,
+      subtitleStreamController: SUBTITLE_STREAM_CONTROLLER,
+    };
   }
 
   private static overrideMethods(hls: Hls, hlsPlayerControllerConfig: HlsPlayerControllerConfig) {

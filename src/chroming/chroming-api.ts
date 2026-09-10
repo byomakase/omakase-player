@@ -141,8 +141,9 @@ export interface ChromingCommonApi {
   /**
    * Adds a video safe zone to the player chroming.
    * @param videoSafeZone
+   * @param renderingRegion Region the safe zone is rendered relative to: VIDEO (relative to the video) or PLAYER (relative to the whole player surface). Defaults to VIDEO.
    */
-  addSafeZone(videoSafeZone: Partial<VideoSafeZone>): Observable<VideoSafeZone>;
+  addSafeZone(videoSafeZone: Partial<VideoSafeZone>, renderingRegion?: VideoSafeZoneRenderingRegion): Observable<VideoSafeZone>;
 
   /**
    * Removes a video safe zone from the player chroming.
@@ -234,6 +235,11 @@ export interface ChromingCommonApi {
 
 export type VideoSafeZoneCreate = Partial<VideoSafeZone> & Pick<VideoSafeZone, 'topRightBottomLeftPercent'>;
 
+export enum VideoSafeZoneRenderingRegion {
+  VIDEO = 'VIDEO',
+  PLAYER = 'PLAYER',
+}
+
 /**
  * Video safe zone determines the area of the video that is considered "safe" for displaying important content.
  */
@@ -257,6 +263,11 @@ export interface VideoSafeZone {
    * Video safe zone HTML element class for styling.
    */
   htmlClass: string;
+
+  /**
+   * Region the safe zone is rendered relative to.
+   */
+  renderingRegion: VideoSafeZoneRenderingRegion;
 }
 
 /**
@@ -398,7 +409,7 @@ export enum DefaultThemeControl {
   FRAME_BACKWARD = 'FRAME_BACKWARD',
   TEN_FRAMES_BACKWARD = 'TEN_FRAMES_BACKWARD',
   TIME_TOGGLE = 'TIME_TOGGLE',
-  FULLSCREEN = 'FULLSCREEN',
+  FULLSCREEN_TOGGLE = 'FULLSCREEN_TOGGLE',
   TEXT_TOGGLE = 'TEXT_TOGGLE',
   VOLUME = 'VOLUME',
   SCRUBBER = 'SCRUBBER',
@@ -442,7 +453,12 @@ export enum StampThemeFloatingControl {
 
 export enum StampThemeActionIcon {
   AUDIO_TOGGLE = 'AUDIO_TOGGLE',
-  FULLSCREEN = 'FULLSCREEN',
+  FULLSCREEN_TOGGLE = 'FULLSCREEN_TOGGLE',
+}
+
+export enum StampThemeVariant {
+  DEFAULT = 'DEFAULT',
+  OMAKASE = 'OMAKASE',
 }
 
 export enum AudioThemeFloatingControl {
@@ -460,7 +476,7 @@ export enum OmakaseThemeControl {
   TEN_FRAMES_FORWARD = 'TEN_FRAMES_FORWARD',
   FRAME_BACKWARD = 'FRAME_BACKWARD',
   TEN_FRAMES_BACKWARD = 'TEN_FRAMES_BACKWARD',
-  FULLSCREEN = 'FULLSCREEN',
+  FULLSCREEN_TOGGLE = 'FULLSCREEN_TOGGLE',
   VOLUME = 'VOLUME',
   TRACK_SELECTOR = 'TRACK_SELECTOR',
   PLAYBACK_RATE = 'PLAYBACK_RATE',
@@ -482,7 +498,7 @@ export enum OmakaseThemeFloatingControl {
 
 export enum OmakaseThemeActionIcon {
   HELP_MENU = 'HELP_MENU',
-  FULLSCREEN = 'FULLSCREEN',
+  FULLSCREEN_TOGGLE = 'FULLSCREEN_TOGGLE',
   AUDIO_TOGGLE = 'AUDIO_TOGGLE',
   VOLUME = 'VOLUME',
   CONTROL_BAR_TOGGLE = 'CONTROL_BAR_TOGGLE',
@@ -512,6 +528,7 @@ export enum AudioPlayerSize {
 export enum FullscreenChroming {
   ENABLED = 'ENABLED',
   DISABLED = 'DISABLED',
+  SIMPLE = 'SIMPLE',
 }
 
 export enum OmakaseProgressBarPosition {
@@ -679,6 +696,11 @@ export interface StampThemeConfig extends StampThemeConfigUpdateableAttrs {
    * Specifies list of enabled action icons
    */
   actionIcons: StampThemeActionIcon[];
+
+  /**
+   * Specifies look and feel variant for Stamp theme, specifically theme icons and default colors
+   */
+  themeVariant: StampThemeVariant;
 
   /**
    * Id of the custom web component used for Player chroming
@@ -894,11 +916,11 @@ export const DEFAULT_PLAYER_CHROMING_CONFIG: DefaultThemeConfig = {
     DefaultThemeControl.TEN_FRAMES_BACKWARD,
     DefaultThemeControl.TIME_TOGGLE,
     DefaultThemeControl.DETACH_TOGGLE,
-    DefaultThemeControl.FULLSCREEN,
+    DefaultThemeControl.FULLSCREEN_TOGGLE,
     DefaultThemeControl.TEXT_TOGGLE,
     DefaultThemeControl.VOLUME,
     DefaultThemeControl.SCRUBBER,
-    DefaultThemeControl.FULLSCREEN,
+    DefaultThemeControl.FULLSCREEN_TOGGLE,
     DefaultThemeControl.TRACK_SELECTOR,
     DefaultThemeControl.PLAYBACK_RATE,
   ],
@@ -920,6 +942,7 @@ export const DEFAULT_STAMP_PLAYER_CHROMING_CONFIG: StampThemeConfig = {
   floatingControls: [StampThemeFloatingControl.PROGRESS_BAR, StampThemeFloatingControl.ACTION_ICONS, StampThemeFloatingControl.TIME, StampThemeFloatingControl.PLAYBACK_CONTROLS],
   alwaysOnFloatingControls: [StampThemeFloatingControl.PROGRESS_BAR, StampThemeFloatingControl.ACTION_ICONS, StampThemeFloatingControl.TIME],
   actionIcons: [StampThemeActionIcon.AUDIO_TOGGLE],
+  themeVariant: StampThemeVariant.DEFAULT,
 };
 
 export const DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG: AudioThemeConfig = {
@@ -952,14 +975,14 @@ export const DEFAULT_OMAKASE_PLAYER_CHROMING_CONFIG: OmakaseThemeConfig = {
     OmakaseThemeControl.VOLUME,
     OmakaseThemeControl.PLAYBACK_RATE,
     OmakaseThemeControl.TRACK_SELECTOR,
-    OmakaseThemeControl.FULLSCREEN,
+    OmakaseThemeControl.FULLSCREEN_TOGGLE,
     OmakaseThemeControl.DETACH_TOGGLE,
     OmakaseThemeControl.CLOSE,
     OmakaseThemeControl.TIME_TOGGLE,
   ],
   floatingControls: [OmakaseThemeFloatingControl.PLAYBACK_CONTROLS, OmakaseThemeFloatingControl.PROGRESS_BAR, OmakaseThemeFloatingControl.TIME, OmakaseThemeFloatingControl.ACTION_ICONS],
   alwaysOnFloatingControls: [OmakaseThemeFloatingControl.TIME, OmakaseThemeFloatingControl.PROGRESS_BAR, OmakaseThemeFloatingControl.VU_METER],
-  actionIcons: [OmakaseThemeActionIcon.HELP_MENU, OmakaseThemeActionIcon.AUDIO_TOGGLE, OmakaseThemeActionIcon.FULLSCREEN],
+  actionIcons: [OmakaseThemeActionIcon.HELP_MENU, OmakaseThemeActionIcon.AUDIO_TOGGLE, OmakaseThemeActionIcon.FULLSCREEN_TOGGLE],
   playbackRates: [0.25, 0.5, 0.75, 1, 2, 4, 8],
   vuMeterConfig: DEFAULT_CHROMING_VU_METER_CONFIG,
   isFloatingVuMeterVisible: true,
@@ -976,4 +999,16 @@ export const DEFAULT_PLAYER_CHROMING: PlayerChromingConfig = {
   theme: ChromingTheme.DEFAULT,
   fullscreenChroming: FullscreenChroming.ENABLED,
   themeConfig: DEFAULT_PLAYER_CHROMING_CONFIG,
+};
+
+/**
+ * Default {@link FullscreenChroming} per {@link ChromingTheme}, used when `fullscreenChroming` is not explicitly configured.
+ */
+export const DEFAULT_FULLSCREEN_CHROMING_BY_THEME: Record<ChromingTheme, FullscreenChroming> = {
+  [ChromingTheme.DEFAULT]: FullscreenChroming.ENABLED,
+  [ChromingTheme.OMAKASE]: FullscreenChroming.ENABLED,
+  [ChromingTheme.STAMP]: FullscreenChroming.SIMPLE,
+  [ChromingTheme.CHROMELESS]: FullscreenChroming.DISABLED,
+  [ChromingTheme.AUDIO]: FullscreenChroming.DISABLED,
+  [ChromingTheme.CUSTOM]: FullscreenChroming.DISABLED,
 };

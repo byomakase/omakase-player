@@ -32,6 +32,8 @@ export interface LabelLaneConfig extends TimelineLaneConfig {
 }
 
 export interface LabelLaneStyle extends TimelineLaneStyle {
+  paddingTop?: number;
+  paddingBottom?: number;
   textFill: string;
   textFontSize: number;
   textFontStyle?: string;
@@ -74,7 +76,7 @@ export class LabelLane extends BaseTimelineLane<LabelLaneConfig, LabelLaneStyle>
 
     this._textLabel = new TextLabel({
       text: this._config.text,
-      listening: true,
+      listening: false,
       style: {
         fontFamily: this._timeline!.style.textFontFamily,
         fontSize: this._style!.textFontSize,
@@ -96,7 +98,11 @@ export class LabelLane extends BaseTimelineLane<LabelLaneConfig, LabelLaneStyle>
 
     // clipping when minimized
     this._contentFlexGroup.contentNode.konvaNode.clipFunc((ctx) => {
-      let layout = this._contentFlexGroup!.getLayout();
+      if (!this._contentFlexGroup) {
+        // lane may already be destroyed by the time Konva's deferred batchDraw invokes this callback
+        return;
+      }
+      let layout = this._contentFlexGroup.getLayout();
       ctx.rect(0, 0, layout.width, layout.height);
     });
 
@@ -105,24 +111,47 @@ export class LabelLane extends BaseTimelineLane<LabelLaneConfig, LabelLaneStyle>
     this._prepared.next(true);
   }
 
+  protected override handleStyleUpdate(): void {
+    super.handleStyleUpdate();
+
+    if (this._textLabel) {
+      this._textLabel.style = {
+        fontFamily: this._timeline!.style.textFontFamily,
+        fontSize: this._style!.textFontSize,
+        fontStyle: this._style!.textFontStyle,
+        fill: this._style!.textFill,
+        textAreaStretch: this._style!.textAreaStretch,
+      };
+      this._textLabel.onMeasurementsChange();
+    }
+  }
+
   protected createStyledElement(): StyledElementWithId<LabelLaneStyle> {
     return {
       id: this._id,
-      classes: [this._ui!.resolveStyleClass('LabelLane')],
+      classes: [this._ui!.resolveStyleClass('TimelineLane'), this._ui!.resolveStyleClass('LabelLane')],
     };
   }
 
   protected settleLayout() {
     let timecodedContainerDimension = this._timeline!.getTimecodedContainerDimension();
     let timecodedRect = this.getTimecodedRect();
+    const paddingTop = this.style.paddingTop ?? 0;
+    const paddingBottom = this.style.paddingBottom ?? 0;
 
-    this._contentFlexGroup!.setDimensionAndPositions(timecodedContainerDimension.width, timecodedRect.height, FlexSpacingBuilder.create().topRightBottomLeft([timecodedRect.y, 0, 0, 0]).build());
+    this._contentFlexGroup!.setDimensionAndPositions(
+      timecodedContainerDimension.width,
+      Math.max(0, timecodedRect.height - paddingTop - paddingBottom),
+      FlexSpacingBuilder.create().topRightBottomLeft([timecodedRect.y + paddingTop, 0, 0, 0]).build()
+    );
   }
 
   override destroy() {
     super.destroy();
 
     this._contentFlexGroup?.destroy();
+    // @ts-ignore
+    this._contentFlexGroup = void 0;
   }
 
   override clearContent() {}

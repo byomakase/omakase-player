@@ -24,6 +24,7 @@ import {OmakaseMarkerBars} from './omakase-marker-bars';
 import {OmakaseMarkerBar} from './omakase-marker-bar';
 import {OmakaseMuteButton} from './omakase-mute-button';
 import {OmakasePlayButton} from './omakase-play-button';
+import {OmakaseLiveButton} from './omakase-live-button';
 import {OmakasePreviewThumbnail} from './omakase-preview-thumbnail';
 import {OmakaseRouterVisualization} from './omakase-router-visualization';
 import {OmakaseTimeDisplay} from './omakase-time-display';
@@ -48,6 +49,10 @@ if (!globalThis.customElements.get('omakase-dropdown-option')) {
 
 if (!globalThis.customElements.get('omakase-play-button')) {
   globalThis.customElements.define('omakase-play-button', OmakasePlayButton);
+}
+
+if (!globalThis.customElements.get('omakase-live-button')) {
+  globalThis.customElements.define('omakase-live-button', OmakaseLiveButton);
 }
 
 if (!globalThis.customElements.get('omakase-mute-button')) {
@@ -92,6 +97,7 @@ if (!globalThis.customElements.get('omakase-router-visualization')) {
 
 export {
   OmakasePlayButton,
+  OmakaseLiveButton,
   OmakaseMuteButton,
   OmakaseTimeRange,
   OmakaseTimeDisplay,

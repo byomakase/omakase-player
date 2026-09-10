@@ -24,8 +24,11 @@ import {type SessionStoreMessageChannel, SessionStoreMessageChannelBinding} from
 import {type OmakaseTrackApiMessageChannel, OmakaseTrackApiMessageChannelBinding} from './impl/omakase-track-api-message-channel';
 import {AlertsManagerMessageChannelBinding, type AlertsManagerMessageChannel} from './impl/alerts-manager-message-channel';
 import {type TrackUtilsMessageChannel, TrackUtilsMessageChannelBinding} from './impl/track-utils-message-channel';
+import {type TamsMainMediaSessionMessageChannel, TamsMainMediaSessionMessageChannelBinding} from './impl/tams-main-media-session-message-channel';
 import type {OmpProvider} from '../omp-provider';
 import {type UiMessageChannel, UiMessageChannelBinding} from './impl/ui-message-channel';
+import {type LivePlaybackTrackerMessageChannel, LivePlaybackTrackerMessageChannelBinding} from './impl/live-playback-tracker-message-channel';
+import type {LivePlaybackTrackerApi} from '../live/live-model';
 
 export class HostRemoteNode extends BaseRemoteNode {
   protected _messageChannelBindings: MessageChannelBinding[] = [];
@@ -33,7 +36,7 @@ export class HostRemoteNode extends BaseRemoteNode {
   protected _lastHeartbeatTime?: number;
   protected _heartbeatFailuresNumber = 0;
 
-  constructor(broadcastChannelId: string, ompProvider: OmpProvider) {
+  constructor(broadcastChannelId: string, ompProvider: OmpProvider, livePlaybackTracker: LivePlaybackTrackerApi) {
     super(broadcastChannelId, ompProvider);
 
     this.setRemoteChannels([
@@ -44,7 +47,9 @@ export class HostRemoteNode extends BaseRemoteNode {
       {messageChannelName: 'OmakaseTrackApi', messageChannel: new MessageChannel<OmakaseTrackApiMessageChannel>(this._managedBroadcastChannel)},
       {messageChannelName: 'AlertsManager', messageChannel: new MessageChannel<AlertsManagerMessageChannel>(this._managedBroadcastChannel)},
       {messageChannelName: 'TrackUtils', messageChannel: new MessageChannel<TrackUtilsMessageChannel>(this._managedBroadcastChannel)},
+      {messageChannelName: 'TamsMainMediaSession', messageChannel: new MessageChannel<TamsMainMediaSessionMessageChannel>(this._managedBroadcastChannel)},
       {messageChannelName: 'Ui', messageChannel: new MessageChannel<UiMessageChannel>(this._managedBroadcastChannel)},
+      {messageChannelName: 'LivePlaybackTracker', messageChannel: new MessageChannel<LivePlaybackTrackerMessageChannel>(this._managedBroadcastChannel)},
     ]);
 
     this._messageChannelBindings = [
@@ -54,7 +59,9 @@ export class HostRemoteNode extends BaseRemoteNode {
       new OmakaseTrackApiMessageChannelBinding(this.getChannelOrFail('OmakaseTrackApi'), ompProvider),
       new AlertsManagerMessageChannelBinding(this.getChannelOrFail('AlertsManager'), ompProvider),
       new TrackUtilsMessageChannelBinding(this.getChannelOrFail('TrackUtils'), ompProvider),
+      new TamsMainMediaSessionMessageChannelBinding(this.getChannelOrFail('TamsMainMediaSession'), ompProvider),
       new UiMessageChannelBinding(this.getChannelOrFail('Ui'), ompProvider),
+      new LivePlaybackTrackerMessageChannelBinding(this.getChannelOrFail('LivePlaybackTracker'), ompProvider, livePlaybackTracker),
     ];
     this._messageChannelBindings.forEach((binding) => binding.bind());
   }

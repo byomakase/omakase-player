@@ -17,3 +17,4 @@
 export * from './timed-items-fetcher';
 export * from './timed-items-fetcher-factory';
 export * from './vtt-timed-items-fetcher';
+export * from './live-text-cue-fetcher';

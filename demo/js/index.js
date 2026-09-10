@@ -47,6 +47,7 @@ import {
   MarkerListEventType,
   ThumbnailTrackLaneEventType,
   TimedItemTemporalUtil,
+  TimelineSlotType,
 } from '@byomakase/omakase-player';
 
 let activeMarker = null;
@@ -84,6 +85,10 @@ let legendButton_20 = null;
 let imageConfigActive = null;
 let imageConfigInactive = null;
 let buttonSub = null;
+let enClosedCaptionLane = null;
+let subtitlesLane2 = null;
+let stereoAudioTrackLane = null;
+let surroundAudioTrackLane = null;
 
 let urls = [
   {
@@ -232,12 +237,19 @@ function loadOmakaseVideo(url, frameRate) {
   }
 }
 
+function getTimelineHeight() {
+  const top = domHelper.getById('omakase-timeline').getBoundingClientRect().top;
+  return Math.max(400, Math.floor(window.innerHeight - top - 10));
+}
+
 function createOmakaseTimeline() {
+  const timelineHeight = getTimelineHeight();
+
   omakasePlayer
     .createTimeline({
+      zoomWheelEnabled: false,
       style: {
-        stageMinWidth: 700,
-        backgroundFill: '#E9F7FF',
+        minWidth: 700,
         headerBackgroundFill: '#E4E5E5',
         footerBackgroundFill: '#E4E5E5',
 
@@ -254,6 +266,7 @@ function createOmakaseTimeline() {
         headerHeight: 20,
         headerMarginBottom: 0,
         leftPaneWidth: 200,
+        leftPaneBackgroundFill: '#E4E5E5',
         rightPanelLeftGutterWidth: 30,
         rightPanelRightGutterWidth: 30,
         timecodedContainerClipPadding: 20,
@@ -273,17 +286,31 @@ function createOmakaseTimeline() {
         playheadBufferedFill: '#a2a2a2',
         playheadBufferedOpacity: 1,
 
-        stageMinHeight: 300,
+        minHeight: timelineHeight,
+        maxHeight: timelineHeight,
+        verticalScrollbarWidth: 10,
+        verticalScrollbarHandleBarBorderRadius: 5,
+        verticalScrollbarBackgroundFill: '#EDEFFE',
+        verticalScrollbarBackgroundFillOpacity: 1,
         playheadHoverTextYOffset: -25,
         playheadHoverTextFill: '#000000',
         playheadTextFill: 'rgba(255, 255, 255, 0)',
 
         scrubberTextFill: '#000000',
         scrubberTextYOffset: -15,
+        padding: [18,0,0,0],
+        backgroundFill: '#E4E5E5',
       },
     })
     .subscribe(() => initializeOmakaseTimeline());
 }
+
+window.addEventListener('resize', () => {
+  if (omakasePlayer && omakasePlayer.timeline) {
+    const timelineHeight = getTimelineHeight();
+    omakasePlayer.timeline.setStyle({minHeight: timelineHeight, maxHeight: timelineHeight});
+  }
+});
 
 function initializeOmakaseTimeline() {
   initializeScrubberLane();
@@ -330,7 +357,7 @@ function addInAndOutMarkersLane() {
     },
   });
 
-  omakasePlayer.timeline.addTimelineLane(inAndOutMarkersLane);
+  omakasePlayer.timeline.addTimelineLane(inAndOutMarkersLane, {slot: TimelineSlotType.HEADER});
 
   inAndOutMarkersTrack = new MarkerTrack();
   omakasePlayer.track.add(inAndOutMarkersTrack);
@@ -391,7 +418,7 @@ function addBlackMarkersLane() {
       },
     });
 
-    omakasePlayer.timeline.addTimelineLane(blacksMarkersLane);
+    omakasePlayer.timeline.addTimelineLane(blacksMarkersLane, {slot: TimelineSlotType.HEADER});
 
     omakasePlayer.track
       .load(urls[urlSelector].blacks, {
@@ -432,7 +459,7 @@ function addPoiMarkersLane() {
       },
     });
 
-    omakasePlayer.timeline.addTimelineLane(poiLane);
+    omakasePlayer.timeline.addTimelineLane(poiLane, {slot: TimelineSlotType.HEADER});
 
     omakasePlayer.track
       .load(urls[urlSelector].poi, {
@@ -509,7 +536,7 @@ function addThumbnailsLane() {
       },
     });
 
-    omakasePlayer.timeline.addTimelineLane(defaultThumbnailLane);
+    omakasePlayer.timeline.addTimelineLane(defaultThumbnailLane, {slot: TimelineSlotType.HEADER});
 
     omakasePlayer.track
       .load(urls[urlSelector].thumbnails, {
@@ -619,7 +646,6 @@ function addBitrateLineChart() {
 
 function addSidecarDKSubtitlesLane() {
   // Sidecar DK subtitle lane
-  let subtitlesLane2;
   if (urls[urlSelector].dkSubtitle) {
     subtitlesLane2 = new TextTrackLane({
       description: '',
@@ -665,9 +691,13 @@ function addSidecarDKSubtitlesLane() {
     const tracks = omakasePlayer.player.text.getTracks();
     const dkTrack = tracks.find((t) => t.label === 'DK');
     const activeTrack = omakasePlayer.player.text.state.tracks['SIDECAR'].find((track) => track.active);
+    const isActive = activeTrack?.trackId === dkTrack?.id && activeTrack?.shown;
     subDkLabel.style = {
-      backgroundFill: activeTrack?.trackId === dkTrack?.id && activeTrack?.shown ? '#008000' : '#f45844',
+      backgroundFill: isActive ? '#008000' : '#f45844',
     };
+    if (isActive && subtitlesLane2) {
+      omakasePlayer.timeline.scrollToLane(subtitlesLane2.id, {easing: true});
+    }
   });
 
   subDkLabel.onEvent$.subscribe((event) => {
@@ -713,7 +743,7 @@ function addSidecarDKSubtitlesLane() {
 }
 
 function addStereoAudioTrackLane() {
-  let stereoAudioTrackLane = createNewAudioTrackLane('', urls[urlSelector].audioLvl20);
+  stereoAudioTrackLane = createNewAudioTrackLane('', urls[urlSelector].audioLvl20);
   if (stereoAudioTrackLane) {
     omakasePlayer.timeline.addTimelineLane(stereoAudioTrackLane);
   }
@@ -855,6 +885,9 @@ function addStereoAudioTrackLane() {
     textLabel20.style = {
       backgroundFill: currentAudio === '2.0' ? '#008000' : '#f45844',
     };
+    if (currentAudio === '2.0' && stereoAudioTrackLane) {
+      omakasePlayer.timeline.scrollToLane(stereoAudioTrackLane.id, {easing: true});
+    }
   });
 
   if (stereoAudioTrackLane) {
@@ -946,7 +979,7 @@ function addStereoAudioTrackLane() {
 }
 
 function addSurroundAudioTrackLane() {
-  let surroundAudioTrackLane = createNewAudioTrackLane('', urls[urlSelector].audioLvl51);
+  surroundAudioTrackLane = createNewAudioTrackLane('', urls[urlSelector].audioLvl51);
   if (surroundAudioTrackLane) {
     omakasePlayer.timeline.addTimelineLane(surroundAudioTrackLane);
     surroundAudioTrackLane.setStyle({
@@ -1016,6 +1049,9 @@ function addSurroundAudioTrackLane() {
     textLabel51.style = {
       backgroundFill: currentAudio === '5.1' ? '#008000' : '#f45844',
     };
+    if (currentAudio === '5.1' && surroundAudioTrackLane) {
+      omakasePlayer.timeline.scrollToLane(surroundAudioTrackLane.id, {easing: true});
+    }
   });
 
   textLabel51.onEvent$.subscribe((event) => {
@@ -1118,7 +1154,7 @@ function addSurroundAudioTrackLane() {
 }
 
 function initializeScrubberLane() {
-  const scrubberLane = omakasePlayer.timeline.getScrubberLane();
+  const scrubberLane = omakasePlayer.timeline.scrubberLane;
 
   scrubberLane.setStyle({
     backgroundFill: '#EDEFEE',
@@ -1128,16 +1164,6 @@ function initializeScrubberLane() {
   });
 
   scrubberLane.updateLayoutDimensions();
-
-  omakasePlayer.timeline.addTimelineLane(
-    new LabelLane({
-      style: {
-        height: 15,
-        backgroundFill: '#E4E5E5',
-        marginBottom: 1,
-      },
-    })
-  );
 }
 
 function addTimelineButtons() {
@@ -1234,7 +1260,7 @@ function addScrollbarLane() {
     },
   });
 
-  omakasePlayer.timeline.addTimelineLane(scrollbarLane);
+  omakasePlayer.timeline.addTimelineLane(scrollbarLane, {slot: TimelineSlotType.FOOTER});
 }
 
 function processSubtitles() {
@@ -1248,7 +1274,7 @@ function processSubtitles() {
       track.updateAttrs({label: 'EN'});
       omakasePlayer.player.text.switchTrack(track.id, true);
 
-      let enClosedCaptionLane = new TextTrackLane({
+      enClosedCaptionLane = new TextTrackLane({
         description: '',
         style: {
           backgroundFill: '#E9F7FF',
@@ -1267,10 +1293,10 @@ function processSubtitles() {
 
       let ind = omakasePlayer.timeline.getTimelineLanes().findIndex((item) => item instanceof TextTrackLane || item instanceof BarChartLane);
       if (ind !== -1) {
-        omakasePlayer.timeline.addTimelineLaneAtIndex(enClosedCaptionLane, ind);
+        omakasePlayer.timeline.addTimelineLane(enClosedCaptionLane, {index: ind});
       } else {
         ind = omakasePlayer.timeline.getTimelineLanes().length - 1;
-        omakasePlayer.timeline.addTimelineLaneAtIndex(enClosedCaptionLane, ind);
+        omakasePlayer.timeline.addTimelineLane(enClosedCaptionLane, {index: ind});
       }
 
       let capEnLabel = new TextLabel({
@@ -1290,9 +1316,13 @@ function processSubtitles() {
         const tracks = omakasePlayer.player.text.getTracks();
         const enTrack = tracks.find((t) => t.label === 'EN');
         const activeTrack = omakasePlayer.player.text.state.tracks['SIDECAR'].find((track) => track.active);
+        const isActive = activeTrack?.trackId === enTrack?.id && activeTrack?.shown;
         capEnLabel.style = {
-          backgroundFill: activeTrack?.trackId === enTrack?.id && activeTrack?.shown ? '#008000' : '#f45844',
+          backgroundFill: isActive ? '#008000' : '#f45844',
         };
+        if (isActive && enClosedCaptionLane) {
+          omakasePlayer.timeline.scrollToLane(enClosedCaptionLane.id, {easing: true});
+        }
       });
 
       capEnLabel.onEvent$.subscribe((event) => {
@@ -2044,7 +2074,7 @@ function enableSafeZone(safeZone) {
 }
 
 function addZoomButtons() {
-  let scrubberLane = omakasePlayer.timeline.getScrubberLane();
+  let scrubberLane = omakasePlayer.timeline.scrubberLane;
 
   let zoomInButton = new ImageButton({
     src: `https://demo.player.byomakase.org/images/plus-circle.svg`,
@@ -2258,6 +2288,10 @@ function resetVariables() {
   poiTrack = null;
   bitrateTrack = null;
   thumbnailTrackRef = null;
+  enClosedCaptionLane = null;
+  subtitlesLane2 = null;
+  stereoAudioTrackLane = null;
+  surroundAudioTrackLane = null;
 }
 
 const domHelper = {

@@ -445,7 +445,7 @@ export class GainPlayerAudioHandler extends BasePlayerAudioHandler {
 
         inputsNumber = isNullOrUndefined(inputsNumber) ? this.channelCount : inputsNumber!;
 
-        let outputsNumberResolver = isNullOrUndefined(outputsNumber) ? () => this._channelCount : (maxChannelCount: number) => outputsNumber!;
+        let outputsNumberResolver = isNullOrUndefined(outputsNumber) ? () => OmakaseAudioContextProvider.audioContext.destination.channelCount : (maxChannelCount: number) => outputsNumber!;
         let audioRouter = new AudioRouter(this._routerSlot.output, inputsNumber, outputsNumberResolver);
         audioRouter.load().subscribe({
           next: (event) => {

@@ -24,7 +24,6 @@ import {TimelineEventType} from './timeline-api';
 import {TIMELINE} from '../constants';
 import {KonvaFactory} from './konva/konva-factory';
 import {isNullOrUndefined} from '../util/util-functions';
-import type {BufferedTimeRange} from '../dom/dom-media-element';
 import {KonvaUtil} from './konva/konva-util';
 import type {TimelineImpl} from './timeline';
 import {type PlayerApi, PlayerEventType} from '../player';
@@ -52,14 +51,6 @@ export interface PlayheadStyle {
   textFontSize: number;
   textFill: string;
   textYOffset: number;
-
-  scrubberHeight: number;
-  backgroundFill: string;
-  backgroundOpacity: number;
-  playProgressFill: string;
-  playProgressOpacity: number;
-  bufferedFill: string;
-  bufferedOpacity: number;
 }
 
 export interface PlayheadConfig extends ComponentConfig<PlayheadStyle> {
@@ -92,22 +83,19 @@ const configDefault: PlayheadConfig = {
     symbolHeight: 15,
     symbolYOffset: 0,
 
-    scrubberHeight: 15,
-    backgroundFill: '#ffffff',
-    backgroundOpacity: 0,
-
-    playProgressFill: '#008cbc',
-    playProgressOpacity: 0.5,
-
-    bufferedFill: '#a2a2a2',
-    bufferedOpacity: 1,
-
     textFontSize: 12,
     textFill: '#0d0f05',
     textYOffset: 0,
   },
 };
 
+/**
+ * The playhead marker: the vertical line, symbol, and timecode label. Deliberately its own
+ * component, separate from {@link PlayheadBuffer} (the play-progress bar + buffered-ranges
+ * background), so {@link TimelineImpl} can place other spanning content — e.g. LiveEdgeOverlay —
+ * between the two in z-order: the marker always renders above whatever sits between it and the
+ * buffer.
+ */
 export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, Konva.Group> implements OnMeasurementsChange {
   public readonly onMove$: Subject<PlayheadMoveEvent> = new Subject<PlayheadMoveEvent>();
   public readonly onStateChange$: Subject<PlayheadState>;
@@ -125,10 +113,6 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
 
   protected _dragBreaker = new ObserverBreaker();
 
-  protected _group: Konva.Group;
-  protected _bgRect: Konva.Rect;
-  protected _playProgressBgRect: Konva.Rect;
-
   protected _playheadGroup: Konva.Group;
   protected _playheadLine: Konva.Line;
   protected _playheadSymbol: Konva.Line;
@@ -136,7 +120,8 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
   protected _timecodeLabel: Konva.Label;
   protected _timecodeText: Konva.Text;
 
-  protected _bufferedGroup: Konva.Group;
+  /** True while media is loading or the timeline hasn't caught up to a fresh live-state yet — see {@link refreshVisibility}. */
+  protected _hiddenUntilReady = false;
 
   protected readonly _animationFrameCallback$: Subject<number | undefined> = new BehaviorSubject<number | undefined>(void 0);
   protected _requestAnimationFrameId: number | undefined;
@@ -156,27 +141,6 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     this._timeline = timeline;
     this._player = player;
     this._playbackState = this._player.playerSession.playback;
-
-    this._group = new Konva.Group({
-      ...TIMELINE.positionTopLeft,
-      listening: true,
-    });
-
-    this._bgRect = KonvaFactory.createRect({
-      ...TIMELINE.positionTopLeft,
-      height: this.style.scrubberHeight,
-      fill: this.style.backgroundFill,
-      opacity: this.style.backgroundOpacity,
-      listening: false,
-    });
-
-    this._playProgressBgRect = KonvaFactory.createRect({
-      ...TIMELINE.positionTopLeft,
-      height: this.style.scrubberHeight,
-      fill: this.style.playProgressFill,
-      opacity: this.style.playProgressOpacity,
-      listening: false,
-    });
 
     this._playheadGroup = KonvaFactory.createGroup({
       ...TIMELINE.positionTopLeft,
@@ -215,19 +179,8 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     this._timecodeLabel.add(this._timecodeText);
     this._playheadGroup.add(this._timecodeLabel);
 
-    this._bufferedGroup = new Konva.Group({
-      ...TIMELINE.positionTopLeft,
-      listening: false,
-    });
-
-    this._group.add(this._bgRect);
-    this._group.add(this._bufferedGroup);
-    this._group.add(this._playProgressBgRect);
-
     this._playheadGroup.add(this._playheadLine);
     this._playheadGroup.add(this._playheadSymbol);
-
-    this._group.add(this._playheadGroup);
 
     this._timeline.onEvent$
       .pipe(filter((p) => p.type === TimelineEventType.TIMELINE_ZOOM || p.type === TimelineEventType.TIMELINE_SCROLL))
@@ -240,11 +193,11 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
       next: (event) => {
         switch (event.type) {
           case PlayerEventType.PLAYER_MAIN_MEDIA_LOADING:
-            this._group.visible(false);
+            this._hiddenUntilReady = true;
+            this.refreshVisibility();
             break;
           case PlayerEventType.PLAYER_MAIN_MEDIA_LOADED:
             this.doPlayProgress();
-            this._group.visible(true);
             break;
           case PlayerEventType.PLAYER_PLAYBACK_PROGRESS:
             this.doPlayProgress();
@@ -252,9 +205,6 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
           case PlayerEventType.PLAYER_SEEKING:
           case PlayerEventType.PLAYER_SEEKED:
             this.doPlayProgress();
-            break;
-          case PlayerEventType.PLAYER_BUFFERING:
-            this.doBufferingProgress(event.data.bufferedTimeRanges);
             break;
           case PlayerEventType.PLAYER_PLAYBACK_CHANGE:
             this._playbackState = event.data.playerPlayback;
@@ -294,18 +244,18 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
 
     let trySeek = () => {
       let position = this._playheadGroup.getPosition().x;
-      let seconds = this._timeline.timelinePositionToTime(position);
+      let seconds = this._timeline.clampSeekTarget(this._timeline.timelinePositionToTime(position));
       if (lastSeek !== seconds) {
         this._player.seekTo(seconds);
         lastSeek = seconds;
       }
-    }
+    };
 
     dragMoveWatcher$
       .pipe(takeUntil(this._destroyBreaker.observer))
       .pipe(auditTime(50), distinctUntilChanged())
       .subscribe((position) => {
-        trySeek()
+        trySeek();
       });
 
     this._playheadGroup.on('dragmove', (event) => {
@@ -319,22 +269,29 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
       if (!this._player.isMainMediaLoaded || !this._state.dragging) {
         return;
       }
-      trySeek()
+      trySeek();
       this.dragEnd();
     });
 
     this._styleAdapter.onChange$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe({
       next: (style) => {
+        this.refreshVisibility();
+
         this._playheadSymbol.setAttrs({
+          points: Playhead.symbolPoints(this.style.symbolHeight),
+          offsetY: this.style.symbolYOffset,
           fill: this._state.dragging ? this.style.draggingFill : this.style.fill,
         });
         this._playheadLine.setAttrs({
+          strokeWidth: this.style.lineWidth,
           stroke: this._state.dragging ? this.style.draggingFill : this.style.fill,
         });
         this._timecodeLabel.setAttrs({
+          y: this.style.textYOffset,
           visible: this._state.dragging,
         });
         this._timecodeText.setAttrs({
+          fontSize: this.style.textFontSize,
           fill: this._state.dragging ? this.style.draggingFill : this.style.fill,
         });
       },
@@ -493,12 +450,17 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
    * @private
    */
   private repositionPlayhead(position: number) {
+    // Same clamp seeking already applies (see clampSeekTarget) — the marker itself must never be
+    // draggable past it into the retained-but-no-longer-seekable history region either, not just
+    // have its eventual seek target silently redirected out from under the pointer.
+    let clampedPosition = this._timeline.timeToTimelinePosition(this._timeline.clampSeekTarget(this._timeline.timelinePositionToTime(position)));
+
     this._playheadGroup.setAttrs({
-      x: position,
-      y: 0,
+      x: clampedPosition,
+      y: this._timeline.scrubberLane.getTimecodedRect().y,
     });
     this._state.positionBeforeDrag = this._playheadGroup.getPosition();
-    this.settleTimecode(position);
+    this.settleTimecode(clampedPosition);
     this.onMove$.next({timecode: this._timeline.timelinePositionToTimecode(this._playheadGroup.getPosition().x)});
   }
 
@@ -521,7 +483,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
   }
 
   protected provideKonvaNode(): Konva.Group {
-    return this._group;
+    return this._playheadGroup;
   }
 
   onMeasurementsChange() {
@@ -535,24 +497,28 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
   protected settleLayout() {
     let timecodedGroupDimension = this._timeline.getTimecodedFloatingDimension();
 
-    [this._group, this._bufferedGroup, this._playheadGroup].forEach((node) => {
-      node.setAttrs({
-        ...timecodedGroupDimension,
-      });
+    // Start at the scrubber lane's own (margin-aware) top, same reasoning as PlayheadBuffer: without
+    // this, setting marginTop on the scrubber lane leaves the line/symbol/timecode starting above
+    // the ruler, in the margin gap, instead of right at it.
+    const scrubberTop = this._timeline.scrubberLane.getTimecodedRect().y;
+    this._playheadGroup.setAttrs({
+      ...timecodedGroupDimension,
+      y: scrubberTop,
     });
 
-    [this._bgRect].forEach((node) => {
-      node.setAttrs({
-        width: timecodedGroupDimension.width,
-      });
-    });
-
+    // Spans from the scrubber lane's top down through HEADER + MAIN + FOOTER content, excluding the
+    // outer vertical padding around it (and, now, the margin gap above the scrubber lane).
+    const lineHeight = this._timeline.getSpanningContentHeight() - scrubberTop;
     this._playheadLine.setAttrs({
-      points: [0, 0, 0, timecodedGroupDimension.height],
+      points: [0, 0, 0, lineHeight],
     });
 
     this.doPlayProgress();
-    this.doBufferingProgress(this._player.playerSession.playback.bufferedTimeRanges);
+  }
+
+  /** Combines the persistent style.visible setting with the transient hidden-until-ready gate below. */
+  private refreshVisibility() {
+    this._playheadGroup.visible(!this._hiddenUntilReady && this.style.visible);
   }
 
   private doPlayProgress() {
@@ -564,8 +530,19 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
       return;
     }
 
+    if (this._player.mainMedia?.isLive && !this._timeline.state.isLive) {
+      // Main media is live, but the timeline hasn't processed its first live-state update yet —
+      // timeToTimelinePosition() would still resolve against the VOD fallback domain (origin 0),
+      // not the true live origin. Stay hidden rather than flashing a wrong position; the next
+      // progress tick re-checks and reveals/positions correctly once the timeline catches up.
+      this._hiddenUntilReady = true;
+      this.refreshVisibility();
+      return;
+    }
+    this._hiddenUntilReady = false;
+    this.refreshVisibility();
+
     let x = this._timeline.timeToTimelinePosition(this._player.getCurrentTime());
-    this._playProgressBgRect.width(x);
     this._playheadGroup.x(x);
 
     this.settleTimecode(x);
@@ -589,64 +566,18 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     this._timecodeLabel.x(labelPosition);
   }
 
-  private doBufferingProgress(bufferedTimeRanges: BufferedTimeRange[]) {
-    if (!this._player.isMainMediaLoaded) {
-      return;
-    }
+  private static symbolPoints(height: number): number[] {
+    let sideLength = (2 * height) / Math.sqrt(3);
+    let bottom = {x: 0, y: height - height / 2};
+    let right = {x: sideLength / 2, y: 0 - height / 2};
+    let left = {x: -sideLength / 2, y: 0 - height / 2};
 
-    if (bufferedTimeRanges && bufferedTimeRanges.length > 0) {
-      if (this._bufferedGroup.hasChildren()) {
-        let numOfBuffers = bufferedTimeRanges.length;
-        let previousNumOfBuffers = this._bufferedGroup.getChildren().length;
-
-        if (numOfBuffers === previousNumOfBuffers) {
-          // move and resize buffers
-          this._bufferedGroup.getChildren().forEach((bufferedRect, i) => {
-            let bufferedTimeRange = bufferedTimeRanges[i]!;
-            let startX = this._timeline.timeToTimelinePosition(bufferedTimeRange.start);
-            let endX = this._timeline.timeToTimelinePosition(bufferedTimeRange.end);
-            bufferedRect.setAttrs({
-              x: startX,
-              width: endX - startX,
-            });
-          });
-        } else {
-          // remove old and recreate
-          this._bufferedGroup.getChildren().forEach((child) => child.destroy());
-          this.createBuffers(bufferedTimeRanges);
-        }
-      } else {
-        this.createBuffers(bufferedTimeRanges);
-      }
-    }
-  }
-
-  private createBuffers(bufferedTimeRanges: BufferedTimeRange[]) {
-    bufferedTimeRanges.forEach((bufferedTimespan) => {
-      let startX = this._timeline.timeToTimelinePosition(bufferedTimespan.start);
-      let endX = this._timeline.timeToTimelinePosition(bufferedTimespan.end);
-
-      let bufferedRect = KonvaFactory.createRect({
-        x: startX,
-        y: 0,
-        width: endX - startX,
-        height: this.style.scrubberHeight,
-        fill: this.style.bufferedFill,
-        opacity: this.style.bufferedOpacity,
-        listening: false,
-      });
-      this._bufferedGroup.add(bufferedRect);
-    });
+    return [bottom.x, bottom.y, right.x, left.y, left.x, left.y];
   }
 
   private createSymbol(config: {height: number; fill: string; offsetY: number}): Konva.Line {
-    let sideLength = (2 * config.height) / Math.sqrt(3);
-    let bottom = {x: 0, y: config.height - config.height / 2};
-    let right = {x: sideLength / 2, y: 0 - config.height / 2};
-    let left = {x: -sideLength / 2, y: 0 - config.height / 2};
-
     return new Konva.Line({
-      points: [bottom.x, bottom.y, right.x, left.y, left.x, left.y],
+      points: Playhead.symbolPoints(config.height),
       fill: config.fill,
       closed: true,
       listening: true,

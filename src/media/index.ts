@@ -16,6 +16,7 @@
 
 export * from './track';
 export * from './main-media';
+export * from './main-media-session-controller';
 export * from './media-entity';
 export * from './relation';
 export * from './video';

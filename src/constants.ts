@@ -18,8 +18,8 @@ import {BrowserProvider} from './common/browser-provider';
 import type {PlayerPlayback} from './player';
 
 export const TEMPORAL = {
-  timedItemsMillisPrecision: 3
-}
+  timedItemsMillisPrecision: 3,
+};
 
 export const REMOTING = {
   detachedBroadcastChannelId: '_ompBroadcastChannel',
@@ -47,6 +47,11 @@ export const PLAYER_CONTROLLER_DEFAULTS = {
   playbackRateUpdateTimeout: 60000,
   frameDurationSpillOverCorrection: 0.001,
   muted: false,
+  /** Cadence for refreshing live state while playback is suspended */
+  liveStateTickIntervalMs: 100,
+  liveLeadingSegmentsCaptured: 6,
+  /** Milliseconds threshold for detecting live pin. Shared by UI components - agreement what "at the live edge" means. */
+  liveEdgeThreshold: 1000,
   MP4: {
     audioLabel: 'Default',
   },
@@ -82,6 +87,8 @@ export const PLAYER_PLAYBACK_DEFAULT: PlayerPlayback = {
   playbackRate: PLAYER_CONTROLLER_DEFAULTS.playbackRate,
 
   bufferedTimeRanges: [],
+
+  mediaRotation: 0,
 };
 
 export const TIMELINE = {
@@ -98,5 +105,5 @@ export const TIMELINE = {
   fillLinearGradientAudioPeak: [0, '#F58428', 0.33, '#FCD151', 0.5, '#FFF263', 0.59, '#DEE666', 0.78, '#A2D06C', 0.93, '#7DC370', 1, '#6FBE72'],
   descriptionMaxLength: 100,
   easingDuration: 300,
-  defaultColor: 'teal'
+  defaultColor: 'teal',
 };

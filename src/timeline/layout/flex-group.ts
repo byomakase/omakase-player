@@ -96,8 +96,50 @@ export abstract class BaseFlexGroup<C extends FlexGroupConfig, T extends FlexGro
       throw new Error(`Flex node already added as a child`);
     }
 
+    // Guard against stale yoga C++-level parents.
+    //
+    // Two scenarios can leave flexNode.yogaNode with a non-null owner:
+    // 1. JS _parent is set  → the flex node was added to a different group and never
+    //    removed. Detach properly via the JS parent.
+    // 2. JS _parent is undefined but yoga owner is non-null → the yoga WASM allocator
+    //    reused a freed node's memory address, inheriting a stale C++ owner pointer
+    //    from the previous occupant. Remove only at the yoga level.
+    //
+    // Both cases would otherwise throw a BindingError inside insertChild.
+    if (flexNode.parent !== undefined) {
+      const oldParent = flexNode.parent as BaseFlexGroup<any, any>;
+      console.warn(`[flex-group] Node '${flexNode.name}' already has JS parent '${oldParent.name}'; detaching before re-add.`);
+      oldParent.removeChild(flexNode, false);
+    } else {
+      const staleYogaParent = flexNode.yogaNode.getParent?.();
+      if (staleYogaParent !== null && staleYogaParent !== undefined) {
+        // Stale C++ owner from yoga WASM memory reuse — clear at the yoga level only.
+        staleYogaParent.removeChild(flexNode.yogaNode);
+      }
+    }
+
     this._children.splice(index, 0, flexNode);
-    this._yogaNode.insertChild(flexNode.yogaNode, index);
+
+    try {
+      this._yogaNode.insertChild(flexNode.yogaNode, index);
+    } catch (e) {
+      // Log diagnostic state to help identify root cause before rethrowing.
+      const rx = this._yogaNode as any;
+      const cx = flexNode.yogaNode as any;
+      const rxPtr = rx.M?.O ?? rx.$$?.ptr;
+      const cxPtr = cx.M?.O ?? cx.$$?.ptr;
+      const sameProto = rx.constructor === cx.constructor;
+      console.error(
+        `[flex-group] insertChild failed: receiver='${this.name}' child='${flexNode.name}' index=${index}\n` +
+        `  receiver ptr=${rxPtr}, child ptr=${cxPtr}\n` +
+        `  child deleted=${cxPtr === undefined}\n` +
+        `  same yoga instance=${sameProto}\n` +
+        `  child JS parent=${flexNode.parent?.name ?? 'none'}`
+      );
+      // Splice back out so the JS tree stays consistent with the failed yoga state.
+      this._children.splice(index, 1);
+      throw e;
+    }
 
     flexNode.setParent(this);
 

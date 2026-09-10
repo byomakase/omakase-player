@@ -15,9 +15,9 @@
  */
 
 import {combineLatest, filter, Observable, take, takeUntil, tap} from 'rxjs';
-import type {PlayerDetachedApi, PlayerTextInternalApi} from '../../player';
-import {type PlayerAudioInternalApi, type PlayerEvent} from '../../player';
-import {type MainMedia, MainMediaEventType, type MainMediaState} from '../../media';
+import type {PlayerDetachedApi, PlayerLiveState, PlayerTextInternalApi} from '../../player';
+import {PlayerEventType, type PlayerAudioInternalApi, type PlayerEvent} from '../../player';
+import {type MainMedia, MainMediaEventType, type MainMediaState, type MediaRotationValue} from '../../media';
 import {MediaTemporalConverter, MediaTemporalFormat, type MediaTemporalFormatValueMap} from '../../common';
 import {Validators} from '../../common/validators';
 import type {Destroyable} from '../../common/capabilities';
@@ -41,6 +41,7 @@ export class PlayerDetachedProxy extends BaseMessageChannelProxy<PlayerDetachedM
 
   protected _mainMedia: MainMedia | undefined;
   protected _mediaTemporalConverter: MediaTemporalConverter | undefined;
+  protected _latestLiveState: PlayerLiveState | undefined;
 
   protected _sessionStore: SessionStore;
   protected _mainMediaRepository: MainMediaRepository;
@@ -84,6 +85,14 @@ export class PlayerDetachedProxy extends BaseMessageChannelProxy<PlayerDetachedM
       .subscribe(() => {
         this._onInitialized$.next(true);
       });
+
+    this.onEvent$
+      .pipe(filter((event) => event.type === PlayerEventType.PLAYER_LIVE_STATE_UPDATE))
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe((event) => {
+        this._latestLiveState = event.data.liveState;
+        this._sessionStore.updatePlayerLiveState(this._latestLiveState);
+      });
   }
 
   get onEvent$(): Observable<PlayerEvent> {
@@ -96,6 +105,7 @@ export class PlayerDetachedProxy extends BaseMessageChannelProxy<PlayerDetachedM
         this._utilsBreaker.break();
         this._mainMedia = void 0;
         this._mediaTemporalConverter = void 0;
+        this._latestLiveState = void 0;
       })
     );
   }
@@ -149,7 +159,7 @@ export class PlayerDetachedProxy extends BaseMessageChannelProxy<PlayerDetachedM
       .pipe(takeUntil(this._utilsBreaker.observer))
       .pipe(takeUntil(this._destroyBreaker.observer))
       .subscribe((event) => {
-        this.initMainMedia(mainMediaId)
+        this.initMainMedia(mainMediaId);
       });
   }
 
@@ -164,7 +174,7 @@ export class PlayerDetachedProxy extends BaseMessageChannelProxy<PlayerDetachedM
         hasAudio: this._mainMedia.hasAudio,
       });
     } else {
-      console.debug(`Trying to init utils before main media is loaded.`)
+      console.debug(`Trying to init utils before main media is loaded.`);
     }
   }
 
@@ -184,8 +194,16 @@ export class PlayerDetachedProxy extends BaseMessageChannelProxy<PlayerDetachedM
     return this.messageChannel.sendAndWaitForResponse('seekFromCurrentTime', [value, format]);
   }
 
+  seekToLive(): Observable<boolean> {
+    return this.messageChannel.sendAndWaitForResponse('seekToLive');
+  }
+
   setPlaybackRate(playbackRate: number): Observable<void> {
     return this.messageChannel.sendAndWaitForResponse('setPlaybackRate', [playbackRate]);
+  }
+
+  setMediaRotation(mediaRotation: MediaRotationValue): Observable<void> {
+    return this.messageChannel.sendAndWaitForResponse('setMediaRotation', [mediaRotation]);
   }
 
   toggleFullScreen(): Observable<void> {
@@ -206,7 +224,8 @@ export class PlayerDetachedProxy extends BaseMessageChannelProxy<PlayerDetachedM
   getDuration(format: MediaTemporalFormat = MediaTemporalFormat.SECONDS): MediaTemporalFormatValueMap[MediaTemporalFormat] {
     format = Validators.mediaTemporalFormat()(format);
     this.checkIsMediaLoaded();
-    let seconds = this._mainMedia!.duration!;
+    // live duration is the sync position rather than the element's, as the playing window reports it
+    let seconds = this._latestLiveState ? this._latestLiveState.liveSyncPosition : this._mainMedia!.duration!;
     return this._mediaTemporalConverter!.convert(seconds, MediaTemporalFormat.SECONDS, format);
   }
 

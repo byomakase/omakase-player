@@ -16,12 +16,14 @@
 
 omakase-dropdown {
   position: absolute;
-  color: white;
+  color: var(--omakase-dropdown-text-color, var(--omakase-text-color, white));
   font-size: 13px;
   bottom: 25px;
-  background-color: rgba(#333, 0.9);
+  background-color: var(--omakase-panel-body-background-color, rgba(#333, 0.9));
   border-radius: 3px;
   z-index: 2;
+  display: flex;
+  overflow: hidden;
 
   &:not([floating]) {
     .omakase-dropdown-close {
@@ -40,17 +42,18 @@ omakase-dropdown {
   }
 
   omakase-dropdown-list {
-    display: inline-block;
-    vertical-align: top;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
 
     &[type='default'] omakase-dropdown-option {
       &.active {
-        background-color: white;
-        color: black;
+        background-color: var(--omakase-dropdown-active-background-color, white);
+        color: var(--omakase-dropdown-active-text-color, black);
       }
 
       &:hover:not(.active) {
-        background-color: rgba(0, 0, 0, 0.7);
+        background-color: var(--omakase-dropdown-hover-background-color, rgba(0, 0, 0, 0.7));
       }
 
       .omakase-dropdown-option-icon {
@@ -105,9 +108,10 @@ omakase-dropdown {
   }
 
   .omakase-dropdown-title {
+    flex-shrink: 0;
     line-height: 20px;
-    background-color: #434242e5;
-    color: #bbbbbb;
+    background-color: var(--omakase-panel-header-background-color, #434242e5);
+    color: var(--omakase-panel-header-color, #bbbbbb);
     padding: 5px;
     font-size: 11px;
     white-space: nowrap;
@@ -116,6 +120,9 @@ omakase-dropdown {
   }
 
   .omakase-dropdown-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
     padding: 5px 0;
 
     omakase-dropdown-option {
@@ -156,5 +163,5 @@ omakase-dropdown-toggle {
 omakase-dropdown,
 omakase-dropdown-toggle,
 .omakase-help {
-  font-family: var(--dropdown-font-family, 'Lato');
+  font-family: var(--omakase-dropdown-font-family, 'Lato');
 }

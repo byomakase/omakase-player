@@ -120,6 +120,13 @@ export class ThumbnailImg extends BaseKonvaComponent<ThumbnailImgConfig, Thumbna
 
     this._group.add(this._bgRect);
 
+    this._styleAdapter.onChange$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe(() => {
+      this._bgRect.setAttrs({
+        stroke: this.style.stroke,
+        strokeWidth: this.style.strokeWidth,
+      });
+    });
+
     let isMouseOver = false;
 
     let doMouseEnter = () => {

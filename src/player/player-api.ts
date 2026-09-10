@@ -15,7 +15,7 @@
  */
 
 import {Observable} from 'rxjs';
-import {type MainMedia, type MainMediaLoadOptions, type MainMediaState, MainMediaType, SlateType, type Track} from '../media';
+import {type MainMedia, type MainMediaLoadOptions, type MainMediaState, MainMediaType, type MediaRotationValue, SlateType, type Track} from '../media';
 import type {PlayerEvent} from './player-event';
 import {MediaTemporalFormat, type MediaTemporalFormatValueMap} from '../common';
 import {type PlayerAudioApi, type PlayerAudioInternalApi, PlayerAudioMode} from './player-audio-api';
@@ -46,9 +46,7 @@ export const COMMON_PLAYER_CONFIG_DEFAULT: PlayerCommonConfig = {
 /**
  * Configuration for the player.
  */
-export interface PlayerConfig extends PlayerCommonConfig {
-
-}
+export interface PlayerConfig extends PlayerCommonConfig {}
 
 /**
  * Player API.
@@ -178,6 +176,8 @@ export type PlayerControllerConfigMap = {
   [MainMediaType.HLS]: HlsPlayerControllerConfig;
   [MainMediaType.MP4]: Mp4PlayerControllerConfig;
   [MainMediaType.AUDIO_FILE]: AudioFilePlayerControllerConfig;
+  // TAMS reuses the HLS controller config (it bridges to HLS)
+  [MainMediaType.TAMS]: HlsPlayerControllerConfig;
 };
 
 /**
@@ -312,6 +312,14 @@ export interface PlayerCommonApi {
    */
   seekFromCurrentTime<F extends MediaTemporalFormat>(value: MediaTemporalFormatValueMap[F], format: F): Observable<boolean>;
 
+  /**
+   * Live mode only. Seeks to the current live edge (the recommended sync position). No-ops
+   * (`false`) when the loaded media isn't live.
+   *
+   * @returns Observable that emits `true` if the seek succeeded, `false` if not currently live.
+   */
+  seekToLive(): Observable<boolean>;
+
   /** @ignore */
   convertTime<S extends MediaTemporalFormat>(
     value: MediaTemporalFormatValueMap[S],
@@ -363,6 +371,15 @@ export interface PlayerCommonApi {
    * @param playbackRate - Decimal value in the range [0.1, 16]. For example, `2` plays at 2x speed.
    */
   setPlaybackRate(playbackRate: number): Observable<void>;
+
+  /**
+   * Rotates the video element by the given number of degrees. Ignored while the loaded main media is audio-only.
+   *
+   * Note: native `<track>` and hls.js-embedded subtitles render inside the video element itself and will
+   * visually rotate along with it. Use the {@link PlayerTextHandlerType.MEDIA_CAPTIONS} text handler (the
+   * library default) to keep captions upright regardless of rotation.
+   */
+  setMediaRotation(mediaRotation: MediaRotationValue): Observable<void>;
 
   /**
    * Toggles between fullscreen and windowed display.

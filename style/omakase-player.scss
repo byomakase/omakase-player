@@ -65,26 +65,57 @@
   }
 
   &.safari {
-    --vertical-correction-scale: calc((var(--player-height) + 1) / var(--player-height));
-    --horizontal-correction-scale: calc((var(--player-width) + 1) / var(--player-width));
+    --vertical-correction-scale: calc((var(--player-height) + 2) / var(--player-height));
+    --horizontal-correction-scale: calc((var(--player-width) + 2) / var(--player-width));
     &.media-letterbox {
       .omakase-video {
-        transform: scaleX(var(--horizontal-correction-scale));
+        transform: rotate(var(--video-rotation-deg, 0deg)) scaleX(var(--horizontal-correction-scale));
       }
     }
     &.media-pillarbox {
       .omakase-video {
-        transform: scaleY(var(--vertical-correction-scale));
+        transform: rotate(var(--video-rotation-deg, 0deg)) scaleY(var(--vertical-correction-scale));
       }
     }
     .omakase-video {
-      transform: scaleX(var(--horizontal-correction-scale)) scaleY(var(--vertical-correction-scale));
+      transform: rotate(var(--video-rotation-deg, 0deg)) scaleX(var(--horizontal-correction-scale)) scaleY(var(--vertical-correction-scale));
     }
+    &:not(.omakase-media-theme-compact-audio) {
+      overflow: hidden;
+      min-height: fit-content;
+    }
+  }
+
+  &:not(.omakase-media-theme-stamp).media-video-rotated {
+    .omakase-video {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: calc(var(--player-height) * 1px);
+      height: auto;
+      aspect-ratio: calc(1 / var(--video-aspect-ratio));
+      transform: translate(-50%, -50%) rotate(var(--video-rotation-deg, 0deg));
+    }
+
+    &.media-letterbox .omakase-video {
+      width: auto;
+      height: calc(var(--player-width) * 1px);
+    }
+  }
+
+  &.omakase-media-theme-stamp.media-video-rotated .omakase-video {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: calc(var(--player-height) * 1px);
+    height: calc(var(--player-width) * 1px);
+    transform: translate(-50%, -50%) rotate(var(--video-rotation-deg, 0deg));
   }
 }
 
 .omakase-video {
   width: 100%;
+  transform: rotate(var(--video-rotation-deg, 0deg));
 
   &.omakase-video-fill {
     object-fit: cover;

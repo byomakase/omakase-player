@@ -2,16 +2,15 @@
 
 Omakase Player is an open source JavaScript player for building frame accurate video experiences.
 
-  [Omakase Player](https://api.player.byomakase.org/interfaces/OmakasePlayerApi.html) is constructed from the following main components:
+[Omakase Player](https://api.player.byomakase.org/interfaces/OmakasePlayerApi.html) is constructed from the following main components:
 
-  - [Track Repository](https://api.player.byomakase.org/interfaces/OmakaseTrackApi.html) as central place containing all the media used in Omakase Player and its components
-  - [Media Player](https://api.player.byomakase.org/interfaces/PlayerApi.html) as Main and Sidecar media player
-  - [Chroming](https://api.player.byomakase.org/interfaces/ChromingApi.html) as Omakase Player user interface, visualization and control surface
-  - [Timeline](https://api.player.byomakase.org/interfaces/TimelineApi.html) as Multi-track timeline with unlimited depth for timed media visualization and control
-  - [Marker List Component](https://api.player.byomakase.org/interfaces/MarkerListApi.html) as Segments visualization and control surface organized into cut-lists
-  - [Tools](https://api.player.byomakase.org/interfaces/OmakaseToolsApi.html) and [Alerts](https://api.player.byomakase.org/interfaces/AlertsApi.html) as helpers for various general utils and interaction with end users with alerts
-  - [VU Meter](https://api.player.byomakase.org/interfaces/VuMeterApi.html) as Volume levels visualization tool
-
+- [Track Repository](https://api.player.byomakase.org/interfaces/OmakaseTrackApi.html) as central place containing all the media used in Omakase Player and its components
+- [Media Player](https://api.player.byomakase.org/interfaces/PlayerApi.html) as Main and Sidecar media player
+- [Chroming](https://api.player.byomakase.org/interfaces/ChromingApi.html) as Omakase Player user interface, visualization and control surface
+- [Timeline](https://api.player.byomakase.org/interfaces/TimelineApi.html) as Multi-track timeline with unlimited depth for timed media visualization and control
+- [Marker List Component](https://api.player.byomakase.org/interfaces/MarkerListApi.html) as Segments visualization and control surface organized into cut-lists
+- [Tools](https://api.player.byomakase.org/interfaces/OmakaseToolsApi.html) and [Alerts](https://api.player.byomakase.org/interfaces/AlertsApi.html) as helpers for various general utils and interaction with end users with alerts
+- [VU Meter](https://api.player.byomakase.org/interfaces/VuMeterApi.html) as Volume levels visualization tool
 
 > For versions prior to v1.0.0 please refer to [v0.25.4 API documentation](https://api.player.byomakase.org/archive/0.25.4/index.html)
 
@@ -66,7 +65,7 @@ Initialize the player by providing div id in player configuration. If used as UM
 ```javascript
 // Create new OmakasePlayer instance
 let omakasePlayer = new omakase.OmakasePlayer({
-  playerHTMLElementId: 'omakase-player',
+  playerHtmlElementId: 'omakase-player',
 });
 ```
 
@@ -80,45 +79,36 @@ omakasePlayer.loadMainMedia('https://my-server.com/myvideo.m3u8').subscribe({
 });
 ```
 
-Player chroming can be configured with the `chroming` property. This property allows selection of a chroming theme, watermark, thumbnail url or selection function and other theme-specific configuration. Some code examples are shown below:
+Player chroming can be configured with the `chromingTheme`, `chromingThemeConfig`, `chromingWatermark`, `chromingWatermarkVisibility`, `chromingFullscreenChroming`, and `chromingStyleUrl` properties. These allow selection of a chroming theme, watermark, and other theme-specific configuration. Some code examples are shown below:
 
 ```javascript
 let omakasePlayer = new OmakasePlayer({
-  chroming: {
-    theme: ChromingTheme.Default,
-    thumbnailUrl: 'https://my-server.com/thumbs.vtt',
-    watermark: 'DEMO_SAMPLE',
-    themeConfig: {
-      controlBarVisibility: ControlBarVisibility.Enabled,
-      controlBar: [DefaultThemeControl.Play, DefaultThemeControl.Scrubber, DefaultThemeControl.Volume, DefaultThemeControl.Trackselector, DefaultThemeControl.Fullscreen],
-      trackSelectorAutoClose: false,
-    },
+  chromingTheme: ChromingTheme.DEFAULT,
+  chromingWatermark: 'DEMO_SAMPLE',
+  chromingThemeConfig: {
+    controlBarVisibility: ControlBarVisibility.ENABLED,
+    controlBar: [DefaultThemeControl.PLAY, DefaultThemeControl.SCRUBBER, DefaultThemeControl.VOLUME, DefaultThemeControl.TRACK_SELECTOR, DefaultThemeControl.FULLSCREEN_TOGGLE],
+    trackSelectorAutoClose: false,
   },
 });
 
 let omakasePlayer = new OmakasePlayer({
-  chroming: {
-    theme: ChromingTheme.Default,
-    themeConfig: {
-      controlBarVisibility: ControlBarVisibility.Disabled,
-      floatingControls: [DefaultThemeFloatingControl.PlaybackControls],
-    },
+  chromingTheme: ChromingTheme.DEFAULT,
+  chromingThemeConfig: {
+    controlBarVisibility: ControlBarVisibility.DISABLED,
+    floatingControls: [DefaultThemeFloatingControl.PLAYBACK_CONTROLS],
   },
 });
 
 let omakasePlayer = new OmakasePlayer({
-  chroming: {
-    theme: PlayerChromingTheme.Chromeless,
-  },
+  chromingTheme: ChromingTheme.CHROMELESS,
 });
 
 /*  Custom template js  */
 let omakasePlayer = new OmakasePlayer({
-  chroming: {
-    theme: ChromingTheme.Custom,
-    themeConfig: {
-      htmlTemplateId: 'custom-template',
-    },
+  chromingTheme: ChromingTheme.CUSTOM,
+  chromingThemeConfig: {
+    htmlTemplateId: 'custom-template',
   },
 });
 
@@ -289,6 +279,24 @@ omakasePlayer.chroming.addSafeZone({
 omakasePlayer.player.toggleFullscreen();
 ```
 
+### Live Media
+
+Player supports live media (HLS). Live can either be `EVENT` or `CONTINUOUS`. `EVENT` live is used for live streams that don't evict segments, i.e. segments are only being appended.
+`CONTINUOUS` live is used for streams that both append new segments, and delete the old ones. To ensure continuous media playback, `liveSyncPosition` is used that trails the live edge,
+and constrains exposed media time — it is what `getDuration()` returns while live, and seeks are clamped to it.
+
+We can subscribe to live state changes:
+
+```ts
+omakasePlayer.player.onEvent$.pipe(filter((event) => event.type === PlayerEventType.PLAYER_LIVE_STATE_UPDATE)).subscribe({
+  next: (event) => {
+    console.log(`Live sync position: ${event.data.liveState?.liveSyncPosition}`);
+  },
+});
+```
+
+Full `liveState` payload is available in API Reference Docs.
+
 ## Audio API
 
 Complete list of Audio API methods is available in API Reference Docs.
@@ -300,7 +308,6 @@ Few common usages of Audio API:
 ```javascript
 // retrieves all available audio tracks
 let audioTracks = omakasePlayer.player.audio.getTracks();
-
 
 // detect audio tracks switching
 omakasePlayer.player.audio.onEvent$.pipe(filter((event) => event.type === omakase.PlayerAudioEventType.PLAYER_AUDIO_TRACK_SWITCHED)).subscribe({
@@ -391,7 +398,6 @@ omakasePlayer.player.audio.switchTrack('sidecarAudioTrackId1', false);
 
 // removes Sidecar audio tracks
 omakasePlayer.player.removeSidecarTrack('sidecarAudioTrackId1');
-
 ```
 
 ### Sidecar audio router
@@ -595,10 +601,10 @@ Omakase Player elements (including media chrome elements) can be styled with CSS
 
 The player's dimensions can be controlled with three CSS custom properties set on the player's container element or any ancestor:
 
-| CSS Variable | Description |
-|---|---|
-| `--omakase-player-width` | Sets the width of the player. Accepts any valid CSS length value (e.g. `800px`, `100%`). |
-| `--omakase-player-height` | Sets the height of the player. Accepts any valid CSS length value (e.g. `450px`, `50vh`). |
+| CSS Variable                    | Description                                                                                                                                        |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--omakase-player-width`        | Sets the width of the player. Accepts any valid CSS length value (e.g. `800px`, `100%`).                                                           |
+| `--omakase-player-height`       | Sets the height of the player. Accepts any valid CSS length value (e.g. `450px`, `50vh`).                                                          |
 | `--omakase-player-aspect-ratio` | Sets the aspect ratio of the player (e.g. `16 / 9`, `4 / 3`). When not specified, the aspect ratio is derived automatically from the loaded media. |
 
 ```css
@@ -607,8 +613,6 @@ The player's dimensions can be controlled with three CSS custom properties set o
   --omakase-player-aspect-ratio: 16 / 9;
 }
 ```
-
-> **Note:** These CSS variables have no effect when the **Stamp** chroming theme is active. In the Stamp theme, player takes the width/height of the container.
 
 ## Text API
 
@@ -638,7 +642,7 @@ omakasePlayer.player
       id: '0',
       label: 'English (US)',
       default: true,
-      srcLang: 'EN'
+      srcLang: 'EN',
     },
   })
   .subscribe({
@@ -652,7 +656,7 @@ omakasePlayer.player
 
 ### Marker track
 
-A **marker track** is a type of **timed items track** — a track that holds a collection of time-anchored data points called *timed items*. Each timed item has a temporal position (a moment or a time span) and an arbitrary data payload. The marker track specialises this concept for timeline annotations: each timed item is a **marker** that can represent either a single point in time (a moment marker) or a duration (a spanning marker).
+A **marker track** is a type of **timed items track** — a track that holds a collection of time-anchored data points called _timed items_. Each timed item has a temporal position (a moment or a time span) and an arbitrary data payload. The marker track specialises this concept for timeline annotations: each timed item is a **marker** that can represent either a single point in time (a moment marker) or a duration (a spanning marker).
 
 Marker data is typically loaded from a [WebVTT](https://www.w3.org/TR/webvtt1/) file, where each cue becomes one marker. When a cue covers an instant it becomes a `MOMENT_MARKER`; when it covers a range it becomes a `SPANNING_MARKER`.
 
@@ -660,18 +664,18 @@ Marker data is typically loaded from a [WebVTT](https://www.w3.org/TR/webvtt1/) 
 
 `MarkerTrack` accepts an optional configuration object with the following fields:
 
-| Argument | Type | Description |
-|---|---|---|
-| `id` | `string` | Optional pre-assigned UUID. A new UUID is generated automatically when omitted. |
-| `source` | `UrlSource` | URL source that points to a VTT file containing marker data. Takes precedence over `url`. |
-| `label` | `string` | Human-readable label for this track. |
-| `timedItemsLocked` | `boolean` | When `true`, the track is locked — markers cannot be added, deleted, or updated after the track loads. Defaults to `false`. |
-| `timedItemHooks` | `TimedItemHooks` | Lifecycle hooks called during marker creation. See [Timed item hooks](#timed-item-hooks) below. |
+| Argument           | Type             | Description                                                                                                                 |
+| ------------------ | ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | `string`         | Optional pre-assigned UUID. A new UUID is generated automatically when omitted.                                             |
+| `source`           | `UrlSource`      | URL source that points to a VTT file containing marker data. Takes precedence over `url`.                                   |
+| `label`            | `string`         | Human-readable label for this track.                                                                                        |
+| `timedItemsLocked` | `boolean`        | When `true`, the track is locked — markers cannot be added, deleted, or updated after the track loads. Defaults to `false`. |
+| `timedItemHooks`   | `TimedItemHooks` | Lifecycle hooks called during marker creation. See [Timed item hooks](#timed-item-hooks) below.                             |
 
 **Loading markers from a VTT file via `source`:**
 
 ```ts
-import { MarkerTrack, UrlSource, TrackType } from '@byomakase/omakase-player';
+import {MarkerTrack, UrlSource, TrackType} from '@byomakase/omakase-player';
 
 const track = omakasePlayer.track.add(
   new MarkerTrack({
@@ -683,6 +687,7 @@ omakasePlayer.track.load(TrackSource.fromTrack(track), {
   trackType: TrackType.MARKER_TRACK,
 });
 ```
+
 #### Locked and unlocked timed items
 
 Every timed items track has a **locked** flag (`timedItemsLocked`) that controls whether its collection of timed items is mutable after the initial load.
@@ -704,7 +709,7 @@ const editableTrack = omakasePlayer.track.add(new MarkerTrack());
 
 editableTrack.addTimedItems(
   new DefaultMarker({
-    temporal: { type: TimedItemTemporalType.MOMENT, time: '42' },
+    temporal: {type: TimedItemTemporalType.MOMENT, time: '42'},
     label: 'Scene cut',
   })
 );
@@ -714,17 +719,17 @@ The locked state can also be toggled at runtime:
 
 ```ts
 track.areTimedItemsLocked = false; // unlock
-track.areTimedItemsLocked = true;  // lock again
+track.areTimedItemsLocked = true; // lock again
 ```
 
 #### Timed item hooks
 
 `timedItemHooks` lets you run callbacks at specific points in a marker's lifecycle. Both hooks receive the timed item instance as their argument.
 
-| Hook | When it fires |
-|---|---|
+| Hook           | When it fires                                                                                                                                                          |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `beforeCreate` | Immediately before the marker is inserted into the track's internal collection. Use this to apply styles or perform setup that must happen before the item is visible. |
-| `afterCreate` | Immediately after the marker has been inserted and the track has emitted its update events. Use this for post-creation side effects. |
+| `afterCreate`  | Immediately after the marker has been inserted and the track has emitted its update events. Use this for post-creation side effects.                                   |
 
 ```ts
 const track = omakasePlayer.track.add(
@@ -736,7 +741,7 @@ const track = omakasePlayer.track.add(
         // Assign a random colour to each marker before it is rendered
         omakasePlayer.ui.updateStyleRule({
           id: timedItem.id,
-          style: { color: ColorUtil.randomHexColor() },
+          style: {color: ColorUtil.randomHexColor()},
         });
       },
       afterCreate: (timedItem) => {
@@ -776,6 +781,7 @@ if (!track.areTimedItemsLocked) {
   track.addTimedItems(newMarker);
 }
 ```
+
 ---
 
 **`getTimedItem(id)`** — Returns the timed item with the given UUID, or `undefined` if not found.
@@ -809,7 +815,7 @@ track.deleteTimedItems(['uuid-1', 'uuid-2']);
 ```ts
 track.updateTimedItem('some-uuid', {
   label: 'Updated label',
-  temporal: { type: TimedItemTemporalType.MOMENT, time: '60' },
+  temporal: {type: TimedItemTemporalType.MOMENT, time: '60'},
 });
 ```
 
@@ -859,12 +865,12 @@ The **timeline** is an interactive canvas-based interface. It renders a playhead
 Call `createTimeline` on the player instance. It returns an `Observable<TimelineApi>` that emits once the timeline canvas has been mounted.
 
 ```ts
-import { OmakasePlayer } from '@byomakase/omakase-player';
+import {OmakasePlayer} from '@byomakase/omakase-player';
 
 omakasePlayer
   .createTimeline({
     style: {
-      stageMinWidth: 700,
+      minWidth: 700,
       backgroundFill: '#E4E5E5',
       headerBackgroundFill: '#EDEFEE',
       footerBackgroundFill: '#EDEFEE',
@@ -889,17 +895,59 @@ omakasePlayer
 
 The created timeline is also accessible at `omakasePlayer.timeline` after creation.
 
-### Adding and removing lanes
+### Configuration
+
+`createTimeline` accepts a `TimelineConfig` object alongside `style` (passed as top-level fields, not nested under `style`):
+
+| Field                               | Type      | Default              | Description                                                                                                                  |
+| ----------------------------------- | --------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `htmlElementId`                     | `string`  | `'omakase-timeline'` | Id of the DOM element the timeline canvas mounts into.                                                                       |
+| `scrubberSnapArea`                  | `number`  | `5`                  | Pixel distance from the playhead within which the hover scrubber snaps to it.                                                |
+| `playheadDragScrollMaxSpeedAfterPx` | `number`  | `100`                | Pixel distance past the viewport edge, while dragging the playhead, beyond which auto-scroll speed is capped at its maximum. |
+| `zoomWheelEnabled`                  | `boolean` | `true`               | Enables zooming the timeline with the mouse wheel.                                                                           |
+| `zoomScale`                         | `number`  | `1.7`                | Zoom multiplier applied per `zoomInEased()`/`zoomOutEased()` call.                                                           |
+| `zoomScaleWheel`                    | `number`  | `1.05`               | Zoom multiplier applied per mouse-wheel zoom step.                                                                           |
+| `zoomBaseline`                      | `number`  | `100`                | Minimum zoom percent (fully zoomed out).                                                                                     |
+| `zoomMax`                           | `number`  | `2000`               | Maximum zoom percent (fully zoomed in).                                                                                      |
+| `layoutEasingDuration`              | `number`  | `500`                | Default easing duration in milliseconds for lane minimize/maximize animations.                                               |
+| `zoomEasingDuration`                | `number`  | `800`                | Default easing duration in milliseconds for `zoomToEased`/`zoomInEased`/`zoomOutEased`/`zoomToMaxEased`.                     |
+| `scrollEasingDuration`              | `number`  | `200`                | Default easing duration in milliseconds for `scrollToEased`/`scrollToPlayheadEased`.                                         |
+| `scrubberClickSeek`                 | `boolean` | `true`               | Clicking the timecode axis seeks playback to that position.                                                                  |
+| `timecodeClickEdit`                 | `boolean` | `true`               | Double-clicking the CTI timecode display toggles it into an editable state (see `toggleTimecodeEdit()`).                     |
 
 ```ts
-// Add a single lane
+omakasePlayer.createTimeline({
+  zoomMax: 4000,
+  scrubberClickSeek: false,
+  style: {
+    /* ... */
+  },
+});
+```
+
+### Adding and removing lanes
+
+A timeline has three slots — `HEADER`, `MAIN`, and `FOOTER` — stacked vertically, with `MAIN` the primary, scrollable content area. Lanes are added to the `MAIN` slot by default. The `HEADER` slot always contains the built-in [scrubber lane](#scrubber-lane) in addition to any lanes you add. See [Slots](#slots) for the slot-level API and for adding lanes to `HEADER`/`FOOTER`.
+
+```ts
+import {TimelineSlotType} from '@byomakase/omakase-player';
+
+// Add a single lane (defaults to the MAIN slot, appended at the end)
 timeline.addTimelineLane(lane);
 
-// Add a lane at a specific index
-timeline.addTimelineLaneAtIndex(lane, 0);
+// Add a lane at a specific index within its slot
+timeline.addTimelineLane(lane, {index: 0});
 
-// Add multiple lanes at once
+// Add a lane to a specific slot
+timeline.addTimelineLane(lane, {slot: TimelineSlotType.HEADER});
+
+// Add a lane to a specific slot at a specific index
+timeline.addTimelineLane(lane, {slot: TimelineSlotType.FOOTER, index: 0});
+
+// Add multiple lanes at once — same {index, slot} options as addTimelineLane;
+// index is the starting index and each subsequent lane is inserted right after the previous one
 timeline.addTimelineLanes([laneA, laneB, laneC]);
+timeline.addTimelineLanes([laneA, laneB], {slot: TimelineSlotType.HEADER});
 
 // Remove by id
 timeline.removeTimelineLane(lane.id);
@@ -907,9 +955,50 @@ timeline.removeTimelineLanes([laneA.id, laneB.id]);
 timeline.removeAllTimelineLanes();
 
 // Retrieve lanes
-const all = timeline.getTimelineLanes();
+const mainLanes = timeline.getTimelineLanes(); // MAIN slot only (backward-compatible shortcut)
+const headerLanes = timeline.getTimelineLanes(TimelineSlotType.HEADER);
 const single = timeline.getTimelineLane<MarkerTrackLane>('some-id');
-const scrubber = timeline.getScrubberLane();
+const scrubber = timeline.scrubberLane;
+```
+
+### Slots
+
+Every timeline has three slots, each implementing `TimelineSlotApi`:
+
+| Slot     | Behaviour                                                                                                                           |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `HEADER` | Adaptive height (grows/shrinks with its lanes), stacked above `MAIN`. Always contains the built-in [scrubber lane](#scrubber-lane). |
+| `MAIN`   | Bounded/scrollable height — the primary content area. The only slot with real vertical scroll.                                      |
+| `FOOTER` | Adaptive height, stacked below `MAIN`.                                                                                              |
+
+```ts
+import {TimelineSlotType, TimelineSlotEventType} from '@byomakase/omakase-player';
+
+const mainSlot = timeline.getSlot(TimelineSlotType.MAIN);
+
+mainSlot.addTimelineLane(lane); // appends to this slot; accepts an optional index
+mainSlot.removeTimelineLane(lane.id);
+mainSlot.getTimelineLanes();
+mainSlot.getEffectiveHeight(); // current rendered height in pixels
+mainSlot.getContentHeight(); // total height of all lanes in this slot, in pixels
+mainSlot.setVerticalScrollbarVisible(true); // MAIN only; no-op on HEADER/FOOTER
+
+// Vertical scroll — only meaningful for MAIN; HEADER/FOOTER expose a no-op adapter
+mainSlot.scroll.scrollTo(50); // percent, 0-100
+mainSlot.scroll.scrollBy(10, {easing: true});
+mainSlot.scroll.onScroll$.subscribe(({scrollPercent, deltaPercent}) => {
+  /* ... */
+});
+
+// Slot-level events — resize (any slot) and scroll (MAIN only)
+mainSlot.onEvent$.subscribe((event) => {
+  if (event.type === TimelineSlotEventType.TIMELINE_SLOT_RESIZE) {
+    console.log('slot height may have changed');
+  }
+  if (event.type === TimelineSlotEventType.TIMELINE_SLOT_SCROLL) {
+    console.log(event.data.scrollPercent, event.data.deltaPercent);
+  }
+});
 ```
 
 ### Common lane configuration
@@ -918,32 +1007,31 @@ Every lane type extends `TimelineLaneConfig` and `TimelineLaneStyle`.
 
 **`TimelineLaneConfig`**
 
-| Field | Type | Description |
-|---|---|---|
-| `description` | `string` | Text shown in the left description pane. When omitted, the associated track's `label` is used automatically. |
-| `minimized` | `boolean` | Start the lane in its collapsed (zero-height) state. Defaults to `false`. |
-| `layoutEasingDuration` | `number` | Easing duration in milliseconds for minimize/maximize animations. |
+| Field                  | Type      | Description                                                                                                  |
+| ---------------------- | --------- | ------------------------------------------------------------------------------------------------------------ |
+| `description`          | `string`  | Text shown in the left description pane. When omitted, the associated track's `label` is used automatically. |
+| `minimized`            | `boolean` | Start the lane in its collapsed (zero-height) state. Defaults to `false`.                                    |
+| `layoutEasingDuration` | `number`  | Easing duration in milliseconds for minimize/maximize animations.                                            |
 
 Every lane exposes `minimize()`, `maximize()`, and `toggleMinimizeMaximize()`. All three accept an optional `TimelineLaneMinimizeMaximizeArgs` object:
 
-| Field | Type | Description |
-|---|---|---|
-| `easing` | `boolean` | Animate the height change. Defaults to `false`. |
-| `duration` | `number` | Animation duration in milliseconds. Defaults to the timeline easing duration. |
+| Field      | Type               | Description                                                                                       |
+| ---------- | ------------------ | ------------------------------------------------------------------------------------------------- |
+| `easing`   | `boolean`          | Animate the height change. Defaults to `false`.                                                   |
+| `duration` | `number`           | Animation duration in milliseconds. Defaults to the timeline easing duration.                     |
 | `complete` | `Observable<void>` | **Set by the method.** Completes when the operation finishes. Subscribe after calling the method. |
 
 ```ts
-const args: TimelineLaneMinimizeMaximizeArgs = { easing: true };
+const args: TimelineLaneMinimizeMaximizeArgs = {easing: true};
 lane.minimize(args);
-args.complete!.subscribe({ complete: () => console.log('minimize done') });
+args.complete!.subscribe({complete: () => console.log('minimize done')});
 ```
 
 ### Lane types
 
 #### Scrubber lane
 
-The **scrubber lane** is created automatically when a timeline is instantiated and cannot be removed. It renders timecode ticks along the time axis and drives the hover scrubber. Retrieve the instance with `timeline.getScrubberLane()`.
-
+The **scrubber lane** is created automatically in the `HEADER` slot when a timeline is instantiated, and cannot be removed or moved to another slot. It renders timecode ticks along the time axis and drives the hover scrubber. Retrieve the instance with `timeline.scrubberLane`.
 
 ---
 
@@ -952,7 +1040,7 @@ The **scrubber lane** is created automatically when a timeline is instantiated a
 A **`MarkerTrackLane`** is a multi-track lane — it can hold one or more `MarkerTrack` instances simultaneously. Each marker appears as a symbol (moment markers) or a shaded region (spanning markers). After adding the lane to the timeline, call `addTrack` to bind a track. Each track can carry its own per-track style.
 
 ```ts
-import { MarkerTrackLane } from '@byomakase/omakase-player';
+import {MarkerTrackLane} from '@byomakase/omakase-player';
 
 const markerLane = new MarkerTrackLane({
   description: 'Scene cuts',
@@ -967,7 +1055,7 @@ markerLane.addTrack(markerTrack);
 ```ts
 // Two tracks rendered in the same lane with different colors
 markerLane.addTrack(dialogTrack, {
-  style: { markerColor: '#2196f3' },
+  style: {markerColor: '#2196f3'},
 });
 
 markerLane.addTrack(blackSegmentsTrack, {
@@ -980,22 +1068,22 @@ markerLane.addTrack(blackSegmentsTrack, {
 
 **Per-track config fields** (passed as second argument to `addTrack`)
 
-| Field | Type | Description |
-|---|---|---|
-| `trackOrderIndex` | `number` | Zero-based index at which to insert the track. Appended at the end when omitted. |
-| `style.markerColor` | `string` | Colour applied to all markers from this track. |
-| `style.markerRenderType` | `string` | Render mode: `'default'`, `'spanning'`, or `'spanning-over-all-lanes'`. |
+| Field                    | Type     | Description                                                                      |
+| ------------------------ | -------- | -------------------------------------------------------------------------------- |
+| `trackOrderIndex`        | `number` | Zero-based index at which to insert the track. Appended at the end when omitted. |
+| `style.markerColor`      | `string` | Colour applied to all markers from this track.                                   |
+| `style.markerRenderType` | `string` | Render mode: `'default'`, `'spanning'`, or `'spanning-over-all-lanes'`.          |
 
 **Events** — emitted via `markerLane.onEvent$`
 
-| Event type | Payload | Description |
-|---|---|---|
-| `TIMELINE_MARKER_TRACK_LANE_ITEM_CLICK` | `{ item: MarkerState }` | A marker was clicked. |
+| Event type                                    | Payload                 | Description                   |
+| --------------------------------------------- | ----------------------- | ----------------------------- |
+| `TIMELINE_MARKER_TRACK_LANE_ITEM_CLICK`       | `{ item: MarkerState }` | A marker was clicked.         |
 | `TIMELINE_MARKER_TRACK_LANE_ITEM_MOUSE_ENTER` | `{ item: MarkerState }` | The pointer entered a marker. |
-| `TIMELINE_MARKER_TRACK_LANE_ITEM_MOUSE_LEAVE` | `{ item: MarkerState }` | The pointer left a marker. |
+| `TIMELINE_MARKER_TRACK_LANE_ITEM_MOUSE_LEAVE` | `{ item: MarkerState }` | The pointer left a marker.    |
 
 ```ts
-import { MarkerTrackLaneEventType } from '@byomakase/omakase-player';
+import {MarkerTrackLaneEventType} from '@byomakase/omakase-player';
 
 markerLane.onEvent$.subscribe((event) => {
   if (event.type === MarkerTrackLaneEventType.TIMELINE_MARKER_TRACK_LANE_ITEM_CLICK) {
@@ -1008,13 +1096,10 @@ markerLane.onEvent$.subscribe((event) => {
 
 ```ts
 // Apply a style to specific markers by their IDs
-markerLane.setMarkerViewStyle(
-  { markerColor: '#ff0000', markerRenderType: 'default' },
-  [markerId1, markerId2]
-);
+markerLane.setMarkerViewStyle({markerColor: '#ff0000', markerRenderType: 'default'}, [markerId1, markerId2]);
 
 // Apply a style to all markers in the lane
-markerLane.setMarkerViewStyle({ markerColor: '#00ff00' });
+markerLane.setMarkerViewStyle({markerColor: '#00ff00'});
 ```
 
 ---
@@ -1024,7 +1109,7 @@ markerLane.setMarkerViewStyle({ markerColor: '#00ff00' });
 A **`ThumbnailTrackLane`** renders a `ThumbnailTrack` as a filmstrip of images across the timeline. After adding the lane, call `setTrack` to bind it to a loaded `ThumbnailTrack`. To also enable the timeline-wide thumbnail hover preview, call `timeline.setThumbnailTrack(track)`.
 
 ```ts
-import { ThumbnailTrackLane } from '@byomakase/omakase-player';
+import {ThumbnailTrackLane} from '@byomakase/omakase-player';
 
 const thumbnailLane = new ThumbnailTrackLane();
 
@@ -1035,20 +1120,18 @@ timeline.addTimelineLane(thumbnailLane);
 
 **Events** — emitted via `thumbnailLane.onEvent$`
 
-| Event type | Payload | Description |
-|---|---|---|
-| `TIMELINE_THUMBNAIL_TRACK_LANE_THUMBNAIL_CLICK` | `{ thumbnailTrackImg: ThumbnailTrackImgState }` | A thumbnail was clicked. |
+| Event type                                            | Payload                                         | Description                      |
+| ----------------------------------------------------- | ----------------------------------------------- | -------------------------------- |
+| `TIMELINE_THUMBNAIL_TRACK_LANE_THUMBNAIL_CLICK`       | `{ thumbnailTrackImg: ThumbnailTrackImgState }` | A thumbnail was clicked.         |
 | `TIMELINE_THUMBNAIL_TRACK_LANE_THUMBNAIL_MOUSE_ENTER` | `{ thumbnailTrackImg: ThumbnailTrackImgState }` | The pointer entered a thumbnail. |
-| `TIMELINE_THUMBNAIL_TRACK_LANE_THUMBNAIL_MOUSE_LEAVE` | `{ thumbnailTrackImg: ThumbnailTrackImgState }` | The pointer left a thumbnail. |
+| `TIMELINE_THUMBNAIL_TRACK_LANE_THUMBNAIL_MOUSE_LEAVE` | `{ thumbnailTrackImg: ThumbnailTrackImgState }` | The pointer left a thumbnail.    |
 
 ```ts
-import { ThumbnailTrackLaneEventType, TimedItemTemporalUtil } from '@byomakase/omakase-player';
+import {ThumbnailTrackLaneEventType, TimedItemTemporalUtil} from '@byomakase/omakase-player';
 
 thumbnailLane.onEvent$.subscribe((event) => {
   if (event.type === ThumbnailTrackLaneEventType.TIMELINE_THUMBNAIL_TRACK_LANE_THUMBNAIL_CLICK) {
-    const startTime = TimedItemTemporalUtil.extractStartTime(
-      event.data.thumbnailTrackImg.thumbnail.temporal
-    );
+    const startTime = TimedItemTemporalUtil.extractStartTime(event.data.thumbnailTrackImg.thumbnail.temporal);
     omakasePlayer.player.seekTo(Number(startTime));
   }
 });
@@ -1061,7 +1144,7 @@ thumbnailLane.onEvent$.subscribe((event) => {
 A **`TextTrackLane`** renders a `TextTrack` (subtitles or captions) as coloured blocks whose width represents each cue's duration. Adjacent cues separated by less than half a pixel are merged into a single block. After adding the lane, call `setTrack` to bind it to a loaded `TextTrack`.
 
 ```ts
-import { TextTrackLane } from '@byomakase/omakase-player';
+import {TextTrackLane} from '@byomakase/omakase-player';
 
 const textLane = new TextTrackLane({
   description: 'Subtitles',
@@ -1073,18 +1156,21 @@ timeline.addTimelineLane(textLane);
 
 **Events** — emitted via `textLane.onEvent$`
 
-| Event type | Payload | Description |
-|---|---|---|
-| `TIMELINE_TEXT_TRACK_LANE_ITEM_CLICK` | `{ cues: TextCue[] }` | A cue block was clicked. The array contains all cues merged into that block. |
-| `TIMELINE_TEXT_TRACK_LANE_ITEM_MOUSE_ENTER` | `{ cues: TextCue[] }` | The pointer entered a cue block. |
-| `TIMELINE_TEXT_TRACK_LANE_ITEM_MOUSE_LEAVE` | `{ cues: TextCue[] }` | The pointer left a cue block. |
+| Event type                                  | Payload               | Description                                                                  |
+| ------------------------------------------- | --------------------- | ---------------------------------------------------------------------------- |
+| `TIMELINE_TEXT_TRACK_LANE_ITEM_CLICK`       | `{ cues: TextCue[] }` | A cue block was clicked. The array contains all cues merged into that block. |
+| `TIMELINE_TEXT_TRACK_LANE_ITEM_MOUSE_ENTER` | `{ cues: TextCue[] }` | The pointer entered a cue block.                                             |
+| `TIMELINE_TEXT_TRACK_LANE_ITEM_MOUSE_LEAVE` | `{ cues: TextCue[] }` | The pointer left a cue block.                                                |
 
 ```ts
-import { TextTrackLaneEventType } from '@byomakase/omakase-player';
+import {TextTrackLaneEventType} from '@byomakase/omakase-player';
 
 textLane.onEvent$.subscribe((event) => {
   if (event.type === TextTrackLaneEventType.TIMELINE_TEXT_TRACK_LANE_ITEM_CLICK) {
-    console.log('Cue text:', event.data.cues.map((c) => c.text));
+    console.log(
+      'Cue text:',
+      event.data.cues.map((c) => c.text)
+    );
   }
 });
 ```
@@ -1096,7 +1182,7 @@ textLane.onEvent$.subscribe((event) => {
 A **`LabelLane`** renders a static text string in the timeline. It has no associated track and is useful for grouping or annotating other lanes visually. The `text` field is required.
 
 ```ts
-import { LabelLane } from '@byomakase/omakase-player';
+import {LabelLane} from '@byomakase/omakase-player';
 
 const labelLane = new LabelLane({
   text: 'Audio tracks',
@@ -1117,17 +1203,17 @@ timeline.addTimelineLane(labelLane);
 A **`BarChartLane`** is a multi-track lane that renders time-series observation data as vertical bars. Each track is added via `addTrack` with its own scale, interpolation settings, and per-measurement visual style.
 
 ```ts
-import { BarChartLane } from '@byomakase/omakase-player';
+import {BarChartLane} from '@byomakase/omakase-player';
 
 const lane = new BarChartLane({
   description: 'Loudness',
-  style: { height: 80 },
+  style: {height: 80},
 });
 
 timeline.addTimelineLane(lane);
 
 lane.addTrack(observationTrack, {
-  scale: { min: -1, max: 1 },
+  scale: {min: -1, max: 1},
   scaleBaseline: 0,
   interpolationStrategy: 'avg',
   interpolationWidth: 5,
@@ -1152,31 +1238,31 @@ lane.addTrack(observationTrack, {
 
 **Per-track config fields** (passed as second argument to `addTrack`)
 
-| Field | Type | Description |
-|---|---|---|
-| `scale` | `{ min, max }` | Value domain. Auto-derived from data when omitted. |
-| `scaleBaseline` | `number` | Value that maps to the bar baseline (zero-crossing). Defaults to `0`. |
-| `interpolationStrategy` | `'avg' \| 'max' \| 'min'` | Aggregation strategy when multiple samples fall in one bucket. |
-| `interpolationWidth` | `number` | Width in pixels of one interpolation bucket. |
-| `style.measurements` | `Partial<BarChartLaneTrackMeasurementStyle>[]` | Per-measurement visual overrides. |
+| Field                   | Type                                           | Description                                                           |
+| ----------------------- | ---------------------------------------------- | --------------------------------------------------------------------- |
+| `scale`                 | `{ min, max }`                                 | Value domain. Auto-derived from data when omitted.                    |
+| `scaleBaseline`         | `number`                                       | Value that maps to the bar baseline (zero-crossing). Defaults to `0`. |
+| `interpolationStrategy` | `'avg' \| 'max' \| 'min'`                      | Aggregation strategy when multiple samples fall in one bucket.        |
+| `interpolationWidth`    | `number`                                       | Width in pixels of one interpolation bucket.                          |
+| `style.measurements`    | `Partial<BarChartLaneTrackMeasurementStyle>[]` | Per-measurement visual overrides.                                     |
 
 **Per-measurement style fields** (`BarChartLaneTrackMeasurementStyle`)
 
-| Field | Type | Description |
-|---|---|---|
-| `measurement` | `string` | Measurement to match (e.g. `'max'`, `'min'`, `'value'`). |
-| `barType` | `'default' \| 'og'` | `'default'` draws rectangles; `'og'` draws a column of stacked circles. |
-| `fill` | `string` | Solid fill color. |
-| `fillLinearGradientColorStops` | `(number \| string)[]` | Gradient color stops (Konva format). Used when `fill` is not set. |
-| `opacity` | `number` | Bar opacity (0–1). |
-| `cornerRadius` | `number \| [number, number, number, number]` | Corner radius for `'default'` bars. |
-| `paddingX` | `number \| [number, number]` | Horizontal padding inside the bar's width. Single value = symmetric; tuple = `[left, right]`. |
+| Field                          | Type                                         | Description                                                                                   |
+| ------------------------------ | -------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `measurement`                  | `string`                                     | Measurement to match (e.g. `'max'`, `'min'`, `'value'`).                                      |
+| `barType`                      | `'default' \| 'og'`                          | `'default'` draws rectangles; `'og'` draws a column of stacked circles.                       |
+| `fill`                         | `string`                                     | Solid fill color.                                                                             |
+| `fillLinearGradientColorStops` | `(number \| string)[]`                       | Gradient color stops (Konva format). Used when `fill` is not set.                             |
+| `opacity`                      | `number`                                     | Bar opacity (0–1).                                                                            |
+| `cornerRadius`                 | `number \| [number, number, number, number]` | Corner radius for `'default'` bars.                                                           |
+| `paddingX`                     | `number \| [number, number]`                 | Horizontal padding inside the bar's width. Single value = symmetric; tuple = `[left, right]`. |
 
 **OG bar type example:**
 
 ```ts
 lane.addTrack(observationTrack, {
-  scale: { min: -1, max: 1 },
+  scale: {min: -1, max: 1},
   scaleBaseline: 0,
   style: {
     measurements: [
@@ -1198,17 +1284,17 @@ lane.addTrack(observationTrack, {
 A **`LineChartLane`** is a multi-track lane that renders time-series observation data as a polyline connecting interpolated data points. Each track is added via `addTrack` with its own scale, interpolation settings, and per-measurement visual style. Area fills above and below the line are optional.
 
 ```ts
-import { LineChartLane } from '@byomakase/omakase-player';
+import {LineChartLane} from '@byomakase/omakase-player';
 
 const lane = new LineChartLane({
   description: 'Waveform',
-  style: { height: 100 },
+  style: {height: 100},
 });
 
 timeline.addTimelineLane(lane);
 
 lane.addTrack(observationTrack, {
-  scale: { min: -1, max: 1 },
+  scale: {min: -1, max: 1},
   scaleBaseline: 0,
   interpolationStrategy: 'avg',
   interpolationWidth: 5,
@@ -1230,26 +1316,26 @@ lane.addTrack(observationTrack, {
 
 **Per-measurement style fields** (`LineChartLaneTrackMeasurementStyle`)
 
-| Field | Type | Description |
-|---|---|---|
-| `measurement` | `string` | Measurement to match. |
-| `lineStroke` | `string` | Polyline color. |
-| `lineStrokeWidth` | `number` | Polyline width in pixels. |
-| `lineDash` | `number[]` | Dash pattern (Konva format). |
-| `lineOpacity` | `number` | Polyline opacity (0–1). |
-| `pointRadius` | `number` | Data-point circle radius in pixels. |
-| `pointFill` | `string` | Data-point fill color. |
-| `pointOpacity` | `number` | Data-point opacity (0–1). |
-| `fillBelow` | `string` | Solid fill for the area below the line. |
+| Field                               | Type                   | Description                                                    |
+| ----------------------------------- | ---------------------- | -------------------------------------------------------------- |
+| `measurement`                       | `string`               | Measurement to match.                                          |
+| `lineStroke`                        | `string`               | Polyline color.                                                |
+| `lineStrokeWidth`                   | `number`               | Polyline width in pixels.                                      |
+| `lineDash`                          | `number[]`             | Dash pattern (Konva format).                                   |
+| `lineOpacity`                       | `number`               | Polyline opacity (0–1).                                        |
+| `pointRadius`                       | `number`               | Data-point circle radius in pixels.                            |
+| `pointFill`                         | `string`               | Data-point fill color.                                         |
+| `pointOpacity`                      | `number`               | Data-point opacity (0–1).                                      |
+| `fillBelow`                         | `string`               | Solid fill for the area below the line.                        |
 | `fillBelowLinearGradientColorStops` | `(number \| string)[]` | Gradient color stops for the area below the line (top→bottom). |
-| `fillAbove` | `string` | Solid fill for the area above the line. |
+| `fillAbove`                         | `string`               | Solid fill for the area above the line.                        |
 | `fillAboveLinearGradientColorStops` | `(number \| string)[]` | Gradient color stops for the area above the line (bottom→top). |
 
 **Area fill example:**
 
 ```ts
 lane.addTrack(observationTrack, {
-  scale: { min: -1, max: 1 },
+  scale: {min: -1, max: 1},
   scaleBaseline: 0,
   style: {
     measurements: [
@@ -1268,11 +1354,11 @@ lane.addTrack(observationTrack, {
 
 ```ts
 lane.addTrack(leftChannelTrack, {
-  style: { measurements: [{ measurement: 'value', lineStroke: '#2196f3', lineStrokeWidth: 1.5 }] },
+  style: {measurements: [{measurement: 'value', lineStroke: '#2196f3', lineStrokeWidth: 1.5}]},
 });
 
 lane.addTrack(rightChannelTrack, {
-  style: { measurements: [{ measurement: 'value', lineStroke: '#f67944', lineStrokeWidth: 1.5 }] },
+  style: {measurements: [{measurement: 'value', lineStroke: '#f67944', lineStrokeWidth: 1.5}]},
 });
 ```
 
@@ -1281,7 +1367,7 @@ lane.addTrack(rightChannelTrack, {
 A **`ScrollbarLane`** renders a horizontal scrollbar that lets users pan and zoom the timeline. It has no associated track. The scrollbar handle reflects the current scroll position and its width reflects the current zoom level — dragging it scrolls the timeline, and pinching or scrolling on it zooms in/out.
 
 ```ts
-import { ScrollbarLane } from '@byomakase/omakase-player';
+import {ScrollbarLane} from '@byomakase/omakase-player';
 
 const scrollbarLane = new ScrollbarLane({
   style: {
@@ -1302,18 +1388,46 @@ timeline.addTimelineLane(scrollbarLane);
 
 **`ScrollbarLaneStyle`**
 
-| Field | Type | Description |
-|---|---|---|
-| `scrollbarWidth` | `number \| string` | Width of the scrollbar track. Accepts a pixel value or `'100%'` to fill the lane. Defaults to `'100%'`. |
-| `scrollbarHeight` | `number \| undefined` | Height of the scrollbar handle bar in pixels. When omitted, fills the full lane height. |
-| `scrollbarBackgroundFill` | `Color` | Fill color of the scrollbar track background. |
-| `scrollbarBackgroundFillOpacity` | `number` | Opacity of the track background (0–1). |
-| `scrollbarHandleBarFill` | `Color` | Fill color of the draggable handle bar. |
-| `scrollbarHandleBarOpacity` | `number` | Opacity of the handle bar (0–1). |
-| `scrollbarHandleOpacity` | `number` | Opacity of the entire scrollbar handle (0–1). |
-| `scrollbarJustify` | `'start' \| 'center' \| 'end'` | Vertical alignment of the scrollbar within the lane. Defaults to `'center'`. |
+| Field                            | Type                           | Description                                                                                             |
+| -------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `scrollbarWidth`                 | `number \| string`             | Width of the scrollbar track. Accepts a pixel value or `'100%'` to fill the lane. Defaults to `'100%'`. |
+| `scrollbarHeight`                | `number \| undefined`          | Height of the scrollbar handle bar in pixels. When omitted, fills the full lane height.                 |
+| `scrollbarBackgroundFill`        | `Color`                        | Fill color of the scrollbar track background.                                                           |
+| `scrollbarBackgroundFillOpacity` | `number`                       | Opacity of the track background (0–1).                                                                  |
+| `scrollbarHandleBarFill`         | `Color`                        | Fill color of the draggable handle bar.                                                                 |
+| `scrollbarHandleBarOpacity`      | `number`                       | Opacity of the handle bar (0–1).                                                                        |
+| `scrollbarHandleOpacity`         | `number`                       | Opacity of the entire scrollbar handle (0–1).                                                           |
+| `scrollbarJustify`               | `'start' \| 'center' \| 'end'` | Vertical alignment of the scrollbar within the lane. Defaults to `'center'`.                            |
 
 ---
+
+### Events
+
+All timeline-wide events are emitted via the `onEvent$` observable. The following event types are available:
+
+- `TimelineEventType.TIMELINE_READY` (triggered once the timeline canvas has been mounted)
+- `TimelineEventType.TIMELINE_SCROLL` (triggered on horizontal timeline scroll; `event.data.scrollPercent` is 0–100)
+- `TimelineEventType.TIMELINE_ZOOM` (triggered on zoom change; `event.data.zoomPercent` is 0–100)
+- `TimelineEventType.TIMELINE_SLOT_SCROLL` (triggered on vertical scroll of a slot — only `MAIN` scrolls vertically; `event.data` carries `slot`, `scrollPercent`, and `deltaPercent`)
+- `TimelineEventType.TIMELINE_TIMECODE_CLICK` (triggered when the timecode axis is clicked; carries `seconds`, `timecode`, `mouseEvent`, `pointerPosition`)
+- `TimelineEventType.TIMELINE_TIMECODE_MOUSE_MOVE` (triggered on mouse move over the timecode axis)
+- `TimelineEventType.TIMELINE_SCRUBBER_MOVE` (triggered as the hover scrubber moves; `event.data.snapped` indicates whether it snapped to the playhead)
+- `TimelineEventType.TIMELINE_PLAYHEAD_MOVE` (triggered as the playhead moves)
+
+```ts
+import {TimelineEventType} from '@byomakase/omakase-player';
+
+timeline.onEvent$.subscribe((event) => {
+  if (event.type === TimelineEventType.TIMELINE_SCROLL) {
+    console.log(event.data.scrollPercent);
+  }
+  if (event.type === TimelineEventType.TIMELINE_SLOT_SCROLL) {
+    console.log(event.data.slot, event.data.scrollPercent, event.data.deltaPercent);
+  }
+});
+```
+
+Each slot also exposes its own `onEvent$` (see [Slots](#slots)), carrying `TimelineSlotEventType.TIMELINE_SLOT_RESIZE` (effective/content height may have changed) and `TimelineSlotEventType.TIMELINE_SLOT_SCROLL` (vertical scroll, `MAIN` only — mirrors the slot's `scroll.onScroll$`).
 
 ## Marker List
 
@@ -1327,9 +1441,12 @@ The marker list web component will be added into an html element with id defined
 ```javascript
 import {MarkerList} from '@byomakase/omakase-player';
 
-const markerList = new MarkerList({
-  markerListHTMLElementId: 'marker-list',
-}, omakasePlayer);
+const markerList = new MarkerList(
+  {
+    markerListHTMLElementId: 'marker-list',
+  },
+  omakasePlayer
+);
 ```
 
 ### Loading markers from a VTT file
@@ -1345,27 +1462,30 @@ The `loadingHTMLElementId` parameter can specify HTML content to render while th
 ```
 
 ```javascript
-const markerList = new MarkerList({
-  markerListHTMLElementId: 'marker-list',
-  loadingHTMLElementId: 'loading-template',
-  markerTrack: {source: UrlSource.of('https://example.com/data/markers.vtt')},
-}, omakasePlayer);
+const markerList = new MarkerList(
+  {
+    markerListHTMLElementId: 'marker-list',
+    loadingHTMLElementId: 'loading-template',
+    markerTrack: {source: UrlSource.of('https://example.com/data/markers.vtt')},
+  },
+  omakasePlayer
+);
 ```
 
 ### Linking to marker tracks
 
-Marker list can be linked to one or more `MarkerTrack` instances. If linked in this way, the markers from the track(s) will appear on the marker list and stay in sync regardless of whether markers are added to the marker list or to the underlying tracks.
+Marker list can be linked to one or more `MarkerTrack` instances. Markers are managed on the track itself (see [Marker Track](#marker-track) above) — the marker list only reflects it, staying in sync whenever markers are added, updated, or removed on the linked track(s).
 
 ```javascript
 import {MarkerList, TrackSource} from '@byomakase/omakase-player';
 
-const markerList = new MarkerList({
-  markerListHTMLElementId: 'marker-list',
-  markerTrack: [
-    {source: TrackSource.fromTrack(markerTrack1)},
-    {source: TrackSource.fromTrack(markerTrack2)},
-  ],
-}, omakasePlayer);
+const markerList = new MarkerList(
+  {
+    markerListHTMLElementId: 'marker-list',
+    markerTrack: [{source: TrackSource.fromTrack(markerTrack1)}, {source: TrackSource.fromTrack(markerTrack2)}],
+  },
+  omakasePlayer
+);
 ```
 
 ### Thumbnails
@@ -1373,41 +1493,13 @@ const markerList = new MarkerList({
 A thumbnail track can be provided using the `thumbnailTrack` property. If provided, it will be used to automatically set the thumbnail to the closest VTT cue based on the marker start time.
 
 ```javascript
-const markerList = new MarkerList({
-  markerListHTMLElementId: 'marker-list',
-  thumbnailTrack: {source: UrlSource.of('https://example.com/data/thumbnails.vtt')},
-}, omakasePlayer);
-```
-
-### CRUD methods
-
-The following methods are available on the marker list. Usage examples are shown below.
-
-- `addMarker`
-- `updateMarker`
-- `removeMarker`
-- `removeAllMarkers`
-
-```javascript
-import {DefaultMarker, TimedItemTemporalType} from '@byomakase/omakase-player';
-
-// create a marker instance
-const marker = new DefaultMarker({
-  label: 'Marker',
-  temporal: {type: TimedItemTemporalType.SPAN, start: '100', end: '200'},
-});
-
-// add marker (track argument required when more than one track is linked)
-markerList.addMarker(marker);
-
-// update marker
-markerList.updateMarker(marker.id, {temporal: {type: TimedItemTemporalType.SPAN, start: '100', end: '300'}});
-
-// remove marker
-markerList.removeMarker(marker.id);
-
-// remove all markers
-markerList.removeAllMarkers();
+const markerList = new MarkerList(
+  {
+    markerListHTMLElementId: 'marker-list',
+    thumbnailTrack: {source: UrlSource.of('https://example.com/data/thumbnails.vtt')},
+  },
+  omakasePlayer
+);
 ```
 
 ### Styling and templating
@@ -1451,13 +1543,16 @@ The parameter `styleUrl` can be an array to provide multiple css files.
 ```
 
 ```javascript
-const markerList = new MarkerList({
-  markerListHTMLElementId: 'marker-list',
-  templateHTMLElementId: 'row-template',
-  headerHTMLElementId: 'header-template',
-  emptyHTMLElementId: 'empty-template',
-  styleUrl: './style.css',
-}, omakasePlayer);
+const markerList = new MarkerList(
+  {
+    markerListHTMLElementId: 'marker-list',
+    templateHTMLElementId: 'row-template',
+    headerHTMLElementId: 'header-template',
+    emptyHTMLElementId: 'empty-template',
+    styleUrl: './style.css',
+  },
+  omakasePlayer
+);
 ```
 
 ### Events
@@ -1467,7 +1562,7 @@ All events are emitted via the `onEvent$` observable. The following event types 
 - `MarkerListEventType.MARKER_LIST_ITEM_CLICK` (triggered when the marker row is clicked)
 - `MarkerListEventType.MARKER_LIST_ITEM_ACTION` (triggered when a custom element provided with an `action-<name>` slot is clicked)
 - `MarkerListEventType.MARKER_LIST_ITEM_DELETE` (triggered when a marker is deleted via the `remove` slot)
-- `MarkerListEventType.MARKER_LIST_TRACKS_LOADED` (triggered when all tracks supplied to the `markerTracks` config parameter are loaded)
+- `MarkerListEventType.MARKER_LIST_TRACKS_LOADED` (triggered when all tracks supplied to the `markerTrack` config parameter are loaded)
 - `MarkerListEventType.MARKER_LIST_ITEM_MOUSE_ENTER`
 - `MarkerListEventType.MARKER_LIST_ITEM_MOUSE_LEAVE`
 
@@ -1541,30 +1636,30 @@ vuMeter.setSource(source);
 
 `VuMeter` is constructed with a `VuMeterArgs` object.
 
-| Field       | Type                     | Description                                                                       |
-| ----------- | ------------------------ | --------------------------------------------------------------------------------- |
-| `player`    | `OmakasePlayerApi`       | Player instance. Required when using `audioType` or `trackId`.                                                                                    |
-| `audioType` | `PlayerAudioType`        | Audio source type for peak-processor-based sources: `MAIN` or `OUTPUT`. Not needed when using `trackId`.                                          |
-| `trackId`   | `string`                 | ID of a sidecar audio track or observation track. When provided with `player`, the source type is resolved automatically from the track type.     |
-| `source`    | `AudioLevelSourceApi`    | Pre-built audio level source. Takes precedence over `player`/`audioType`/`trackId`.                                                               |
-| `config`    | `Partial<VuMeterConfig>` | VU Meter configuration. See `VuMeterConfig` below.                                |
+| Field       | Type                     | Description                                                                                                                                   |
+| ----------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `player`    | `OmakasePlayerApi`       | Player instance. Required when using `audioType` or `trackId`.                                                                                |
+| `audioType` | `PlayerAudioType`        | Audio source type for peak-processor-based sources: `MAIN` or `OUTPUT`. Not needed when using `trackId`.                                      |
+| `trackId`   | `string`                 | ID of a sidecar audio track or observation track. When provided with `player`, the source type is resolved automatically from the track type. |
+| `source`    | `AudioLevelSourceApi`    | Pre-built audio level source. Takes precedence over `player`/`audioType`/`trackId`.                                                           |
+| `config`    | `Partial<VuMeterConfig>` | VU Meter configuration. See `VuMeterConfig` below.                                                                                            |
 
 #### `VuMeterConfig`
 
-| Field               | Type                    | Default                          | Description                                                                                                               |
-| ------------------- | ----------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `htmlElementId`     | `string`                | `'omakase-vu-meter'`             | ID of the HTML element where the VU Meter will be rendered.                                                               |
-| `htmlElement`       | `HTMLElement`           | —                                | HTML element to render into. Takes precedence over `htmlElementId` when both are provided.                                |
-| `theme`             | `VuMeterTheme`          | `DEFAULT`                        | `DEFAULT` renders filled bars; `LED` renders a column of discrete segments.                                               |
-| `orientation`       | `VuMeterOrientation`    | `VERTICAL`                       | `VERTICAL` stacks bars top-to-bottom; `HORIZONTAL` renders bars left-to-right.                                            |
-| `channels`          | `number`                | auto-detected                    | Number of channels to display (Can be 1, 2 or 6). Auto-detected from the source when omitted.                                                |
-| `scale`             | `VuMeterScale`          | `DEFAULT`                        | `DEFAULT`: As configured with other parameters. `NORDIC`: fixed 3 dB steps, 12 dB offset. `NONE`: no scale.           |
-| `rangeMinDb`        | `number`                | `-54`                            | Minimum dB value at the bottom of the scale.                                                                              |
-| `scaleStepDb`       | `number`                | `6`                              | Interval in dB between scale tick marks. Ignored when `scale` is `NORDIC`.                                                |
-| `scaleOffsetDb`     | `number`                | `0`                              | Offset applied to all scale label values. Ignored when `scale` is `NORDIC`.                                               |
-| `levelHoldDuration` | `number`                | `0`                              | Milliseconds the peak-hold indicator stays visible after a peak. `0` disables peak hold.                                  |
-| `labels`            | `string[]`              | `['L','R','C','LFE','Ls','Rs']`  | Channel labels displayed beneath each bar.                                                                                |
-| `style`             | `Partial<VuMeterStyle>` | See below                        | Visual style overrides. See `VuMeterStyle`.                                                                               |
+| Field               | Type                    | Default                         | Description                                                                                                 |
+| ------------------- | ----------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `htmlElementId`     | `string`                | `'omakase-vu-meter'`            | ID of the HTML element where the VU Meter will be rendered.                                                 |
+| `htmlElement`       | `HTMLElement`           | —                               | HTML element to render into. Takes precedence over `htmlElementId` when both are provided.                  |
+| `theme`             | `VuMeterTheme`          | `DEFAULT`                       | `DEFAULT` renders filled bars; `LED` renders a column of discrete segments.                                 |
+| `orientation`       | `VuMeterOrientation`    | `VERTICAL`                      | `VERTICAL` stacks bars top-to-bottom; `HORIZONTAL` renders bars left-to-right.                              |
+| `channels`          | `number`                | auto-detected                   | Number of channels to display (Can be 1, 2 or 6). Auto-detected from the source when omitted.               |
+| `scale`             | `VuMeterScale`          | `DEFAULT`                       | `DEFAULT`: As configured with other parameters. `NORDIC`: fixed 3 dB steps, 12 dB offset. `NONE`: no scale. |
+| `rangeMinDb`        | `number`                | `-54`                           | Minimum dB value at the bottom of the scale.                                                                |
+| `scaleStepDb`       | `number`                | `6`                             | Interval in dB between scale tick marks. Ignored when `scale` is `NORDIC`.                                  |
+| `scaleOffsetDb`     | `number`                | `0`                             | Offset applied to all scale label values. Ignored when `scale` is `NORDIC`.                                 |
+| `levelHoldDuration` | `number`                | `0`                             | Milliseconds the peak-hold indicator stays visible after a peak. `0` disables peak hold.                    |
+| `labels`            | `string[]`              | `['L','R','C','LFE','Ls','Rs']` | Channel labels displayed beneath each bar.                                                                  |
+| `style`             | `Partial<VuMeterStyle>` | See below                       | Visual style overrides. See `VuMeterStyle`.                                                                 |
 
 #### `VuMeterStyle`
 
@@ -1582,7 +1677,7 @@ Default `levelColors` for `Default` theme:
 | ------------ | --------- | ----------- |
 | `-18`        | `#008800` | `#00880088` |
 | `-12`        | `#04E400` | `#04E40088` |
-| `-9`        | `#F27100` | `#F2710088` |
+| `-9`         | `#F27100` | `#F2710088` |
 | `0`          | `#BB0000` | `#BB000088` |
 
 Default `levelColors` for `LED` theme:
@@ -1590,7 +1685,7 @@ Default `levelColors` for `LED` theme:
 | `maxValueDb` | `color`   | `holdColor` |
 | ------------ | --------- | ----------- |
 | `-15`        | `#04E400` | `#04E40088` |
-| `-9`        | `#F27100` | `#F2710088` |
+| `-9`         | `#F27100` | `#F2710088` |
 | `0`          | `#BB0000` | `#BB000088` |
 
 #### `VuMeterColor`
@@ -1605,30 +1700,30 @@ Default `levelColors` for `LED` theme:
 
 The VU Meter component exposes the following CSS variables for visual customization:
 
-| CSS Variable                        | Default                | Description                                                                                        |
-| ----------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------- |
-| `--omakase-vu-meter-font-size`              | `12px`                 | Font size for channel labels and scale text                                                        |
-| `--omakase-vu-meter-padding`                | `5px`                  | Padding around the entire VU meter component                                                       |
-| `--omakase-vu-meter-background-color`       | `transparent`          | Background color of the entire VU meter component                                                  |
-| `--omakase-vu-meter-label-background-color` | `transparent`          | Background color of the area behind channel labels                                                 |
-| `--omakase-vu-meter-label-color`            | `#333`                 | Text color of the channel labels                                                                   |
-| `--omakase-vu-meter-label-gap`              | `5px`                  | Gap between each channel label and its level bar                                                   |
-| `--omakase-vu-meter-label-width`            | `20px`                 | Width of the channel label area (horizontal orientation only)                                      |
-| `--omakase-vu-meter-label-height`           | `20px` | Height of the channel label area (vertical orientation only)                                       |
-| `--omakase-vu-meter-bar-size`               | `16px`                 | Bar width in vertical orientation; bar height in horizontal orientation                            |
-| `--omakase-vu-meter-bar-gap`                | `5px`                  | Gap between adjacent channel bars                                                                  |
-| `--omakase-vu-meter-bars-padding`                | `0px`                  | Padding around the bar area                                                                  |
-| `--omakase-vu-meter-scale-color`            | `#333`                 | Color of scale tick marks and label text                                                           |
-| `--omakase-vu-meter-scale-danger-color`            | `red`                 | Color of +6, +9 and +12 marks in NORDIC scale                                                           |
-| `--omakase-vu-meter-scale-background-color` | `transparent`          | Background color of the scale area                                                                 |
-| `--omakase-vu-meter-scale-padding`          | `0px`                  | Padding inside the scale container                                                                 |
-| `--omakase-vu-meter-scale-size`             | `16px`                 | Width of the tick column in vertical orientation; height of the tick row in horizontal orientation |
-| `--omakase-vu-meter-scale-gap`              | `4px`                  | Gap between the scale label column and the scale tick column                                       |
-| `--omakase-vu-meter-scale-margin`           | `5px`                  | Margin between the scale and the bar area                                                          |
-| `--omakase-vu-meter-scale-thickness`        | `1px`                  | Thickness of main scale division tick marks                                                        |
-| `--omakase-vu-meter-scale-subdivision-opacity` | `0.7`               | Opacity of subdivision tick marks                                  |
-| `--omakase-vu-meter-scale-label-width`      | `20px`                 | Width of the scale label column (vertical orientation only)                                        |
-| `--omakase-vu-meter-transition`             | `0.2s`                 | Duration of bar fill and clip-path transition animations                                           |
+| CSS Variable                                   | Default       | Description                                                                                        |
+| ---------------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------- |
+| `--omakase-vu-meter-font-size`                 | `12px`        | Font size for channel labels and scale text                                                        |
+| `--omakase-vu-meter-padding`                   | `5px`         | Padding around the entire VU meter component                                                       |
+| `--omakase-vu-meter-background-color`          | `transparent` | Background color of the entire VU meter component                                                  |
+| `--omakase-vu-meter-label-background-color`    | `transparent` | Background color of the area behind channel labels                                                 |
+| `--omakase-vu-meter-label-color`               | `#333`        | Text color of the channel labels                                                                   |
+| `--omakase-vu-meter-label-gap`                 | `5px`         | Gap between each channel label and its level bar                                                   |
+| `--omakase-vu-meter-label-width`               | `20px`        | Width of the channel label area (horizontal orientation only)                                      |
+| `--omakase-vu-meter-label-height`              | `20px`        | Height of the channel label area (vertical orientation only)                                       |
+| `--omakase-vu-meter-bar-size`                  | `16px`        | Bar width in vertical orientation; bar height in horizontal orientation                            |
+| `--omakase-vu-meter-bar-gap`                   | `5px`         | Gap between adjacent channel bars                                                                  |
+| `--omakase-vu-meter-bars-padding`              | `0px`         | Padding around the bar area                                                                        |
+| `--omakase-vu-meter-scale-color`               | `#333`        | Color of scale tick marks and label text                                                           |
+| `--omakase-vu-meter-scale-danger-color`        | `red`         | Color of +6, +9 and +12 marks in NORDIC scale                                                      |
+| `--omakase-vu-meter-scale-background-color`    | `transparent` | Background color of the scale area                                                                 |
+| `--omakase-vu-meter-scale-padding`             | `0px`         | Padding inside the scale container                                                                 |
+| `--omakase-vu-meter-scale-size`                | `16px`        | Width of the tick column in vertical orientation; height of the tick row in horizontal orientation |
+| `--omakase-vu-meter-scale-gap`                 | `4px`         | Gap between the scale label column and the scale tick column                                       |
+| `--omakase-vu-meter-scale-margin`              | `5px`         | Margin between the scale and the bar area                                                          |
+| `--omakase-vu-meter-scale-thickness`           | `1px`         | Thickness of main scale division tick marks                                                        |
+| `--omakase-vu-meter-scale-subdivision-opacity` | `0.7`         | Opacity of subdivision tick marks                                                                  |
+| `--omakase-vu-meter-scale-label-width`         | `20px`        | Width of the scale label column (vertical orientation only)                                        |
+| `--omakase-vu-meter-transition`                | `0.2s`        | Duration of bar fill and clip-path transition animations                                           |
 
 ## Development
 

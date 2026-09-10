@@ -22,7 +22,7 @@ import {MainMediaRepository, MainMediaRepositoryEventType, TrackRepository} from
 import {ObserverBreaker} from '../common/observer-breaker';
 import {errorCompleteObserver, freeObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
 import {MediaTemporalFormat, type MediaTemporalFormatValueMap, WindowPlaybackMode} from '../common';
-import {type MainMedia, type MainMediaLoadOptions, MainMediaType, SlateProvider, SlateType, type Track, TrackType} from '../media';
+import {type MainMedia, type MainMediaLoadOptions, MainMediaType, type MediaRotationValue, SlateProvider, SlateType, type Track, TrackType} from '../media';
 import {PlayerLocal} from './player-local';
 import {type MediaLoadRequest, type PlayerSession, SessionStore} from '../session';
 import {type PlayerAudioApi} from './player-audio-api';
@@ -32,6 +32,7 @@ import {UnsupportedMethodInDetachedError} from '../types';
 import type {PlayerPlaybackEngineMapping} from './player-playback-engine';
 import {type Source, SourceType, TrackSource, UrlSource} from '../source';
 import {MediaFactory} from '../media/media-factory';
+import type {MainMediaSessionManager} from '../media/main-media-session-manager';
 import {isString} from '../util/util-functions';
 import {PlayerText} from './player-text';
 import type {PlayerTextApi} from './player-text-api';
@@ -45,6 +46,8 @@ import {TextTrackUtil} from '../text/text-track-util';
 import type {OmpProvider} from '../omp-provider';
 import type {VideoKeyframe, VideoKeyframeOptions} from '../tools/keyframe-extractor';
 import {extractErrorMessage} from '../util/error-util';
+import {Validators} from '../common/validators';
+import {LivePlaybackTracker, type LivePlaybackTrackerApi} from '../live/live-model';
 
 export const PLAYER_CONFIG_DEFAULT: PlayerConfig = {
   ...COMMON_PLAYER_CONFIG_DEFAULT,
@@ -64,6 +67,9 @@ export interface PlayerPlayback {
   playbackRate: number;
 
   bufferedTimeRanges: BufferedTimeRange[];
+
+  /** Current video rotation in degrees. Always `0` while the loaded main media is audio-only. */
+  mediaRotation: MediaRotationValue;
 }
 
 export class Player implements PlayerApi, Destroyable {
@@ -74,6 +80,7 @@ export class Player implements PlayerApi, Destroyable {
 
   protected _sessionStore: SessionStore;
   protected _mainMediaRepository: MainMediaRepository;
+  protected _mainMediaSessionManager: MainMediaSessionManager;
   protected _trackRepository: TrackRepository;
   protected _trackUtils: TrackUtils;
   protected _slateProvider: SlateProvider;
@@ -84,6 +91,8 @@ export class Player implements PlayerApi, Destroyable {
   protected _playerAudio: PlayerAudio;
   protected _playerText: PlayerText;
 
+  protected _livePlaybackTracker: LivePlaybackTracker = new LivePlaybackTracker();
+
   protected _playerInternalSwitchBreaker = new ObserverBreaker();
 
   protected _destroyBreaker = new ObserverBreaker();
@@ -92,6 +101,7 @@ export class Player implements PlayerApi, Destroyable {
     this._alertsManager = ompProvider.alertsManager;
     this._sessionStore = ompProvider.sessionStore;
     this._mainMediaRepository = ompProvider.mainMediaRepository;
+    this._mainMediaSessionManager = ompProvider.mainMediaSessionManager;
     this._trackRepository = ompProvider.trackRepository;
     this._trackUtils = ompProvider.trackUtils;
     this._slateProvider = ompProvider.slateProvider;
@@ -143,6 +153,7 @@ export class Player implements PlayerApi, Destroyable {
 
     this._playerAudio.wirePlayer(playerInternal);
     this._playerText.wirePlayer(playerInternal);
+    this._livePlaybackTracker.wirePlayer(playerInternal);
   }
 
   protected isAttached(): boolean {
@@ -163,6 +174,10 @@ export class Player implements PlayerApi, Destroyable {
 
   get playerLocal(): PlayerLocalApi {
     return this._playerLocal;
+  }
+
+  get livePlaybackTracker(): LivePlaybackTrackerApi {
+    return this._livePlaybackTracker;
   }
 
   get playerDetached(): PlayerDetachedApi | undefined {
@@ -205,14 +220,18 @@ export class Player implements PlayerApi, Destroyable {
 
   loadMainMedia(url: string, loadOptions?: MainMediaLoadOptions | undefined): Observable<MainMedia> {
     this.checkIsStableWindowPlayback();
+    let resolvedLoadOptions = loadOptions?.mediaRotation !== undefined ? {...loadOptions, mediaRotation: this.sanitizeMediaRotation(loadOptions.mediaRotation)} : loadOptions;
     return passiveObservable((observer) => {
       let mediaLoadRequest = this._sessionStore.createMediaLoadRequest();
 
       this.unloadMainMedia()
         .pipe(
-          switchMap(() => MediaFactory.createMainMedia(UrlSource.of(url), loadOptions)),
+          switchMap(() => MediaFactory.createMainMedia(UrlSource.of(url), resolvedLoadOptions)),
           switchMap((mainMedia) => {
             mediaLoadRequest.mediaId = mainMedia.id;
+            if (mainMedia.mainMediaType === MainMediaType.AUDIO_FILE && loadOptions?.mediaRotation !== undefined) {
+              console.warn(`mediaRotation is ignored for audio-only main media`);
+            }
             return this._loadMainMedia(mainMedia).pipe(map(() => mainMedia));
           }),
           finalize(() => this._sessionStore.removeMediaLoadRequest(mediaLoadRequest))
@@ -229,7 +248,15 @@ export class Player implements PlayerApi, Destroyable {
 
   protected _loadMainMedia(mainMedia: MainMedia): Observable<MainMedia> {
     this._mainMediaRepository.add(mainMedia);
-    return this.isAttached() ? this._playerLocal.loadMainMedia(mainMedia.id) : this._playerDetached!.loadMainMedia(mainMedia.id).pipe(map((p) => mainMedia));
+
+    const sessionController = this._mainMediaSessionManager.create(mainMedia);
+
+    if (this.isAttached()) {
+      return this._playerLocal.loadMainMedia(mainMedia.id);
+    }
+
+    const prepare$ = sessionController ? sessionController.prepare() : of(void 0);
+    return prepare$.pipe(switchMap(() => this._playerDetached!.loadMainMedia(mainMedia.id).pipe(map(() => mainMedia))));
   }
 
   protected checkIsMediaLoaded(): void {
@@ -274,7 +301,7 @@ export class Player implements PlayerApi, Destroyable {
 
         // update args immediately if they're provided
         if (loadOptions?.args) {
-          existingTrack.updateAttrs(loadOptions.args)
+          existingTrack.updateAttrs(loadOptions.args);
         }
 
         track$ = of(existingTrack);
@@ -427,6 +454,10 @@ export class Player implements PlayerApi, Destroyable {
     return this.getPlayerInternalOrFail().seekFromCurrentTime(value, format);
   }
 
+  seekToLive(): Observable<boolean> {
+    return this.getPlayerInternalOrFail().seekToLive();
+  }
+
   convertTime<S extends MediaTemporalFormat, D extends MediaTemporalFormat>(value: MediaTemporalFormatValueMap[S], valueFormat: S, destinationFormat: D): MediaTemporalFormatValueMap[D];
   convertTime(value: MediaTemporalFormatValueMap[MediaTemporalFormat], valueFormat: MediaTemporalFormat, destinationFormat: MediaTemporalFormat): MediaTemporalFormatValueMap[MediaTemporalFormat] {
     return this.getPlayerInternalOrFail().convertTime(value, valueFormat, destinationFormat);
@@ -436,8 +467,23 @@ export class Player implements PlayerApi, Destroyable {
     return this.getPlayerInternalOrFail().setPlaybackRate(playbackRate);
   }
 
+  setMediaRotation(mediaRotation: MediaRotationValue): Observable<void> {
+    return this.getPlayerInternalOrFail().setMediaRotation(this.sanitizeMediaRotation(mediaRotation));
+  }
+
+  protected sanitizeMediaRotation(mediaRotation: MediaRotationValue): MediaRotationValue {
+    try {
+      return Validators.mediaRotation()(mediaRotation);
+    } catch {
+      this._alertsManager.error(`Invalid mediaRotation value: ${mediaRotation}. Allowed values are 0, 90, 180 and 270. Using 0 instead.`);
+      return 0;
+    }
+  }
+
   unloadMainMedia(): Observable<void> {
     return passiveObservable((observer) => {
+      this._mainMediaSessionManager.clear();
+
       this.getPlayerInternalOrFail()
         .unloadMainMedia()
         .subscribe({
@@ -531,6 +577,7 @@ export class Player implements PlayerApi, Destroyable {
     this._playerDetached?.destroy();
     this._playerAudio.destroy();
     this._playerText.destroy();
+    this._livePlaybackTracker.destroy();
 
     freeObserver(this._onEvent$);
   }

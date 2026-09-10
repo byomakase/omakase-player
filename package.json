@@ -1,6 +1,6 @@
 {
     "name": "@byomakase/omakase-player",
-    "version": "1.1.1",
+    "version": "1.2.0",
     "type": "module",
     "module": "./dist/omakase-player.es.js",
     "types": "./dist/omakase-player.es.d.ts",
@@ -41,6 +41,7 @@
         "@vitest/browser-playwright": "^4.1.9",
         "@vitest/ui": "^4.1.9",
         "jsdom": "^27.0.1",
+        "oidc-client-ts": "^3.5.0",
         "prettier": "^3.7.4",
         "sass": "^1.97.2",
         "typedoc": "^0.28.17",
@@ -51,14 +52,14 @@
         "vitest": "^4.1.9"
     },
     "dependencies": {
-        "@byomakase/omakase-ttconv-ts": "1.0.0",
+        "@byomakase/omakase-ttconv-ts": "1.1.0-SNAPSHOT.1788770467",
         "decimal.js": "^10.6.0",
-        "hls.js": "^1.6.15",
+        "hls.js": "1.6.15",
         "konva": "^10.2.0",
         "m3u8-parser": "^7.2.0",
         "media-captions": "^1.0.4",
         "media-chrome": "^4.17.2",
-        "mediabunny": "^1.16.1",
+        "mediabunny": "^1.55.7",
         "node-webvtt": "^1.9.4",
         "patch-package": "^8.0.1",
         "rxjs": "^7.8.2",

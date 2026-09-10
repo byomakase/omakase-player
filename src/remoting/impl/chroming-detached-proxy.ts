@@ -38,6 +38,7 @@ import {
   type StampThemeConfig,
   StampThemeFloatingControl,
   type VideoSafeZone,
+  VideoSafeZoneRenderingRegion,
 } from '../../chroming';
 import type {Destroyable} from '../../common/capabilities';
 import {type ChromingSession, SessionStore} from '../../session';
@@ -161,8 +162,8 @@ export class ChromingDetachedProxy extends BaseMessageChannelProxy<ChromingDetac
     return this.messageChannel.sendAndWaitForResponse('addHelpMenuGroup', [helpMenuGroup, insertPosition]);
   }
 
-  addSafeZone(videoSafeZone: Partial<VideoSafeZone>): Observable<VideoSafeZone> {
-    return this.messageChannel.sendAndWaitForResponse('addSafeZone', [videoSafeZone]);
+  addSafeZone(videoSafeZone: Partial<VideoSafeZone>, renderingRegion = VideoSafeZoneRenderingRegion.VIDEO): Observable<VideoSafeZone> {
+    return this.messageChannel.sendAndWaitForResponse('addSafeZone', [videoSafeZone, renderingRegion]);
   }
 
   clearHelpMenuGroups(): Observable<void> {

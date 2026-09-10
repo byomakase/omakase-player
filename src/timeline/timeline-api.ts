@@ -20,9 +20,18 @@ import type {TimelineLaneApi} from './timeline-lane-api';
 import {ScrubberLane} from './scrubber';
 import {ThumbnailTrack} from '../media';
 import type {Position} from './model';
+import type {TimelineSlotApi} from './timeline-slot-api';
+import type {TimelineSlotType} from './timeline-slot-type';
+import type {PrefixKeys} from '../types/ts-types';
+import type {VerticalScrollbarStyle} from './scrollbar/vertical-scrollbar';
+import type {PlayheadStyle} from './playhead';
+import type {PlayheadBufferStyle} from './playhead-buffer';
+import type {ScrubberStyle} from './scrubber/scrubber';
+import type {LiveEdgeOverlayStyle} from './live/live-edge-overlay';
+import type {EvictedRegionOverlayStyle} from './live/evicted-region-overlay';
+import type {VerticalScrollOptions} from './vertical-scroll';
 
 export type ConfigAndStyle<C, S> = Partial<C> & {style?: Partial<S>};
-
 
 export enum TimelineEventType {
   TIMELINE_READY = 'TIMELINE_READY',
@@ -31,16 +40,22 @@ export enum TimelineEventType {
 
   TIMELINE_SCROLL = 'TIMELINE_SCROLL',
   TIMELINE_ZOOM = 'TIMELINE_ZOOM',
-  TIMELINE_RESIZE = 'TIMELINE_RESIZE',
+  TIMELINE_SLOT_SCROLL = 'TIMELINE_SLOT_SCROLL',
 
   TIMELINE_TIMECODE_CLICK = 'TIMELINE_TIMECODE_CLICK',
   TIMELINE_TIMECODE_MOUSE_MOVE = 'TIMELINE_TIMECODE_MOUSE_MOVE',
   TIMELINE_SCRUBBER_MOVE = 'TIMELINE_SCRUBBER_MOVE',
   TIMELINE_PLAYHEAD_MOVE = 'TIMELINE_PLAYHEAD_MOVE',
+
+  /** Live mode only — fires whenever the rendered left bound advances; see {@link TimelineConfig.liveHistoryRetention}. */
+  TIMELINE_LIVE_ORIGIN_ADVANCED = 'TIMELINE_LIVE_ORIGIN_ADVANCED',
 }
 
 export interface TimelineState {
-
+  /** Whether the timeline is currently rendering live media. When false, {@link liveExtentEnd} is meaningless. */
+  isLive: boolean;
+  /** Right edge of the live coordinate domain (media-element-absolute time), including any reserved locked region. */
+  liveExtentEnd: number;
 }
 
 export interface TimelineEventData extends Serializable {
@@ -51,7 +66,15 @@ export interface TimelineScrollEventData {
   scrollPercent: number;
 }
 
-export interface TimelineResizeEventData extends TimelineEventData {}
+/**
+ * Emitted on vertical scroll of a slot. Currently only the MAIN slot scrolls vertically —
+ * HEADER and FOOTER never emit this.
+ */
+export interface TimelineSlotScrollEventData {
+  slot: TimelineSlotType;
+  scrollPercent: number;
+  deltaPercent: number;
+}
 
 export interface TimelineStyleChangeEventData {
   style: TimelineStyle;
@@ -90,6 +113,11 @@ export interface TimelineZoomEventData extends Serializable {
   zoomPercent: number;
 }
 
+/** `origin` is the new, advanced left edge of the live coordinate domain (media-element-absolute time). */
+export interface TimelineLiveOriginAdvancedEventData extends Serializable {
+  origin: number;
+}
+
 export type TimelineEventTypeDataMap = {
   [TimelineEventType.TIMELINE_READY]: TimelineEventData;
 
@@ -97,12 +125,13 @@ export type TimelineEventTypeDataMap = {
 
   [TimelineEventType.TIMELINE_SCROLL]: TimelineScrollEventData;
   [TimelineEventType.TIMELINE_ZOOM]: TimelineZoomEventData;
-  [TimelineEventType.TIMELINE_RESIZE]: TimelineResizeEventData;
+  [TimelineEventType.TIMELINE_SLOT_SCROLL]: TimelineSlotScrollEventData;
 
   [TimelineEventType.TIMELINE_TIMECODE_CLICK]: TimelineTimecodeClickEventData;
   [TimelineEventType.TIMELINE_TIMECODE_MOUSE_MOVE]: TimelineTimecodeMouseMoveEventData;
   [TimelineEventType.TIMELINE_SCRUBBER_MOVE]: TimelineScrubberMoveEventData;
   [TimelineEventType.TIMELINE_PLAYHEAD_MOVE]: TimelinePlayheadMoveEventData;
+  [TimelineEventType.TIMELINE_LIVE_ORIGIN_ADVANCED]: TimelineLiveOriginAdvancedEventData;
 };
 
 export type TimelineEvent = {
@@ -132,35 +161,102 @@ export interface TimelineConfig {
 
   scrubberClickSeek: boolean;
   timecodeClickEdit: boolean;
+
+  /**
+   * Live mode only. Seconds of "excess space" manually reserved as a locked/unreachable region past the
+   * live edge, absorbing manifest growth without reflowing the timeline until it's used up. When
+   * undefined, the locked region is always the automatic minimum (`liveEdgeDuration - liveSyncPosition`),
+   * so every manifest update that grows the edge reflows the timeline.
+   *
+   * Its "absorb without reflow" benefit is EVENT-mode-centric: for a CONTINUOUS (sliding-window)
+   * stream, `liveStartTime` drifts on essentially every manifest update regardless of this setting,
+   * which alone makes the timeline reflow-eligible — this option only governs whether the *extent*
+   * side of that reflow also grows, not whether a reflow happens at all. {@link liveReflowCadence} is
+   * the setting that actually throttles reflow frequency for CONTINUOUS streams.
+   */
+  liveEdgeBufferSpace?: number;
+
+  /**
+   * Live mode only. Minimum accumulated growth of `liveEdgeDuration` (seconds) required between
+   * geometry reflows (timecoded-width resize/reposition) while live. Segment/manifest updates that
+   * arrive in between are absorbed silently — the rendered width, scroll position, and every
+   * derived coordinate (ticks, markers, playhead) stay exactly as they were — until accumulated
+   * growth since the last reflow reaches this cadence, at which point a single reflow catches up
+   * all of the held growth at once. The live-edge-proximity overlay keeps tracking every update
+   * regardless of this setting. When undefined, every live-state update that changes the geometry
+   * reflows immediately (the previous default behavior).
+   */
+  liveReflowCadence?: number;
+
+  /**
+   * Live mode only. When `true`, an automatic scroll-to-live-edge snap animates the scroll position
+   * over {@link scrollEasingDuration} instead of jumping there instantly. The timeline's width still
+   * resizes immediately to fit the new extent — only the follow-scroll itself eases. Manual
+   * scrolling/zooming is unaffected. Defaults to `false` (instant snap).
+   */
+  liveScrollSmoothing?: boolean;
+
+  /**
+   * CONTINUOUS live mode only. Seconds of "evicted but still shown" slack the rendered timeline's
+   * left bound is allowed to lag behind the true, current live start by, **at all times** — a
+   * continuously-maintained rolling cap, not a one-time batch flush.
+   *
+   * Undefined (default): today's behavior — the left bound tracks the true live start exactly, on
+   * every reflow. The timeline never shows anything the player can no longer actually seek to.
+   *
+   * Set: the left bound trails the true live start by up to (never more than) this many seconds,
+   * advancing incrementally alongside it rather than jumping — so at most this many seconds of
+   * otherwise-evicted content stays visible/scrollable-to at any given moment. This cap is enforced
+   * every tick regardless of {@link liveReflowCadence} (an unrelated, extent-growth-only throttle) —
+   * "at most N seconds" is a hard guarantee. The gap can still be closed completely on demand,
+   * independent of the cap, via {@link TimelineApi.evictLiveHistory}. Either way, emits {@link
+   * TimelineEventType.TIMELINE_LIVE_ORIGIN_ADVANCED} whenever the left bound actually advances, so
+   * lanes holding onto now-unreachable items (e.g. thumbnails, which are never pruned upstream) can
+   * release them.
+   */
+  liveHistoryRetention?: number;
 }
 
-export interface TimelineStyle {
+export interface TimelineStyle
+  extends
+    PrefixKeys<VerticalScrollbarStyle, 'verticalScrollbar'>,
+    PrefixKeys<Omit<PlayheadStyle, 'draggingFill' | 'symbolYOffset'>, 'playhead'>,
+    PrefixKeys<PlayheadBufferStyle, 'playhead'>,
+    PrefixKeys<Omit<ScrubberStyle, 'textSnappedFill' | 'symbolYOffset'>, 'scrubber'>,
+    PrefixKeys<LiveEdgeOverlayStyle, 'liveEdgeOverlay'>,
+    PrefixKeys<EvictedRegionOverlayStyle, 'evictedRegionOverlay'> {
+  /**
+   * Minimum timeline width in pixels. The timeline never renders narrower than this, regardless of
+   * the container's actual width.
+   */
+  minWidth: number;
+
+  /**
+   * Minimum timeline height in pixels. The timeline never renders shorter than this, regardless of
+   * content height or {@link maxHeight}.
+   */
+  minHeight: number;
+
+  /**
+   * Maximum total timeline height in pixels.
+   * MAIN slot is clamped to maxHeight − HEADER height − FOOTER height.
+   * When undefined, the timeline height is unconstrained.
+   */
+  maxHeight?: number;
+
   textFontFamily: string;
   textFontStyle: string;
-
-  stageMinWidth: number;
-  stageMinHeight: number;
 
   backgroundFill: string;
   backgroundOpacity: number;
 
-  headerHeight: number;
-  headerMarginBottom: number;
-  headerBackgroundFill: string;
-  headerBackgroundOpacity: number;
-
-  footerHeight: number;
-  footerMarginTop: number;
-  footerBackgroundFill: string;
-  footerBackgroundOpacity: number;
-
-  // scrollbarHeight: number;
-  // scrollbarWidth: number;
-  // scrollbarBackgroundFill: string;
-  // scrollbarBackgroundFillOpacity: number;
-  // scrollbarHandleBarFill: string;
-  // scrollbarHandleBarOpacity: number;
-  // scrollbarHandleOpacity: number;
+  /**
+   * Outer padding around the timeline's content (HEADER + MAIN + FOOTER as a whole), in pixels.
+   * Follows CSS `padding` shorthand: a single number applies to all sides; a 2-element array is
+   * `[vertical, horizontal]`; a 4-element array is `[top, right, bottom, left]`. Undefined means
+   * no padding.
+   */
+  padding?: number | number[];
 
   thumbnailHoverWidth: number;
   thumbnailHoverStroke: string;
@@ -172,41 +268,10 @@ export interface TimelineStyle {
   rightPaneMarginRight: number;
   rightPaneClipPadding: number;
 
-  // playhead
-  playheadVisible: boolean;
-  playheadFill: string;
-  playheadLineWidth: number;
-  playheadSymbolHeight: number;
-  playheadScrubberHeight: number;
-  playheadBackgroundFill: string;
-  playheadBackgroundOpacity: number;
-  playheadTextFill: string;
-  playheadTextYOffset: number;
-  playheadTextFontSize: number;
-
-  playheadPlayProgressFill: string;
-  playheadPlayProgressOpacity: number;
-
-  playheadBufferedFill: string;
-  playheadBufferedOpacity: number;
-
-  // playhead hover
-  scrubberVisible: boolean;
-  scrubberFill: string;
-  scrubberSnappedFill: string;
-
-  scrubberNorthLineWidth: number;
-  scrubberNorthLineOpacity: number;
-  scrubberSouthLineWidth: number;
-  scrubberSouthLineOpacity: number;
-
-  scrubberSymbolHeight: number;
-  scrubberTextFill: string;
-  scrubberTextYOffset: number;
-  scrubberTextFontSize: number;
-
-  scrubberHeight: number;
-  scrubberMarginBottom: number;
+  leftPaneBackgroundFill?: string;
+  leftPaneBackgroundOpacity?: number;
+  rightPaneBackgroundFill?: string;
+  rightPaneBackgroundOpacity?: number;
 
   loadingAnimationTheme: 'light' | 'dark';
 }
@@ -215,34 +280,63 @@ export interface TimelineApi extends Destroyable {
   /**
    * Stream of all events emitted by this timeline instance, including lifecycle events
    * ({@link TimelineEventType.TIMELINE_READY}), viewport changes ({@link TimelineEventType.TIMELINE_SCROLL},
-   * {@link TimelineEventType.TIMELINE_ZOOM}, {@link TimelineEventType.TIMELINE_RESIZE}),
+   * {@link TimelineEventType.TIMELINE_ZOOM}, {@link TimelineEventType.TIMELINE_SLOT_SCROLL}),
    * and interaction events ({@link TimelineEventType.TIMELINE_TIMECODE_CLICK},
    * {@link TimelineEventType.TIMELINE_SCRUBBER_MOVE}, {@link TimelineEventType.TIMELINE_PLAYHEAD_MOVE}).
    */
-  onEvent$: Observable<TimelineEvent>;
+  readonly onEvent$: Observable<TimelineEvent>;
 
   /**
    * Unique identifier for this timeline instance.
    */
-  id: string;
+  readonly id: string;
 
   /**
    * Current style configuration of the timeline.
    * Reflects the active visual settings such as dimensions, colours, and playhead appearance.
    * @see {@link TimelineStyle}
    */
-  style: TimelineStyle;
+  readonly style: TimelineStyle;
 
   /**
    * Current runtime state of the timeline.
    * @see {@link TimelineState}
    */
-  state: TimelineState;
+  readonly state: TimelineState;
+
+  /**
+   * Live mode only. Forces the rendered left bound to fully catch up to the true, current live
+   * start — unlike {@link TimelineConfig.liveHistoryRetention}'s automatic behavior, which only
+   * ever maintains a bounded (at-most-threshold) trailing gap and never fully closes it by itself.
+   * A no-op if there's nothing to evict, including whenever no threshold is configured (the left
+   * bound already tracks the true live start exactly in that case).
+   */
+  evictLiveHistory(): void;
+
+  /**
+   * Live-updates the timeline's style. Only the provided fields are changed; everything else
+   * keeps its current value. Propagates to the playhead, scrubber, vertical scrollbar,
+   * thumbnail hover preview, slots, and every timeline lane, and emits
+   * {@link TimelineEventType.TIMELINE_STYLE_CHANGE}.
+   * @param style
+   */
+  setStyle(style: Partial<TimelineStyle>): void;
 
   /**
    * @returns true if visible, false if not visible
    */
-  descriptionPaneVisible: boolean;
+  readonly descriptionPaneVisible: boolean;
+
+  /**
+   * ScrubberLane instance.
+   */
+  readonly scrubberLane: ScrubberLane;
+
+  /**
+   * Get a slot by type — HEADER (adaptive height, stacked above MAIN), MAIN (bounded/scrollable
+   * height, the primary content area), or FOOTER (adaptive height, stacked below MAIN).
+   */
+  getSlot(type: TimelineSlotType): TimelineSlotApi;
 
   /**
    * Timeline zoom
@@ -302,17 +396,22 @@ export interface TimelineApi extends Destroyable {
   scrollToPlayheadEased(): Observable<number>;
 
   /**
-   * Adds {@link TimelineLaneApi} instance to timeline
+   * Adds {@link TimelineLaneApi} instance to a slot.
    * @param timelineLane
+   * @param options
+   * @param options.slot Target slot — HEADER, MAIN, or FOOTER. Defaults to MAIN.
+   * @param options.index Position within the slot; defaults to end.
    */
-  addTimelineLane(timelineLane: TimelineLaneApi): TimelineLaneApi;
+  addTimelineLane(timelineLane: TimelineLaneApi, options?: {index?: number | undefined; slot?: TimelineSlotType | undefined}): TimelineLaneApi;
 
   /**
-   * Adds {@link TimelineLaneApi} instance to timeline
-   * @param timelineLane
-   * @param index
+   * Adds multiple instantiated {@link TimelineLaneApi} instances to a slot.
+   * @param timelineLanes
+   * @param options
+   * @param options.index Starting index for the added lanes; each subsequent lane is inserted right after the previous one. Defaults to end of slot.
+   * @param options.slot Target slot — HEADER, MAIN, or FOOTER. Defaults to MAIN.
    */
-  addTimelineLaneAtIndex(timelineLane: TimelineLaneApi, index: number): TimelineLaneApi;
+  addTimelineLanes(timelineLanes: TimelineLaneApi[], options?: {index?: number | undefined; slot?: TimelineSlotType | undefined}): TimelineLaneApi[];
 
   /**
    * Removes {@link TimelineLaneApi} instance by id
@@ -332,26 +431,16 @@ export interface TimelineApi extends Destroyable {
   removeAllTimelineLanes(): void;
 
   /**
-   * Adds multiple instantiated {@link TimelineLaneApi} instances to timeline
-   * @param timelineLanes
+   * @param slot Slot to get lanes from. Defaults to MAIN when omitted (backward-compatible shortcut).
+   * @returns {@link TimelineLaneApi} instances in the given slot.
    */
-  addTimelineLanes(timelineLanes: TimelineLaneApi[]): TimelineLaneApi[];
-
-  /**
-   * @returns all {@link TimelineLaneApi} instances
-   */
-  getTimelineLanes(): TimelineLaneApi[];
+  getTimelineLanes(slot?: TimelineSlotType): TimelineLaneApi[];
 
   /**
    * @returns single {@link TimelineLaneApi} instance
    * @param id {@link TimelineLaneApi.id}
    */
   getTimelineLane<T extends TimelineLaneApi>(id: string): T | undefined;
-
-  /**
-   * @returns ScrubberLane instance
-   */
-  getScrubberLane(): ScrubberLane;
 
   /**
    * Shows or hides Timeline description pane
@@ -378,7 +467,6 @@ export interface TimelineApi extends Destroyable {
    */
   toggleTimecodeEdit(): void;
 
-
   setThumbnailTrack(track: ThumbnailTrack): void;
 
   /**
@@ -392,6 +480,8 @@ export interface TimelineApi extends Destroyable {
    * @param timelineLanes
    */
   maximizeTimelineLanes(timelineLanes: TimelineLaneApi[]): void;
+
+  scrollToLane(laneId: TimelineLaneApi['id'], options?: VerticalScrollOptions): Observable<number>;
 
   /**
    * Recalculates and settles layout, called on window resize event

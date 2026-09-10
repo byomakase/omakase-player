@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {TIMELINE_LANE_CONFIG_DEFAULT, type TimelineLaneStyle} from '../timeline-lane';
+import {TIMELINE_LANE_CONFIG_DEFAULT} from '../timeline-lane';
 import {
   MarkerTrack,
   MarkerType,
@@ -28,20 +28,20 @@ import {freeObserver} from '../../util/rxjs-util';
 import type {TimelineImpl} from '../timeline';
 import type {PlayerApi} from '../../player';
 import {KonvaFactory} from '../konva/konva-factory';
-import Decimal from 'decimal.js';
 import Konva from 'konva';
 import {MarkerViewComponent, MarkerViewComponentEventType} from './marker-view';
 import type {Cursor, MarkerTrackStyle, Size, StyledElement, StyledElementWithId} from '../../ui';
 import {TimelineEventType} from '../timeline-api';
 import type {ConfigAndStyle} from '../timeline-api';
+import {TimelineSlotType} from '../timeline-slot-type';
 import {omitKeys} from '../../util/object-util';
 import type {OmpProvider} from '../../omp-provider';
 import {MeasurementUtil} from '../measurement-util';
 import type {Position} from '../model';
 import {BaseMultiTrackLane} from '../track-lane';
-import type {MultiTrackLaneConfig, MultiTrackLaneTrackConfig} from '../track-lane';
+import type {MultiTrackLaneConfig, MultiTrackLaneStyle, MultiTrackLaneTrackConfig} from '../track-lane';
 
-export interface MarkerTrackLaneStyle extends TimelineLaneStyle, MarkerOnMarkerTrackLaneStyle {}
+export interface MarkerTrackLaneStyle extends MultiTrackLaneStyle, MarkerOnMarkerTrackLaneStyle {}
 
 export interface MarkerOnMarkerTrackLaneStyle extends MarkerTrackStyle {
   markerSymbol: 'none' | 'circle' | 'square' | 'triangle';
@@ -446,7 +446,7 @@ export class MarkerTrackLane extends BaseMultiTrackLane<MarkerTrackLaneConfig, M
   override prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider) {
     super.prepareForTimeline(timeline, player, ompProvider);
 
-    let timecodedDimension = this._timeline!.getTimecodedFloatingDimension();
+    let timecodedDimension = this._timeline!.getTimecodedFloatingDimensionForLane(this.id);
     let timecodedRect = this.getTimecodedRect();
 
     this._timecodedSpanningGroup = KonvaFactory.createGroup({
@@ -467,7 +467,16 @@ export class MarkerTrackLane extends BaseMultiTrackLane<MarkerTrackLaneConfig, M
     this._timecodedSpanningGroup.add(this._markerViewComponentsGroup);
 
     this._timeline!.addToTimecodedFloatingContent(this._eventCatcher, 1);
-    this._timeline!.addToSurfaceLayerTimecodedFloatingContent(this._timecodedSpanningGroup);
+
+    // MAIN clips spanning content to its own bounds (matches its scrollable viewport); HEADER
+    // and FOOTER are adaptive-height with nothing to scroll, so spanning markers there are left
+    // unclipped instead, so they aren't cut off by transient/animated slot height changes
+    // (e.g. lane minimize/maximize).
+    if (this._timeline!.getLaneSlotType(this.id) === TimelineSlotType.MAIN) {
+      this._timeline!.addToSurfaceLayerTimecodedFloatingContent(this._timecodedSpanningGroup);
+    } else {
+      this._timeline!.addToSurfaceLayerSpreadContent(this._timecodedSpanningGroup);
+    }
 
     this._timeline!.onEvent$
       .pipe(filter((p) => p.type === TimelineEventType.TIMELINE_TIMECODE_MOUSE_MOVE))
@@ -583,8 +592,6 @@ export class MarkerTrackLane extends BaseMultiTrackLane<MarkerTrackLaneConfig, M
       let markerViewComponent = this._markerViewComponents.get(timedItemState.id);
       if (markerViewComponent) {
         markerViewComponent.update(timedItemState as MarkerState);
-      } else {
-        throw new Error('markerViewComponent not found');
       }
     });
   }
@@ -607,7 +614,7 @@ export class MarkerTrackLane extends BaseMultiTrackLane<MarkerTrackLaneConfig, M
   protected settleLayout() {
     super.settleLayout();
 
-    let timecodedDimension = this._timeline!.getTimecodedFloatingDimension();
+    let timecodedDimension = this._timeline!.getTimecodedFloatingDimensionForLane(this.id);
     let timecodedRect = this.getTimecodedRect();
 
     this._eventCatcher!.y(timecodedRect.y);
@@ -616,17 +623,38 @@ export class MarkerTrackLane extends BaseMultiTrackLane<MarkerTrackLaneConfig, M
       node.width(timecodedDimension.width);
     });
 
-    let clipFactorHeightDecimal = new Decimal(timecodedDimension.height).div(this.style.height);
-    let clipFactorYDecimal = new Decimal(timecodedRect.height).div(this.style.height);
-
     let clipX = -this._timeline!.style.rightPaneClipPadding;
-    let clipY = timecodedRect.y - timecodedRect.y * clipFactorYDecimal.toNumber();
     let clipWidth = timecodedRect.width + this._timeline!.style.rightPaneClipPadding * 2;
-    let clipHeight = clipFactorHeightDecimal.mul(timecodedRect.height).toNumber();
+    let clipY: number;
+    let clipHeight: number;
+
+    if (this._timeline!.getLaneSlotType(this.id) === TimelineSlotType.MAIN) {
+      // Spans MAIN's whole scrollable content height — the viewport itself is
+      // clipped separately upstream, so this only needs to cover the full content.
+      clipY = 0;
+      clipHeight = timecodedDimension.height;
+    } else {
+      // HEADER/FOOTER spanning content isn't clipped to its own slot (see prepareForTimeline) —
+      // match that here so this group's own clipFunc doesn't undo it by cropping back down to
+      // the slot's own bounds. Span the HEADER+MAIN+FOOTER content region instead, translated
+      // into this slot's local coordinates via its absolute canvas offset — that region starts at
+      // the outer padding's top edge and excludes the padding on both ends (see
+      // getSpanningContentTop/-Height), not canvas y=0 for the raw stage height.
+      clipY = this._timeline!.getSpanningContentTop() - this._timeline!.getLaneSlotAbsoluteTop(this.id);
+      clipHeight = this._timeline!.getSpanningContentHeight();
+    }
 
     this._timecodedSpanningGroup!.clipFunc((ctx) => {
       ctx.rect(clipX, clipY, clipWidth, clipHeight);
     });
+
+    // Fade this lane's own spanning content in/out with its own minimize/maximize progress,
+    // so it doesn't sit at full opacity while its own row visibly collapses/expands. Other
+    // lanes minimizing in the same slot don't affect this, since progress is driven only by
+    // this lane's own style height.
+    const initialHeight = this._initialStyle?.height ?? 0;
+    const progress = initialHeight > 0 ? Math.min(1, Math.max(0, this.style.height / initialHeight)) : 1;
+    this._timecodedSpanningGroup!.opacity(progress);
 
     this.refreshMarkerViewComponentsPosition();
   }

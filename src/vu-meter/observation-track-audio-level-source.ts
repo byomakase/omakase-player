@@ -48,6 +48,14 @@ export class ObservationTrackAudioLevelSource extends AudioLevelSource {
     this.wirePlayer(player);
   }
 
+  get channelCount() {
+    if (this._channelTracks.length) {
+      return this._channelTracks.length;
+    } else {
+      return 6;
+    }
+  }
+
   wirePlayer(player: OmakasePlayerApi): void {
     this._playerBreaker.break();
 

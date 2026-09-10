@@ -15,7 +15,7 @@
  */
 
 import type {Destroyable} from '../common/capabilities';
-import {concat, filter, forkJoin, from, mergeMap, Observable, Subject, switchMap, takeUntil, tap} from 'rxjs';
+import {concat, filter, forkJoin, from, mergeMap, Observable, of, Subject, switchMap, takeUntil, tap} from 'rxjs';
 import {type PlayerEvent, PlayerEventType} from './player-event';
 import {MainMediaRepository, TrackRepository} from '../repository';
 import {ObserverBreaker} from '../common/observer-breaker';
@@ -28,6 +28,7 @@ import {
   MainMediaEventType,
   type MainMediaState,
   MainMediaType,
+  type MediaRotationValue,
   Relation,
   RelationType,
   type TextTrack,
@@ -37,15 +38,17 @@ import {
   TrackEventType,
   TrackType,
 } from '../media';
+import type {MainMediaSessionManager} from '../media/main-media-session-manager';
 import {PlayerControllerFactory} from './player-controller-factory';
 import {describedObservable, errorCompleteObserver, freeObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
+import {isNullOrUndefined} from '../util/util-functions';
 import {SourceUtil} from '../source';
 import {MediaTemporalFormat, type MediaTemporalFormatValueMap} from '../common';
 import {Validators} from '../common/validators';
 import {COMMON_PLAYER_CONFIG_DEFAULT, type PlayerLocalApi, type PlayerLocalConfig} from './player-api';
 import {type PlayerSession, SessionStore} from '../session';
 import {OpStageStatus} from '../common/op-stage';
-import {type MainMediaEssentialArgsHookType, type PlayerController, PlayerControllerEventType} from './player-controller-api';
+import {type MainMediaEssentialArgsHookType, type PlayerController, PlayerControllerEventType, type PlayerLiveState, toMediaLiveState} from './player-controller-api';
 import {PlayerAudioInternal} from './player-audio';
 import {PlayerAudioEventType, type PlayerAudioInternalApi} from './player-audio-api';
 import type {PlayerPlaybackEngineMapping} from './player-playback-engine';
@@ -75,6 +78,7 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
 
   private _sessionStore: SessionStore;
   private _mainMediaRepository: MainMediaRepository;
+  private _mainMediaSessionManager: MainMediaSessionManager;
   private _trackRepository: TrackRepository;
   private _trackUtils: TrackUtils;
   private _alertsManager: AlertsManager;
@@ -82,6 +86,8 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
   private _config: PlayerLocalConfig;
 
   private _mainMedia: MainMedia | undefined;
+  private _wiredDuration: number | undefined;
+  private _latestLiveState: PlayerLiveState | undefined;
   private _playerPlayback: PlayerPlayback;
 
   private _playerController: PlayerController | undefined;
@@ -98,6 +104,7 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
   constructor(ompProvider: OmpProvider, config?: Partial<PlayerLocalConfig>) {
     this._sessionStore = ompProvider.sessionStore;
     this._mainMediaRepository = ompProvider.mainMediaRepository;
+    this._mainMediaSessionManager = ompProvider.mainMediaSessionManager;
     this._trackRepository = ompProvider.trackRepository;
     this._trackUtils = ompProvider.trackUtils;
     this._alertsManager = ompProvider.alertsManager;
@@ -203,23 +210,39 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
             },
           });
 
+          this._playerPlayback.mediaRotation = mainMedia.mainMediaType === MainMediaType.AUDIO_FILE ? 0 : (mainMedia.state.loadOptions?.mediaRotation ?? 0);
+          this._onEvent$.next({
+            type: PlayerEventType.PLAYER_MEDIA_ROTATION_UPDATE,
+            data: {mediaRotation: this._playerPlayback.mediaRotation},
+          });
+
           if (!this._chromingInternal) {
             throw new Error(`Chroming not set`);
           }
-          let playerController = PlayerControllerFactory.create(mainMedia.mainMediaType, this._chromingInternal.domController, this._config.controllerConfig?.[mainMedia.mainMediaType]);
-          this._playerController = playerController;
 
           mainMedia.loadStart();
 
-          let mainMediaState = mainMedia.state;
-          this._playerController
-            .loadMainMedia({
-              url: SourceUtil.resolveUrlFromSourceState(mainMediaState.source),
-              loadOptions: mainMediaState.loadOptions,
-              mainMediaEssentialArgsHook: mainMediaEssentialArgsHook,
-              tracksCreatedHook: tracksCreatedHook,
-            })
-            .pipe(takeUntil(this._loadMainMediaBreaker.observer))
+          const mainMediaSessionController = this._mainMediaSessionManager.get(mainMediaId);
+
+          let playerController: PlayerController;
+
+          (mainMediaSessionController ? mainMediaSessionController.prepare() : of(void 0))
+            .pipe(
+              switchMap(() => {
+                playerController = PlayerControllerFactory.create(mainMedia.mainMediaType, this._chromingInternal!.domController, this._config.controllerConfig?.[mainMedia.mainMediaType]);
+                this._playerController = playerController;
+
+                return playerController.loadMainMedia({
+                  providedMainMedia: mainMedia.state,
+                  url: SourceUtil.resolveUrlFromSourceState(mainMedia.state.source),
+                  loadOptions: mainMedia.state.loadOptions,
+                  mainMediaEssentialArgsHook: mainMediaEssentialArgsHook,
+                  tracksCreatedHook: tracksCreatedHook,
+                  mainMediaSessionController: mainMediaSessionController,
+                });
+              }),
+              takeUntil(this._loadMainMediaBreaker.observer)
+            )
             .subscribe({
               next: (result) => {
                 this._mainMedia = mainMedia;
@@ -228,7 +251,7 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
                 concat(this.wireEvents()).subscribe({
                   complete: () => {
                     this._playerAudioInternal.setup(playerController, mainMedia.state);
-                    this._playerTextInternal.setup(playerController, mainMedia.state, this._config.textMainTracksHandler);
+                    this._playerTextInternal.setup(playerController, mainMedia.state, PlayerInternalUtil.resolveTextMainTracksHandler(this._config.textMainTracksHandler, mainMedia.state));
 
                     this.loadMainTextTracksAsSidecars(mainMedia.state);
 
@@ -248,9 +271,14 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
    * Preloads all text tracks from the main media state as sidecar tracks.
    */
   protected loadMainTextTracksAsSidecars(mainMediaState: MainMediaState) {
-    let preloadTextTrackHandlers = this._config.textMainTracksHandler.filter((p) => p !== PlayerTextHandlerType.EMBEDDED);
+    let preloadTextTrackHandlers = PlayerInternalUtil.resolveTextMainTracksHandler(this._config.textMainTracksHandler, mainMediaState).filter((p) => p !== PlayerTextHandlerType.EMBEDDED);
+    let textTracks = mainMediaState.tracks.filter((p): p is TextTrackState => p.trackType === TrackType.TEXT_TRACK);
+
+    if (preloadTextTrackHandlers.length === 0 && textTracks.length > 0) {
+      console.log('Using embedded text track rendering');
+    }
+
     if (preloadTextTrackHandlers.length > 0) {
-      let textTracks = mainMediaState.tracks.filter((p): p is TextTrackState => p.trackType === TrackType.TEXT_TRACK);
       let defaultTextTrack = textTracks.findLast((p) => p.default);
       preloadTextTrackHandlers.forEach((preloadTextTrackHandler) => {
         from(textTracks)
@@ -292,6 +320,7 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
     if (this._playerController) {
       this._playerController.destroy();
       this._playerController = void 0;
+      this._latestLiveState = void 0;
     }
 
     this._playerAudioInternal.teardown();
@@ -319,18 +348,26 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
           `Restore main media session`,
           playerController.restoreMainMediaSession({
             mainMedia: mainMediaState,
+            liveTimelineAnchor: playerSession.liveTimelineAnchor,
+            mainMediaSessionController: this._mainMediaSessionManager.get(mainMedia.id),
             mainMediaLoadedHook: () => {
               return new Observable((observer) => {
                 this._playerController = playerController;
 
                 this._mainMedia = mainMedia;
 
+                this._playerPlayback.mediaRotation = mainMedia.mainMediaType === MainMediaType.AUDIO_FILE ? 0 : playerSession.playback.mediaRotation;
+
                 this._sessionStore.setPlayer(this.playerSession);
 
                 this._playerAudioInternal.setup(playerController, mainMediaState);
-                this._playerTextInternal.setup(playerController, mainMediaState, this._config.textMainTracksHandler);
+                this._playerTextInternal.setup(playerController, mainMediaState, PlayerInternalUtil.resolveTextMainTracksHandler(this._config.textMainTracksHandler, mainMediaState));
 
                 this.wireEvents().subscribe(() => {
+                  this._onEvent$.next({
+                    type: PlayerEventType.PLAYER_MEDIA_ROTATION_UPDATE,
+                    data: {mediaRotation: this._playerPlayback.mediaRotation},
+                  });
                   nextCompleteObserver(observer);
                 });
               });
@@ -474,8 +511,6 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
           })
         ).subscribe();
       }
-
-
     });
   }
 
@@ -497,6 +532,31 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
       this.checkIsMediaLoaded();
 
       this._playerController.wireEvents(this._mainMedia!.state);
+      this._wiredDuration = this._mainMedia!.state.duration;
+
+      this._mainMedia!.onEvent$.pipe(takeUntil(this._wiredEventsBreaker.observer), takeUntil(this._loadMainMediaBreaker.observer)).subscribe({
+        next: (event) => {
+          if (event.type === MainMediaEventType.MAIN_MEDIA_UPDATED) {
+            // The player controller's own duration/temporal-conversion state is only refreshed
+            // by wireEvents() — re-sync it here, before relaying, whenever duration changed,
+            // regardless of which caller mutated it (not just the PLAYER_CONTROLLER_DURATION_UPDATE
+            // case below). Otherwise consumers of PLAYER_MAIN_MEDIA_UPDATED (e.g. Timeline) would
+            // recompute against a stale duration on this same synchronous relay.
+            let newDuration = event.data.mainMediaState.duration;
+            if (!isNullOrUndefined(newDuration) && newDuration !== this._wiredDuration) {
+              this._wiredDuration = newDuration;
+              this._playerController!.wireEvents(event.data.mainMediaState);
+            }
+
+            this._onEvent$.next({
+              type: PlayerEventType.PLAYER_MAIN_MEDIA_UPDATED,
+              data: {
+                mainMediaState: event.data.mainMediaState,
+              },
+            });
+          }
+        },
+      });
 
       this._playerController!.onEvent$.pipe(takeUntil(this._wiredEventsBreaker.observer))
         .pipe(takeUntil(this._loadMainMediaBreaker.observer))
@@ -504,17 +564,16 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
           next: (event) => {
             switch (event.type) {
               case PlayerControllerEventType.PLAYER_CONTROLLER_DURATION_UPDATE:
+                // updateAttrs() below triggers MAIN_MEDIA_UPDATED, which the generic relay wired
+                // above re-syncs the player controller for (since duration changed) and then
+                // relays as PLAYER_MAIN_MEDIA_UPDATED — no need to call wireEvents() or emit here too.
                 let mainMedia = this._mainMediaRepository.getOrFail(this._mainMedia!.id);
                 mainMedia.updateAttrs({
                   duration: event.data.duration,
                 });
-                this._playerController!.wireEvents(mainMedia.state);
-                this._onEvent$.next({
-                  type: PlayerEventType.PLAYER_MAIN_MEDIA_UPDATED,
-                  data: {
-                    mainMediaState: this._mainMedia!.state,
-                  },
-                });
+                break;
+              case PlayerControllerEventType.PLAYER_CONTROLLER_LIVE_STATE_UPDATE:
+                this.applyLiveStateUpdate(event.data.liveState, event.data.manifestChanged);
                 break;
               case PlayerControllerEventType.PLAYER_CONTROLLER_MEDIA_ELEMENT_PLAYBACK_CHANGE:
                 this._playerPlayback = {
@@ -606,7 +665,38 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
           },
         });
 
+      // Seed the live state synchronously right after subscribing. For a live stream, the controller
+      // resolves (and may have already emitted, on `onEvent$`) its live state off the initial manifest
+      // parse - which happens well before this method runs (it waits on the essential-args/tracks-created
+      // gate, i.e. the video element actually having data). That first emission is missed since nothing
+      // was subscribed yet; without this seed, `_latestLiveState` would stay unset until the *next*
+      // manifest reload, several seconds later, since {@link BasePlayerController.emitLiveStateUpdate}'s
+      // own signature dedup already recorded that first (unheard) state and won't repeat it on its own.
+      let initialLiveState = this._playerController.resolveLiveState();
+      if (initialLiveState) {
+        this.applyLiveStateUpdate(initialLiveState, true);
+      }
+
       nextCompleteObserver(observer);
+    });
+  }
+
+  private applyLiveStateUpdate(liveState: PlayerLiveState | undefined, manifestChanged: boolean): void {
+    this._latestLiveState = liveState;
+    this._sessionStore.updatePlayerLiveState(liveState);
+    if (manifestChanged) {
+      let mainMediaLive = this._mainMediaRepository.getOrFail(this._mainMedia!.id);
+      mainMediaLive.updateAttrs({
+        isLive: !!liveState,
+        liveState: liveState ? toMediaLiveState(liveState) : void 0,
+      });
+      this._sessionStore.updatePlayer({liveTimelineAnchor: this.playerSession.liveTimelineAnchor});
+    }
+    this._onEvent$.next({
+      type: PlayerEventType.PLAYER_LIVE_STATE_UPDATE,
+      data: {
+        liveState: liveState,
+      },
     });
   }
 
@@ -699,6 +789,7 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
 
     this._playerController?.destroy();
     this._playerController = void 0;
+    this._latestLiveState = void 0;
   }
 
   unloadMainMedia(): Observable<void> {
@@ -779,6 +870,20 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
     });
   }
 
+  seekToLive(): Observable<boolean> {
+    this.checkIsMediaLoaded();
+    return passiveObservable<boolean>((observer) => {
+      this._playerController!.seekToLive().subscribe({
+        next: (result) => {
+          nextCompleteObserver(observer, result);
+        },
+        error: (err) => {
+          errorCompleteObserver(observer, err);
+        },
+      });
+    });
+  }
+
   seekFromCurrentTime(value: MediaTemporalFormatValueMap[MediaTemporalFormat], format: MediaTemporalFormat = MediaTemporalFormat.SECONDS): Observable<boolean> {
     format = Validators.mediaTemporalFormat()(format);
     this.checkIsMediaLoaded();
@@ -809,6 +914,24 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
           errorCompleteObserver(observer, err);
         },
       });
+    });
+  }
+
+  setMediaRotation(mediaRotation: MediaRotationValue): Observable<void> {
+    return passiveObservable((observer) => {
+      if (this._mainMedia?.mainMediaType === MainMediaType.AUDIO_FILE) {
+        nextCompleteObserver(observer);
+        return;
+      }
+      this._playerPlayback.mediaRotation = mediaRotation;
+      this._sessionStore.updatePlayer({
+        playback: this._playerPlayback,
+      });
+      this._onEvent$.next({
+        type: PlayerEventType.PLAYER_MEDIA_ROTATION_UPDATE,
+        data: {mediaRotation},
+      });
+      nextCompleteObserver(observer);
     });
   }
 
@@ -1011,6 +1134,8 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
       playback: this._playerPlayback,
       audio: this._playerAudioInternal.state,
       text: this._playerTextInternal.state,
+      liveTimelineAnchor: PlayerInternalUtil.resolveLiveTimelineAnchor(this._latestLiveState ?? this._mainMedia?.liveState),
+      liveState: this._latestLiveState,
     };
   }
 
@@ -1031,6 +1156,7 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
 
     this._playerController?.destroy();
     this._playerController = void 0;
+    this._latestLiveState = void 0;
 
     this._playerAudioInternal.destroy();
     this._playerTextInternal.destroy();

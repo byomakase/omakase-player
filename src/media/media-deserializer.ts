@@ -23,6 +23,7 @@ import type {BaseMediaEntityArgs, MediaEntityState} from './media-entity';
 import {isNullOrUndefined} from '../util/util-functions';
 import {Mp4Audio, Mp4MainMedia, Mp4Video} from '../mp4';
 import {AudioMainMedia} from '../audio/audio-file-main-media';
+import {TamsMainMedia, type TamsMainMediaState} from '../tams/tams-main-media';
 import {Video, type VideoArgs, type VideoState, VideoType} from './video';
 import {Audio, type AudioArgs, AudioFile, type AudioState, AudioType} from './audio';
 import {MarkerTrack, type MarkerTrackArgs, type MarkerTrackState} from './marker-track';
@@ -43,9 +44,19 @@ export class MediaDeserializer implements Destroyable {
         return this.createMp4MainMedia(state);
       case MainMediaType.AUDIO_FILE:
         return this.createAudioFileMainMedia(state);
+      case MainMediaType.TAMS:
+        return this.createTamsMainMedia(state as TamsMainMediaState);
       default:
         throw new Error('niy');
     }
+  }
+
+  protected static createTamsMainMedia(state: TamsMainMediaState): TamsMainMedia {
+    return new TamsMainMedia({
+      ...this.createBaseMainMediaArgs(state),
+      // tamsMediaData is instance only, so it is repopulated by the reload the restore triggers
+      tamsMetadata: state.tamsMetadata ? {...state.tamsMetadata} : void 0,
+    });
   }
 
   protected static createAudioFileMainMedia(state: MainMediaState): AudioMainMedia {
@@ -79,6 +90,8 @@ export class MediaDeserializer implements Destroyable {
       hasDrm: isNullOrUndefined(state.hasDrm) ? void 0 : state.hasDrm,
       hasVideo: isNullOrUndefined(state.hasVideo) ? void 0 : state.hasVideo,
       hasAudio: isNullOrUndefined(state.hasAudio) ? void 0 : state.hasAudio,
+      isLive: isNullOrUndefined(state.isLive) ? void 0 : state.isLive,
+      liveState: state.liveState,
     };
   }
 
@@ -214,7 +227,7 @@ export class MediaDeserializer implements Destroyable {
   protected static createBaseTimedItemsTrackArgs(state: TimedItemsTrackState): TimedItemsTrackArgs {
     return {
       ...this.createBaseTrackArgs(state),
-      timedItemHooks: void 0 // not supported
+      timedItemHooks: void 0, // not supported
     };
   }
 

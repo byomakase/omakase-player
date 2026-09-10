@@ -15,6 +15,7 @@
  */
 
 import type Konva from 'konva';
+import {takeUntil} from 'rxjs';
 import {TIMELINE} from '../../constants';
 import {BaseKonvaComponent, type ComponentConfig, type ConfigWithOptionalStyle} from '../layout/konva-component';
 import type {Group} from 'konva/lib/Group';
@@ -82,6 +83,13 @@ export class TextCueVisualization extends BaseKonvaComponent<TextCueVisualizatio
 
     this._group.add(this._bgRect);
     this._group.add(this._eventCatcherRect);
+
+    this._styleAdapter.onChange$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe(() => {
+      this._bgRect.setAttrs({
+        fill: this.style.fill,
+        opacity: this.style.opacity,
+      });
+    });
   }
 
   protected provideKonvaNode(): Konva.Group {

@@ -33,7 +33,7 @@ import {
 } from '../../media';
 import {type ObservationTrackView} from './observation-track-view';
 import {type TimelineImpl} from '../timeline';
-import {type Color, type Size, type StyledElement, type StyledElementWithId, Ui} from '../../ui';
+import {type Color, type Size, Ui} from '../../ui';
 import {KonvaFactory} from '../konva/konva-factory';
 import Konva from 'konva';
 import {ObserverBreaker} from '../../common/observer-breaker';
@@ -79,8 +79,6 @@ export interface BarChartLaneTrackConfig extends ObservationTrackLaneTrackConfig
 }
 
 export interface BarChartLaneTrackStyle {
-  paddingTop?: number;
-  paddingBottom?: number;
   baselineFill?: Color;
   baselineThickness?: Size;
   baselineDash?: Size[];
@@ -196,6 +194,31 @@ export class BarChartLane extends BaseObservationTrackLane<BarChartLaneConfig, B
 
   protected override hasVisualElements(): boolean {
     return [...this._typedTrackViews.values()].some((v) => v.viewCount > 0);
+  }
+
+  /**
+   * Live-updates a track's style (measurements, baseline). Only the provided fields change;
+   * everything else keeps its current value.
+   */
+  setTrackStyle(trackId: ObservationTrack['id'], style: Partial<BarChartLaneTrackStyle>): void {
+    if (!this._tracksMap.has(trackId)) {
+      throw new Error(`Track with id ${trackId} not found`);
+    }
+
+    let config = this._trackConfigs.get(trackId);
+    if (!config) {
+      config = {};
+      this._trackConfigs.set(trackId, config);
+    }
+
+    config.style = {
+      ...config.style,
+      ...style,
+    };
+
+    if (this._canRender) {
+      this._trackViews.get(trackId)?.render(this._timeline!.getVisibleTimeRange());
+    }
   }
 
   protected override updatePositions() {
@@ -570,7 +593,10 @@ class TrackMeasurementsView extends BaseKonvaComponent2<Konva.Group> {
     const sortedItems = this._interpolator.interpolatedTrack.timedItemsSorted;
     const periodSeconds = interpolationPeriod / 1000;
     const pps = visiblePx / (timeRange.end - timeRange.start);
-    const measurementStyle = this._config?.style?.measurements?.find((p) => p.measurement === this._measurement);
+    const measurementEntries = this._config?.style?.measurements;
+    const measurementStyle = measurementEntries
+      ? (measurementEntries.find((p) => p.measurement === this._measurement) ?? measurementEntries.find((p) => p.measurement === undefined))
+      : undefined;
 
     // Pass 1: compute barCount per item from midpoint region widths
     const itemRegions = sortedItems.map((timedItem, index) => {
@@ -612,13 +638,8 @@ class TrackMeasurementsView extends BaseKonvaComponent2<Konva.Group> {
   }
 
   protected createView(observation: Observation, config: MeasurementItemViewConfig) {
-    let styledElement: StyledElement<BarChartLaneTrackStyle> = {
-      id: `${this._timelineLane.id}.${this._downsampler.sourceTrack.id}`,
-    };
-
     let measurementItemView = new MeasurementItemView({
       observationState: observation.state,
-      styledElement: styledElement,
       timelineLane: this._timelineLane,
       timeline: this._timeline!,
       ui: this._ui!,
@@ -721,9 +742,6 @@ class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
   protected _config: MeasurementItemViewConfig;
   protected _ui: Ui;
 
-  protected _styledElement: StyledElement<BarChartLaneTrackStyle>;
-  protected _style!: BarChartLaneTrackStyle;
-
   protected _observationState: ObservationState;
   protected _observationItem: ObservationItem;
 
@@ -738,7 +756,6 @@ class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
   constructor(args: {
     config: MeasurementItemViewConfig;
     observationState: ObservationState;
-    styledElement: StyledElement<BarChartLaneTrackStyle>;
     timeline: TimelineImpl;
     ui: Ui;
     timelineLane: BarChartLane;
@@ -757,12 +774,6 @@ class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
     }
 
     this._observationItem = observationItem;
-
-    this._styledElement = args.styledElement;
-    this._style = {
-      ...this._config.style,
-      ...this._ui.resolveStyle(this._styledElement) as BarChartLaneTrackStyle
-    };
 
     this._group = KonvaFactory.createGroup({
       height: this._timelineLane.style.height,
@@ -862,8 +873,8 @@ class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
     this._group.destroyChildren();
 
     const fullHeight = this._group.height();
-    const paddingTop = this._style.paddingTop ?? 0;
-    const paddingBottom = this._style.paddingBottom ?? 0;
+    const paddingTop = this._timelineLane.style.paddingTop;
+    const paddingBottom = this._timelineLane.style.paddingBottom;
     const containerHeight = fullHeight - paddingTop - paddingBottom;
     const contentTop = paddingTop;
     const contentBottom = fullHeight - paddingBottom;
@@ -951,8 +962,8 @@ class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
         KonvaFactory.createLine({
           points: [barX, y, barX + rectWidth, y],
           opacity: this._config.style?.opacity ?? 1,
-          stroke: this._config.style?.strokeColor ?? void 0,
-          strokeWidth: this._config.style?.strokeWidth ?? void 0,
+          stroke: this._config.style?.strokeColor ?? this._config.style?.fill ?? BAR_CHART_LANE_TRACK_MEASUREMENT_STYLE_DEFAULT.fill,
+          strokeWidth: this._config.style?.strokeWidth ?? 1,
         })
       );
     }

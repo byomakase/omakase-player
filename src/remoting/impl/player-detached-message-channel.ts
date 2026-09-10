@@ -126,11 +126,29 @@ export class PlayerDetachedMessageChannelBinding extends BaseMessageChannelBindi
       });
 
     this._playerDetachedMessageChannel
+      .receiveAndSendResponse('seekToLive')
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe({
+        next: ([request, sendResponseHook]) => {
+          sendResponseHook(this._playerDetached.seekToLive());
+        },
+      });
+
+    this._playerDetachedMessageChannel
       .receiveAndSendResponse('setPlaybackRate')
       .pipe(takeUntil(this._destroyBreaker.observer))
       .subscribe({
         next: ([[value], sendResponseHook]) => {
           sendResponseHook(this._playerDetached.setPlaybackRate(value));
+        },
+      });
+
+    this._playerDetachedMessageChannel
+      .receiveAndSendResponse('setMediaRotation')
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe({
+        next: ([[mediaRotation], sendResponseHook]) => {
+          sendResponseHook(this._playerDetached.setMediaRotation(mediaRotation));
         },
       });
 

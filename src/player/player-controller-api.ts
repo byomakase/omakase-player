@@ -16,7 +16,17 @@
 
 import {MediaTemporalConverter, MediaTemporalFormat, type MediaTemporalFormatValueMap, type MediaTemporalSeconds} from '../common';
 import {MediaElementPlayback, type MediaElementPlaybackState} from '../common/media-element-playback';
-import {type AudioState, type MainMediaLoadOptions, type MainMediaState, type MainMediaUpdateableAttrs, type TextTrackState, type Track} from '../media';
+import {
+  type AudioState,
+  type MediaLiveState,
+  type MainMediaLoadOptions,
+  type MainMediaSessionController,
+  type MainMediaState,
+  type MainMediaUpdateableAttrs,
+  type TextTrackState,
+  type Track,
+  type MediaRotationValue,
+} from '../media';
 import {Observable} from 'rxjs';
 import type {Destroyable} from '../common/capabilities';
 import type {AudioTrackIdentifier, TextTrackIdentifier} from './player-controller';
@@ -37,6 +47,7 @@ export enum PlayerControllerEventType {
 
   PLAYER_CONTROLLER_PLAYBACK_RATE_UPDATE = 'PLAYER_CONTROLLER_PLAYBACK_RATE_UPDATE',
   PLAYER_CONTROLLER_DURATION_UPDATE = 'PLAYER_CONTROLLER_DURATION_UPDATE',
+  PLAYER_CONTROLLER_LIVE_STATE_UPDATE = 'PLAYER_CONTROLLER_LIVE_STATE_UPDATE',
 
   PLAYER_CONTROLLER_AUDIO_SWITCHED = 'PLAYER_CONTROLLER_AUDIO_SWITCHED',
   PLAYER_CONTROLLER_TEXT_TRACK_SWITCHED = 'PLAYER_CONTROLLER_TEXT_TRACK_SWITCHED',
@@ -88,6 +99,45 @@ export interface PlayerControllerDurationUpdateEventData {
   duration: number;
 }
 
+/**
+ * Runtime live state: the manifest-derived {@link MediaLiveState} plus the continuously-drifting
+ * `liveSyncPosition` (a playback/latency concern, not persisted on the media state).
+ */
+export interface PlayerLiveState extends MediaLiveState {
+  /** Whether the media source is currently a live stream. */
+  isLive: boolean;
+  /** Safe live playback point (edge minus hold-back); the target for a "go to live" action. */
+  liveSyncPosition: number;
+}
+
+/** Drops the player-only `liveSyncPosition`, yielding the manifest-derived {@link MediaLiveState}. */
+export function toMediaLiveState(state: PlayerLiveState): MediaLiveState {
+  return {
+    liveStartTime: state.liveStartTime,
+    liveEdgeDuration: state.liveEdgeDuration,
+    duration: state.duration,
+    targetDuration: state.targetDuration,
+    leadingSegmentDurations: state.leadingSegmentDurations,
+    startSN: state.startSN,
+    liveMode: state.liveMode,
+    manifestUpdatedTime: state.manifestUpdatedTime,
+  };
+}
+
+export interface PlayerControllerLiveStateUpdateEventData {
+  /**
+   * Live details; `undefined` when the media source is not currently a live stream. See
+   * {@link PlayerLiveState.isLive}.
+   */
+  liveState: PlayerLiveState | undefined;
+
+  /**
+   * True when this update was triggered by a manifest reload (window bounds changed), false when it
+   * is a liveSyncPosition-progress tick between reloads.
+   */
+  manifestChanged: boolean;
+}
+
 export interface PlayerControllerAudioSwitchedEventData {
   activeAudioIdentifiers: AudioTrackIdentifier[];
 }
@@ -105,6 +155,7 @@ export interface PlayerControllerMediaElementPlaybackChangeEventData {
 export type PlayerControllerEventTypeDataMap = {
   [PlayerControllerEventType.PLAYER_CONTROLLER_PLAYBACK_RATE_UPDATE]: PlayerControllerPlaybackRateUpdateEventData;
   [PlayerControllerEventType.PLAYER_CONTROLLER_DURATION_UPDATE]: PlayerControllerDurationUpdateEventData;
+  [PlayerControllerEventType.PLAYER_CONTROLLER_LIVE_STATE_UPDATE]: PlayerControllerLiveStateUpdateEventData;
 
   [PlayerControllerEventType.PLAYER_CONTROLLER_MEDIA_ELEMENT_PLAYBACK_CHANGE]: PlayerControllerMediaElementPlaybackChangeEventData;
 
@@ -128,12 +179,27 @@ export type PlayerControllerEvent = {
 
 export type TypedMediaControllerEvent<T extends PlayerControllerEventType> = Extract<PlayerControllerEvent, {type: T}>;
 
+/**
+ * Anchors a newly created playback engine onto the timeline the media was already playing on.
+ */
+export interface LiveTimelineAnchor {
+  /** Earliest seekable position when the anchor was taken. */
+  liveStartTime: number;
+  /** Durations of the segments eviction will consume, oldest first. */
+  segmentDurations: number[];
+  /** Media sequence number the durations start at; how a resuming instance counts what it missed. */
+  startSN: number;
+}
+
 export type MainMediaEssentialArgsHookType = (args: MainMediaUpdateableAttrs) => Observable<void>;
 export type LoadMainMediaArgsType = {
   url: string;
   loadOptions?: MainMediaLoadOptions | undefined;
   mainMediaEssentialArgsHook: MainMediaEssentialArgsHookType;
   tracksCreatedHook: (tracks: Track[]) => Observable<void>;
+  mainMediaSessionController?: MainMediaSessionController | undefined;
+  /** Set when resuming live media in a new window, so its timeline matches the one being resumed. */
+  liveTimelineAnchor?: LiveTimelineAnchor | undefined;
   /**
    * If provided it will be used to identify possible known properties which we can take automatically instead of resolving them (ie. initSegmentTimeOffset etc.)
    */
@@ -143,6 +209,10 @@ export type LoadMainMediaArgsType = {
 export type RestoreMainMediaSessionArgsType = {
   mainMedia: MainMediaState;
   mainMediaLoadedHook: () => Observable<void>;
+  /** See {@link LoadMainMediaArgsType.mainMediaSessionController}; the restore reloads through the same path. */
+  mainMediaSessionController?: MainMediaSessionController | undefined;
+  /** See {@link LoadMainMediaArgsType.liveTimelineAnchor}; the restore reloads through the same path. */
+  liveTimelineAnchor?: LiveTimelineAnchor | undefined;
 };
 
 export interface PlayerController extends Destroyable {
@@ -159,6 +229,14 @@ export interface PlayerController extends Destroyable {
   textImscElement: HTMLElement;
 
   loadMainMedia(args: LoadMainMediaArgsType): Observable<boolean>;
+
+  /**
+   * Synchronously resolves the current live state, independent of the {@link PlayerControllerEventType.PLAYER_CONTROLLER_LIVE_STATE_UPDATE}
+   * event stream. Callers that start listening to {@link onEvent$} after the controller has already resolved (and possibly
+   * emitted) a live state - e.g. right after {@link wireEvents} - need this to avoid missing that first, already-emitted state.
+   * Returns `undefined` for VOD or before any playlist/manifest details are available.
+   */
+  resolveLiveState(): PlayerLiveState | undefined;
 
   /**
    * Sets up media time converters and wires {@link onEvent$} events
@@ -196,6 +274,8 @@ export interface PlayerController extends Destroyable {
   seekFromCurrentTime(value: MediaTemporalFormatValueMap[MediaTemporalFormat.MEDIA_TIME], format: MediaTemporalFormat.MEDIA_TIME): Observable<boolean>;
   seekFromCurrentTime(value: MediaTemporalFormatValueMap[MediaTemporalFormat.COUNTDOWN_MEDIA_TIME], format: MediaTemporalFormat.COUNTDOWN_MEDIA_TIME): Observable<boolean>;
   seekFromCurrentTime(value: MediaTemporalFormatValueMap[MediaTemporalFormat], format: MediaTemporalFormat): Observable<boolean>;
+
+  seekToLive(): Observable<boolean>;
 
   extractVideoKeyframe(options?: VideoKeyframeOptions): Observable<VideoKeyframe>;
 
@@ -236,6 +316,8 @@ export interface PlayerController extends Destroyable {
   playbackRate: number;
   setPlaybackRate(playbackRate: number): Observable<void>;
 
+  mediaRotation: MediaRotationValue;
+
   // region audio
   createMediaElementSourceEnabled: boolean;
 
@@ -261,6 +343,8 @@ export interface PlayerController extends Destroyable {
 
 export interface PlayerDomController {
   mainMediaVideoElement: HTMLVideoElement;
+
+  mediaRotation: MediaRotationValue;
 
   textMediaCaptionsElement: HTMLElement;
 

@@ -175,8 +175,33 @@ export class Scrubber extends BaseKonvaComponent<ScrubberConfig, ScrubberStyle, 
   protected onStyleChange() {
     this._group.visible(this.style.visible);
 
-    let totalHeight = this._timeline.getTimecodedContainerDimension().height;
-    let scrubberLaneHeight = this._timeline.getScrubberLane().getTimecodedRect().height;
+    this._northLine.setAttrs({
+      stroke: this.style.fill,
+      strokeWidth: this.style.northLineWidth,
+      opacity: this.style.northLineOpacity,
+    });
+    this._southLine.setAttrs({
+      stroke: this.style.fill,
+      strokeWidth: this.style.southLineWidth,
+      opacity: this.style.southLineOpacity,
+    });
+    this._symbol.setAttrs({
+      fill: this.style.fill,
+      radius: this.style.symbolHeight / 2,
+      offsetY: this.style.symbolYOffset,
+      opacity: this.style.symbolOpacity,
+    });
+    this._label.setAttrs({
+      y: this.style.textYOffset,
+    });
+    this._text.setAttrs({
+      fontSize: this.style.textFontSize,
+      fill: this.style.textFill,
+    });
+
+    // Spans HEADER + MAIN + FOOTER content, excluding the outer vertical padding around it.
+    const totalHeight = this._timeline.getSpanningContentHeight();
+    const scrubberLaneHeight = this._timeline.scrubberLane.getTimecodedRect().height;
 
     this._northLine.points([this._northLine.x(), 0, this._northLine.x(), scrubberLaneHeight]);
     this._southLine.points([this._southLine.x(), scrubberLaneHeight, this._southLine.x(), totalHeight]);

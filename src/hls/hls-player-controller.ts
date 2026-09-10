@@ -14,35 +14,24 @@
  * limitations under the License.
  */
 
-import Hls, {
-  ErrorDetails,
-  Events as HlsEvents,
-  type FragLoadedData,
-  type HlsConfig,
-  type ManifestParsedData,
-  type MediaKeySessionContext,
-  type MediaPlaylist
-} from 'hls.js';
-import {type AudioState, type MainMediaLoadOptions, type TextTrackState} from '../media';
-import {combineLatest, filter, fromEvent, map, Observable, Subject, take, takeUntil, timeout} from 'rxjs';
+import Hls, {ErrorDetails, Events as HlsEvents, type FragLoadedData, type HlsConfig, type ManifestParsedData, type MediaKeySessionContext, type MediaPlaylist} from 'hls.js';
+import Decimal from 'decimal.js';
+import {type AudioState, LiveMode, type MainMediaLoadOptions, type MainMediaState, type MainMediaUpdateableAttrs, type TextTrackState} from '../media';
+import {combineLatest, filter, fromEvent, interval, map, Observable, of, Subject, type Subscription, switchMap, take, takeUntil, timeout} from 'rxjs';
 import {errorCompleteObserver, nextCompleteObserver} from '../util/rxjs-util';
 import {HlsJsFactory} from './hls-js-factory';
+import {createHlsPlaylistAlignLoader, resolvePlaylistMediaSequence} from './hls-playlist-align-loader';
 import {type FrameRateModel, FrameRateResolver} from '../common/frame-rate';
 import {isNullOrUndefined} from '../util/util-functions';
 import {MediaMetadataResolver} from '../tools';
 import {TimecodeConverter, type TimecodeModel} from '../common/timecode';
 import {HlsAudio, type HlsAudioState, HlsTextTrack, type HlsTextTrackState, HlsVideo} from './hls-track';
-import {
-  type AudioTrackIdentifier,
-  BasePlayerController,
-  type PlayerControllerConfig,
-  type TextTrackIdentifier
-} from '../player/player-controller';
+import {type AudioTrackIdentifier, BasePlayerController, type PlayerControllerConfig, type TextTrackIdentifier} from '../player/player-controller';
 import {z} from 'zod';
 import {BrowserProvider} from '../common/browser-provider';
-import {type LoadMainMediaArgsType, PlayerControllerEventType, type PlayerDomController} from '../player';
+import {type LiveTimelineAnchor, type LoadMainMediaArgsType, PlayerControllerEventType, type PlayerDomController, type PlayerLiveState, toMediaLiveState} from '../player';
 import {UrlSource} from '../source';
-import {AuthConfig, FileFormatType} from '../common';
+import {AuthConfig, FileFormatType, MediaTemporalFormat, type MediaTemporalFormatValueMap} from '../common';
 import {StringUtil} from '../util/string-util';
 import {OpStage, OpStageStatus} from '../common/op-stage';
 import {PLAYER_CONTROLLER_DEFAULTS} from '../constants';
@@ -67,12 +56,17 @@ export interface HlsPlayerControllerConfig extends PlayerControllerConfig {
 
 export const _hlsControllerConfigDefault: HlsPlayerControllerConfig = {
   hlsConfig: {
-    ...Hls.DefaultConfig
+    ...Hls.DefaultConfig,
   },
 };
 
 export class HlsPlayerController extends BasePlayerController<HlsPlayerControllerConfig> {
   protected _hls: Hls | undefined;
+
+  protected _wasLive: boolean = false;
+  protected _liveStateTickSubscription: Subscription | undefined;
+  protected _lastLiveSignature: string | undefined;
+  protected _manifestUpdatedTime: number = 0;
 
   constructor(playerDomController: PlayerDomController, config?: Partial<HlsPlayerControllerConfig>) {
     super(playerDomController, {
@@ -87,10 +81,32 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
     this._createMediaElementSourceEnabled = !BrowserProvider.instance.isSafari; // if HLS and Safari then we handle MediaElementSourceEnabled related to audio in different way
   }
 
+  wireEvents(mainMediaState: MainMediaState) {
+    super.wireEvents(mainMediaState);
+
+    let liveState = this.resolveLiveState();
+    if (liveState) {
+      this.onEvent$
+        .pipe(filter((p) => p.type === PlayerControllerEventType.PLAYER_CONTROLLER_MEDIA_ELEMENT_PLAYBACK_CHANGE))
+        .pipe(takeUntil(this._loadBreaker.observer), takeUntil(this._destroyBreaker.observer))
+        .subscribe((event) => {
+          if (event.data.mediaElementPlaybackState.paused) {
+            this.startPausedLiveStateTick();
+          } else {
+            this.stopPausedLiveStateTick();
+          }
+        });
+    }
+  }
+
   loadMainMedia(args: LoadMainMediaArgsType): Observable<boolean> {
     // console.debug(`loadMainMedia args: `, args);
 
     this._loadBreaker.break();
+
+    this._wasLive = false;
+    this._lastLiveSignature = void 0;
+    this._manifestUpdatedTime = 0;
 
     this.destroyHls();
 
@@ -136,6 +152,36 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
       let hls = HlsJsFactory.createHls(this._config);
       this._hls = hls;
 
+      const timelineOffset = this.resolveTimelineOffset(args.liveTimelineAnchor);
+      if (timelineOffset !== void 0) {
+        hls.config.timelineOffset = timelineOffset;
+      }
+
+      const liveTimelineAnchor = args.liveTimelineAnchor;
+      if (liveTimelineAnchor) {
+        this.alignLiveTimeline(hls, liveTimelineAnchor);
+
+        const alignPlayheadToWindow = () => {
+          const videoElement = this._playerDomController.mainMediaVideoElement;
+          const buffered = videoElement.buffered;
+
+          if (!buffered.length) {
+            return; // nothing appended yet
+          }
+
+          // runs once, before the session restores its own position
+          hls.off(HlsEvents.FRAG_BUFFERED, alignPlayheadToWindow);
+
+          if (videoElement.currentTime < buffered.start(0) || videoElement.currentTime > buffered.end(buffered.length - 1)) {
+            videoElement.currentTime = buffered.start(0);
+          }
+        };
+
+        hls.on(HlsEvents.FRAG_BUFFERED, alignPlayheadToWindow);
+      } else {
+        this.anchorTimelineAtFirstFragment(hls);
+      }
+
       console.debug(`Created new HLS instance, sessionId=${this._hls.sessionId}`, hlsConfig);
 
       let that = this;
@@ -162,6 +208,20 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
             textTracksDisplayed: that.textTracksDisplayed,
           },
         });
+      });
+
+      // LEVEL_UPDATED fires on every live playlist reload (i.e. when a new segment appears) and when playlist ends.
+      // enforceLiveWindowFloor() runs first and, when it seeks, does so synchronously (currentTime
+      // is updated immediately, even though full seek completion/re-buffering is async) - so
+      // emitLiveStateUpdate()'s geometry reflow, which runs after, sees the corrected currentTime
+      // and positions the playhead inside the new window on the very first render. The other way
+      // around, the reflow would render once against the just-advanced window while currentTime
+      // still held the about-to-be-evicted position, flashing the playhead off-screen until the
+      // seek's events caught up.
+      this._hls!.on(HlsEvents.LEVEL_UPDATED, function (event, data) {
+        that._manifestUpdatedTime = Date.now();
+        that.enforceLiveWindowFloor();
+        that.emitLiveStateUpdate(true);
       });
 
       if (AuthConfig.authentication) {
@@ -219,6 +279,23 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
           hasInitSegment = true;
         }
         nextCompleteObserver(hlsFragParsingInitSegment$);
+      });
+
+      hls.subtitleDisplay = false;
+
+      //IMPORTANT - we have to switch before the frag starts getting loaded as cues
+      // if there is no default there is no issue, hence the guard
+      this._hls!.once(HlsEvents.SUBTITLE_TRACKS_UPDATED, function (event, data) {
+        let autoSelects = data.subtitleTracks.some((subtitleTrack) => subtitleTrack.default) || !!hls.config.subtitlePreference;
+
+        if (!autoSelects) {
+          return;
+        }
+
+        hls.once(HlsEvents.SUBTITLE_TRACK_SWITCH, function () {
+          hls.subtitleTrack = -1;
+          hls.subtitleDisplay = false;
+        });
       });
 
       this._hls.once(HlsEvents.MANIFEST_PARSED, (event, manifestParsedData) => {
@@ -317,7 +394,9 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
                 if (firstLevel && firstLevel.details && firstLevel.details.fragments && firstLevel.details.fragments[0]) {
                   let firstFragment = firstLevel.details.fragments[0];
                   let firstFragmentUrl = firstFragment.url;
-                  if (StringUtil.isNonEmpty(firstFragmentUrl)) {
+                  if (loadOptions?.forceSkipMetadataResolution) {
+                    nextCompleteObserver(frameRateResolution$, void 0);
+                  } else if (StringUtil.isNonEmpty(firstFragmentUrl)) {
                     MediaMetadataResolver.getMediaMetadata(firstFragmentUrl, ['firstVideoTrackFrameRate'])
                       .pipe(map((p) => p.firstVideoTrackFrameRate))
                       .subscribe({
@@ -355,6 +434,8 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
               if (!isNullOrUndefined(args.providedMainMedia?.initSegmentTimeOffset)) {
                 console.debug(`firstVideoTrackInitSegmentTime already provided`);
                 nextCompleteObserver(initSegmentResolution$, args.providedMainMedia?.initSegmentTimeOffset);
+              } else if (loadOptions?.forceSkipMetadataResolution) {
+                nextCompleteObserver(initSegmentResolution$, 0);
               } else {
                 MediaMetadataResolver.getMediaMetadata(preloadedLevel.details.fragments[0].url, ['firstVideoTrackInitSegmentTime']).subscribe({
                   next: (mediaMetadata) => {
@@ -398,28 +479,26 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
             }
           }
 
-          if (!frameRateModel) {
-            errorCompleteObserver(rootObserver, `Frame rate could not be determined. Try by providing frame rate in load options.`);
-            return;
-          }
-
           if (hasDrm) {
             console.warn(`Init segment time offset for DRM videos set to undefined`);
             initSegmentTimeOffset = void 0;
           }
 
-          let hlsVideo = new HlsVideo({
-            source: new UrlSource(url),
-            sourceFileFormatType: FileFormatType.HLS,
-            loadStage: OpStage.of(OpStageStatus.SUCCESS),
-            levels: hls.levels.map((p, index) => ({
-              index: index,
-              id: p.id,
-              bitrate: p.bitrate,
-              url: p.url ? p.url[0] : undefined,
-            })),
-            duration: duration,
-          });
+          let hlsVideo: HlsVideo | undefined;
+          if (hasVideo) {
+            hlsVideo = new HlsVideo({
+              source: new UrlSource(url),
+              sourceFileFormatType: FileFormatType.HLS,
+              loadStage: OpStage.of(OpStageStatus.SUCCESS),
+              levels: hls.levels.map((p, index) => ({
+                index: index,
+                id: p.id,
+                bitrate: p.bitrate,
+                url: p.url ? p.url[0] : undefined,
+              })),
+              duration: duration,
+            });
+          }
 
           let hlsAudios = hls.allAudioTracks.map((hlsMediaPlaylist) => {
             return new HlsAudio({
@@ -444,15 +523,23 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
             });
           });
 
-          let hasVideo = !!hlsVideo;
           let hasAudio = hlsAudios.length > 0;
 
+          if (hasVideo && !frameRateModel) {
+            errorCompleteObserver(rootObserver, `Frame rate could not be determined. Try by providing frame rate in load options.`);
+            return;
+          }
+
+          if (hasAudio && !hasVideo && !frameRateModel) {
+            frameRateModel = FrameRateResolver.FR_100;
+          }
+
           let ffomTimecodeModel: TimecodeModel | undefined;
-          if (loadOptions?.ffom) {
+          if (loadOptions?.ffom && frameRateModel) {
             let timecodeConverter = TimecodeConverter.create({
               frameRateModel: frameRateModel,
               hasVideo: hasVideo,
-              hasAudio: hasAudio
+              hasAudio: hasAudio,
             });
             try {
               ffomTimecodeModel = timecodeConverter.parseValueTextToTimecodeModel(loadOptions.ffom);
@@ -461,16 +548,21 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
             }
           }
 
+          let liveState = this.resolveLiveState();
+          let essentialArgs: MainMediaUpdateableAttrs = {
+            duration: duration,
+            frameRateModel: frameRateModel,
+            initSegmentTimeOffset: initSegmentTimeOffset,
+            ffomTimecodeModel: ffomTimecodeModel,
+            hasDrm: hasDrm,
+            hasVideo: hasVideo,
+            hasAudio: hlsAudios.length > 0,
+            isLive: !!liveState,
+            liveState: liveState ? toMediaLiveState(liveState) : void 0,
+          };
+
           args
-            .mainMediaEssentialArgsHook({
-              duration: duration,
-              frameRateModel: frameRateModel,
-              initSegmentTimeOffset: initSegmentTimeOffset,
-              ffomTimecodeModel: ffomTimecodeModel,
-              hasDrm: hasDrm,
-              hasVideo: !!hlsVideo,
-              hasAudio: hlsAudios.length > 0
-            })
+            .mainMediaEssentialArgsHook(essentialArgs)
             .pipe(takeUntil(this._loadBreaker.observer))
             .subscribe({
               next: () => {
@@ -480,10 +572,6 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
                 errorCompleteObserver(mainMediaEssentialArgsHookCompleted$, err);
               },
             });
-
-          // subtitles
-          this._hls!.subtitleTrack = -1;
-          this._hls!.subtitleDisplay = false;
 
           let hlsTextTracks: HlsTextTrack[] = [];
           if (hls.allSubtitleTracks.length > 0) {
@@ -510,7 +598,19 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
             });
           }
 
-          let allTracks = [hlsVideo, ...hlsAudios, ...hlsTextTracks];
+          let allTracks = [];
+
+          if (hlsVideo) {
+            allTracks.push(hlsVideo);
+          }
+
+          if (hlsAudios.length > 0) {
+            allTracks.push(...hlsAudios);
+          }
+
+          if (hlsTextTracks.length > 0) {
+            allTracks.push(...hlsTextTracks);
+          }
 
           args
             .tracksCreatedHook(allTracks)
@@ -529,6 +629,222 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
       this._hls.loadSource(url);
       this._hls.attachMedia(this._playerDomController.mainMediaVideoElement);
     });
+  }
+
+  /**
+   * syncs LSP while paused
+   */
+  protected startPausedLiveStateTick(): void {
+    this.stopPausedLiveStateTick();
+
+    this._liveStateTickSubscription = interval(PLAYER_CONTROLLER_DEFAULTS.liveStateTickIntervalMs)
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe(() => {
+        if (this._playerDomController.mainMediaVideoElement.paused) {
+          this.emitLiveStateUpdate(false);
+        }
+      });
+  }
+
+  protected stopPausedLiveStateTick(): void {
+    this._liveStateTickSubscription?.unsubscribe();
+    this._liveStateTickSubscription = void 0;
+  }
+
+  protected emitLiveStateUpdate(manifestChanged: boolean): void {
+    let liveState = this.resolveLiveState();
+
+    // no emit for vod
+    if (!liveState && !this._wasLive) {
+      return;
+    }
+
+    let signature = liveState ? `${liveState.liveStartTime}|${liveState.liveEdgeDuration}|${liveState.liveSyncPosition}` : 'ended';
+
+    if (!manifestChanged && signature === this._lastLiveSignature) {
+      return;
+    }
+
+    this._wasLive = !!liveState;
+    this._lastLiveSignature = signature;
+
+    this._onEvent$.next({
+      type: PlayerControllerEventType.PLAYER_CONTROLLER_LIVE_STATE_UPDATE,
+      data: {liveState: liveState, manifestChanged: manifestChanged},
+    });
+  }
+
+  protected override emitPlaybackProgress(): void {
+    super.emitPlaybackProgress();
+    this.emitLiveStateUpdate(false);
+  }
+
+  protected override _play(): Observable<void> {
+    let liveState = this.resolveLiveState();
+    if (liveState && this.getCurrentTime() < liveState.liveStartTime) {
+      // in case we fall out of current manifest window
+      return this.seekTo(liveState.liveStartTime).pipe(switchMap(() => super._play()));
+    }
+    return super._play();
+  }
+
+  /**
+   * Continuous live's sliding window evicts its oldest fragment on every manifest reload. If the
+   * playhead is paused at a position behind the new window start, that position no longer has
+   * fetchable media - snap it forward to the first still-available position instead of leaving it
+   * stranded there. Only while paused: during playback, eviction naturally advances past old
+   * fragments as playback itself moves forward, so no correction is needed. EVENT-mode playlists
+   * never evict, so they're excluded too.
+   */
+  protected enforceLiveWindowFloor(): void {
+    if (!this._playerDomController.mainMediaVideoElement.paused) {
+      return;
+    }
+
+    let liveState = this.resolveLiveState();
+    if (!liveState || liveState.liveMode !== LiveMode.CONTINUOUS) {
+      return;
+    }
+
+    if (this.getCurrentTime() < liveState.liveStartTime) {
+      this.seekTo(liveState.liveStartTime).subscribe();
+    }
+  }
+
+  /**
+   * Resolves live info from the loaded HLS playlist. Returns `isLive: false` for VOD or before
+   * any playlist details are available.
+   */
+  resolveLiveState(): PlayerLiveState | undefined {
+    let details = this._hls?.loadLevelObj?.details ?? this._hls?.levels.find((level) => level.details)?.details;
+    let twoFrameTimeOffset = this._mainMediaState?.frameRateModel ? Decimal.mul(this._mainMediaState.frameRateModel.frameDuration, 2).toNumber() : 0;
+
+    if (!details || !details.live) {
+      return undefined;
+    }
+
+    // start of first fragment from current level
+    let liveStartTime = Math.max(0, details.fragmentStart);
+    // end of last fragment from level
+    let liveEdgeDuration = Math.max(liveStartTime, details.edge);
+
+    let liveSyncPosition = this._hls?.liveSyncPosition ?? liveEdgeDuration;
+
+    if (this._mainMediaState && !isNullOrUndefined(this._mainMediaState.duration)) {
+      let currentTime = this.getCurrentTime();
+      if (liveSyncPosition - twoFrameTimeOffset < currentTime) {
+        // if close enough we lie due to UI reasons
+        liveSyncPosition = currentTime;
+      }
+    }
+
+    let liveState: PlayerLiveState = {
+      isLive: true,
+      liveStartTime: liveStartTime,
+      liveEdgeDuration: liveEdgeDuration,
+      liveSyncPosition: liveSyncPosition,
+      leadingSegmentDurations: details.fragments.slice(0, PLAYER_CONTROLLER_DEFAULTS.liveLeadingSegmentsCaptured).map((fragment) => fragment.duration),
+      startSN: details.startSN,
+      duration: liveSyncPosition,
+      targetDuration: details.targetduration,
+      liveMode: details.type === 'EVENT' ? LiveMode.EVENT : LiveMode.CONTINUOUS,
+      manifestUpdatedTime: this._manifestUpdatedTime,
+    };
+
+    return liveState;
+  }
+
+  /**
+   * Anchors the timeline on the first fragment, then hands playback back to the live edge.
+   */
+  protected anchorTimelineAtFirstFragment(hls: Hls): void {
+    hls.config.startPosition = 0;
+
+    const jumpToLive = (event: HlsEvents.FRAG_BUFFERED, data: {frag: {type: string}}) => {
+      if (data.frag.type !== 'main') {
+        return;
+      }
+
+      hls.off(HlsEvents.FRAG_BUFFERED, jumpToLive);
+
+      // VOD keeps the position it was given; only live has an edge to return to
+      const liveState = this.resolveLiveState();
+      if (liveState) {
+        this._playerDomController.mainMediaVideoElement.currentTime = liveState.liveSyncPosition;
+      }
+    };
+
+    hls.on(HlsEvents.FRAG_BUFFERED, jumpToLive);
+  }
+
+  /**
+   * Corrects {@link resolveTimelineOffset} from the resuming instance's own media playlist, which is
+   * the last moment before hls.js shifts the fragments with it.
+   *
+   * Takes the `pLoader` slot to get there. Subclasses that build their own manifests already know the
+   * offset exactly and override this to do nothing, keeping the slot for their own loader.
+   */
+  protected alignLiveTimeline(hls: Hls, liveTimelineAnchor: LiveTimelineAnchor): void {
+    let aligned = false;
+
+    hls.config.pLoader = createHlsPlaylistAlignLoader((playlistText) => {
+      if (aligned) {
+        return;
+      }
+      aligned = true;
+
+      const alignedOffset = this.resolveAlignedTimelineOffset(liveTimelineAnchor, playlistText);
+      if (alignedOffset !== void 0) {
+        hls.config.timelineOffset = alignedOffset;
+      }
+    });
+  }
+
+  protected resolveTimelineOffset(liveTimelineAnchor: LiveTimelineAnchor | undefined): number | undefined {
+    return liveTimelineAnchor ? Math.max(0, liveTimelineAnchor.liveStartTime) : void 0;
+  }
+
+  protected resolveAlignedTimelineOffset(liveTimelineAnchor: LiveTimelineAnchor, playlistText: string): number | undefined {
+    const evictedCount = resolvePlaylistMediaSequence(playlistText) - liveTimelineAnchor.startSN;
+    if (evictedCount < 0 || evictedCount > liveTimelineAnchor.segmentDurations.length) {
+      return void 0;
+    }
+
+    const evicted = liveTimelineAnchor.segmentDurations.slice(0, evictedCount).reduce((total, duration) => total + duration, 0);
+
+    return Math.max(0, liveTimelineAnchor.liveStartTime + evicted);
+  }
+
+  protected override constrainSeekTime(time: number): number {
+    let base = super.constrainSeekTime(time);
+    let liveState = this.resolveLiveState();
+    if (liveState) {
+      // constrain to live window
+      return Math.min(liveState.liveSyncPosition, Math.max(liveState.liveStartTime, base));
+    }
+    return base;
+  }
+
+  override getDuration(): MediaTemporalFormatValueMap[MediaTemporalFormat.SECONDS];
+  override getDuration<F extends MediaTemporalFormat>(format: F): MediaTemporalFormatValueMap[F];
+  override getDuration(format: MediaTemporalFormat = MediaTemporalFormat.SECONDS): MediaTemporalFormatValueMap[MediaTemporalFormat] {
+    let liveState = this.resolveLiveState();
+    if (liveState) {
+      return this._mediaTemporalConverter!.convert(liveState.liveSyncPosition, MediaTemporalFormat.SECONDS, format);
+    }
+    return super.getDuration(format);
+  }
+
+  seekToLive(): Observable<boolean> {
+    let liveState = this.resolveLiveState();
+    if (!liveState) {
+      return of(false);
+    }
+    return this.seekTo(liveState.liveSyncPosition);
+  }
+
+  protected override isLive(): boolean {
+    return !!this.resolveLiveState();
   }
 
   resolveAudioTrackIdentifier(track: HlsAudioState): AudioTrackIdentifier {
@@ -588,8 +904,8 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
   }
 
   isTextTrackActive(track: HlsTextTrackState): boolean {
-    let hlsTrackId = this._hls!.subtitleTrack;
-    return this.resolveTextTrackIdentifier(track) === hlsTrackId;
+    // queried on every switch, including after the engine is gone - nothing is active without one
+    return !!this._hls && this.resolveTextTrackIdentifier(track) === this._hls.subtitleTrack;
   }
 
   resolveActiveTextTracks(textTrackStates: HlsTextTrackState[]): TextTrackState[] {
@@ -662,8 +978,8 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
   }
 
   destroy() {
-    super.destroy();
-
     this.destroyHls();
+
+    super.destroy();
   }
 }

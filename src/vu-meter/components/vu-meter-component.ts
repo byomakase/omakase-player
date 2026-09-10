@@ -79,6 +79,8 @@ export class VuMeterComponent extends HTMLElement {
   private _barContainers: HTMLElement[] = [];
   private _scaleLabelsContainer: HTMLElement | undefined;
   private _scaleLabels: HTMLElement[] = [];
+  private _scaleLabelValues: number[] = [];
+  private _scaleMarks: {element: HTMLElement; value: number; isDivision: boolean}[] = [];
   private _barLevels: HTMLElement[] = [];
   private _heldLevels: HTMLElement[] = [];
   private _barSegments?: SVGRectElement[][];
@@ -130,9 +132,11 @@ export class VuMeterComponent extends HTMLElement {
   }
 
   set channelCount(channelCount: number) {
-    this.setAttribute(OmakaseVuMeterAttributes.CHANNELS, channelCount.toString());
-    if (this._barRegion) {
-      this.createChannelsDom(this._barRegion);
+    if (this.channelCount !== channelCount) {
+      this.setAttribute(OmakaseVuMeterAttributes.CHANNELS, channelCount.toString());
+      if (this._barRegion) {
+        this.createChannelsDom(this._barRegion);
+      }
     }
   }
 
@@ -379,6 +383,7 @@ export class VuMeterComponent extends HTMLElement {
   private createScaleLabelsDom(parent: HTMLElement) {
     this._scaleLabelsContainer = DomUtil.createElement('div');
     this._scaleLabels = [];
+    this._scaleLabelValues = [];
     this._scaleLabelsContainer.classList.add(OmakaseVuMeterDomClasses.SCALE_LABELS);
     const scaleLabels = this.getScaleLabels();
     for (const scaleLabel of scaleLabels) {
@@ -396,6 +401,7 @@ export class VuMeterComponent extends HTMLElement {
       }
       this._scaleLabelsContainer.appendChild(scaleLabelElement);
       this._scaleLabels.push(scaleLabelElement);
+      this._scaleLabelValues.push(scaleLabel.value);
     }
     parent.appendChild(this._scaleLabelsContainer);
   }
@@ -407,32 +413,52 @@ export class VuMeterComponent extends HTMLElement {
         const labelSize = this.isVertical ? this._scaleLabels[0]!.offsetHeight : this._scaleLabels[0]!.offsetWidth;
         const maxNumLabels = Math.floor(totalSize / labelSize);
         const numLabels = this._scaleLabels.length;
+        const hasHiddenLabels = numLabels > maxNumLabels;
+        const hiddenLabelValues = new Set<number>();
         this._scaleLabels.forEach((scaleLabel, index) => {
-          if (numLabels <= maxNumLabels) {
+          if (!hasHiddenLabels) {
             DomUtil.showElements(scaleLabel);
           } else {
             const shownRatio = Math.ceil(numLabels / maxNumLabels);
             if (index % shownRatio) {
               DomUtil.hideElements(scaleLabel);
+              hiddenLabelValues.add(this._scaleLabelValues[index]!);
             } else {
               DomUtil.showElements(scaleLabel);
             }
           }
         });
+        this.updateScaleMarksDom(hasHiddenLabels, hiddenLabelValues);
       }
     }
+  }
+
+  private updateScaleMarksDom(hasHiddenLabels: boolean, hiddenLabelValues: Set<number>) {
+    this._scaleMarks.forEach(({element, value, isDivision}) => {
+      DomUtil.showElements(element);
+      if (!hasHiddenLabels) {
+        element.classList.toggle(OmakaseVuMeterDomClasses.SCALE_DIVISION, isDivision);
+        element.classList.toggle(OmakaseVuMeterDomClasses.SCALE_SUBDIVISION, !isDivision);
+      } else if (!isDivision) {
+        DomUtil.hideElements(element);
+      } else if (hiddenLabelValues.has(value)) {
+        element.classList.remove(OmakaseVuMeterDomClasses.SCALE_DIVISION);
+        element.classList.add(OmakaseVuMeterDomClasses.SCALE_SUBDIVISION);
+      } else {
+        element.classList.add(OmakaseVuMeterDomClasses.SCALE_DIVISION);
+        element.classList.remove(OmakaseVuMeterDomClasses.SCALE_SUBDIVISION);
+      }
+    });
   }
 
   private createScaleMarksDom(parent: HTMLElement) {
     const scaleContainer = DomUtil.createElement('div');
     scaleContainer.classList.add(OmakaseVuMeterDomClasses.SCALE);
+    this._scaleMarks = [];
     for (let i = this.rangeMaxDb; i >= this.rangeMinDb; i -= this.scale === VuMeterScale.NORDIC ? 1.5 : 1) {
       const markElement = DomUtil.createElement('div');
-      if (i % this.scaleStepDb) {
-        markElement.classList.add(OmakaseVuMeterDomClasses.SCALE_SUBDIVISION);
-      } else {
-        markElement.classList.add(OmakaseVuMeterDomClasses.SCALE_DIVISION);
-      }
+      const isDivision = i % this.scaleStepDb === 0;
+      markElement.classList.add(isDivision ? OmakaseVuMeterDomClasses.SCALE_DIVISION : OmakaseVuMeterDomClasses.SCALE_SUBDIVISION);
       const markPosition = DomUtil.getPercentValue((i - this.rangeMinDb) / (this.rangeMaxDb - this.rangeMinDb));
       if (this.isVertical) {
         markElement.style.bottom = markPosition;
@@ -440,6 +466,7 @@ export class VuMeterComponent extends HTMLElement {
         markElement.style.left = markPosition;
       }
       scaleContainer.appendChild(markElement);
+      this._scaleMarks.push({element: markElement, value: i, isDivision});
     }
     parent.appendChild(scaleContainer);
   }

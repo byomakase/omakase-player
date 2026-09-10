@@ -30,6 +30,10 @@ node_modules
 # Library token
 .npmrc
 
+# Local env (AWS/TAMS playground config) - see .env.example
+.env
+.env.local
+
 # Editors
 .idea
 *.iml

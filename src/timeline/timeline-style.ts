@@ -24,9 +24,14 @@ import {TIMELINE} from '../constants';
 import {MARKER_TRACK_STYLE_DEFAULT} from '../ui/marker-style'; // keep direct import to prevent circular dependencies
 import type {ObservationTrackLaneStyle} from './observation';
 import type {TextTrackLaneStyle} from './text';
+import {VERTICAL_SCROLLBAR_STYLE_DEFAULT} from './scrollbar/vertical-scrollbar';
+import {LIVE_EDGE_OVERLAY_STYLE_DEFAULT} from './live/live-edge-overlay';
+import {EVICTED_REGION_OVERLAY_STYLE_DEFAULT} from './live/evicted-region-overlay';
+import {prefixKeys} from '../util/util-functions';
 
 export const TIMELINE_LANE_STYLE_DEFAULT: TimelineLaneStyle = {
   height: 80,
+  marginTop: 0,
   marginBottom: 0,
   backgroundFill: '#ffffff',
   backgroundOpacity: 1,
@@ -37,34 +42,17 @@ export const TIMELINE_LANE_STYLE_DEFAULT: TimelineLaneStyle = {
 };
 
 export const TIMELINE_STYLE_DEFAULT: TimelineStyle = {
-  stageMinWidth: 700,
-  stageMinHeight: 100,
+  minWidth: 700,
+  minHeight: 100,
+  // No default maxHeight — per TimelineStyle's own doc comment, omitting it means unconstrained.
+  // Defaulting it to a number here would make that unreachable for any consumer who simply
+  // doesn't set maxHeight, since the merge falls back to this default instead of undefined.
 
   textFontFamily: 'Arial',
   textFontStyle: 'normal',
 
   backgroundFill: '#f5f5f5',
   backgroundOpacity: 1,
-
-  headerHeight: 0,
-  headerMarginBottom: 10,
-  // headerMarginBottom: 0,
-  headerBackgroundFill: '#f5f5f5',
-  headerBackgroundOpacity: 1,
-
-  footerHeight: 50,
-  footerMarginTop: 10,
-  // footerMarginTop: 0,
-  footerBackgroundFill: '#f5f5f5',
-  footerBackgroundOpacity: 1,
-
-  // scrollbarHeight: 15,
-  // scrollbarWidth: 500,
-  // scrollbarBackgroundFill: '#000000',
-  // scrollbarBackgroundFillOpacity: 0.3,
-  // scrollbarHandleBarFill: '#01a6f0',
-  // scrollbarHandleBarOpacity: 1,
-  // scrollbarHandleOpacity: 1,
 
   thumbnailHoverWidth: 200,
   thumbnailHoverStroke: 'rgba(255,73,145,0.9)',
@@ -75,10 +63,15 @@ export const TIMELINE_STYLE_DEFAULT: TimelineStyle = {
   rightPaneMarginLeft: 30,
   rightPaneMarginRight: 30,
   rightPaneClipPadding: 20,
+  // No default leftPaneBackgroundFill/Opacity/rightPaneBackgroundFill/Opacity — omitting them means
+  // fall back to backgroundFill/backgroundOpacity, same convention as maxHeight above.
+
+  // width: 0 hides the scrollbar by default — no separate visibility flag.
+  ...prefixKeys({...VERTICAL_SCROLLBAR_STYLE_DEFAULT, width: 0}, 'verticalScrollbar'),
 
   playheadVisible: true,
   playheadFill: '#f43530',
-  scrubberSnappedFill: '#ffd500',
+
   playheadLineWidth: 2,
   playheadSymbolHeight: 15,
   playheadScrubberHeight: 15,
@@ -98,6 +91,9 @@ export const TIMELINE_STYLE_DEFAULT: TimelineStyle = {
   scrubberVisible: false,
   scrubberFill: '#737373',
 
+  scrubberSymbolOpacity: 1,
+  scrubberSnappedFill: '#ffd500',
+
   scrubberNorthLineWidth: 2,
   scrubberNorthLineOpacity: 1,
   scrubberSouthLineWidth: 2,
@@ -108,8 +104,8 @@ export const TIMELINE_STYLE_DEFAULT: TimelineStyle = {
   scrubberTextYOffset: 0,
   scrubberTextFontSize: 12,
 
-  scrubberHeight: 60,
-  scrubberMarginBottom: 15,
+  ...prefixKeys(LIVE_EDGE_OVERLAY_STYLE_DEFAULT, 'liveEdgeOverlay'),
+  ...prefixKeys(EVICTED_REGION_OVERLAY_STYLE_DEFAULT, 'evictedRegionOverlay'),
 
   loadingAnimationTheme: 'light',
 };
@@ -145,11 +141,14 @@ export const MARKER_TRACK_LANE_STYLE_DEFAULT: MarkerTrackLaneStyle = {
   ...TIMELINE_LANE_STYLE_DEFAULT,
   ...MARKER_ON_MARKER_TRACK_LANE_STYLE_DEFAULT,
   height: 190,
+  paddingTop: 0,
+  paddingBottom: 0,
 };
 
 export const THUMBNAIL_TRACK_LANE_STYLE_DEFAULT: ThumbnailTrackLaneStyle = {
   ...TIMELINE_LANE_STYLE_DEFAULT,
-  thumbnailHeight: 40,
+  paddingTop: 0,
+  paddingBottom: 0,
   thumbnailStroke: 'rgba(121,0,255,0.9)',
   thumbnailStrokeWidth: 0,
 
@@ -178,4 +177,6 @@ export const LABEL_LANE_STYLE_DEFAULT: LabelLaneStyle = {
 export const OBSERVATION_TRACK_LANE_STYLE_DEFAULT: ObservationTrackLaneStyle = {
   ...TIMELINE_LANE_STYLE_DEFAULT,
   height: 120,
+  paddingTop: 0,
+  paddingBottom: 0,
 };

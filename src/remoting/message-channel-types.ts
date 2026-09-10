@@ -33,8 +33,10 @@ import type {MarkerTrackMessageChannel} from './impl/marker-track-message-channe
 import type {ChromingMarkerBarHandlerMessageChannel} from './impl/chroming-marker-bar-handler-message-channel';
 import type {AlertsManagerMessageChannel} from './impl/alerts-manager-message-channel';
 import type {TrackUtilsMessageChannel} from './impl/track-utils-message-channel';
+import type {TamsMainMediaSessionMessageChannel} from './impl/tams-main-media-session-message-channel';
 import type {ThumbnailTrackMessageChannel} from './impl/thumbnail-track-message-channel';
 import type {UiMessageChannel} from './impl/ui-message-channel';
+import type {LivePlaybackTrackerMessageChannel} from './impl/live-playback-tracker-message-channel';
 
 /**
  * Name - Type mappings for supported message channels
@@ -47,6 +49,7 @@ export type MessageChannelTypeMap = {
   SessionStore: SessionStoreMessageChannel;
   OmakaseTrackApi: OmakaseTrackApiMessageChannel;
   TrackUtils: TrackUtilsMessageChannel;
+  TamsMainMediaSession: TamsMainMediaSessionMessageChannel;
 
   MainMedia: MainMediaMessageChannel;
   Track: TrackMessageChannel;
@@ -65,6 +68,8 @@ export type MessageChannelTypeMap = {
   AudioEffects: AudioEffectsMessageChannel;
   AudioRouter: AudioRouterMessageChannel;
   AlertsManager: AlertsManagerMessageChannel;
+
+  LivePlaybackTracker: LivePlaybackTrackerMessageChannel;
 };
 export type MessageChannelName = keyof MessageChannelTypeMap;
 export type MessageChannelType = MessageChannelTypeMap[MessageChannelName];

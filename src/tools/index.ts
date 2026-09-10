@@ -16,4 +16,4 @@
 
 export {MediaMetadataResolver} from './media-metadata-resolver';
 export type {OmakaseToolsApi} from './omakase-tools-api';
-export type {MediaProbeToolType, MediaProbeResult} from './media-probe';
+export {MediaProbeToolType, type MediaProbeResult} from './media-probe';

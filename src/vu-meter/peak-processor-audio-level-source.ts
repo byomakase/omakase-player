@@ -39,6 +39,21 @@ export class PeakProcessorAudioLevelSource extends AudioLevelSource {
     this.wireEvents();
   }
 
+  get channelCount() {
+    if (this._player) {
+      if (this._audioType === PlayerAudioType.MAIN) {
+        const activeMainTrackId = this._player?.player.audio.state.tracks[PlayerAudioType.MAIN].find((track) => track.active)?.trackId;
+        return this._player?.player.audio.getTracks().find((track) => track.id === activeMainTrackId)?.channels;
+      } else if (this._audioType === PlayerAudioType.OUTPUT) {
+        return this._player?.player.audio.getHandler(PlayerAudioType.OUTPUT)?.channelCount;
+      } else if (this._trackId) {
+        return this._player?.player.audio.getTracks().find((track) => track.id === this._trackId)?.channels;
+      }
+    } else {
+      return undefined;
+    }
+  }
+
   setHandler(handler: AudioHandlerApi): void {
     this._handlerBreaker.break();
     handler
@@ -101,7 +116,7 @@ export class PeakProcessorAudioLevelSource extends AudioLevelSource {
       if (this._audioType === PlayerAudioType.MAIN) {
         this._player.player.audio.onEvent$
           .pipe(
-            filter((event) => event.type === PlayerAudioEventType.PLAYER_AUDIO_TRACK_SWITCHED),
+            filter((event) => event.type === PlayerAudioEventType.PLAYER_AUDIO_CHANGE),
             takeUntil(this._destroyBreaker.observer)
           )
           .subscribe(() => {

@@ -15,13 +15,14 @@
  */
 
 import type {Serializable} from '../common/capabilities';
-import {type MainMediaState} from '../media';
+import {type MainMediaState, type MediaRotationValue} from '../media';
 import type {
   PlayerControllerBufferingEventData,
   PlayerControllerPlaybackProgressEventData,
   PlayerControllerPlaybackRateUpdateEventData,
   PlayerControllerSeekedEventData,
   PlayerControllerSeekingEventData,
+  PlayerLiveState,
 } from './player-controller-api';
 import type {PlayerAudioState} from './player-audio-api';
 import type {PlayerSession} from '../session';
@@ -38,6 +39,7 @@ export enum PlayerEventType {
   PLAYER_MAIN_MEDIA_UNLOADING = 'PLAYER_MAIN_MEDIA_UNLOADING',
   PLAYER_MAIN_MEDIA_UNLOADED = 'PLAYER_MAIN_MEDIA_UNLOADED',
   PLAYER_MAIN_MEDIA_UPDATED = 'PLAYER_MAIN_MEDIA_UPDATED',
+  PLAYER_LIVE_STATE_UPDATE = 'PLAYER_LIVE_STATE_UPDATE',
 
   PLAYER_AUDIO_CHANGE = 'PLAYER_AUDIO_CHANGE',
   PLAYER_CHROMING_CHANGE = 'PLAYER_CHROMING_CHANGE',
@@ -54,6 +56,7 @@ export enum PlayerEventType {
   PLAYER_PLAYBACK_PROGRESS = 'PLAYER_PLAYBACK_PROGRESS',
 
   PLAYER_PLAYBACK_RATE_UPDATE = 'PLAYER_PLAYBACK_RATE_UPDATE',
+  PLAYER_MEDIA_ROTATION_UPDATE = 'PLAYER_MEDIA_ROTATION_UPDATE',
 }
 
 export interface PlayerSessionRestoredEventData extends Serializable {
@@ -70,6 +73,11 @@ export interface PlayerMainMediaUnloadedEventData extends Serializable {
 
 export interface PlayerMainMediaErrorEventData extends PlayerMainMediaEventData {
   error: string | undefined;
+}
+
+/** Fired on every live manifest change (CORE-4); carries the current live state (CORE-3). */
+export interface PlayerLiveStateUpdateEventData extends Serializable {
+  liveState: PlayerLiveState | undefined;
 }
 
 export interface PlayerPlaybackChangeEventData extends Serializable {
@@ -92,6 +100,10 @@ export interface PlayerPlaybackProgressEventData extends PlayerControllerPlaybac
 
 export interface PlayerPlaybackRateUpdateEventData extends PlayerControllerPlaybackRateUpdateEventData {}
 
+export interface PlayerMediaRotationUpdateEventData extends Serializable {
+  mediaRotation: MediaRotationValue;
+}
+
 export interface PlayerPlayEventData extends PlayerControllerPlaybackProgressEventData {}
 
 export interface PlayerPauseEventData extends PlayerPlayEventData {}
@@ -113,6 +125,7 @@ export type PlayerEventTypeDataMap = {
   [PlayerEventType.PLAYER_MAIN_MEDIA_UNLOADING]: PlayerMainMediaUnloadedEventData;
   [PlayerEventType.PLAYER_MAIN_MEDIA_UNLOADED]: PlayerMainMediaUnloadedEventData;
   [PlayerEventType.PLAYER_MAIN_MEDIA_UPDATED]: PlayerMainMediaEventData;
+  [PlayerEventType.PLAYER_LIVE_STATE_UPDATE]: PlayerLiveStateUpdateEventData;
 
   [PlayerEventType.PLAYER_AUDIO_CHANGE]: PlayerAudioChangeEventData;
   [PlayerEventType.PLAYER_CHROMING_CHANGE]: PlayerChromingChangeEventData;
@@ -129,6 +142,7 @@ export type PlayerEventTypeDataMap = {
   [PlayerEventType.PLAYER_SEEKED]: PlayerSeekedEventData;
 
   [PlayerEventType.PLAYER_PLAYBACK_RATE_UPDATE]: PlayerPlaybackRateUpdateEventData;
+  [PlayerEventType.PLAYER_MEDIA_ROTATION_UPDATE]: PlayerMediaRotationUpdateEventData;
 };
 
 export type PlayerEvent = {

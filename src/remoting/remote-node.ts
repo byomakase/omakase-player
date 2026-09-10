@@ -54,11 +54,13 @@ import type {AudioRouterState} from '../audio';
 import type {ChromingMarkerBarState} from '../chroming';
 import {AlertsManagerProxy} from './impl/alerts-manager-proxy';
 import {TrackUtilsProxy} from './impl/track-utils-proxy';
+import {TamsMainMediaSessionProxy} from './impl/tams-main-media-session-proxy';
 import type {MessageChannelProxy} from './message-channel-proxy';
 import {ThumbnailTrackProxy} from './impl/thumbnail-track-proxy';
 import type {ThumbnailTrackMessageChannel} from './impl/thumbnail-track-message-channel';
 import type {OmpProvider} from '../omp-provider';
 import {UiProxy} from './impl/ui-proxy';
+import {LivePlaybackTrackerProxy} from './impl/live-playback-tracker-proxy';
 
 interface MessageChannelDto {
   messageChannelName: MessageChannelName;
@@ -331,6 +333,10 @@ export abstract class BaseRemoteNode implements RemoteNode, Destroyable {
         this._proxyByName['TrackUtils'] = new TrackUtilsProxy(this);
       }
 
+      if (this._remoteMessageChannelsByName.has('TamsMainMediaSession')) {
+        this._proxyByName['TamsMainMediaSession'] = new TamsMainMediaSessionProxy(this);
+      }
+
       if (this._remoteMessageChannelsByName.has('PlayerAudioInternal')) {
         this._proxyByName['PlayerAudioInternal'] = new PlayerAudioInternalProxy(this, this._ompProvider);
       }
@@ -353,6 +359,10 @@ export abstract class BaseRemoteNode implements RemoteNode, Destroyable {
 
       if (this._remoteMessageChannelsByName.has('Ui')) {
         this._proxyByName['Ui'] = new UiProxy(this);
+      }
+
+      if (this._remoteMessageChannelsByName.has('LivePlaybackTracker')) {
+        this._proxyByName['LivePlaybackTracker'] = new LivePlaybackTrackerProxy(this);
       }
 
       combineLatest(Object.values(this._proxyByName).map((p) => p.onInitialized$.pipe(filter((p) => p))))

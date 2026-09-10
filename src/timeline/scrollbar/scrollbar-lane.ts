@@ -16,7 +16,7 @@
 
 import {BaseTimelineLane, TIMELINE_LANE_CONFIG_DEFAULT, type TimelineLaneConfig, type TimelineLaneStyle} from '../timeline-lane';
 import {KonvaFlexGroup, KonvaFlexItem} from '../layout/konva-flex';
-import {Scrollbar, ScrollbarEventType, type ScrollbarStyle} from './scrollbar';
+import {ZoomScrollbar, ZoomScrollbarEventType, type ZoomScrollbarStyle} from './zoom-scrollbar';
 import Konva from 'konva';
 import {type ConfigAndStyle, TimelineEventType} from '../timeline-api';
 import {omitKeys, removeEmptyValues} from '../../util/object-util';
@@ -32,6 +32,8 @@ import {TIMELINE_LANE_STYLE_DEFAULT} from '../timeline-style';
 import {isNullOrUndefined} from '../../util/util-functions';
 
 export interface ScrollbarLaneStyle extends TimelineLaneStyle {
+  paddingTop?: number;
+  paddingBottom?: number;
   scrollbarWidth: number | string;
   scrollbarHeight: number | undefined;
   scrollbarBackgroundFill: Color;
@@ -51,6 +53,8 @@ const configDefault: ScrollbarLaneConfig = {
 export const TIMELINE_SCROLLBAR_LANE_STYLE_DEFAULT: ScrollbarLaneStyle = {
   ...TIMELINE_LANE_STYLE_DEFAULT,
   height: 40,
+  paddingTop: 0,
+  paddingBottom: 0,
   scrollbarHeight: void 0,
   scrollbarWidth: '100%',
   scrollbarBackgroundFill: '#000000',
@@ -64,9 +68,9 @@ export const TIMELINE_SCROLLBAR_LANE_STYLE_DEFAULT: ScrollbarLaneStyle = {
 export class ScrollbarLane extends BaseTimelineLane<ScrollbarLaneConfig, ScrollbarLaneStyle> {
   protected _contentGroup?: Konva.Group;
   protected _contentFlexGroup?: KonvaFlexGroup;
-  protected _scrollbarFlexItem?: KonvaFlexItem<KonvaComponentFlexContentNode2<Scrollbar>>;
+  protected _scrollbarFlexItem?: KonvaFlexItem<KonvaComponentFlexContentNode2<ZoomScrollbar>>;
 
-  protected _scrollbar?: Scrollbar;
+  protected _scrollbar?: ZoomScrollbar;
 
   private _timelineZoomInProgress = false;
 
@@ -118,7 +122,7 @@ export class ScrollbarLane extends BaseTimelineLane<ScrollbarLaneConfig, Scrollb
 
     this._timeline!.addToTimecodedStaticContent(this._contentFlexGroup.contentNode.konvaNode);
 
-    this._scrollbar = new Scrollbar(ompProvider, {
+    this._scrollbar = new ZoomScrollbar(ompProvider, {
       style: removeEmptyValues({
         height: this.resolveScrollbarHeight(),
         backgroundFill: this._style?.scrollbarBackgroundFill,
@@ -145,8 +149,12 @@ export class ScrollbarLane extends BaseTimelineLane<ScrollbarLaneConfig, Scrollb
 
     // clipping when minimized
     this._contentFlexGroup.contentNode.konvaNode.clipFunc((ctx) => {
+      if (!this._contentFlexGroup) {
+        // lane may already be destroyed by the time Konva's deferred batchDraw invokes this callback
+        return;
+      }
       let padding = this._timeline!.style.rightPaneClipPadding;
-      let layout = this._contentFlexGroup!.getLayout();
+      let layout = this._contentFlexGroup.getLayout();
       ctx.rect(-padding, 0, layout.width + 2 * padding, layout.height);
     });
 
@@ -169,10 +177,10 @@ export class ScrollbarLane extends BaseTimelineLane<ScrollbarLaneConfig, Scrollb
 
     this._scrollbar.onEvent$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe((event) => {
       switch (event.type) {
-        case ScrollbarEventType.SCROLLBAR_SCROLL:
+        case ZoomScrollbarEventType.SCROLLBAR_SCROLL:
           this._timeline!.scrollHorizontallyToPercent(this._scrollbar!.getScrollHandlePercent());
           break;
-        case ScrollbarEventType.SCROLLBAR_ZOOM:
+        case ZoomScrollbarEventType.SCROLLBAR_ZOOM:
           this._timelineZoomInProgress = true;
           this._timeline!.zoomTo(event.data.zoomPercent, event.data.zoomFocus);
           this._timeline!.scrollHorizontallyToPercent(this._scrollbar!.getScrollHandlePercent());
@@ -195,34 +203,42 @@ export class ScrollbarLane extends BaseTimelineLane<ScrollbarLaneConfig, Scrollb
       this._scrollbarFlexItem?.setHeight(this._style?.scrollbarHeight)
     }
 
-    this._scrollbar?.updateStyle(removeEmptyValues({
+    this._scrollbar?.setStyle(removeEmptyValues({
       height: this.resolveScrollbarHeight(),
       backgroundFill: this._style?.scrollbarBackgroundFill,
       backgroundFillOpacity: this._style?.scrollbarBackgroundFillOpacity,
       handleBarFill: this._style?.scrollbarHandleBarFill,
       handleBarOpacity: this._style?.scrollbarHandleBarOpacity,
       handleOpacity: this._style?.scrollbarHandleOpacity,
-    } as Partial<ScrollbarStyle>))
+    } as Partial<ZoomScrollbarStyle>))
 
     this._scrollbar?.updateScrollHandle(this._timeline!)
   }
 
   private resolveScrollbarHeight() {
     let timecodedRect = this.getTimecodedRect();
-    return isNullOrUndefined(this._style?.scrollbarHeight) ? timecodedRect.height : this._style?.scrollbarHeight;
+    const paddingTop = this._style?.paddingTop ?? 0;
+    const paddingBottom = this._style?.paddingBottom ?? 0;
+    return isNullOrUndefined(this._style?.scrollbarHeight) ? Math.max(0, timecodedRect.height - paddingTop - paddingBottom) : this._style?.scrollbarHeight;
   }
 
   protected settleLayout() {
     let timecodedContainerDimension = this._timeline!.getTimecodedContainerDimension();
     let timecodedRect = this.getTimecodedRect();
+    const paddingTop = this._style?.paddingTop ?? 0;
+    const paddingBottom = this._style?.paddingBottom ?? 0;
 
-    this._contentFlexGroup!.setDimensionAndPositions(timecodedContainerDimension.width, timecodedRect.height, FlexSpacingBuilder.create().topRightBottomLeft([timecodedRect.y, 0, 0, 0]).build());
+    this._contentFlexGroup!.setDimensionAndPositions(
+      timecodedContainerDimension.width,
+      Math.max(0, timecodedRect.height - paddingTop - paddingBottom),
+      FlexSpacingBuilder.create().topRightBottomLeft([timecodedRect.y + paddingTop, 0, 0, 0]).build()
+    );
     if (!this._timelineZoomInProgress) {
       this._scrollbar!.updateScrollHandle(this._timeline!);
     }
   }
 
-  get scrollbar(): Scrollbar | undefined {
+  get scrollbar(): ZoomScrollbar | undefined {
     return this._scrollbar;
   }
 
@@ -230,5 +246,11 @@ export class ScrollbarLane extends BaseTimelineLane<ScrollbarLaneConfig, Scrollb
     super.destroy();
 
     this._contentFlexGroup?.destroy();
+    // @ts-ignore
+    this._contentFlexGroup = void 0;
+
+    this._scrollbarFlexItem?.destroy();
+    // @ts-ignore
+    this._scrollbarFlexItem = void 0;
   }
 }
