@@ -38,6 +38,18 @@ import {affectsStyledElement, type Color, type Size, type StyledElementWithId, U
 import type {OmpProvider} from '../omp-provider';
 import {TIMELINE} from '../constants';
 
+export interface TimelineLaneBorderStyle {
+  width: Size;
+  /** Defaults to `'solid'` when omitted. */
+  style?: 'solid' | number[];
+  color: Color;
+}
+
+export interface TimelineLaneBorderEdges {
+  top?: TimelineLaneBorderStyle;
+  bottom?: TimelineLaneBorderStyle;
+}
+
 export interface TimelineLaneStyle {
   height: number;
   marginTop: number;
@@ -54,6 +66,18 @@ export interface TimelineLaneStyle {
   leftBackgroundOpacity?: Size | undefined;
   rightBackgroundFill?: Color | undefined;
   rightBackgroundOpacity?: Size | undefined;
+
+  /** Shared top/bottom border for both panes; overridden per-pane by {@link leftBorder}/{@link rightBorder}. */
+  border?: TimelineLaneBorderEdges | undefined;
+  leftBorder?: TimelineLaneBorderEdges | undefined;
+  rightBorder?: TimelineLaneBorderEdges | undefined;
+
+  /**
+   * Additional top/bottom padding applied to the lane's content area, on top of any implicit padding
+   * reserved by {@link border}/{@link leftBorder}/{@link rightBorder} width. A single number applies to
+   * both edges; a 2-element array is `[top, bottom]`.
+   */
+  padding?: number | number[];
 
   loadingAnimationFill?: Color | undefined;
   loadingAnimationSpeed?: Size | undefined;
@@ -106,6 +130,21 @@ export interface TimelineLaneComponentConfig {
 
 const edgePadding = 5;
 
+function resolveBorderLineDash(style: TimelineLaneBorderStyle['style']): number[] {
+  return !style || style === 'solid' ? [] : style;
+}
+
+function resolveLanePaddingEdges(padding: number | number[] | undefined): {top: number; bottom: number} {
+  if (padding === undefined) {
+    return {top: 0, bottom: 0};
+  }
+  if (typeof padding === 'number') {
+    return {top: padding, bottom: padding};
+  }
+  let top = padding[0] ?? 0;
+  return {top, bottom: padding.length >= 2 ? (padding[1] ?? 0) : top};
+}
+
 export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends TimelineLaneStyle> implements TimelineLaneApi {
   protected _config: C;
 
@@ -114,6 +153,11 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
 
   protected _leftBgRect: Konva.Rect;
   protected _rightBgRect: Konva.Rect;
+
+  protected _leftBorderTopLine: Konva.Line;
+  protected _leftBorderBottomLine: Konva.Line;
+  protected _rightBorderTopLine: Konva.Line;
+  protected _rightBorderBottomLine: Konva.Line;
 
   protected _timecodedGroup?: Konva.Group;
   protected _loadingGroup?: Konva.Group;
@@ -148,6 +192,11 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
 
     this._leftBgRect = KonvaFactory.createRect();
     this._rightBgRect = KonvaFactory.createRect();
+
+    this._leftBorderTopLine = KonvaFactory.createLine({listening: false});
+    this._leftBorderBottomLine = KonvaFactory.createLine({listening: false});
+    this._rightBorderTopLine = KonvaFactory.createLine({listening: false});
+    this._rightBorderBottomLine = KonvaFactory.createLine({listening: false});
   }
 
   protected abstract createStyledElement(): StyledElementWithId<S>;
@@ -247,6 +296,60 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
       fill: rightBgFill,
       opacity: rightBgOpacity,
     });
+
+    let leftBorder = this._style.leftBorder ?? this._style.border;
+    let rightBorder = this._style.rightBorder ?? this._style.border;
+
+    this.applyBorderStyle(this._leftBorderTopLine, leftBorder?.top);
+    this.applyBorderStyle(this._leftBorderBottomLine, leftBorder?.bottom);
+    this.applyBorderStyle(this._rightBorderTopLine, rightBorder?.top);
+    this.applyBorderStyle(this._rightBorderBottomLine, rightBorder?.bottom);
+
+    this.repositionBorderLines(this._leftBgRect, this._leftBorderTopLine, this._leftBorderBottomLine);
+    this.repositionBorderLines(this._rightBgRect, this._rightBorderTopLine, this._rightBorderBottomLine);
+
+    this.updateLeftPaneContentPositions();
+  }
+
+  /**
+   * `_mainLeftStartJustified`/`_mainLeftEndJustified`/`_mainLeftDescription` are `POSITION_TYPE_ABSOLUTE`
+   * with `height: '100%'` — Yoga does not shrink a percentage-sized absolute child for its parent's
+   * padding (only the implicit top offset respects it), so `height:'100%'` would overflow past a
+   * configured bottom border/padding instead of centering within it. Setting explicit top/bottom
+   * positions equal to the content insets makes Yoga derive the correct (shrunk) height instead.
+   */
+  protected updateLeftPaneContentPositions(): void {
+    let positions = this.buildContentInsetSpacing('left');
+    [this._mainLeftStartJustified, this._mainLeftEndJustified, this._mainLeftDescription].forEach((group) => group?.setPositions(positions));
+  }
+
+  /**
+   * Konva strokes are centered on the path, so each line is inset by half its own
+   * strokeWidth to stay fully inside the pane's box, flush with the edge — matching
+   * how CSS border-top/border-bottom render, and avoiding a stroke half-clipped by
+   * the right pane's clipFunc or bleeding outside the left pane's (unclipped) box.
+   */
+  protected repositionBorderLines(bgRect: Konva.Rect, topLine: Konva.Line, bottomLine: Konva.Line): void {
+    let width = bgRect.width();
+    let height = bgRect.height();
+    let paneVisible = height > 0;
+
+    let topStrokeWidth = topLine.strokeWidth() ?? 0;
+    let topY = topStrokeWidth / 2;
+    topLine.setAttrs({points: [0, topY, width, topY], visible: topLine.visible() && paneVisible});
+
+    let bottomStrokeWidth = bottomLine.strokeWidth() ?? 0;
+    let bottomY = Math.max(bottomStrokeWidth / 2, height - bottomStrokeWidth / 2);
+    bottomLine.setAttrs({points: [0, bottomY, width, bottomY], visible: bottomLine.visible() && paneVisible});
+  }
+
+  protected applyBorderStyle(line: Konva.Line, border: TimelineLaneBorderStyle | undefined): void {
+    line.setAttrs({
+      stroke: border?.color ?? 'transparent',
+      strokeWidth: border?.width ?? 0,
+      dash: border ? resolveBorderLineDash(border.style) : [],
+      visible: !!border,
+    });
   }
 
   protected handleTimelineZoom(): void {
@@ -268,10 +371,13 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
       justifyContent: 'JUSTIFY_FLEX_START',
     });
 
+    // height:'100%' is intentionally omitted on these POSITION_TYPE_ABSOLUTE groups — Yoga does not
+    // shrink a percentage-sized absolute child for its parent's padding, so height:'100%' would
+    // overflow past a configured bottom border/padding. Explicit top/bottom positions (set below,
+    // via updateLeftPaneContentPositions()) make Yoga derive the correct height instead.
     this._mainLeftStartJustified = KonvaFlexGroup.of({
       konvaNode: KonvaFactory.createGroup(),
       clip: true,
-      height: '100%',
       width: '100%',
       justifyContent: 'JUSTIFY_FLEX_START',
       alignItems: 'ALIGN_CENTER',
@@ -286,7 +392,6 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
       //   opacity: 0,
       // }),
       clip: true,
-      height: '100%',
       width: '100%',
       flexDirection: 'FLEX_DIRECTION_ROW_REVERSE',
       justifyContent: 'JUSTIFY_FLEX_START',
@@ -296,6 +401,13 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
     });
 
     flexGroup.addChild(this._mainLeftStartJustified).addChild(this._mainLeftEndJustified);
+    this.updateLeftPaneContentPositions();
+
+    flexGroup.contentNode.konvaNode.add(this._leftBorderTopLine, this._leftBorderBottomLine);
+    this._leftBgRect.on('widthChange.timelineLaneBorder heightChange.timelineLaneBorder', () =>
+      this.repositionBorderLines(this._leftBgRect, this._leftBorderTopLine, this._leftBorderBottomLine)
+    );
+    this.repositionBorderLines(this._leftBgRect, this._leftBorderTopLine, this._leftBorderBottomLine);
 
     return flexGroup;
   }
@@ -311,7 +423,6 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
         //   opacity: 0,
         // }),
         clip: true,
-        height: '100%',
         width: '100%',
         flexDirection: 'FLEX_DIRECTION_ROW_REVERSE',
         justifyContent: 'JUSTIFY_FLEX_START',
@@ -321,6 +432,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
       });
 
       this.mainLeftFlexGroup.addChild(this._mainLeftDescription);
+      this.updateLeftPaneContentPositions();
 
       this._descriptionTextLabel = new TextLabel({
         text: this._description,
@@ -349,7 +461,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
   }
 
   protected createMainRightFlexGroup(): KonvaFlexGroup {
-    return KonvaFlexGroup.of({
+    const flexGroup = KonvaFlexGroup.of({
       konvaNode: KonvaFactory.createGroup(),
       konvaBgNode: this._rightBgRect,
       height: this._config.minimized ? 0 : this._style!.height,
@@ -361,6 +473,14 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
         .build(),
       justifyContent: 'JUSTIFY_FLEX_START',
     });
+
+    flexGroup.contentNode.konvaNode.add(this._rightBorderTopLine, this._rightBorderBottomLine);
+    this._rightBgRect.on('widthChange.timelineLaneBorder heightChange.timelineLaneBorder', () =>
+      this.repositionBorderLines(this._rightBgRect, this._rightBorderTopLine, this._rightBorderBottomLine)
+    );
+    this.repositionBorderLines(this._rightBgRect, this._rightBorderTopLine, this._rightBorderBottomLine);
+
+    return flexGroup;
   }
 
   onMeasurementsChange() {
@@ -389,13 +509,37 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
 
   getTimecodedRect(): RectMeasurement {
     let layout = this.mainRightFlexGroup.getLayout();
+    let insets = this.getContentInsets('right');
     let timelineTimecodedDimension = this._timeline?.getTimecodedFloatingDimension();
     return {
       x: 0,
-      y: layout.top,
+      y: layout.top + insets.top,
       width: timelineTimecodedDimension ? timelineTimecodedDimension.width : 0,
-      height: layout.height,
+      height: Math.max(0, layout.height - insets.top - insets.bottom),
     };
+  }
+
+  /**
+   * Top/bottom space reserved on the given pane's content area: implicit padding from that pane's
+   * resolved border width, plus {@link TimelineLaneStyle.padding}.
+   */
+  getContentInsets(pane: 'left' | 'right' = 'right'): {top: number; bottom: number} {
+    let border = (pane === 'left' ? this._style!.leftBorder : this._style!.rightBorder) ?? this._style!.border;
+    let paddingEdges = resolveLanePaddingEdges(this._style!.padding);
+    return {
+      top: (border?.top?.width ?? 0) + paddingEdges.top,
+      bottom: (border?.bottom?.width ?? 0) + paddingEdges.bottom,
+    };
+  }
+
+  getContentHeight(pane: 'left' | 'right' = 'right'): number {
+    let insets = this.getContentInsets(pane);
+    return Math.max(0, this._style!.height - insets.top - insets.bottom);
+  }
+
+  protected buildContentInsetSpacing(pane: 'left' | 'right') {
+    let insets = this.getContentInsets(pane);
+    return FlexSpacingBuilder.create().spacing(insets.top, 'EDGE_TOP').spacing(insets.bottom, 'EDGE_BOTTOM').build();
   }
 
   get id(): string {

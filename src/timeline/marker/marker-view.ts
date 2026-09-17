@@ -424,16 +424,14 @@ abstract class BaseMarkerViewInnerComponent extends BaseKonvaComponent2<Konva.Gr
 
     switch (this._style.markerRenderType) {
       case 'default': {
-        const paddingTop = this._markerTrackLane.style.paddingTop;
-        const paddingBottom = this._markerTrackLane.style.paddingBottom;
-        const contentHeight = Math.max(0, timecodedRect.height - paddingTop - paddingBottom);
+        // getTimecodedRect() already accounts for the lane's implicit border/padding content insets.
         return {
           area: {
-            y: timecodedRect.y + paddingTop,
-            height: contentHeight,
+            y: timecodedRect.y,
+            height: timecodedRect.height,
           },
           handle: {
-            y: contentHeight / 2,
+            y: timecodedRect.height / 2,
             height: 0,
           },
         };

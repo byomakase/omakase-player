@@ -498,7 +498,11 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
         .pipe(takeUntil(this._destroyBreaker.observer))
         .subscribe(() => {
           [...this._timelines.values()].forEach((p) => {
-            p.destroy();
+            try {
+              p.destroy();
+            } catch (e) {
+              // could be that timeline was destroyed manually, we will just ignore the error
+            }
             this._timelines.delete(p.id);
           });
 

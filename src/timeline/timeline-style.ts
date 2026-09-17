@@ -141,14 +141,10 @@ export const MARKER_TRACK_LANE_STYLE_DEFAULT: MarkerTrackLaneStyle = {
   ...TIMELINE_LANE_STYLE_DEFAULT,
   ...MARKER_ON_MARKER_TRACK_LANE_STYLE_DEFAULT,
   height: 190,
-  paddingTop: 0,
-  paddingBottom: 0,
 };
 
 export const THUMBNAIL_TRACK_LANE_STYLE_DEFAULT: ThumbnailTrackLaneStyle = {
   ...TIMELINE_LANE_STYLE_DEFAULT,
-  paddingTop: 0,
-  paddingBottom: 0,
   thumbnailStroke: 'rgba(121,0,255,0.9)',
   thumbnailStrokeWidth: 0,
 
@@ -160,8 +156,6 @@ export const THUMBNAIL_TRACK_LANE_STYLE_DEFAULT: ThumbnailTrackLaneStyle = {
 export const TEXT_TRACK_LANE_STYLE_DEFAULT: TextTrackLaneStyle = {
   ...TIMELINE_LANE_STYLE_DEFAULT,
   height: 40,
-  paddingTop: 0,
-  paddingBottom: 0,
   textLaneItemOpacity: 0.9,
   textLaneItemFill: 'rgba(255,73,145)',
 };
@@ -177,6 +171,4 @@ export const LABEL_LANE_STYLE_DEFAULT: LabelLaneStyle = {
 export const OBSERVATION_TRACK_LANE_STYLE_DEFAULT: ObservationTrackLaneStyle = {
   ...TIMELINE_LANE_STYLE_DEFAULT,
   height: 120,
-  paddingTop: 0,
-  paddingBottom: 0,
 };

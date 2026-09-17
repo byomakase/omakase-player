@@ -1,6 +1,6 @@
 {
     "name": "@byomakase/omakase-player",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "type": "module",
     "module": "./dist/omakase-player.es.js",
     "types": "./dist/omakase-player.es.d.ts",
@@ -52,7 +52,7 @@
         "vitest": "^4.1.9"
     },
     "dependencies": {
-        "@byomakase/omakase-ttconv-ts": "1.1.0-SNAPSHOT.1788770467",
+        "@byomakase/omakase-ttconv-ts": "1.1.0",
         "decimal.js": "^10.6.0",
         "hls.js": "1.6.15",
         "konva": "^10.2.0",

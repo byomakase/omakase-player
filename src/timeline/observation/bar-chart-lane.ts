@@ -456,7 +456,9 @@ class TrackView extends BaseKonvaComponent2<Konva.Group> implements ObservationT
     const scale = this._config?.scale;
     if (!scale) return undefined;
     const scaleBaseline = this._config?.scaleBaseline ?? BAR_CHART_LANE_TRACK_CONFIG_DEFAULT.scaleBaseline;
-    const height = this._timelineLane.style.height;
+    // This group sits at the same absolute position as the lane's already border/padding-inset
+    // _timecodedGroup, so its own frame must be the content height, not the raw lane height.
+    const height = this._timelineLane.getContentHeight('right');
     const scaleSize = scale.max - scale.min;
     const clamp = (v: number) => Math.max(0, Math.min(height, v));
     this._baselineY = clamp(((scale.max - scaleBaseline) / scaleSize) * height);
@@ -538,8 +540,10 @@ class TrackMeasurementsView extends BaseKonvaComponent2<Konva.Group> {
     this._timelineLane = args.timelineLane;
     this._ui = args.ui;
 
+    // This group sits at the same absolute position as the lane's already border/padding-inset
+    // _timecodedGroup, so its own frame must be the content height, not the raw lane height.
     this._group = KonvaFactory.createGroup({
-      height: this._timelineLane.style.height,
+      height: this._timelineLane.getContentHeight('right'),
     });
   }
 
@@ -775,8 +779,10 @@ class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
 
     this._observationItem = observationItem;
 
+    // This group sits at the same absolute position as the lane's already border/padding-inset
+    // _timecodedGroup, so its own frame must be the content height, not the raw lane height.
     this._group = KonvaFactory.createGroup({
-      height: this._timelineLane.style.height,
+      height: this._timelineLane.getContentHeight('right'),
     });
 
     let isMouseOver = false;
@@ -872,15 +878,18 @@ class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
   redrawBars(viewWidth: number, gap: number) {
     this._group.destroyChildren();
 
-    const fullHeight = this._group.height();
-    const paddingTop = this._timelineLane.style.paddingTop;
-    const paddingBottom = this._timelineLane.style.paddingBottom;
-    const containerHeight = fullHeight - paddingTop - paddingBottom;
-    const contentTop = paddingTop;
-    const contentBottom = fullHeight - paddingBottom;
+    // This group's own frame is already the content box (0..containerHeight) — it sits at the
+    // same absolute position as the lane's already border/padding-inset _timecodedGroup, so no
+    // further padding offset is applied here. Read the content height fresh (not this._group's
+    // own height attribute, which is only set once at construction and never resynced) so a live
+    // border/padding change is picked up on the next redraw.
+    const containerHeight = this._timelineLane.getContentHeight('right');
+    this._group.height(containerHeight);
+    const contentTop = 0;
+    const contentBottom = containerHeight;
     const scaleSize = this._config.scale.max - this._config.scale.min;
-    const calculateY = (value: number) => paddingTop + ((this._config.scale.max - value) / scaleSize) * containerHeight;
-    const clamp = (v: number) => Math.max(paddingTop, Math.min(paddingTop + containerHeight, v));
+    const calculateY = (value: number) => ((this._config.scale.max - value) / scaleSize) * containerHeight;
+    const clamp = (v: number) => Math.max(0, Math.min(containerHeight, v));
 
     const baselineInContainer = clamp(calculateY(this._config.scaleBaseline));
     const valueInContainer = clamp(calculateY(Number(this._observationItem.value)));

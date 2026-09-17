@@ -47,19 +47,19 @@ export class AudioRouterProxy extends BaseMessageChannelProxy<AudioRouterMessage
     return this.state.initialRoutingConnections;
   }
   setDefaultRoutingConnections(connections: AudioRoutingConnection[]): Observable<void> {
-    return this.messageChannel.sendAndWaitForResponse('setDefaultRoutingConnections', [connections]);
+    return this.messageChannel.sendAndWaitForResponse('setDefaultRoutingConnections', [connections]).pipe(this.syncStateOperator());
   }
   toggleSolo(routingPath: AudioRoutingInputPath): Observable<void> {
-    return this.messageChannel.sendAndWaitForResponse('toggleSolo', [routingPath]);
+    return this.messageChannel.sendAndWaitForResponse('toggleSolo', [routingPath]).pipe(this.syncStateOperator());
   }
   toggleMute(routingPath: AudioRoutingInputPath): Observable<void> {
-    return this.messageChannel.sendAndWaitForResponse('toggleMute', [routingPath]);
+    return this.messageChannel.sendAndWaitForResponse('toggleMute', [routingPath]).pipe(this.syncStateOperator());
   }
   resetRouter(): Observable<void> {
-    return this.messageChannel.sendAndWaitForResponse('resetRouter');
+    return this.messageChannel.sendAndWaitForResponse('resetRouter').pipe(this.syncStateOperator());
   }
   updateConnections(connections: AudioRoutingConnection[]): Observable<void> {
-    return this.messageChannel.sendAndWaitForResponse('updateConnections', [connections]);
+    return this.messageChannel.sendAndWaitForResponse('updateConnections', [connections]).pipe(this.syncStateOperator());
   }
 
   private checkLateInitialization() {

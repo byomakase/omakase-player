@@ -60,7 +60,7 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
   protected _timeRange?: OmakaseTimeRange;
   protected _volumeRange?: OmakaseVolumeRange;
   protected _audioVisualization?: OmakaseAudioVisualization;
-  protected _routerVisualization?: OmakaseRouterVisualization;
+  protected _routerVisualization?: OmakaseRouterVisualization | undefined;
   protected _audioBackground?: HTMLElement;
 
   protected _speedDropdown?: OmakaseDropdown;
@@ -543,6 +543,10 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
   }
 
   private initializeAudioRouter(playerInternal: PlayerInternalApi) {
+    if (this._routerVisualization) {
+      this._routerVisualization.destroy();
+      this._routerVisualization.remove();
+    }
     this._routerVisualization = document.createElement('omakase-router-visualization') as OmakaseRouterVisualization;
     this._routerDropdown?.appendChild(this._routerVisualization);
     this._routerVisualization.player = playerInternal;
@@ -577,7 +581,8 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
     }
     if (this._routerVisualization) {
       this._routerVisualization.destroy();
-      this._routerDropdown?.removeChild(this._routerVisualization);
+      this._routerVisualization.remove();
+      this._routerVisualization = undefined;
     }
   }
 

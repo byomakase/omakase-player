@@ -92,6 +92,8 @@ export class AudioHandlerProxy extends BaseMessageChannelProxy<AudioHandlerMessa
     if (this._state?.router) {
       this._audioRouter = this._remoteNode.getOrCreateProxy('AudioRouter', AudioRouterMessageChannelUtil.formatMessageChannelTopic(this.messageChannel), this._state.router);
       this._audioRouter.updateFromState(this._state.router);
+    } else {
+      this._audioRouter = undefined;
     }
   }
 

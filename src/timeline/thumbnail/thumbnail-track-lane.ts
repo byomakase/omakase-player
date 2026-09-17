@@ -27,7 +27,6 @@ import {ImageUtil} from '../konva/image-util';
 import {AuthConfig} from '../../common';
 import {errorCompleteObserver, freeObserver, nextCompleteObserver} from '../../util/rxjs-util';
 import {ObserverBreaker} from '../../common/observer-breaker';
-import Decimal from 'decimal.js';
 import {UrlUtil} from '../../util/url-util';
 import type {Destroyable} from '../../common/capabilities';
 import {pulseAnimation} from '../animation-util';
@@ -43,8 +42,6 @@ import {BaseTrackLane, type TrackLaneConfig} from '../track-lane';
 
 export interface ThumbnailTrackLaneStyle extends TimelineLaneStyle {
   thumbnailHeight?: Size;
-  paddingTop: number;
-  paddingBottom: number;
   thumbnailStroke: Color;
   thumbnailStrokeWidth: Size;
 
@@ -265,6 +262,7 @@ export class ThumbnailTrackLane extends BaseTrackLane<ThumbnailTrackLaneConfig, 
 
   protected _timecodedEventCatcher?: Konva.Rect;
   protected _thumbnailsGroup?: Konva.Group;
+  private _lastEffectiveThumbnailHeight?: number;
 
   protected _thumbnailDimension?: Dimension;
 
@@ -318,8 +316,25 @@ export class ThumbnailTrackLane extends BaseTrackLane<ThumbnailTrackLaneConfig, 
   }
 
   private get effectiveThumbnailHeight(): number {
-    const contentHeight = this.style.height - this.style.paddingTop - this.style.paddingBottom;
-    return this.style.thumbnailHeight ?? contentHeight;
+    // Uses the raw _style field rather than the `style` getter: this is now also called from
+    // prepareForTimeline() (via updateThumbnailsGroupBounds()), before _prepared flips true and
+    // the getter's checkIsPrepared() guard would throw.
+    return this._style!.thumbnailHeight ?? this.getContentHeight('right');
+  }
+
+  /**
+   * Recenters `_thumbnailsGroup` within the lane's current (border/padding-inset) content height.
+   * Returns whether `effectiveThumbnailHeight` itself changed — when it has (i.e. no explicit
+   * `thumbnailHeight` override, so it tracks content height), already-loaded thumbnail images are
+   * baked to the old height and must be reloaded via a full render(), not just repositioned.
+   */
+  private updateThumbnailsGroupBounds(): boolean {
+    let contentHeight = this.getContentHeight('right');
+    let thumbHeight = this.effectiveThumbnailHeight;
+    let changed = this._lastEffectiveThumbnailHeight !== thumbHeight;
+    this._thumbnailsGroup?.setAttrs({y: (contentHeight - thumbHeight) / 2, height: contentHeight});
+    this._lastEffectiveThumbnailHeight = thumbHeight;
+    return changed;
   }
 
   protected createStyledElement(): StyledElementWithId<ThumbnailTrackLaneStyle> {
@@ -347,6 +362,13 @@ export class ThumbnailTrackLane extends BaseTrackLane<ThumbnailTrackLaneConfig, 
         stroke: this.style.thumbnailHoverStroke,
         strokeWidth: this.style.thumbnailHoverStrokeWidth,
       };
+    }
+
+    // A border/padding change moves and/or resizes the content area. Recenter the group always;
+    // when that also changed effectiveThumbnailHeight (no explicit thumbnailHeight override),
+    // already-loaded thumbnail images are baked to the old height and need a full re-render.
+    if (this.updateThumbnailsGroupBounds()) {
+      this.render();
     }
   }
 
@@ -475,13 +497,16 @@ export class ThumbnailTrackLane extends BaseTrackLane<ThumbnailTrackLaneConfig, 
       node!.width(timecodedRect.width);
     });
 
-    let clipFactorHeightDecimal = new Decimal(timelineTimecodedDimension.height).div(this.style.height);
-    let clipFactorYDecimal = new Decimal(timecodedRect.height).div(this.style.height);
-
+    // clipY/clipHeight used to be computed via a (timecodedRect.height / this.style.height) ratio,
+    // which canceled out to exactly 1 pre-border/padding (timecodedRect.height always equaled the
+    // raw lane height then) — i.e. clipY was always 0 and clipHeight always simplified to
+    // timelineTimecodedDimension.height. Now that border/padding insets make timecodedRect.height
+    // smaller than the raw height, that ratio is no longer 1 and would clip away the top of the
+    // content by the inset amount. Use the values the formula always actually produced.
     let clipX = -this._timeline!.style.rightPaneClipPadding;
-    let clipY = timecodedRect.y - timecodedRect.y * clipFactorYDecimal.toNumber();
+    let clipY = 0;
     let clipWidth = timecodedRect.width + this._timeline!.style.rightPaneClipPadding * 2;
-    let clipHeight = clipFactorHeightDecimal.mul(timecodedRect.height).toNumber();
+    let clipHeight = timelineTimecodedDimension.height;
 
     this._timecodedGroup!.clipFunc((ctx) => {
       ctx.rect(clipX, clipY, clipWidth, clipHeight);
@@ -522,16 +547,14 @@ export class ThumbnailTrackLane extends BaseTrackLane<ThumbnailTrackLaneConfig, 
       ...this._timecodedGroup.getSize(),
     });
 
-    const paddingTop = this._style!.paddingTop;
-    const paddingBottom = this._style!.paddingBottom;
-    const contentHeight = this._style!.height - paddingTop - paddingBottom;
-    const thumbHeight = this._style!.thumbnailHeight ?? contentHeight;
+    // _timecodedGroup is already built from getTimecodedRect(), which itself is the border/padding
+    // inset content rect — so positioning within it (a local 0..contentHeight frame) must not add
+    // insets.top again, or content would be pushed further down than the border/padding call for.
     this._thumbnailsGroup = new Konva.Group({
       x: 0,
-      y: paddingTop + (contentHeight - thumbHeight) / 2,
       width: this._timecodedGroup.width(),
-      height: this._style!.height,
     });
+    this.updateThumbnailsGroupBounds();
 
     this._timecodedGroup.add(this._timecodedEventCatcher);
     this._timecodedGroup.add(this._thumbnailsGroup);

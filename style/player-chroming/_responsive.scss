@@ -334,6 +334,14 @@
   }
 }
 
+@container (inline-size < 510px) {
+  media-controller.media-controller-omakase {
+    .omakase-player-bitc {
+      display: none !important;
+    }
+  }
+}
+
 @container (inline-size < 500px) {
   media-controller {
     .omakase-vu-meter {
@@ -353,7 +361,6 @@
   media-controller.media-controller-omakase {
     .omakase-audio-text-dropdown,
     .omakase-player-trackselector,
-    .omakase-player-bitc,
     .omakase-vu-meter-floating {
       display: none !important;
     }

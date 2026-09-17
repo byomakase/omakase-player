@@ -100,6 +100,7 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
 
   private _timecodedEventCatcher?: Konva.Rect;
   private _ticksGroup?: Konva.Group;
+  private _lastTicksContentHeight?: number;
 
   constructor(configAndStyle?: ConfigAndStyle<ScrubberLaneConfig, ScrubberLaneStyle>) {
     super({
@@ -128,9 +129,15 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
       ...this._timecodedGroup.getSize(),
     });
 
+    // _timecodedGroup is already built from getTimecodedRect(), the border/padding inset content
+    // rect — so this child group must fill it exactly (local y=0, its own height), not re-inset
+    // again, or ticks would render pushed further down than the border/padding call for.
+    this._lastTicksContentHeight = this._timecodedGroup.height();
     this._ticksGroup = KonvaFactory.createGroup({
+      x: 0,
+      y: 0,
       width: this._timecodedGroup.width(),
-      height: this._style!.height,
+      height: this._lastTicksContentHeight,
     });
 
     this._timecodedGroup.add(this._timecodedEventCatcher);
@@ -207,19 +214,37 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
     this._timecodedGroup!.setAttrs({
       x: timecodedRect.x,
       y: timecodedRect.y,
+      height: timecodedRect.height,
     });
 
     [this._timecodedGroup, this._timecodedEventCatcher, this._ticksGroup].forEach((node) => {
       node!.width(timecodedRect.width);
     });
 
-    this.refreshTimeDivisions();
+    let contentHeightChanged = this.updateTicksGroupBounds();
+
+    this.refreshTimeDivisions(contentHeightChanged);
   }
 
   protected handleStyleUpdate() {
     super.handleStyleUpdate();
 
+    this._timecodedGroup?.height(this.getTimecodedRect().height);
+    this.updateTicksGroupBounds();
     this.refreshTimeDivisions(true);
+  }
+
+  /**
+   * Ticks are drawn flush with the bottom of `_ticksGroup`, so its height must track
+   * `_timecodedGroup`'s own (already border/padding-inset) content height, or ticks would render
+   * glued to the raw bottom of the lane and bleed under/over a configured bottom border.
+   */
+  private updateTicksGroupBounds(): boolean {
+    let contentHeight = this._timecodedGroup?.height() ?? 0;
+    let changed = this._lastTicksContentHeight !== contentHeight;
+    this._ticksGroup?.height(contentHeight);
+    this._lastTicksContentHeight = contentHeight;
+    return changed;
   }
 
   override destroy() {

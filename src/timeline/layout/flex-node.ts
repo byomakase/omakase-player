@@ -389,7 +389,12 @@ export abstract class BaseFlexNode<C extends FlexNodeConfig, T extends FlexConte
 
   setPositions(positions: FlexSpacing[]): void {
     this.setPositionsInternal(positions);
-    this.refreshLayoutFromRoot();
+    // Local refreshLayout(), not refreshLayoutFromRoot(): this node is POSITION_TYPE_ABSOLUTE, so
+    // repositioning it can't affect any ancestor's or sibling's box — but climbing to the root and
+    // reapplying layout tree-wide would blow away scroll offsets that other nodes (e.g. a scrollable
+    // TimelineSlot's left/right pane groups) hold as a manual Konva y() outside Yoga's own layout
+    // model, snapping a scrolled MAIN slot back to the top on every unrelated lane style update.
+    this.refreshLayout();
   }
 
   setDimensionAndPositions(width: number | string | 'auto', height: number | string | 'auto', positions: FlexSpacing[]): void {

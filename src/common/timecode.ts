@@ -61,7 +61,7 @@ export class TimecodeConverter {
     this._frameRateModel = args.frameRateModel;
     this._ffomTimecodeModel = args.ffomTimecodeModel;
     this._initSegmentTimeOffset = args.initSegmentTimeOffset;
-    this._hasVideo = args.hasVideo;
+    this._hasVideo = args.hasVideo ?? true;
     this._hasAudio = args.hasAudio;
   }
 

@@ -15,7 +15,6 @@
  */
 
 import Konva from 'konva';
-import Decimal from 'decimal.js';
 import {type SpanTemporal, type TextCue, type TextTrack, TimedItemsTrackEventType, TrackEventType} from '../../media';
 import type {PlayerApi} from '../../player';
 import type {TimelineImpl} from '../timeline';
@@ -34,8 +33,6 @@ import type {StyledElementWithId} from '../../ui';
 import type {OmpProvider} from '../../omp-provider';
 
 export interface TextTrackLaneStyle extends TimelineLaneStyle {
-  paddingTop: number;
-  paddingBottom: number;
   textLaneItemOpacity: number;
   textLaneItemFill: string;
 }
@@ -153,11 +150,14 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
     });
     this._timeline!.addToTimecodedFloatingContent(this._timecodedGroup, 1);
 
+    // _timecodedGroup is already built from getTimecodedRect(), which itself is the border/padding
+    // inset content rect — so this child group must start at local y=0, not insets.top again, or
+    // cues would be pushed further down than the border/padding call for.
     this._textMarkingsGroup = new Konva.Group({
       x: 0,
-      y: this._style!.paddingTop,
+      y: 0,
       width: this._timecodedGroup.width(),
-      height: this._style!.height,
+      height: this.getContentHeight('right'),
     });
 
     this._timecodedGroup.add(this._textMarkingsGroup);
@@ -214,10 +214,11 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
   protected override createLoadingGroupContent(width: number, height: number): Konva.Animation {
     const fill = this.style.loadingAnimationFill ?? '#ffffff';
     const period = this.style.loadingAnimationSpeed ?? 800;
-    const paddingTop = this.style.paddingTop;
-    const paddingBottom = this.style.paddingBottom;
-    const contentY = paddingTop;
-    const contentHeight = height - paddingTop - paddingBottom;
+    // _loadingGroup itself is already positioned at getTimecodedRect().y, the border/padding inset
+    // content top — so content drawn inside it starts at local y=0, not insets.top again.
+    const insets = this.getContentInsets('right');
+    const contentY = 0;
+    const contentHeight = height - insets.top - insets.bottom;
     const lineCount = Math.ceil(width / 4);
 
     const positions = Array.from({length: lineCount}, (_, i) => ({
@@ -276,14 +277,18 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
     [this._timecodedGroup, this._textMarkingsGroup].forEach((node) => {
       node!.width(timecodedRect.width);
     });
+    this._textMarkingsGroup!.height(this.getContentHeight('right'));
 
-    let clipFactorHeightDecimal = new Decimal(timelineTimecodedDimension.height).div(this.style.height);
-    let clipFactorYDecimal = new Decimal(timecodedRect.height).div(this.style.height);
-
+    // clipY/clipHeight used to be computed via a (timecodedRect.height / this.style.height) ratio,
+    // which canceled out to exactly 1 pre-border/padding (timecodedRect.height always equaled the
+    // raw lane height then) — i.e. clipY was always 0 and clipHeight always simplified to
+    // timelineTimecodedDimension.height. Now that border/padding insets make timecodedRect.height
+    // smaller than the raw height, that ratio is no longer 1 and would clip away the top of the
+    // content by the inset amount. Use the values the formula always actually produced.
     let clipX = -this._timeline!.style.rightPaneClipPadding;
-    let clipY = timecodedRect.y - timecodedRect.y * clipFactorYDecimal.toNumber();
+    let clipY = 0;
     let clipWidth = timecodedRect.width + this._timeline!.style.rightPaneClipPadding * 2;
-    let clipHeight = clipFactorHeightDecimal.mul(timecodedRect.height).toNumber();
+    let clipHeight = timelineTimecodedDimension.height;
 
     this._timecodedGroup!.clipFunc((ctx) => {
       ctx.rect(clipX, clipY, clipWidth, clipHeight);
@@ -333,7 +338,7 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
 
   private adjustCueVisualizations(): void {
     const visibleRange = this._timeline!.getVisibleTimeRange();
-    const cueHeight = this.style.height - this.style.paddingTop - this.style.paddingBottom;
+    const cueHeight = this.getContentHeight('right');
     const newIndices = new Set<number>();
 
     this._squashedCueGroups.forEach((group, index) => {
@@ -358,7 +363,7 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
 
       if (existing) {
         existing.cues = group;
-        existing.konvaNode.setAttrs({x: xStart, width: xEnd - xStart});
+        existing.konvaNode.setAttrs({x: xStart, width: xEnd - xStart, height: cueHeight});
         existing.onMeasurementsChange();
       } else {
         const cueVisualization = new TextCueVisualization({

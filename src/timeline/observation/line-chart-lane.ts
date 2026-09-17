@@ -362,13 +362,13 @@ class TrackView extends BaseKonvaComponent2<Konva.Group> implements ObservationT
     const scale = this._config?.scale;
     if (!scale) return undefined;
     const scaleBaseline = this._config?.scaleBaseline ?? LINE_CHART_LANE_TRACK_CONFIG_DEFAULT.scaleBaseline;
-    const fullHeight = this._timelineLane.style.height;
-    const paddingTop = this._timelineLane.style.paddingTop;
-    const paddingBottom = this._timelineLane.style.paddingBottom;
-    const contentHeight = fullHeight - paddingTop - paddingBottom;
+    // This group sits at the same absolute position as the lane's already border/padding-inset
+    // _timecodedGroup, so its own frame is already the content box (0..contentHeight) — no further
+    // padding offset is applied here.
+    const contentHeight = this._timelineLane.getContentHeight('right');
     const scaleSize = scale.max - scale.min;
-    const clamp = (v: number) => Math.max(paddingTop, Math.min(paddingTop + contentHeight, v));
-    this._baselineY = clamp(paddingTop + ((scale.max - scaleBaseline) / scaleSize) * contentHeight);
+    const clamp = (v: number) => Math.max(0, Math.min(contentHeight, v));
+    this._baselineY = clamp(((scale.max - scaleBaseline) / scaleSize) * contentHeight);
     return this._baselineY;
   }
 
@@ -454,8 +454,10 @@ class TrackMeasurementsView extends BaseKonvaComponent2<Konva.Group> {
     this._timelineLane = args.timelineLane;
     this._ui = args.ui;
 
+    // This group sits at the same absolute position as the lane's already border/padding-inset
+    // _timecodedGroup, so its own frame must be the content height, not the raw lane height.
     this._group = KonvaFactory.createGroup({
-      height: this._timelineLane.style.height,
+      height: this._timelineLane.getContentHeight('right'),
     });
   }
 
@@ -563,9 +565,10 @@ class TrackMeasurementsView extends BaseKonvaComponent2<Konva.Group> {
     });
 
     if (polylinePoints.length >= 4) {
-      const fullHeight = this._timelineLane.style.height;
-      const contentTop = this._timelineLane.style.paddingTop;
-      const contentBottom = fullHeight - this._timelineLane.style.paddingBottom;
+      // This group sits at the same absolute position as the lane's already border/padding-inset
+      // _timecodedGroup, so its own frame is already the content box (0..contentBottom).
+      const contentTop = 0;
+      const contentBottom = this._timelineLane.getContentHeight('right');
       const firstX: number = polylinePoints[0]!;
       const lastX: number = polylinePoints[polylinePoints.length - 2]!;
 
@@ -656,9 +659,10 @@ class TrackMeasurementsView extends BaseKonvaComponent2<Konva.Group> {
     this._polyline?.points(polylinePoints);
 
     if (polylinePoints.length >= 4) {
-      const fullHeight = this._timelineLane.style.height;
-      const contentTop = this._timelineLane.style.paddingTop;
-      const contentBottom = fullHeight - this._timelineLane.style.paddingBottom;
+      // This group sits at the same absolute position as the lane's already border/padding-inset
+      // _timecodedGroup, so its own frame is already the content box (0..contentBottom).
+      const contentTop = 0;
+      const contentBottom = this._timelineLane.getContentHeight('right');
       const firstX: number = polylinePoints[0]!;
       const lastX: number = polylinePoints[polylinePoints.length - 2]!;
       this._fillBelowShape?.points([...polylinePoints, lastX, contentBottom, firstX, contentBottom]);
@@ -813,14 +817,14 @@ class MeasurementItemView extends BaseKonvaComponent2<Konva.Group> {
 
   computePosition(): {x: number; y: number} {
     const x = this._timeline.timeToTimelinePosition(this._config.startTime);
-    const fullHeight = this._timelineLane.style.height;
-    const paddingTop = this._timelineLane.style.paddingTop;
-    const paddingBottom = this._timelineLane.style.paddingBottom;
-    const contentHeight = fullHeight - paddingTop - paddingBottom;
+    // This group sits at the same absolute position as the lane's already border/padding-inset
+    // _timecodedGroup, so its own frame is already the content box (0..contentHeight) — no
+    // further padding offset is applied here.
+    const contentHeight = this._timelineLane.getContentHeight('right');
     const scale = this._config.scale;
     const scaleSize = scale.max - scale.min;
-    const clamp = (v: number) => Math.max(paddingTop, Math.min(paddingTop + contentHeight, v));
-    const y = clamp(paddingTop + ((scale.max - Number(this._observationItem.value)) / scaleSize) * contentHeight);
+    const clamp = (v: number) => Math.max(0, Math.min(contentHeight, v));
+    const y = clamp(((scale.max - Number(this._observationItem.value)) / scaleSize) * contentHeight);
     return {x, y};
   }
 

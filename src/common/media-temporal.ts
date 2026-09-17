@@ -96,9 +96,9 @@ export interface MediaTemporalConverterArgs {
   ffomTimecodeModel?: TimecodeModel | undefined;
   /** HLS init-segment time offset in seconds. Applied as a base offset when converting absolute media time to presentation time. */
   initSegmentTimeOffset?: number | undefined;
-  /** Indicates if main media has video. **/
+  /** Indicates if media has video. **/
   hasVideo?: boolean | undefined;
-  /** Indicates if main media has audio. **/
+  /** Indicates if media has audio. **/
   hasAudio?: boolean | undefined;
 }
 
@@ -115,7 +115,7 @@ export class MediaTemporalConverter {
     this._frameRateModel = args?.frameRateModel;
     this._ffomTimecodeModel = args?.ffomTimecodeModel;
     this._initSegmentTimeOffset = args?.initSegmentTimeOffset;
-    this._hasVideo = args?.hasVideo;
+    this._hasVideo = args?.hasVideo ?? true;
     this._hasAudio = args?.hasAudio;
   }
 

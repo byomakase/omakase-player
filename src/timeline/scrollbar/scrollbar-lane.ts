@@ -32,8 +32,6 @@ import {TIMELINE_LANE_STYLE_DEFAULT} from '../timeline-style';
 import {isNullOrUndefined} from '../../util/util-functions';
 
 export interface ScrollbarLaneStyle extends TimelineLaneStyle {
-  paddingTop?: number;
-  paddingBottom?: number;
   scrollbarWidth: number | string;
   scrollbarHeight: number | undefined;
   scrollbarBackgroundFill: Color;
@@ -53,8 +51,6 @@ const configDefault: ScrollbarLaneConfig = {
 export const TIMELINE_SCROLLBAR_LANE_STYLE_DEFAULT: ScrollbarLaneStyle = {
   ...TIMELINE_LANE_STYLE_DEFAULT,
   height: 40,
-  paddingTop: 0,
-  paddingBottom: 0,
   scrollbarHeight: void 0,
   scrollbarWidth: '100%',
   scrollbarBackgroundFill: '#000000',
@@ -216,22 +212,19 @@ export class ScrollbarLane extends BaseTimelineLane<ScrollbarLaneConfig, Scrollb
   }
 
   private resolveScrollbarHeight() {
+    // getTimecodedRect() already accounts for the lane's implicit border/padding content insets.
     let timecodedRect = this.getTimecodedRect();
-    const paddingTop = this._style?.paddingTop ?? 0;
-    const paddingBottom = this._style?.paddingBottom ?? 0;
-    return isNullOrUndefined(this._style?.scrollbarHeight) ? Math.max(0, timecodedRect.height - paddingTop - paddingBottom) : this._style?.scrollbarHeight;
+    return isNullOrUndefined(this._style?.scrollbarHeight) ? timecodedRect.height : this._style?.scrollbarHeight;
   }
 
   protected settleLayout() {
     let timecodedContainerDimension = this._timeline!.getTimecodedContainerDimension();
     let timecodedRect = this.getTimecodedRect();
-    const paddingTop = this._style?.paddingTop ?? 0;
-    const paddingBottom = this._style?.paddingBottom ?? 0;
 
     this._contentFlexGroup!.setDimensionAndPositions(
       timecodedContainerDimension.width,
-      Math.max(0, timecodedRect.height - paddingTop - paddingBottom),
-      FlexSpacingBuilder.create().topRightBottomLeft([timecodedRect.y + paddingTop, 0, 0, 0]).build()
+      timecodedRect.height,
+      FlexSpacingBuilder.create().topRightBottomLeft([timecodedRect.y, 0, 0, 0]).build()
     );
     if (!this._timelineZoomInProgress) {
       this._scrollbar!.updateScrollHandle(this._timeline!);

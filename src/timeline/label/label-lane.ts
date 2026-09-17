@@ -32,8 +32,6 @@ export interface LabelLaneConfig extends TimelineLaneConfig {
 }
 
 export interface LabelLaneStyle extends TimelineLaneStyle {
-  paddingTop?: number;
-  paddingBottom?: number;
   textFill: string;
   textFontSize: number;
   textFontStyle?: string;
@@ -135,14 +133,13 @@ export class LabelLane extends BaseTimelineLane<LabelLaneConfig, LabelLaneStyle>
 
   protected settleLayout() {
     let timecodedContainerDimension = this._timeline!.getTimecodedContainerDimension();
+    // getTimecodedRect() already accounts for the lane's implicit border/padding content insets.
     let timecodedRect = this.getTimecodedRect();
-    const paddingTop = this.style.paddingTop ?? 0;
-    const paddingBottom = this.style.paddingBottom ?? 0;
 
     this._contentFlexGroup!.setDimensionAndPositions(
       timecodedContainerDimension.width,
-      Math.max(0, timecodedRect.height - paddingTop - paddingBottom),
-      FlexSpacingBuilder.create().topRightBottomLeft([timecodedRect.y + paddingTop, 0, 0, 0]).build()
+      timecodedRect.height,
+      FlexSpacingBuilder.create().topRightBottomLeft([timecodedRect.y, 0, 0, 0]).build()
     );
   }
 

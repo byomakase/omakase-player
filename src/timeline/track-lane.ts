@@ -68,10 +68,11 @@ export abstract class BaseTrackLane<C extends TrackLaneConfig, S extends Timelin
   }
 
   protected createLoadingGroupContent(width: number, height: number): Konva.Animation {
-    const paddingTop = (this.style as Partial<{paddingTop: number}>).paddingTop ?? 0;
-    const paddingBottom = (this.style as Partial<{paddingBottom: number}>).paddingBottom ?? 0;
-    const contentY = paddingTop;
-    const contentHeight = height - paddingTop - paddingBottom;
+    // _loadingGroup itself is already positioned at getTimecodedRect().y, the border/padding inset
+    // content top — so content drawn inside it starts at local y=0, not insets.top again.
+    const insets = this.getContentInsets('right');
+    const contentY = 0;
+    const contentHeight = height - insets.top - insets.bottom;
     if (this.style.loadingAnimationType === 'gradient') {
       return gradientAnimation({
         group: this._loadingGroup!,
@@ -164,10 +165,7 @@ export abstract class BaseTrackLane<C extends TrackLaneConfig, S extends Timelin
 
 export interface MultiTrackLaneConfig extends TimelineLaneConfig {}
 
-export interface MultiTrackLaneStyle extends TimelineLaneStyle {
-  paddingTop: number;
-  paddingBottom: number;
-}
+export interface MultiTrackLaneStyle extends TimelineLaneStyle {}
 
 export interface MultiTrackLaneTrackConfig {
   /** Zero-based index at which to insert the track into the lane's track list. When omitted, the track is appended at the end. */
@@ -252,8 +250,11 @@ export abstract class BaseMultiTrackLane<C extends MultiTrackLaneConfig, S exten
   }
 
   protected createLoadingGroupContent(width: number, height: number): Konva.Animation {
-    const contentY = this.style.paddingTop;
-    const contentHeight = height - this.style.paddingTop - this.style.paddingBottom;
+    // _loadingGroup itself is already positioned at getTimecodedRect().y, the border/padding inset
+    // content top — so content drawn inside it starts at local y=0, not insets.top again.
+    const insets = this.getContentInsets('right');
+    const contentY = 0;
+    const contentHeight = height - insets.top - insets.bottom;
     if (this.style.loadingAnimationType === 'gradient') {
       return gradientAnimation({
         group: this._loadingGroup!,

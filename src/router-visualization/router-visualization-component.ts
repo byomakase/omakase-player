@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {filter, Observable, of, takeUntil} from 'rxjs';
+import {filter, Observable, of, switchMap, takeUntil, tap} from 'rxjs';
 import {AudioRouterEventType, type AudioRouterState, type AudioRoutingConnection} from '../audio/audio-router';
 import {PlayerAudioEventType, PlayerAudioType, PlayerEventType} from '../player';
 import {ROUTER_VISUALIZATION_LABELS_DEFAULT, type RouterVisualizationTrack} from './router-visualization';
@@ -47,23 +47,40 @@ export class RouterVisualizationComponent extends RouterVisualizationBase {
     }
     this._mainTrack = this.prepareTrackForVisualization(config.track);
 
-    const mainHandler = this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.MAIN)!;
     const isSafariAndHls = this._omakasePlayer!.player.mainMedia?.mainMediaType === MainMediaType.HLS && BrowserProvider.instance.isSafari;
     if (!isSafariAndHls) {
-      const o$: Observable<any> = !mainHandler?.router ? mainHandler.createAudioRouter(config.track.maxInputNumber, this._outputs!.length) : of(true);
-      o$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe({
-        next: () => {
-          if (applyDefaultMatrix) {
-            this.setAudioRouterDefaultMatrix(config.track!, config.defaultMatrix);
-          }
-          this._wireMainTrackEvents();
-        },
-      });
-      this.renderTrack(config.track);
+      if (applyDefaultMatrix) {
+        this.applyMainTrackDefaultMatrix(config);
+      }
+      this.mainRouterReady$(config.track)
+        .pipe(takeUntil(this._destroyBreaker.observer))
+        .pipe(takeUntil(this._mainTrackSetterBreaker.observer))
+        .subscribe({
+          next: () => {
+            this.renderTrack(config.track);
+            this._wireMainTrackEvents();
+          },
+        });
     } else {
       this.renderTrack(config.track);
       this._wireMainTrackEvents(false);
     }
+  }
+
+  protected applyMainTrackDefaultMatrix(config: MainTrackConfig) {
+    if (!config.track || !config.defaultMatrix) {
+      return;
+    }
+    this.mainRouterReady$(config.track)
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .pipe(takeUntil(this._detachAttachBreaker.observer))
+      .pipe(switchMap(() => this.setAudioRouterDefaultMatrix(config.track!, config.defaultMatrix)))
+      .subscribe();
+  }
+
+  protected mainRouterReady$(track: RouterVisualizationTrack): Observable<any> {
+    const mainHandler = this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.MAIN)!;
+    return !mainHandler?.router ? mainHandler.createAudioRouter(track.maxInputNumber, this._outputs!.length) : of(true);
   }
 
   protected setSidecarTracksConfig(config: SidecarTracksConfig, applyDefaultMatrix: boolean = true) {
@@ -90,13 +107,19 @@ export class RouterVisualizationComponent extends RouterVisualizationBase {
 
       o$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe({
         next: () => {
-          if (applyDefaultMatrix) {
-            this.setAudioRouterDefaultMatrix(track, config.defaultMatrix);
-          }
-          this._wireSidecarTrackEvents(track.trackId!);
-          for (const track of this._sidecarTracks!) {
-            this.renderTrack(track, track.trackId);
-          }
+          const defaultMatrix$ = applyDefaultMatrix ? this.setAudioRouterDefaultMatrix(track, config.defaultMatrix) : of(void 0);
+          defaultMatrix$
+            .pipe(takeUntil(this._destroyBreaker.observer))
+            .pipe(takeUntil(this._detachAttachBreaker.observer))
+            .pipe(takeUntil(this._sidecarTrackSetterBreaker.observer))
+            .subscribe({
+              next: () => {
+                this._wireSidecarTrackEvents(track.trackId!);
+                for (const track of this._sidecarTracks!) {
+                  this.renderTrack(track, track.trackId);
+                }
+              },
+            });
         },
       });
     }
@@ -176,16 +199,20 @@ export class RouterVisualizationComponent extends RouterVisualizationBase {
       }
     });
 
-    let updateMainTrack = () => {
+    let updateMainTrack = (applyDefaultMatrix: boolean = false) => {
       const activeMainTrackId = this._omakasePlayer?.player.audio.state.tracks[PlayerAudioType.MAIN].find((track) => track.active)?.trackId;
       let channelCount = this._omakasePlayer?.player.audio.getTracks().find((track) => track.id === activeMainTrackId)?.channels;
       if (channelCount && this._mainTrack) {
-        this.updateMainTrack({
-          track: {
-            ...this._mainTrack,
-            inputNumber: channelCount,
+        this.updateMainTrack(
+          {
+            track: {
+              ...this._mainTrack,
+              inputNumber: channelCount,
+            },
+            defaultMatrix: this._providedMainTrackConfig?.defaultMatrix,
           },
-        });
+          applyDefaultMatrix
+        );
       }
     };
 
@@ -204,7 +231,7 @@ export class RouterVisualizationComponent extends RouterVisualizationBase {
       .pipe(filter((event) => event.type === PlayerAudioEventType.PLAYER_AUDIO_LOADED))
       .pipe(filter(attachedDetachedModeFilter))
       .subscribe(() => {
-        updateMainTrack();
+        updateMainTrack(true);
       });
 
     this._omakasePlayer.player.onEvent$
@@ -227,18 +254,16 @@ export class RouterVisualizationComponent extends RouterVisualizationBase {
     }
   }
 
-  protected setAudioRouterDefaultMatrix(track: RouterVisualizationTrack, defaultMatrix?: AudioRoutingConnection[]) {
-    if (defaultMatrix) {
-      if ('trackId' in track) {
-        const handler = this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.SIDECAR, track.trackId!)!;
-        handler.router!.setDefaultRoutingConnections(defaultMatrix);
-        this.resetAllNodes(track);
-      } else {
-        const handler = this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.MAIN)!;
-        handler.router!.setDefaultRoutingConnections(defaultMatrix);
-        this.resetAllNodes(track);
-      }
+  protected setAudioRouterDefaultMatrix(track: RouterVisualizationTrack, defaultMatrix?: AudioRoutingConnection[]): Observable<void> {
+    if (!defaultMatrix) {
+      return of(void 0);
     }
+    const handler = 'trackId' in track ? this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.SIDECAR, track.trackId!)! : this._omakasePlayer!.player.audio.getHandler(PlayerAudioType.MAIN)!;
+    return handler.router!.setDefaultRoutingConnections(defaultMatrix).pipe(
+      tap(() => {
+        this.resetAllNodes(track);
+      })
+    );
   }
 
   protected renderOutputs() {
