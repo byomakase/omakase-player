@@ -124,12 +124,10 @@ export interface ObservationArgs extends TimedItemArgs {
 /**
  * Abstract base for all observation track implementations.
  */
-export abstract class BaseObservationTrack<
-  T extends Observation,
-  TM extends T & BaseObservation,
-  S extends ObservationTrackState,
-  E extends OmpEventGroup<any, any> = never,
-> extends BaseTimedItemsTrack<T, TM, S, E> {
+export abstract class BaseObservationTrack<T extends Observation, TM extends T & BaseObservation, S extends ObservationTrackState, E extends OmpEventGroup<any, any> = never>
+  extends BaseTimedItemsTrack<T, TM, S, E>
+  implements ObservationTrack<S, E>
+{
   protected _trackType = TrackType.OBSERVATION_TRACK;
 
   protected abstract _observationTrackType: ObservationTrackType;

@@ -66,6 +66,7 @@ let urlSelector = 0;
 let markerColors = ['#E4ABFF', '#6AC7F6', '#A007E8', '#FCD004', '#009CEB', '#5E1879', '#4D79A7', '#A481B5', '#5A6C80', '#2B299E', '#EE9247', '#520160', '#863800', '#CD5600'];
 let maxSampleFillLinearGradientColorStops = [1, 'red', 0.5, 'yellow', 0, 'green'];
 let minSampleFillLinearGradientColorStops = [0, 'green', 0.5, 'yellow', 1, 'red'];
+let laneSeparatorBorder = {bottom: {width: 1, color: '#E9F7FF'}};
 let omakasePlayer;
 let activeAlertType = null;
 let commentAlertId = null;
@@ -267,6 +268,7 @@ function createOmakaseTimeline() {
         headerMarginBottom: 0,
         leftPaneWidth: 200,
         leftPaneBackgroundFill: '#E4E5E5',
+        rightPaneBackgroundFill: '#EDEFEE',
         rightPanelLeftGutterWidth: 30,
         rightPanelRightGutterWidth: 30,
         timecodedContainerClipPadding: 20,
@@ -290,15 +292,16 @@ function createOmakaseTimeline() {
         maxHeight: timelineHeight,
         verticalScrollbarWidth: 10,
         verticalScrollbarHandleBarBorderRadius: 5,
-        verticalScrollbarBackgroundFill: '#EDEFFE',
+        verticalScrollbarBackgroundFill: '#E4E5E5',
         verticalScrollbarBackgroundFillOpacity: 1,
+        verticalScrollbarHandleBarFill: '#00A6F0',
         playheadHoverTextYOffset: -25,
         playheadHoverTextFill: '#000000',
         playheadTextFill: 'rgba(255, 255, 255, 0)',
 
         scrubberTextFill: '#000000',
         scrubberTextYOffset: -15,
-        padding: [18,0,0,0],
+        padding: [18, 0, 0, 0],
         backgroundFill: '#E4E5E5',
       },
     })
@@ -353,6 +356,7 @@ function addInAndOutMarkersLane() {
       backgroundFill: '#E9F7FF',
       height: 30,
       leftBackgroundFill: '#E4E5E5',
+      leftBorder: laneSeparatorBorder,
       marginBottom: 1,
     },
   });
@@ -414,6 +418,7 @@ function addBlackMarkersLane() {
         backgroundFill: '#E9F7FF',
         height: 30,
         leftBackgroundFill: '#E4E5E5',
+        leftBorder: laneSeparatorBorder,
         marginBottom: 1,
       },
     });
@@ -455,6 +460,7 @@ function addPoiMarkersLane() {
         backgroundFill: '#E9F7FF',
         height: 30,
         leftBackgroundFill: '#E4E5E5',
+        leftBorder: laneSeparatorBorder,
         marginBottom: 1,
       },
     });
@@ -531,6 +537,7 @@ function addThumbnailsLane() {
         backgroundFill: '#E9F7FF',
         height: 50,
         leftBackgroundFill: '#E4E5E5',
+        leftBorder: laneSeparatorBorder,
         thumbnailHoverScale: 2,
         marginBottom: 1,
       },
@@ -565,11 +572,11 @@ function addMarkerList() {
   omakaseMarkerList = new MarkerList(
     {
       markerListHTMLElementId: 'omakase-marker-list',
-      headerHTMLElementId: 'marker-header',
-      templateHTMLElementId: 'marker-template',
       markerTrack: [{source: TrackSource.of(inAndOutMarkersTrack.id)}],
       thumbnailTrack: thumbnailTrackRef ? {source: TrackSource.of(thumbnailTrackRef.id)} : undefined,
-      styleUrl: './css/player.css',
+      styleUrl: './css/marker-list.css',
+      timeEditable: true,
+      labelEditable: true,
     },
     omakasePlayer
   );
@@ -607,6 +614,7 @@ function addBitrateLineChart() {
         backgroundFill: '#E9F7FF',
         height: 50,
         leftBackgroundFill: '#E4E5E5',
+        leftBorder: laneSeparatorBorder,
         marginBottom: 1,
       },
     });
@@ -653,10 +661,10 @@ function addSidecarDKSubtitlesLane() {
         backgroundFill: '#E9F7FF',
         height: 40,
         leftBackgroundFill: '#E4E5E5',
+        leftBorder: laneSeparatorBorder,
         textLaneItemOpacity: 0.7,
         textLaneItemFill: '#87D798',
-        paddingTop: 10,
-        paddingBottom: 10,
+        padding: [10, 10],
         marginBottom: 1,
       },
     });
@@ -771,6 +779,7 @@ function addStereoAudioTrackLane() {
           backgroundFill: '#E9F7FF',
           height: 60,
           leftBackgroundFill: '#E4E5E5',
+          leftBorder: laneSeparatorBorder,
           margin: 0,
         },
       });
@@ -809,6 +818,7 @@ function addStereoAudioTrackLane() {
           backgroundFill: '#E9F7FF',
           height: 100,
           leftBackgroundFill: '#E4E5E5',
+          leftBorder: laneSeparatorBorder,
         },
       });
 
@@ -1253,7 +1263,7 @@ function addScrollbarLane() {
     description: '',
     style: {
       height: 25,
-      backgroundFill: '#EDEFFE',
+      backgroundFill: '#E4E5E5',
       leftBackgroundFill: '#E4E5E5',
       scrollbarHandleBarFill: '#00A6F0',
       scrollbarHeight: 16,
@@ -1280,10 +1290,10 @@ function processSubtitles() {
           backgroundFill: '#E9F7FF',
           height: 40,
           leftBackgroundFill: '#E4E5E5',
+          leftBorder: laneSeparatorBorder,
           textLaneItemOpacity: 0.7,
           textLaneItemFill: '#87D798',
-          paddingTop: 10,
-          paddingBottom: 10,
+          padding: [10, 10],
           marginBottom: 1,
         },
       });
@@ -1375,6 +1385,7 @@ function createNewAudioTrackLane(description, url) {
         backgroundFill: '#E9F7FF',
         height: 40,
         leftBackgroundFill: '#E4E5E5',
+        leftBorder: laneSeparatorBorder,
       },
     });
 

@@ -26,8 +26,9 @@ import {affectsStyledElement, Ui, type MarkerStyle, type StyledElement} from '..
 import type {UiProxy} from '../../remoting/impl/ui-proxy';
 import {DomUtil} from '../../dom/dom-util';
 import {isNullOrUndefined} from '../../util/util-functions';
-import {PlayerEventType, type PlayerInternalApi} from '../../player';
+import {PlayerEventType, type PlayerApi, type PlayerDetachedApi, type PlayerInternalApi, type PlayerPlayback} from '../../player';
 import type {UiLiveModel} from '../../live/live-model';
+import {ControlBarComponent} from '../../control-bar/control-bar-component';
 
 export const OmakaseTimeRangeAttributes = {
   NAME: 'name',
@@ -55,7 +56,7 @@ export interface OmakaseTimeRangeMarker {
   trackId: MarkerTrackState['id'];
 }
 
-export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBarElementApi {
+export class OmakaseTimeRange extends ControlBarComponent(MediaTimeRange) implements ChromingMarkerBarElementApi {
   protected readonly _onEvent$: Subject<ChromingMarkerBarElementEvent> = new Subject<ChromingMarkerBarElementEvent>();
 
   protected readonly _onSeek$: Subject<number> = new Subject();
@@ -67,7 +68,7 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
 
   destroy$ = new Subject<void>();
 
-  private _player?: PlayerInternalApi;
+  private _player?: PlayerApi | PlayerDetachedApi;
   private _markerDisplayContainer: HTMLElement;
   private _markerAreaContainer: HTMLElement;
   private _rangeElement: HTMLInputElement;
@@ -80,6 +81,7 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
   private _previewAtLive = false; // cursor is over the ball of the scrubber
   private _lastPreviewRangeValue: number | undefined;
   protected _destroyBreaker = new ObserverBreaker();
+  protected _playerBreaker = new ObserverBreaker();
 
   private _live = false;
   private _windowStart = 0;
@@ -89,6 +91,7 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
   private _liveModelApplied = false;
 
   private _markers: Map<MarkerState['id'], OmakaseTimeRangeMarker> = new Map();
+  private _markerBreakers: Map<MarkerState['id'], ObserverBreaker> = new Map();
   private _tracks: Map<MarkerTrackState['id'], MarkerTrackState> = new Map();
   private _focusedMarkers: Set<OmakaseTimeRangeMarker> = new Set();
   private _config: ChromingMarkerBarConfig = {
@@ -105,14 +108,15 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
         height: var(--time-range-hover-height, var(--media-range-track-height, 4px));
       }
       #thumb {
-        z-index: 2;
+        z-index: 20;
         bottom: var(--time-range-thumb-bottom, unset);
       }
       #markers {
         position: absolute;
         overflow-x: hidden;
+        overflow-y: hidden;
         width: 100%;
-        z-index: 1;
+        z-index: 10;
         height: var(--time-range-markers-height, 100%);
         bottom: var(--time-range-markers-bottom-offset, 0);
         background: var(--time-range-background, transparent);
@@ -122,7 +126,7 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
         position: absolute;
         width: 100%;
         height: 100%;
-        z-index: 2;
+        z-index: 20;
       }
       .omakase-marker-display {
         position: absolute;
@@ -147,7 +151,7 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
       .omakase-marker-display.focused {
         height: calc(100% + var(--time-range-marker-focus-height, 3px));
         top: var(--time-range-marker-focus-top, calc(-1 * var(--time-range-marker-focus-height, 3px)));
-        z-index: 1;
+        z-index: 10;
         filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.25));
       }
       .omakase-marker-display.focused .marker-halo {
@@ -268,7 +272,94 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
   }
 
   override set mediaDuration(value: number | undefined) {
-    super.mediaDuration = value;
+    if (!this._player) {
+      super.mediaDuration = value;
+    }
+  }
+
+  override get mediaCurrentTime(): number | undefined {
+    return super.mediaCurrentTime;
+  }
+
+  override set mediaCurrentTime(value: number | undefined) {
+    if (!this._player) {
+      super.mediaCurrentTime = value;
+    }
+  }
+
+  override get mediaSeekable(): number[] | undefined {
+    return super.mediaSeekable;
+  }
+
+  override set mediaSeekable(value: number[] | undefined) {
+    if (!this._player) {
+      super.mediaSeekable = value;
+    }
+  }
+
+  override get mediaBuffered(): number[][] {
+    return super.mediaBuffered;
+  }
+
+  override set mediaBuffered(value: number[][]) {
+    if (!this._player) {
+      super.mediaBuffered = value;
+    }
+  }
+
+  override get mediaPaused(): boolean {
+    return super.mediaPaused;
+  }
+
+  override set mediaPaused(value: boolean) {
+    if (!this._player) {
+      super.mediaPaused = value;
+    }
+  }
+
+  override get mediaLoading(): boolean {
+    return super.mediaLoading;
+  }
+
+  override set mediaLoading(value: boolean) {
+    if (!this._player) {
+      super.mediaLoading = value;
+    }
+  }
+
+  override get mediaEnded(): boolean | undefined {
+    return super.mediaEnded;
+  }
+
+  override set mediaEnded(value: boolean | undefined) {
+    if (!this._player) {
+      super.mediaEnded = value;
+    }
+  }
+
+  override get mediaPlaybackRate(): number {
+    return super.mediaPlaybackRate;
+  }
+
+  override set mediaPlaybackRate(value: number) {
+    if (!this._player) {
+      super.mediaPlaybackRate = value;
+    }
+  }
+
+  private updateMediaDuration(duration: number | undefined) {
+    let mediaDuration = !isNullOrUndefined(duration) && Number.isFinite(duration) && duration > 0 ? duration : void 0;
+    super.mediaDuration = mediaDuration;
+    super.mediaSeekable = mediaDuration ? [0, mediaDuration] : void 0;
+  }
+
+  private updateMediaPlayback(playback: PlayerPlayback) {
+    super.mediaPlaybackRate = playback.playbackRate;
+    super.mediaBuffered = playback.bufferedTimeRanges.map((bufferedTimeRange) => [bufferedTimeRange.start, bufferedTimeRange.end]);
+    super.mediaEnded = playback.ended;
+    super.mediaLoading = playback.waiting || playback.seeking || playback.waitingSyncedMedia;
+    super.mediaCurrentTime = playback.currentTime;
+    super.mediaPaused = !playback.playing;
   }
 
   private _seekWindow(): {start: number; end: number} {
@@ -395,12 +486,69 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
     }
   }
 
-  get player(): PlayerInternalApi | undefined {
+  get player(): PlayerApi | PlayerDetachedApi | undefined {
     return this._player;
   }
 
-  set player(player: PlayerInternalApi) {
+  set player(player: PlayerApi | PlayerDetachedApi) {
     this._player = player;
+    this._playerBreaker.break();
+
+    if (this._player.isMainMediaLoaded) {
+      this.updateMediaDuration(this._player.getDuration());
+      this.updateMediaPlayback(this._player.playerSession.playback);
+      const duration = this._player.getDuration();
+      this.range.valueAsNumber = this._player.getCurrentTime() / duration;
+      this.updateBar();
+    } else {
+      this.updateMediaDuration(void 0);
+    }
+
+    this._player.onEvent$.pipe(takeUntil(this._playerBreaker.observer), takeUntil(this._destroyBreaker.observer)).subscribe((event) => {
+      switch (event.type) {
+        case PlayerEventType.PLAYER_MAIN_MEDIA_LOADED:
+          this.updateMediaDuration(event.data.mainMediaState.duration);
+          this.updateMediaPlayback(this._player!.playerSession.playback);
+          break;
+        case PlayerEventType.PLAYER_SESSION_RESTORED:
+          this.updateMediaDuration(this._player!.isMainMediaLoaded ? this._player!.getDuration() : void 0);
+          this.updateMediaPlayback(event.data.playerSession.playback);
+          break;
+        case PlayerEventType.PLAYER_MAIN_MEDIA_UPDATED:
+          this.updateMediaDuration(event.data.mainMediaState.duration);
+          break;
+        case PlayerEventType.PLAYER_MAIN_MEDIA_UNLOADED:
+          this.updateMediaDuration(void 0);
+          break;
+        case PlayerEventType.PLAYER_PLAYBACK_CHANGE:
+          this.updateMediaPlayback(event.data.playerPlayback);
+          break;
+        case PlayerEventType.PLAYER_PLAYBACK_PROGRESS:
+        case PlayerEventType.PLAYER_SEEKED:
+          super.mediaCurrentTime = event.data.currentTime;
+          break;
+        case PlayerEventType.PLAYER_PLAYBACK_RATE_UPDATE:
+          super.mediaPlaybackRate = event.data.playbackRate;
+          break;
+        case PlayerEventType.PLAYER_BUFFERING:
+          super.mediaBuffered = event.data.bufferedTimeRanges.map((bufferedTimeRange) => [bufferedTimeRange.start, bufferedTimeRange.end]);
+          break;
+      }
+    });
+
+    this._player.onEvent$
+      .pipe(
+        filter((event) => event.type === PlayerEventType.PLAYER_SEEKING),
+        takeUntil(this._playerBreaker.observer),
+        takeUntil(this._destroyBreaker.observer)
+      )
+      .subscribe((event) => {
+        const time = event.data.toTime;
+        const duration = this._player!.getDuration();
+        this.range.valueAsNumber = time / duration;
+        this.updateBar();
+      });
+
     this._player.onEvent$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe((event) => {
       if (event.type === PlayerEventType.PLAYER_PAUSE || event.type === PlayerEventType.PLAYER_BUFFERING) {
         this._releaseEndPin();
@@ -495,8 +643,11 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
         },
       },
     };
+    this.destroyMarkerBreaker(marker.id);
+    const markerBreaker = new ObserverBreaker();
+    this._markerBreakers.set(marker.id, markerBreaker);
     this.toObservable(this._ui.resolveStyle<MarkerStyle>(styledElement))
-      .pipe(takeUntil(this._destroyBreaker.observer))
+      .pipe(takeUntil(markerBreaker.observer), takeUntil(this._destroyBreaker.observer))
       .subscribe((style) => {
         const displayElement = this.createMarkerDisplayElement(marker, style as MarkerStyle);
         const areaElement = this.createMarkerAreaElement(marker);
@@ -510,10 +661,10 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
       });
     this._ui.onEvent$
       .pipe(filter((event) => affectsStyledElement(event, styledElement)))
-      .pipe(takeUntil(this._destroyBreaker.observer))
+      .pipe(takeUntil(markerBreaker.observer), takeUntil(this._destroyBreaker.observer))
       .subscribe(() => {
         this.toObservable(this._ui.resolveStyle<MarkerStyle>(styledElement))
-          .pipe(takeUntil(this._destroyBreaker.observer))
+          .pipe(takeUntil(markerBreaker.observer), takeUntil(this._destroyBreaker.observer))
           .subscribe(() => {
             this.updateMarkerStyle(marker.id, this._ui.resolveStyle<MarkerStyle>(styledElement) as MarkerStyle);
           });
@@ -529,6 +680,7 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
   }
 
   removeMarker(markerId: Marker['id']): void {
+    this.destroyMarkerBreaker(markerId);
     const marker = this._markers.get(markerId);
     if (marker) {
       this._markerDisplayContainer.removeChild(marker.displayElement);
@@ -541,21 +693,32 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
   removeAllMarkers(): void {
     this.destroy$.next();
     this._tracks.clear();
-    this._markerDisplayContainer.innerHTML = '';
-    this._markerAreaContainer.innerHTML = '';
-    this._markers.clear();
+    this.clearMarkers();
     this.updateClasses();
   }
 
   private loadMarkers(markerTracks: MarkerTrackState[]) {
-    this._markerDisplayContainer.innerHTML = '';
-    this._markerAreaContainer.innerHTML = '';
-    this._markers.clear();
+    this.clearMarkers();
     for (const markerTrack of markerTracks) {
       for (const marker of markerTrack.timedItems) {
         this.addMarker(marker, markerTrack.id);
       }
     }
+  }
+
+  private clearMarkers() {
+    for (const markerBreaker of this._markerBreakers.values()) {
+      markerBreaker.destroy();
+    }
+    this._markerBreakers.clear();
+    this._markerDisplayContainer.innerHTML = '';
+    this._markerAreaContainer.innerHTML = '';
+    this._markers.clear();
+  }
+
+  private destroyMarkerBreaker(markerId: Marker['id']) {
+    this._markerBreakers.get(markerId)?.destroy();
+    this._markerBreakers.delete(markerId);
   }
 
   override handleEvent(evt: Event | MouseEvent): void {
@@ -663,9 +826,15 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
       this.unfocusAllMarkers();
     });
     markerElement.addEventListener('click', () => {
+      if (!this.enabled) {
+        return;
+      }
       this._onMarkerClick$.next({markerId: marker.id});
     });
     markerElement.addEventListener('mousedown', (event) => {
+      if (!this.enabled) {
+        return;
+      }
       const rangeValue = this.getRangeValueFromMouseEvent(event);
       this._rangeElement.valueAsNumber = rangeValue;
       this._onSeek$.next(this.getTimeFromRangeValue(rangeValue));
@@ -761,6 +930,11 @@ export class OmakaseTimeRange extends MediaTimeRange implements ChromingMarkerBa
 
   private getTimeFromRangeValue = (value?: number): number => {
     value = value ?? this._rangeElement.valueAsNumber;
+    if (this._player) {
+      // prefer the wired player's duration over the native media attributes, which reflect the
+      // local <video> element and are stale/unset while playback happens in a detached window
+      return value * this._player.getDuration();
+    }
     const startTime = Number.isFinite(this.mediaSeekableStart) ? this.mediaSeekableStart : 0;
     const endTime = Number.isFinite(this.mediaDuration) ? this.mediaDuration : this.mediaSeekableEnd;
     if (Number.isNaN(endTime) || isNullOrUndefined(endTime)) {

@@ -14,8 +14,17 @@
  * limitations under the License.
  */
 
-import {type AudioTrackLoadOptions, type MarkerTrackLoadOptions, type ObservationTrackLoadOptions, type TextTrackLoadOptions, type ThumbnailTrackLoadOptions, TrackType} from '../media';
-import type {PlayerAudioLoadOptions, PlayerTextTrackLoadOptions} from '../player';
+import {
+  type AudioObservationTrackGenerationOptions,
+  type AudioTrackLoadOptions,
+  type MediaContainerTrackLoadOptions,
+  type MarkerTrackLoadOptions,
+  type ObservationTrackLoadOptions,
+  type TextTrackLoadOptions,
+  type ThumbnailTrackLoadOptions,
+  TrackType,
+} from '../media';
+import type {PlayerAudioLoadOptions, PlayerTextTrackLoadOptions, PlayerVideoLoadOptions} from '../player';
 
 /** Maps each {@link TrackType} to its concrete load-options type. */
 export type TrackLoadOptionsMap = {
@@ -29,6 +38,20 @@ export type TrackLoadOptionsMap = {
   [TrackType.MARKER_TRACK]: MarkerTrackLoadOptions;
   /** Load options for observation tracks. */
   [TrackType.OBSERVATION_TRACK]: ObservationTrackLoadOptions;
+  /** Load options for MP4 files loaded as sidecar video. */
+  [TrackType.MP4_TRACK]: PlayerVideoLoadOptions & MediaContainerTrackLoadOptions;
+  /** Load options for HLS streams loaded as sidecar video. */
+  [TrackType.HLS_TRACK]: PlayerVideoLoadOptions & MediaContainerTrackLoadOptions;
+  /** Load options for frame image manifests loaded as sidecar video. Frame images have no sound, `muted` and `crossOrigin` are ignored. */
+  [TrackType.FRAME_IMAGE_TRACK]: PlayerVideoLoadOptions & MediaContainerTrackLoadOptions;
+  /** Load options for trick track, frame image manifest shown while main media plays backwards or faster than max native playback rate. `muted` and `crossOrigin` are ignored. */
+  [TrackType.TRICK_TRACK]: PlayerVideoLoadOptions & MediaContainerTrackLoadOptions;
+};
+
+/** Maps some {@link TrackType} to its concrete generation-options type. */
+export type TrackGenerationOptionsMap = {
+  /** Generation options for audio observation tracks. */
+  [TrackType.AUDIO]: AudioObservationTrackGenerationOptions;
 };
 
 /**
@@ -40,3 +63,13 @@ export type TrackLoadOptions = {
     trackType?: T;
   } & TrackLoadOptionsMap[T];
 }[keyof TrackLoadOptionsMap];
+
+/**
+ * Discriminated union of some track generation-options types.
+ * The optional `trackType` field narrows the union to the options for a specific track type.
+ */
+export type TrackGenerationOptions = {
+  [T in keyof TrackGenerationOptionsMap]: {
+    trackType?: T;
+  } & TrackGenerationOptionsMap[T];
+}[keyof TrackGenerationOptionsMap];

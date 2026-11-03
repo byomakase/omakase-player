@@ -92,6 +92,19 @@ export class MediaElementPlayback implements Destroyable {
     });
   }
 
+  /**
+   * Play was requested on media element, but playback is waiting for data
+   */
+  setPlayingWaiting() {
+    this.updateState({
+      playing: true,
+      paused: false,
+      pausing: false,
+      waiting: true,
+      ended: false,
+    });
+  }
+
   setPaused() {
     this.updateState({
       playing: false,
@@ -153,9 +166,9 @@ export class MediaElementPlayback implements Destroyable {
   }
 
   set seeking(value: boolean) {
+    // pausing is not reset here, it is finalized or cancelled by pause workflow
     this.updateState({
       seeking: value,
-      pausing: false,
       ended: false,
     });
   }

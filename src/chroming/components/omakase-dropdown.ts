@@ -81,9 +81,7 @@ export class OmakaseDropdown extends HTMLElement {
 
   set displayLabel(displayLabel: string | undefined) {
     this._displayLabel = displayLabel;
-    if (this._toggle?.span) {
-      this._toggle.span.innerText = displayLabel ?? '';
-    }
+    this._toggle?.setLabel(displayLabel);
   }
 
   get isFloating() {

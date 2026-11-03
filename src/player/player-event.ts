@@ -15,7 +15,8 @@
  */
 
 import type {Serializable} from '../common/capabilities';
-import {type MainMediaState, type MediaRotationValue} from '../media';
+import {type MainMediaLoadOptions, type MainMediaState, type MediaRotationValue} from '../media';
+import type {SourceState} from '../source';
 import type {
   PlayerControllerBufferingEventData,
   PlayerControllerPlaybackProgressEventData,
@@ -29,10 +30,13 @@ import type {PlayerSession} from '../session';
 import type {PlayerPlayback} from './player';
 import type {ChromingState} from '../chroming';
 import type {PlayerTextState} from './player-text-api';
+import type {PlayerVideoState} from './player-video';
 
 export enum PlayerEventType {
   PLAYER_SESSION_RESTORED = 'PLAYER_SESSION_RESTORED',
 
+  PLAYER_MAIN_MEDIA_LOAD_REQUESTED = 'PLAYER_MAIN_MEDIA_LOAD_REQUESTED',
+  PLAYER_MAIN_MEDIA_CREATED = 'PLAYER_MAIN_MEDIA_CREATED',
   PLAYER_MAIN_MEDIA_LOADING = 'PLAYER_MAIN_MEDIA_LOADING',
   PLAYER_MAIN_MEDIA_LOADED = 'PLAYER_MAIN_MEDIA_LOADED',
   PLAYER_MAIN_MEDIA_LOAD_ERROR = 'PLAYER_MAIN_MEDIA_LOAD_ERROR',
@@ -44,6 +48,7 @@ export enum PlayerEventType {
   PLAYER_AUDIO_CHANGE = 'PLAYER_AUDIO_CHANGE',
   PLAYER_CHROMING_CHANGE = 'PLAYER_CHROMING_CHANGE',
   PLAYER_TEXT_CHANGE = 'PLAYER_TEXT_CHANGE',
+  PLAYER_VIDEO_CHANGE = 'PLAYER_VIDEO_CHANGE',
 
   PLAYER_PLAYBACK_CHANGE = 'PLAYER_PLAYBACK_CHANGE',
 
@@ -63,6 +68,11 @@ export interface PlayerSessionRestoredEventData extends Serializable {
   playerSession: PlayerSession;
 }
 
+export interface PlayerMainMediaLoadRequestedEventData extends Serializable {
+  source: SourceState;
+  loadOptions: MainMediaLoadOptions | undefined;
+}
+
 export interface PlayerMainMediaEventData extends Serializable {
   mainMediaState: MainMediaState;
 }
@@ -71,7 +81,9 @@ export interface PlayerMainMediaUnloadedEventData extends Serializable {
   mainMediaId: MainMediaState['id'];
 }
 
-export interface PlayerMainMediaErrorEventData extends PlayerMainMediaEventData {
+export interface PlayerMainMediaErrorEventData extends Serializable {
+  source?: SourceState | undefined;
+  mainMediaState?: MainMediaState | undefined;
   error: string | undefined;
 }
 
@@ -94,6 +106,10 @@ export interface PlayerChromingChangeEventData extends Serializable {
 
 export interface PlayerTextChangeEventData extends Serializable {
   playerText: PlayerTextState;
+}
+
+export interface PlayerVideoChangeEventData extends Serializable {
+  playerVideo: PlayerVideoState;
 }
 
 export interface PlayerPlaybackProgressEventData extends PlayerControllerPlaybackProgressEventData {}
@@ -119,6 +135,8 @@ export interface PlayerSeekedEventData extends PlayerControllerSeekedEventData {
 export type PlayerEventTypeDataMap = {
   [PlayerEventType.PLAYER_SESSION_RESTORED]: PlayerSessionRestoredEventData;
 
+  [PlayerEventType.PLAYER_MAIN_MEDIA_LOAD_REQUESTED]: PlayerMainMediaLoadRequestedEventData;
+  [PlayerEventType.PLAYER_MAIN_MEDIA_CREATED]: PlayerMainMediaEventData;
   [PlayerEventType.PLAYER_MAIN_MEDIA_LOADING]: PlayerMainMediaEventData;
   [PlayerEventType.PLAYER_MAIN_MEDIA_LOADED]: PlayerMainMediaEventData;
   [PlayerEventType.PLAYER_MAIN_MEDIA_LOAD_ERROR]: PlayerMainMediaErrorEventData;
@@ -130,6 +148,7 @@ export type PlayerEventTypeDataMap = {
   [PlayerEventType.PLAYER_AUDIO_CHANGE]: PlayerAudioChangeEventData;
   [PlayerEventType.PLAYER_CHROMING_CHANGE]: PlayerChromingChangeEventData;
   [PlayerEventType.PLAYER_TEXT_CHANGE]: PlayerTextChangeEventData;
+  [PlayerEventType.PLAYER_VIDEO_CHANGE]: PlayerVideoChangeEventData;
 
   [PlayerEventType.PLAYER_PLAYBACK_CHANGE]: PlayerPlaybackChangeEventData;
 

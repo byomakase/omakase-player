@@ -16,7 +16,6 @@
 
 import {filter, merge, Observable, Subject, takeUntil} from 'rxjs';
 import {
-  BaseMarker,
   MarkerTrack,
   ThumbnailTrack,
   TimedItemsTrackEventType,
@@ -25,7 +24,6 @@ import {
   TrackEventType,
   TrackType,
   type MarkerState,
-  type MarkerUpdateableAttrs,
   type TimedItemsTrackEventData,
   type Track,
 } from '../media';

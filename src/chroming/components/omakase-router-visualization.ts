@@ -17,13 +17,20 @@
 import {filter, Observable, of, takeUntil} from 'rxjs';
 import {ROUTER_VISUALIZATION_LABELS_DEFAULT, type RouterVisualizationTrack} from '../../router-visualization';
 import {AudioRouterEventType, type AudioRouterState, type AudioRoutingConnection} from '../../audio';
-import {PlayerAudioEventType, PlayerAudioType, PlayerEventType, type PlayerInternalApi} from '../../player';
+import {getPlayerAudioApi, PlayerAudioEventType, PlayerAudioType, PlayerEventType, type PlayerApi, type PlayerDetachedApi} from '../../player';
+import type {PlayerAudioCommonApi} from '../../player/player-audio-api';
 import {WindowPlaybackMode} from '../../common';
 import {type MainTrackConfig, type SidecarTracksConfig, RouterVisualizationBase, RouterVisualizationClasses} from '../../router-visualization/router-visualization-base';
 
 export class OmakaseRouterVisualization extends RouterVisualizationBase {
-  private _player?: PlayerInternalApi;
+  private _player?: PlayerApi | PlayerDetachedApi;
+  private _audio?: PlayerAudioCommonApi;
   private _windowPlaybackMode: WindowPlaybackMode.ATTACHED | WindowPlaybackMode.DETACHED = WindowPlaybackMode.ATTACHED;
+
+  private getAudioTracks(playerAudioType?: PlayerAudioType.MAIN | PlayerAudioType.SIDECAR) {
+    const player = this._player!;
+    return 'audio' in player ? player.audio.getTracks(playerAudioType as PlayerAudioType.MAIN) : player.audioInternal.getTracks(playerAudioType as PlayerAudioType.MAIN);
+  }
 
   get windowPlaybackMode() {
     return this._windowPlaybackMode;
@@ -50,7 +57,7 @@ export class OmakaseRouterVisualization extends RouterVisualizationBase {
     }
     this._mainTrack = this.prepareTrackForVisualization(config.track);
 
-    const mainHandler = this._player!.audioInternal.getHandler(PlayerAudioType.MAIN)!;
+    const mainHandler = this._audio!.getHandler(PlayerAudioType.MAIN)!;
     const o$: Observable<any> = !mainHandler?.router ? mainHandler.createAudioRouter(config.track.maxInputNumber, this._outputs!.length) : of(true);
     o$.subscribe({
       next: () => {
@@ -71,7 +78,7 @@ export class OmakaseRouterVisualization extends RouterVisualizationBase {
     this._providedSidecarTracksConfig = config;
 
     this._sidecarTracks = config.tracks.map((track) => {
-      const sidecarAudioState = this._player!.audioInternal.getTracks(PlayerAudioType.SIDECAR).find((playerTrack) => track.trackId === playerTrack.id);
+      const sidecarAudioState = this.getAudioTracks(PlayerAudioType.SIDECAR).find((playerTrack) => track.trackId === playerTrack.id);
 
       if (sidecarAudioState) {
         return this.prepareTrackForVisualization({...track, inputNumber: sidecarAudioState.channels});
@@ -80,7 +87,7 @@ export class OmakaseRouterVisualization extends RouterVisualizationBase {
     }) as (RouterVisualizationTrack & {trackId: string})[];
 
     for (const track of config.tracks) {
-      const handler = this._player!.audioInternal.getHandler(PlayerAudioType.SIDECAR, track.trackId!)!;
+      const handler = this._audio!.getHandler(PlayerAudioType.SIDECAR, track.trackId!)!;
       const o$: Observable<any> = !handler?.router ? handler.createAudioRouter(track.maxInputNumber, this._outputs!.length) : of(true);
 
       o$.subscribe({
@@ -96,36 +103,37 @@ export class OmakaseRouterVisualization extends RouterVisualizationBase {
   }
 
   protected _wireSidecarTrackEvents(trackId: string) {
-    this._player!.audioInternal.getHandler(PlayerAudioType.SIDECAR, trackId)!
+    this._audio!.getHandler(PlayerAudioType.SIDECAR, trackId)!
       .router!.onEvent$.pipe(takeUntil(this._destroyBreaker.observer))
       .pipe(takeUntil(this._detachAttachBreaker.observer))
       .pipe(filter((event) => event.type === AudioRouterEventType.AUDIO_ROUTER_CHANGE))
 
       .subscribe((event) => {
-        this.updateTogglesFromState(this._player!.audioInternal.getHandler(PlayerAudioType.SIDECAR, trackId)!.router!.state, trackId);
+        this.updateTogglesFromState(this._audio!.getHandler(PlayerAudioType.SIDECAR, trackId)!.router!.state, trackId);
       });
-    this.updateTogglesFromState(this._player!.audioInternal.getHandler(PlayerAudioType.SIDECAR, trackId)!.router!.state, trackId);
+    this.updateTogglesFromState(this._audio!.getHandler(PlayerAudioType.SIDECAR, trackId)!.router!.state, trackId);
   }
 
   protected _wireMainTrackEvents() {
-    this._player!.audioInternal.getHandler(PlayerAudioType.MAIN)!
+    this._audio!.getHandler(PlayerAudioType.MAIN)!
       .router!.onEvent$.pipe(takeUntil(this._destroyBreaker.observer))
       .pipe(takeUntil(this._detachAttachBreaker.observer))
       .pipe(filter((event) => event.type === AudioRouterEventType.AUDIO_ROUTER_CHANGE))
 
       .subscribe((event) => {
-        this.updateTogglesFromState(this._player!.audioInternal.getHandler(PlayerAudioType.MAIN)!.router!.state);
+        this.updateTogglesFromState(this._audio!.getHandler(PlayerAudioType.MAIN)!.router!.state);
       });
-    this.updateTogglesFromState(this._player!.audioInternal.getHandler(PlayerAudioType.MAIN)!.router!.state);
+    this.updateTogglesFromState(this._audio!.getHandler(PlayerAudioType.MAIN)!.router!.state);
   }
 
-  set player(player: PlayerInternalApi) {
+  set player(player: PlayerApi | PlayerDetachedApi) {
     this._player = player;
+    this._audio = getPlayerAudioApi(player);
 
     let updateMainTrack = () => {
-      const activeMainTrackId = this._player?.audioInternal.state.tracks[PlayerAudioType.MAIN].find((track) => track.active)?.trackId;
-      const activeMainTrack = this._player?.audioInternal.getTracks(PlayerAudioType.MAIN).find((track) => track.id === activeMainTrackId);
-      let channelCount = this._player?.audioInternal.getTracks().find((track) => track.id === activeMainTrackId)?.channels;
+      const activeMainTrackId = this._audio?.state.tracks[PlayerAudioType.MAIN].find((track) => track.active)?.trackId;
+      const activeMainTrack = this.getAudioTracks(PlayerAudioType.MAIN).find((track) => track.id === activeMainTrackId);
+      let channelCount = this.getAudioTracks().find((track) => track.id === activeMainTrackId)?.channels;
       if (channelCount && this._mainTrack) {
         this.updateMainTrack({
           track: {
@@ -137,7 +145,7 @@ export class OmakaseRouterVisualization extends RouterVisualizationBase {
       }
     };
 
-    this._player.audioInternal.onEvent$
+    this._audio!.onEvent$
       .pipe(takeUntil(this._destroyBreaker.observer))
       .pipe(filter((event) => event.type === PlayerAudioEventType.PLAYER_AUDIO_TRACK_SWITCHED))
 
@@ -174,11 +182,11 @@ export class OmakaseRouterVisualization extends RouterVisualizationBase {
   protected setAudioRouterDefaultMatrix(track: RouterVisualizationTrack, defaultMatrix?: AudioRoutingConnection[]) {
     if (defaultMatrix) {
       if ('trackId' in track) {
-        const handler = this._player!.audioInternal.getHandler(PlayerAudioType.SIDECAR, track.trackId!)!;
+        const handler = this._audio!.getHandler(PlayerAudioType.SIDECAR, track.trackId!)!;
         handler.router!.setDefaultRoutingConnections(defaultMatrix);
         this.resetAllNodes(track);
       } else {
-        const handler = this._player!.audioInternal.getHandler(PlayerAudioType.MAIN)!;
+        const handler = this._audio!.getHandler(PlayerAudioType.MAIN)!;
         handler.router!.setDefaultRoutingConnections(defaultMatrix);
         this.resetAllNodes(track);
       }
@@ -234,8 +242,8 @@ export class OmakaseRouterVisualization extends RouterVisualizationBase {
 
     const routingConnections =
       trackId === this._mainTrackLabel
-        ? this._player!.audioInternal.getHandler(PlayerAudioType.MAIN)?.router?.state.routingConnections
-        : this._player!.audioInternal.getHandler(PlayerAudioType.SIDECAR, trackId)?.router?.state.routingConnections;
+        ? this._audio!.getHandler(PlayerAudioType.MAIN)?.router?.state.routingConnections
+        : this._audio!.getHandler(PlayerAudioType.SIDECAR, trackId)?.router?.state.routingConnections;
 
     track.inputLabels!.forEach((input, inputNumber) => {
       const tr = document.createElement('tr');
@@ -279,9 +287,9 @@ export class OmakaseRouterVisualization extends RouterVisualizationBase {
             },
           ];
           if (trackId === this._mainTrackLabel) {
-            this._player!.audioInternal.getHandler(PlayerAudioType.MAIN)?.router?.updateConnections(routingConnections);
+            this._audio!.getHandler(PlayerAudioType.MAIN)?.router?.updateConnections(routingConnections);
           } else {
-            this._player!.audioInternal.getHandler(PlayerAudioType.SIDECAR, trackId)?.router?.updateConnections(routingConnections);
+            this._audio!.getHandler(PlayerAudioType.SIDECAR, trackId)?.router?.updateConnections(routingConnections);
           }
         };
 
@@ -306,28 +314,28 @@ export class OmakaseRouterVisualization extends RouterVisualizationBase {
 
   protected getRoutingConnections(trackId: string): AudioRoutingConnection[][] | undefined {
     return trackId === this._mainTrackLabel
-      ? this._player!.audioInternal.getHandler(PlayerAudioType.MAIN)?.router?.state.routingConnections
-      : this._player!.audioInternal.getHandler(PlayerAudioType.SIDECAR, trackId)?.router?.state.routingConnections;
+      ? this._audio!.getHandler(PlayerAudioType.MAIN)?.router?.state.routingConnections
+      : this._audio!.getHandler(PlayerAudioType.SIDECAR, trackId)?.router?.state.routingConnections;
   }
 
   protected updateConnections(trackId: string, routingConnections: AudioRoutingConnection[]): void {
     if (trackId === this._mainTrackLabel) {
-      this._player!.audioInternal.getHandler(PlayerAudioType.MAIN)?.router?.updateConnections(routingConnections);
+      this._audio!.getHandler(PlayerAudioType.MAIN)?.router?.updateConnections(routingConnections);
     } else {
-      this._player!.audioInternal.getHandler(PlayerAudioType.SIDECAR, trackId)?.router?.updateConnections(routingConnections);
+      this._audio!.getHandler(PlayerAudioType.SIDECAR, trackId)?.router?.updateConnections(routingConnections);
     }
   }
 
   protected getDefaultRoutingConnections(audioType: PlayerAudioType, trackId?: string): AudioRoutingConnection[] | undefined {
     if (audioType === PlayerAudioType.MAIN) {
-      return this._player!.audioInternal.getHandler(PlayerAudioType.MAIN)?.router?.getDefaultRoutingConnections() ?? [];
+      return this._audio!.getHandler(PlayerAudioType.MAIN)?.router?.getDefaultRoutingConnections() ?? [];
     } else {
-      return this._player!.audioInternal.getHandler(PlayerAudioType.SIDECAR, trackId!)?.router?.getDefaultRoutingConnections() ?? [];
+      return this._audio!.getHandler(PlayerAudioType.SIDECAR, trackId!)?.router?.getDefaultRoutingConnections() ?? [];
     }
   }
 
   protected getOutputsFromAudioContext(): string[] | undefined {
-    const outputCount = this._player!.audioInternal.getHandler(PlayerAudioType.OUTPUT)!.channelCount;
+    const outputCount = this._audio!.getHandler(PlayerAudioType.OUTPUT)!.channelCount;
     if (outputCount && outputCount >= 6) {
       return ROUTER_VISUALIZATION_LABELS_DEFAULT.slice(0, 6);
     } else if (outputCount && outputCount >= 2) {

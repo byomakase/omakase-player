@@ -148,7 +148,7 @@ export class MarkerViewComponent extends BaseKonvaComponent2<Konva.Group> {
       });
 
     let targetTouches = (event: KonvaEventObject<MouseEvent, Konva.Group>): boolean => {
-      return event.target === this._innerGroup || this._innerGroup.isAncestorOf(event.target);
+      return this._innerGroup.isAncestorOf(event.target);
     };
 
     let isMouseOver = false;

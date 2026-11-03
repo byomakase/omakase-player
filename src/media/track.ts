@@ -36,6 +36,11 @@ export enum TrackType {
   MARKER_TRACK = 'MARKER_TRACK',
   OBSERVATION_TRACK = 'OBSERVATION_TRACK',
   THUMBNAIL_TRACK = 'THUMBNAIL_TRACK',
+
+  HLS_TRACK = 'HLS_TRACK',
+  MP4_TRACK = 'MP4_TRACK',
+  FRAME_IMAGE_TRACK = 'FRAME_IMAGE_TRACK',
+  TRICK_TRACK = 'TRICK_TRACK',
 }
 
 /**
@@ -91,7 +96,7 @@ export type TrackEventTypeDataMap<S extends TrackState = TrackState> = {
   [TrackEventType.TRACK_LOADED]: TrackEventData<S>;
   [TrackEventType.TRACK_LOAD_ERROR]: TrackErrorEventData<S>;
 
-  [TrackEventType.TRACK_UPDATING]: {};
+  [TrackEventType.TRACK_UPDATING]: TrackEventData<S>;
   [TrackEventType.TRACK_UPDATED]: TrackEventData<S>;
 };
 
@@ -241,7 +246,9 @@ export abstract class BaseTrack<S extends TrackState, E extends OmpEventGroup<an
     if (emitEvent) {
       this._onEvent$.next({
         type: TrackEventType.TRACK_UPDATING,
-        data: {},
+        data: {
+          trackState: this.state,
+        },
       });
     }
 

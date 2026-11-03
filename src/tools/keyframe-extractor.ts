@@ -20,19 +20,7 @@ import {OmpError} from '../types';
 import {BlobUtil} from '../util/blob-util';
 import {nextCompleteObserver} from '../util/rxjs-util';
 import {Validators} from '../common/validators';
-
-export enum VideoKeyframeType {
-  PNG = 'PNG',
-  JPEG = 'JPEG',
-}
-
-export interface VideoKeyframeOptions {
-  type?: VideoKeyframeType;
-}
-
-export interface VideoKeyframe {
-  src: string;
-}
+import {type VideoKeyframe, type VideoKeyframeOptions, VideoKeyframeType} from '../media';
 
 export class VideoKeyframeExtractor {
   static extractVideoKeyframe(options: VideoKeyframeOptions = {type: VideoKeyframeType.JPEG}, videoElement: HTMLVideoElement): Observable<VideoKeyframe> {

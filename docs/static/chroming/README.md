@@ -57,9 +57,68 @@ Controls the output volume with a slider, based on the [media-volume-range](http
 
 Mutes/unmutes the output volume, based on the [media-mute-button](https://www.media-chrome.org/docs/en/components/media-mute-button) component.
 
+With the `volume-flyout` attribute (`left`, `right`, `up` or `down`), the button also presents an `<omakase-volume-range>` on that side while it's hovered: horizontally for `left` and `right`, vertically (maximum at the top) for `up` and `down`.
+
+#### `<omakase-captions-toggle>`
+
+Shows or hides the active text track. Its icon reflects the state: captions on, captions off, or disabled when there is no active text track (in a control bar, the toggle keeps its icon and is dimmed instead, see `--omakase-control-disabled-opacity` in [STYLING.md](../STYLING.md#control-bar)). The state is also available as the `captionsState` property (`on`, `off` or `disabled`).
+
+#### `<omakase-time-toggle>`
+
+Shows or hides the floating timecode display ("BITC"). Its icon reflects the current visibility and the state is also available as the `timeVisible` boolean property.
+
+#### `<omakase-vu-meter-toggle>`
+
+Shows or hides the floating VU meter. Its icon reflects the current visibility and the state is also available as the `vuMeterVisible` boolean property. Not every theme supports a floating VU meter; clicking the toggle while the active theme doesn't support it logs an error to the console instead of changing the icon.
+
 #### `<omakase-play-button>`
 
 Play/pause button with frame-stepping capabilities in video mode.
+
+#### `<omakase-time-skip-button>`
+
+Pauses playback (if playing) and moves the playhead forward or backward. Attributes:
+
+- `unit` - `frame` (default), `second` or `percent` (of the media duration)
+- `amount` - Number of units to move by, positive to move forward and negative to move backward (default is `1`)
+
+Its icon and tooltip follow the direction and amount.
+
+```html
+<omakase-time-skip-button unit="frame" amount="-10"></omakase-time-skip-button>
+```
+
+#### `<omakase-rewind-and-play-button>`
+
+Rewinds the playhead backward by a configurable `duration` (in seconds), then plays forward at the current playback rate until the playhead catches back up to the position it started from, where it pauses. The rewind is clamped to the start of the media.
+
+#### `<omakase-play-and-rewind-button>`
+
+Plays forward at the current playback rate for up to a configurable `duration` (in seconds) of media time, then pauses and rewinds the playhead back to the position it started from. The play-forward target is clamped to the end of the media.
+
+#### `<omakase-home-button>`
+
+Pauses playback (if playing) and sets the playhead to the start of the media.
+
+#### `<omakase-end-button>`
+
+Pauses playback (if playing) and sets the playhead to the end of the media.
+
+#### `<omakase-live-button>`
+
+Live indicator, labelled with the localized `live` text. Its dot is lit (`--omakase-live-button-live-color`) while live media plays at the live edge, and dimmed (`--omakase-live-button-dvr-color`) otherwise: behind the live edge, paused, or not live. While live, clicking it moves the playhead to the live edge (starting playback if paused); while not live, it can't be clicked, and in a standalone control bar it's dimmed like a disabled component. Its state is also reflected in the `live`, `live-edge` and `dvr` attributes.
+
+#### `<omakase-keyframe-button>`
+
+Extracts the video keyframe at the playhead and hands it to a configured callback function (`callbackFn`), optionally playing an audio file. Inactive until a callback function is configured. See [Keyframes](../control-bar/README.md#keyframes).
+
+#### `<omakase-safe-zone-toggle>`
+
+Shows or hides a configured set of safe zones, and reflects whether they're shown in its icon and the `safeZonesVisible` property. Inactive until safe zones are configured. See [Safe Zones](../control-bar/README.md#safe-zones).
+
+#### `<omakase-detach-toggle>`
+
+Detaches the player into its own window, or attaches it back, and shows which of the two a click does: the detach icon (`--omakase-detach-icon`) while attached, and the attach icon (`--omakase-attach-icon`) while detached. In a control bar, it invokes the player's `detachPlayer()` / `attachPlayer()` API and follows the player's session: it has the `detached` attribute while the player is detached, and the `inactive` attribute (and is dimmed) while the player can't currently be detached or attached, e.g. before main media is loaded or while detaching. The default and omakase themes use it for their detach button.
 
 #### `<omakase-fullscreen-button>`
 
@@ -71,7 +130,7 @@ Dropdown components are used throughout the themes to display playback rate, aud
 
 #### `<omakase-dropdown>`
 
-Container for the dropdown list(s). Content can be aligned to `left`, `center`, or `right` using the `align` attribute (default is `left`). Will close when clicking outside unless the `floating` attribute is set.
+Container for the dropdown list(s). Content can be aligned to `left`, `center`, or `right` using the `alignment` attribute (default is `center`). Will close when clicking outside unless the `floating` attribute is set.
 
 #### `<omakase-dropdown-toggle>`
 
@@ -88,6 +147,86 @@ Container for displaying options within a `<omakase-dropdown>`. Attributes:
 #### `<omakase-dropdown-option>`
 
 Individual dropdown option with `value` and `selected` attributes, similar to HTML `<option>` tags.
+
+### Omakase Selector Components
+
+Selectors combine an `<omakase-dropdown>` and its `<omakase-dropdown-toggle>` into a single element that is wired to the player: it fills the dropdown from the player's state, applies the selection to the player, and follows changes made elsewhere (for example through the player API).
+```
+
+The dropdown opens anchored to the toggle. The selector has no box of its own (`display: contents`), so the toggle is laid out as if it were placed directly.
+
+Attributes shared by all selectors:
+
+- `dropdown` - Id of the rendered `<omakase-dropdown>` (generated if not set)
+- `position` - `above` (default) or `below` the toggle. Above, the gap is set with the `--omakase-dropdown-selector-offset` CSS variable; below, the gap is 10px
+- `alignment` - Horizontal alignment with the toggle: `left`, `center` (default) or `right`
+- `container-right` - A CSS length. When set, the dropdown is kept this far from the right edge of its containing block instead of being aligned with the toggle
+- `floating` - Keeps the dropdown open when an option is selected or when clicking outside it, and shows a close button
+- `dropdown-class` / `toggle-class` - Additional classes for the rendered dropdown and toggle
+
+By default the toggle shows the selected option's label. Children with `slot="toggle"` are shown in the toggle instead, for example an icon:
+
+```html
+<omakase-audio-selector>
+  <media-chrome-button slot="toggle">
+    <span class="media-chrome-trackselector"></span>
+  </media-chrome-button>
+</omakase-audio-selector>
+```
+
+The rendered elements are available as the `dropdown`, `dropdownList` (`dropdownLists` for several), `toggle` and `toggleContent` properties.
+
+Without content in the `toggle` slot, the toggle shows the selected option's label, which can be styled with two attributes (or the matching `caret` and `toggleBackground` properties):
+
+- `caret` - shows a down caret after the label
+- `toggle-background` - gives the toggle a background, border and border radius, set with the `--omakase-dropdown-selector-toggle-*` CSS variables (see [STYLING.md](../STYLING.md#dropdowns))
+- `expand-direction` - `left` or `right` (or the `expandDirection` property). The selector takes the toggle's max width, `--omakase-dropdown-toggle-max-width`, whatever label is shown, with the toggle on the opposite side: a longer label expands the toggle in that direction, into the empty space, without moving the controls around it. The selector gives up the empty space when there isn't enough room
+
+```html
+<omakase-audio-selector caret toggle-background></omakase-audio-selector>
+```
+
+#### `<omakase-playback-rate-selector>`
+
+Playback rate selector. The `rates` attribute takes a comma-separated list of rates (default `0.25,0.5,0.75,1,2,4,8`). The selected rate is available as the `playbackRate` property, and setting it sets the player's playback rate.
+
+```html
+<omakase-playback-rate-selector rates="0.5,1,1.5,2"></omakase-playback-rate-selector>
+```
+
+The rates can also be set with the `rates` property (an array), and can be changed at runtime; the options are updated right away, keeping the player's rate selected. Rates are offered in ascending order, whatever order they're given in, and duplicates are removed. Rates the player doesn't accept - anything that isn't a number from `0.1` to `16` - are dropped and the default rates are used when no valid rates are provided.
+
+```javascript
+document.querySelector('omakase-playback-rate-selector').rates = [0.5, 1, 2];
+```
+
+#### `<omakase-audio-selector>`
+
+Audio track selector. Lists the main audio tracks, plus the sidecar audio tracks when the player's audio mode is `SINGLE`, and switches to the selected track. The toggle is disabled while there is only one track.
+
+#### `<omakase-text-selector>`
+
+Text track selector. Lists the main and sidecar text tracks, selects the active track, and switches to (or shows) the selected track. The active track stays selected while text is hidden, for example with `<omakase-captions-toggle>`, and selecting it shows the text again. With the `off-option` attribute, the tracks are preceded by an "Off" option, which is selected instead while no track is shown and hides text when selected. The toggle is disabled while there are no text tracks.
+
+```html
+<omakase-text-selector off-option alignment="right"></omakase-text-selector>
+```
+
+#### `<omakase-track-selector>`
+
+Audio and text track selector, with the lists side by side in one dropdown:
+
+- the main audio tracks, plus the sidecar audio tracks when the audio mode is `SINGLE`
+- the sidecar audio tracks, in a list of their own when the audio mode is `MULTIPLE`
+- the text tracks
+
+Empty lists are hidden. In `MULTIPLE` audio mode the lists use checkboxes, and selecting an active track deactivates it.
+
+With the `router` attribute, active audio tracks get an icon that opens the audio router in place of the lists, with a button to go back. The main audio track doesn't get it for HLS media on Safari, where its routing can't be changed.
+
+The `DEFAULT` and `OMAKASE` themes use it for their track selector.
+
+Selectors rebuild their options from the player's events. The player doesn't emit an event when a track is renamed, so call `refresh()` on the audio, text or track selector after renaming one. The built-in themes do this for you.
 
 ### Omakase Marker Components
 
@@ -106,6 +245,7 @@ Individual marker bar element. Displays markers with configurable presentations 
 #### `<omakase-audio-visualization>`
 
 Audio visualization component for the Audio theme. Displays waveform visualization for audio playback using the peak processor.
+
 
 ---
 

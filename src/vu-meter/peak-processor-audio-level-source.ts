@@ -23,6 +23,7 @@ import type {Track} from '../media';
 import type {OmakasePlayerApi, OmakasePlayerDetachedApi} from '../omakase-player-api';
 import {SessionEventType} from '../session';
 import {WindowPlaybackMode} from '../common';
+import {AudioUtil} from '../audio/audio-util';
 
 export class PeakProcessorAudioLevelSource extends AudioLevelSource {
   protected _handlerBreaker = new ObserverBreaker();
@@ -30,6 +31,7 @@ export class PeakProcessorAudioLevelSource extends AudioLevelSource {
   protected _player?: OmakasePlayerApi | undefined;
   protected _audioType?: PlayerAudioType | undefined;
   protected _trackId?: Track['id'] | undefined;
+  protected _handler?: AudioHandlerApi | undefined;
 
   constructor(player?: OmakasePlayerApi, audioType?: PlayerAudioType, trackId?: Track['id']) {
     super();
@@ -55,6 +57,10 @@ export class PeakProcessorAudioLevelSource extends AudioLevelSource {
   }
 
   setHandler(handler: AudioHandlerApi): void {
+    if (this._handler === handler) {
+      return;
+    }
+    this._handler = handler;
     this._handlerBreaker.break();
     handler
       .createPeakProcessor()
@@ -72,7 +78,7 @@ export class PeakProcessorAudioLevelSource extends AudioLevelSource {
               this._onEvent$.next({
                 type: AudioLevelEventType.AUDIO_LEVEL_CHANGE,
                 data: {
-                  dbValues: peaks.map((peak) => this.dbFromFloat(peak)),
+                  dbValues: peaks.map((peak) => AudioUtil.dbFromFloat(peak)),
                 },
               });
             });
@@ -110,6 +116,7 @@ export class PeakProcessorAudioLevelSource extends AudioLevelSource {
           if (event.data.windowPlayback.mode === WindowPlaybackMode.ATTACHED || event.data.windowPlayback.mode === WindowPlaybackMode.DETACHED) {
             this.resetHandler();
           } else {
+            this._handler = undefined;
             this._handlerBreaker.break();
           }
         });
@@ -141,6 +148,7 @@ export class PeakProcessorAudioLevelSource extends AudioLevelSource {
           .subscribe((event) => {
             switch (event.type) {
               case PlayerEventType.PLAYER_MAIN_MEDIA_UNLOADING:
+                this._handler = undefined;
                 this._handlerBreaker.break();
                 break;
               case PlayerEventType.PLAYER_MAIN_MEDIA_LOADED:

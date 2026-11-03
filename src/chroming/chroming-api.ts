@@ -22,7 +22,8 @@ import type {ChromingState} from './chroming-state';
 import type {ChromingEvent} from './chroming-event';
 import type {Destroyable} from '../common/capabilities';
 import type {ChromingSession} from '../session';
-import {type PlayerInternalApi} from '../player';
+import {type PlayerApi, type PlayerDetachedApi} from '../player';
+import type {LocalizationApi} from '../localization';
 import {type ChromingDomConfig, ChromingDomController} from './chroming-dom';
 import type {Source} from '../source';
 import type {ChromingMarkerBarConfig, ChromingMarkerBarHandlerApi, ChromingMarkerBarState} from './chroming-marker-bar';
@@ -96,7 +97,9 @@ export interface ChromingDetachedApi extends ChromingInternalApi, Destroyable {}
 export interface ChromingInternalApi extends ChromingCommonApi {
   domController: ChromingDomController<ChromingThemeTypes>;
 
-  setPlayerInternal(playerInternal: PlayerInternalApi): void;
+  setPlayerInternal(player: PlayerApi | PlayerDetachedApi): void;
+
+  setLocalizationInternal(localization: LocalizationApi): void;
 
   addMarkerBar(id: Track['id'], destination: ChromingTrackDestination, config?: Partial<ChromingMarkerBarConfig>): Observable<ChromingMarkerBarState['id']>;
   setThumbnailTrack(id: Track['id'] | undefined): Observable<void>;
@@ -323,6 +326,11 @@ export interface OmakaseDropdownListItem extends Record<string, any> {
    * If true, the dropdown list item will be displayed as selected in the UI.
    */
   active?: boolean;
+
+  /**
+   * If true, the dropdown list item is displayed as disabled and can't be selected.
+   */
+  disabled?: boolean;
 
   /**
    * Class(es) to add to the element displayed after the label text

@@ -16,18 +16,18 @@
 
 import {bufferCount, catchError, concatMap, defer, forkJoin, from, map, Observable, of, switchMap, timeout, toArray} from 'rxjs';
 import {DefaultTextCue, TimedItemTemporalType} from '../media';
-import {BaseTimedItemsFetcher} from '../track/timed-items-fetcher/timed-items-fetcher';
-import type {LiveTextCueFetcher, ReadableTextTrack, SegmentedVttReadResult} from '../track/timed-items-fetcher/live-text-cue-fetcher';
-import type {TrackLoadOptions} from '../track/track-load-options';
+import type {LiveTextCueFetcher, ReadableTextTrack, SegmentedVttReadResult, TrackLoadOptions} from '../track';
+import {BaseTimedItemsFetcher, TimedItemsParser} from '../track';
 import {VttUtil} from '../vtt';
 import {SourceUtil} from '../source';
 import {httpGetText} from '../http';
-import {AuthConfig} from '../common';
+import {AuthConfig, FileFormatType} from '../common';
 import {OmpError} from '../types';
 import {UrlUtil} from '../util/url-util';
 import {M3u8Parser} from '../m3u8/m3u8-parser';
 import type {Manifest} from '../m3u8/m3u8.model';
 import {MediaMetadataResolver} from '../tools';
+import {isNullOrUndefined} from '../util/util-functions';
 
 const DEFAULT_MAX_CONCURRENT_REQUESTS = 20;
 
@@ -68,7 +68,7 @@ export class SegmentedVttTimedItemsFetcher extends BaseTimedItemsFetcher<Readabl
       throw new OmpError(`Source not set`);
     }
 
-    const playlistUrl = SourceUtil.resolveUrlFromSource(this._track.source);
+    const playlistUrl = SourceUtil.resolveUrlFromSourceOrFail(this._track.source);
 
     return this.resolveInitTimestamp().pipe(
       switchMap(() => this.fetchPlaylist(playlistUrl)),
@@ -214,15 +214,17 @@ export class SegmentedVttTimedItemsFetcher extends BaseTimedItemsFetcher<Readabl
 
     let parsed;
     try {
-      parsed = VttUtil.parseVtt(VttUtil.stripTimestampMap(text));
+      parsed = TimedItemsParser.parse(VttUtil.stripTimestampMap(text), FileFormatType.VTT);
     } catch (err) {
       console.debug(`SegmentedVttTimedItemsFetcher: failed to parse segment`, err);
       return [];
     }
 
     return (
-      parsed.cues
-        .map((cue) => ({start: cue.start + offset, end: cue.end + offset, text: cue.text}))
+      parsed.timedItems
+        // filter out parsed cues without start and end
+        .filter((timedItem) => !isNullOrUndefined(timedItem.temporal.start) && !isNullOrUndefined(timedItem.temporal.end))
+        .map((timedItem) => ({start: timedItem.temporal.start! + offset, end: timedItem.temporal.end! + offset, text: timedItem.text}))
         // whatever the shift pushes off the front of the timeline is not rendered either
         .filter((cue) => cue.end > 0)
         .map(

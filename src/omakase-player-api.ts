@@ -20,6 +20,7 @@ import type {AuthenticationData} from './common';
 import type {PlayerApi, PlayerDetachedApi} from './player';
 import type {AlertsApi, SessionApi} from './session';
 import type {ChromingApi} from './chroming';
+import type {LocalizationApi, LocalizationDetachedApi} from './localization';
 import type {OmakaseTrackApi} from './track';
 import type {OmakaseToolsApi} from './tools';
 import type {ConfigAndStyle, TimelineApi, TimelineConfig, TimelineStyle} from './timeline';
@@ -62,6 +63,11 @@ export interface OmakasePlayerApi extends OmakasePlayerCommonApi {
   chroming: ChromingApi;
 
   /**
+   * Localization API.
+   */
+  localization: LocalizationApi;
+
+  /**
    * Tools API.
    */
   tools: OmakaseToolsApi;
@@ -72,9 +78,16 @@ export interface OmakasePlayerApi extends OmakasePlayerCommonApi {
   alerts: AlertsApi;
 
   /**
-   * Timeline API.
+   * Timeline API of the first created timeline that is still alive.
+   *
+   * @deprecated Use {@link getTimeline} or {@link timelines} instead.
    */
   timeline: TimelineApi | undefined;
+
+  /**
+   * All timelines that are currently alive, in creation order.
+   */
+  timelines: TimelineApi[];
 
   /**
    * UI API.
@@ -100,7 +113,21 @@ export interface OmakasePlayerApi extends OmakasePlayerCommonApi {
    */
   attachPlayer(): Observable<void>;
 
+  /**
+   * Creates a timeline and appends it to the end of the HTML element identified by {@link TimelineConfig.htmlElementId}.
+   * Multiple timelines can exist at the same time, in the same or in different HTML elements.
+   *
+   * @param configAndStyle - Timeline configuration and style.
+   * @returns Observable that emits the created timeline.
+   */
   createTimeline(configAndStyle?: ConfigAndStyle<TimelineConfig, TimelineStyle>): Observable<TimelineApi>;
+
+  /**
+   * Returns the timeline with the given id, or undefined if it doesn't exist or was destroyed.
+   *
+   * @param id - Timeline id, see {@link TimelineApi.id}.
+   */
+  getTimeline(id: string): TimelineApi | undefined;
 }
 
 /**
@@ -111,4 +138,9 @@ export interface OmakasePlayerDetachedApi extends OmakasePlayerCommonApi {
    * Reduced player control API available in detached mode.
    */
   get player(): PlayerDetachedApi;
+
+  /**
+   * Localization API.
+   */
+  get localization(): LocalizationDetachedApi;
 }

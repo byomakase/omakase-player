@@ -22,8 +22,6 @@ import {BlobUtil} from '../../util/blob-util';
 import {errorCompleteObserver, nextCompleteObserver} from '../../util/rxjs-util';
 
 export class ImageUtil {
-  private static _spriteCache = new Map();
-
   static getProtectedImageUrl(url: string, authentication: AuthenticationData): Observable<string> {
     return new Observable<string>((o$) => {
       fetch(url, AuthConfig.createRequestInit(url, authentication))
@@ -60,18 +58,10 @@ export class ImageUtil {
     const imageUrl$ = authentication ? this.getProtectedImageUrl(url, authentication) : of(url);
     return imageUrl$.pipe(
       switchMap((url) => {
-        if (this._spriteCache.has(url)) {
-          const img = new Konva.Image(this._spriteCache.get(url));
-
-          return of(this.cropSpriteImage(img, xywh));
-        }
-
         return new Observable<Konva.Image>((o$) => {
           Konva.Image.fromURL(
             url,
             (image: Konva.Image) => {
-              this._spriteCache.set(url, image.getAttrs());
-
               const cropImage = this.cropSpriteImage(image, xywh);
 
               nextCompleteObserver(o$, cropImage);

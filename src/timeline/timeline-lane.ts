@@ -204,6 +204,9 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
   protected abstract settleLayout(): void;
 
   prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider) {
+    if (this._timeline && this._timeline !== timeline) {
+      throw new Error(`TimelineLane with id=${this._id} is already added to timeline with id=${this._timeline.id}`);
+    }
     this._timeline = timeline;
     this._player = player;
     this._ui = ompProvider.ui;
@@ -404,9 +407,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
     this.updateLeftPaneContentPositions();
 
     flexGroup.contentNode.konvaNode.add(this._leftBorderTopLine, this._leftBorderBottomLine);
-    this._leftBgRect.on('widthChange.timelineLaneBorder heightChange.timelineLaneBorder', () =>
-      this.repositionBorderLines(this._leftBgRect, this._leftBorderTopLine, this._leftBorderBottomLine)
-    );
+    this._leftBgRect.on('widthChange.timelineLaneBorder heightChange.timelineLaneBorder', () => this.repositionBorderLines(this._leftBgRect, this._leftBorderTopLine, this._leftBorderBottomLine));
     this.repositionBorderLines(this._leftBgRect, this._leftBorderTopLine, this._leftBorderBottomLine);
 
     return flexGroup;
@@ -475,9 +476,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
     });
 
     flexGroup.contentNode.konvaNode.add(this._rightBorderTopLine, this._rightBorderBottomLine);
-    this._rightBgRect.on('widthChange.timelineLaneBorder heightChange.timelineLaneBorder', () =>
-      this.repositionBorderLines(this._rightBgRect, this._rightBorderTopLine, this._rightBorderBottomLine)
-    );
+    this._rightBgRect.on('widthChange.timelineLaneBorder heightChange.timelineLaneBorder', () => this.repositionBorderLines(this._rightBgRect, this._rightBorderTopLine, this._rightBorderBottomLine));
     this.repositionBorderLines(this._rightBgRect, this._rightBorderTopLine, this._rightBorderBottomLine);
 
     return flexGroup;
@@ -783,7 +782,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
     // @ts-ignore
     this._mainLeftDescription = void 0;
 
-    this._mainLeftStartJustified?.destroy()
+    this._mainLeftStartJustified?.destroy();
     // @ts-ignore
     this._mainLeftStartJustified = void 0;
 

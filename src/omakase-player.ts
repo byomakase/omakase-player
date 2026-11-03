@@ -15,7 +15,8 @@
  */
 
 import {ObserverBreaker} from './common/observer-breaker';
-import {type MainMedia, type MainMediaLoadOptions, SlateType} from './media';
+import {type MainMedia, type MainMediaLoadOptions} from './media';
+import {SlateType} from './slate/slate-main-media';
 import {BehaviorSubject, combineLatest, concat, filter, Observable, takeUntil} from 'rxjs';
 import {Player, type PlayerApi, type PlayerConfig, type PlayerDetachedApi, PlayerEventType, type PlayerInternalApi} from './player';
 import {type PrefixKeys} from './types/ts-types';
@@ -30,6 +31,8 @@ import './../style/omakase-player.scss';
 import type {OmakasePlayerApi} from './omakase-player-api';
 import {Chroming} from './chroming/chroming';
 import {type ChromingApi, type ChromingDetachedApi, type ChromingInternalApi, DEFAULT_FULLSCREEN_CHROMING_BY_THEME, DEFAULT_PLAYER_CHROMING, type PlayerChromingConfig} from './chroming';
+import {Localization} from './localization/localization';
+import type {LocalizationApi, LocalizationDetachedApi, LocalizationInternalApi, Localizations} from './localization';
 import type {OmakaseTrackApi} from './track';
 import {BaseOmakasePlayer} from './base-omakase-player';
 import {HostRemoteNode} from './remoting/host-remote-node';
@@ -50,6 +53,8 @@ export type OmakasePlayerConfig = {
   detachedBroadcastChannelId?: string | undefined;
   detachWindowUrlFn?: (mainMedia: MainMedia) => string;
   detachWindowFeatures?: string | undefined;
+
+  localization?: Localizations | undefined;
 } & PrefixKeys<PlayerConfig, 'player'> &
   PrefixKeys<PlayerChromingConfig, 'chroming'>;
 
@@ -61,6 +66,10 @@ const _configDefault: OmakasePlayerConfig = {
   chromingTheme: DEFAULT_PLAYER_CHROMING.theme,
 };
 
+/**
+ * @document ../docs/static/STYLING.md
+ * @document ../README.md
+ */
 export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi {
   private _config: OmakasePlayerConfig;
 
@@ -73,12 +82,15 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
   private _chroming: Chroming;
   private _chromingDetached?: ChromingDetachedApi | undefined;
 
+  private _localization: Localization;
+  private _localizationDetached?: LocalizationDetachedApi | undefined;
+
   private _omakaseTrack: OmakaseTrackApiImpl;
 
   private _remoteNode: HostRemoteNode | undefined;
   private _playerDetachedWindow: WindowProxy | undefined;
 
-  private _timelines: Map<TimelineApi['id'], TimelineApi> = new Map();
+  private _timelines: Map<TimelineApi['id'], TimelineImpl> = new Map();
 
   private _detachingBreaker = new ObserverBreaker();
   private _detachedBreaker = new ObserverBreaker();
@@ -109,6 +121,11 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
       textMode: this._config.playerTextMode,
       textMainTracksHandler: this._config.playerTextMainTracksHandler,
       ...(this._config.playerControllerConfig ? {controllerConfig: this._config.playerControllerConfig} : {}),
+      ...(this._config.playerSidecarVideo ? {sidecarVideo: this._config.playerSidecarVideo} : {}),
+    });
+
+    this._localization = new Localization(this._ompProvider, {
+      localizations: this._config.localization,
     });
 
     this._chroming = new Chroming(
@@ -132,31 +149,11 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
       this._player.livePlaybackTracker
     );
     this._player.setChromingInternal(this._chroming.chromingLocal);
-    this._chroming.setPlayerInternal(this._player.playerLocal);
+    this._chroming.setPlayerInternal(this._player);
+    this._chroming.setLocalizationInternal(this._localization.localizationLocal);
     this._ompProvider.omakaseTrack.setPlayerInternal(this._player.playerLocal);
 
     this._omakaseTrack = this._ompProvider.omakaseTrack;
-
-    this._session.onEvent$
-      .pipe(takeUntil(this._destroyBreaker.observer))
-      .pipe(filter((p) => p.type === SessionEventType.SESSION_WINDOW_PLAYBACK_UPDATED))
-      .subscribe((event) => {
-        switch (event.data.windowPlayback.mode) {
-          case WindowPlaybackMode.ATTACHING:
-            this._chroming.prepareDomForAttaching(!!this._session.state.player.mainMediaId);
-            this._chroming.chromingLocal.domController.showLoading();
-            break;
-          case WindowPlaybackMode.ATTACHED:
-            if (this._player.isMainMediaLoaded) {
-              this._chroming.chromingLocal.domController.showLoaded();
-              this._chroming.chromingLocal.domController.setAttachDetachButtonEnabled(event.data.windowPlayback.canDetach);
-            }
-            break;
-          case WindowPlaybackMode.DETACHING:
-            this._chroming.prepareDomForDetaching();
-            break;
-        }
-      });
 
     this._session.onEvent$
       .pipe(takeUntil(this._destroyBreaker.observer))
@@ -228,8 +225,9 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
 
           let playerDetached = remoteNode.getProxyByName('PlayerDetached');
           let chromingDetached = remoteNode.getProxyByName('ChromingDetached');
+          let localizationDetached = remoteNode.getProxyByName('LocalizationDetached');
 
-          this.restoreSession(sessionState, playerDetached, chromingDetached)
+          this.restoreSession(sessionState, playerDetached, chromingDetached, localizationDetached)
             .pipe(takeUntil(this._detachingBreaker.observer))
             .pipe(takeUntil(this._destroyBreaker.observer))
             .subscribe({
@@ -239,6 +237,9 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
 
                 this._chromingDetached = chromingDetached;
                 this._chroming.wireDetached(chromingDetached);
+
+                this._localizationDetached = localizationDetached;
+                this._localization.wireDetached(localizationDetached);
 
                 remoteNode.onEvent$
                   .pipe(takeUntil(this._detachedBreaker.observer))
@@ -371,24 +372,13 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
           this._attachingBreaker.break();
         };
 
-        this.restoreSession(sessionState, this._player.playerLocal, this._chroming.chromingLocal)
+        this.restoreSession(sessionState, this._player.playerLocal, this._chroming.chromingLocal, this._localization.localizationLocal)
           .pipe(takeUntil(this._attachingBreaker.observer))
           .subscribe({
             next: (event) => {
               this._player.wireLocal();
               this._session.updateWindowPlaybackMode(WindowPlaybackMode.ATTACHED);
-
               completeAttaching();
-
-              // TODO @dzivkovic - TEMPORARY HACK FOR CHROMING - THIS WILL BE REMOVED
-              if (!this._player.mainMedia) {
-                setTimeout(() => {
-                  this._player.loadSlate(SlateType.BLACK).subscribe(() => {
-                    this._player.unloadMainMedia();
-                  });
-                });
-              }
-
               nextCompleteObserver(observer);
             },
             error: (err) => {
@@ -402,7 +392,7 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
     });
   }
 
-  protected restoreSession(sessionState: SessionState, player: PlayerInternalApi, chroming: ChromingInternalApi): Observable<void> {
+  protected restoreSession(sessionState: SessionState, player: PlayerInternalApi, chroming: ChromingInternalApi, localization: LocalizationInternalApi): Observable<void> {
     return new Observable((observer) => {
       let player$ = new Observable((observer) => {
         player.restorePlayerSession(sessionState.player).subscribe({
@@ -420,7 +410,15 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
         });
       });
 
-      concat(player$, chroming$)
+      let localization$ = new Observable((observer) => {
+        localization.restoreLocalization(sessionState.localization).subscribe({
+          next: () => {
+            nextCompleteObserver(observer);
+          },
+        });
+      });
+
+      concat(player$, chroming$, localization$)
         .pipe(takeUntil(this._detachingBreaker.observer))
         .pipe(takeUntil(this._destroyBreaker.observer))
         .subscribe({
@@ -458,6 +456,10 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
     return this._chroming;
   }
 
+  get localization(): LocalizationApi {
+    return this._localization;
+  }
+
   get session(): SessionApi {
     return this._session;
   }
@@ -474,8 +476,15 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
     return this._ompProvider.alertsManager;
   }
 
+  /**
+   * @deprecated Use {@link getTimeline} or {@link timelines} instead. Returns the first created timeline that is still alive.
+   */
   get timeline(): TimelineApi | undefined {
-    return this.getTimeline();
+    return [...this._timelines.values()][0];
+  }
+
+  get timelines(): TimelineApi[] {
+    return [...this._timelines.values()];
   }
 
   get ui(): UiApi {
@@ -497,29 +506,20 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
       combineLatest([yogaLayoutReady$.pipe(filter((p) => p))])
         .pipe(takeUntil(this._destroyBreaker.observer))
         .subscribe(() => {
-          [...this._timelines.values()].forEach((p) => {
-            try {
-              p.destroy();
-            } catch (e) {
-              // could be that timeline was destroyed manually, we will just ignore the error
-            }
-            this._timelines.delete(p.id);
-          });
-
-          let timeline = new TimelineImpl(this._player, this._ompProvider, configAndStyle);
+          let timeline = new TimelineImpl(this._player, this._localization, this._ompProvider, configAndStyle);
 
           this._timelines.set(timeline.id, timeline);
+          timeline.onDestroyed$.subscribe(() => {
+            this._timelines.delete(timeline.id);
+          });
+
           nextCompleteObserver(observer, timeline);
         });
     });
   }
 
-  getTimeline(id?: TimelineApi['id']): TimelineApi | undefined {
-    if (id) {
-      return this._timelines.get(id);
-    } else {
-      return [...this._timelines.values()][0] ?? undefined;
-    }
+  getTimeline(id: TimelineApi['id']): TimelineApi | undefined {
+    return this._timelines.get(id);
   }
 
   destroy(): void {
@@ -536,7 +536,10 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
     this._chroming.destroy();
     this._chromingDetached?.destroy();
 
-    this._timelines.forEach((timeline) => timeline.destroy());
+    this._localization.destroy();
+    this._localizationDetached?.destroy();
+
+    [...this._timelines.values()].forEach((timeline) => timeline.destroy());
     this._timelines.clear();
 
     this._ompProvider.destroy();

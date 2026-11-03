@@ -20,10 +20,12 @@ export const OmakaseDropdownOptionAttributes = {
   VALUE: 'value',
   TITLE: 'title',
   SELECTED: 'selected',
+  DISABLED: 'disabled',
 };
 
 export const OmakaseDropdownOptionDomClasses = {
   ICON: 'omakase-dropdown-option-icon',
+  ICON_INNER: 'omakase-dropdown-option-icon-inner',
   TEXT: 'omakase-dropdown-option-text',
   ACTION: 'omakase-dropdown-option-action',
   ACTIVE: 'active',
@@ -52,6 +54,14 @@ export class OmakaseDropdownOption extends HTMLElement {
     }
   }
 
+  get disabled(): boolean {
+    return this.hasAttribute(OmakaseDropdownOptionAttributes.DISABLED);
+  }
+
+  set disabled(disabled: boolean) {
+    this.toggleAttribute(OmakaseDropdownOptionAttributes.DISABLED, disabled);
+  }
+
   setLabel(label: string) {
     if (this._textElement) {
       this._textElement.textContent = label;
@@ -63,16 +73,23 @@ export class OmakaseDropdownOption extends HTMLElement {
     this.innerText = '';
     this._iconElement = document.createElement('span');
     this._iconElement.classList.add(OmakaseDropdownOptionDomClasses.ICON);
+    const iconInnerElement = document.createElement('span');
+    iconInnerElement.classList.add(OmakaseDropdownOptionDomClasses.ICON_INNER);
+    this._iconElement.appendChild(iconInnerElement);
     this._textElement = document.createElement('span');
     this._textElement.textContent = text;
     this._textElement.classList.add(OmakaseDropdownOptionDomClasses.TEXT);
     this._actionElement = document.createElement('span');
     this._actionElement.classList.add(OmakaseDropdownOptionDomClasses.ACTION);
     this._iconElement.onclick = () => {
-      this.onSelect$.next();
+      if (!this.disabled) {
+        this.onSelect$.next();
+      }
     };
     this._textElement.onclick = () => {
-      this.onSelect$.next();
+      if (!this.disabled) {
+        this.onSelect$.next();
+      }
     };
     this._actionElement.onclick = () => {
       this.onAction$.next();

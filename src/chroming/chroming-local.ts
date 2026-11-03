@@ -46,7 +46,7 @@ import type {ChromingMarkerBarConfig, ChromingMarkerBarState} from './chroming-m
 import {AlertsManager} from '../session/alert';
 import type {OmpProvider} from '../omp-provider';
 import {Ui} from '../ui';
-import {ObserverBreaker} from '../common/observer-breaker';
+import {ChromingUtil} from './chroming-util';
 import {PlayerAudioType} from '../player';
 import type {LivePlaybackTrackerApi} from '../live/live-model';
 
@@ -340,15 +340,7 @@ export class ChromingLocal extends BaseChroming implements ChromingLocalApi {
   }
 
   findThumbnailFn(trackId: Track['id'], time: number): Observable<ThumbnailState | undefined> {
-    return new Observable((observer) => {
-      const track = this._trackApi.get(trackId);
-      if (track && track instanceof ThumbnailTrack) {
-        const thumbnail = track.findNearestTimedItem(time);
-        nextCompleteObserver(observer, thumbnail);
-      } else {
-        nextCompleteObserver(observer, undefined);
-      }
-    });
+    return ChromingUtil.findThumbnail(this._trackApi, trackId, time);
   }
 
   restoreAlerts(): Observable<void> {

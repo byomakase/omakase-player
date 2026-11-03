@@ -20,6 +20,7 @@ export * from "./flow-core-segment-duration";
 export * from "./flow-segment";
 export * from "./flow-segment1";
 export * from "./flow-segment-get-urls-inner";
+export * from "./flow-segment-init-object";
 export * from "./flow-storage-post";
 export * from "./http-request";
 export * from "./media-bucket-object-store";

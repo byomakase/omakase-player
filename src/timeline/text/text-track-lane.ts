@@ -15,48 +15,87 @@
  */
 
 import Konva from 'konva';
-import {type SpanTemporal, type TextCue, type TextTrack, TimedItemsTrackEventType, TrackEventType} from '../../media';
+import {type SpanTemporal, type TextCue, type TextCueState, type TextTrack, TimedItemsTrackEventType, TimedItemTemporalType, TimedItemTemporalUtil, TrackEventType} from '../../media';
 import type {PlayerApi} from '../../player';
 import type {TimelineImpl} from '../timeline';
 import {TIMELINE_LANE_CONFIG_DEFAULT, type TimelineLaneStyle} from '../timeline-lane';
 import {BaseTrackLane, type TrackLaneConfig} from '../track-lane';
-import {TextCueVisualization} from './text-cue-visualization';
+import {TextCueVisualization, type TextCueVisualizationStyle} from './text-cue-visualization';
 import {combineLatest, filter, Observable, Subject, takeUntil} from 'rxjs';
-import {ObserverBreaker} from '../../common/observer-breaker';
-import {WindowPlaybackMode} from '../../common/window-playback';
-import {SessionEventType} from '../../session/session-event';
-import type {SessionApi} from '../../session/session-api';
+import {WindowPlaybackMode} from '../../common';
+import type {SessionApi} from '../../session';
+import {SessionEventType} from '../../session';
 import {type ConfigAndStyle} from '../timeline-api';
-import {omitKeys} from '../../util/object-util';
+import {omitKeys, removeEmptyValues} from '../../util/object-util';
 import {konvaUnlistener} from '../konva/konva-util';
-import type {StyledElementWithId} from '../../ui';
+import {type StyledElementWithId, type UiElementProps, UiEventType} from '../../ui';
 import type {OmpProvider} from '../../omp-provider';
+import type {Position} from '../model';
+import {freeObserver} from '../../util/rxjs-util';
+import {isNullOrUndefined} from '../../util/util-functions';
 
 export interface TextTrackLaneStyle extends TimelineLaneStyle {
-  textLaneItemOpacity: number;
-  textLaneItemFill: string;
+  itemOpacity: number;
+  itemFill: string;
+  itemBorderSize: number;
+  itemBorderColor: string;
+  itemBorderRadius: number;
+
+  itemContentPadding: number;
+  /** Minimal required cue width for text/timestamps rendering. */
+  itemMinWidthToShowContent: number;
+
+  itemTextFontSize: number;
+  itemTextFontFamily: string;
+  itemTextFill: string;
+  /** Minimal required cue content height for text rendering. */
+  itemMinHeightToShowText: number;
+
+  itemTimestampsFontSize: number;
+  itemTimestampsFontFamily: string;
+  itemTimestampsFill: string;
+  /** Minimal required cue content height for timestamps rendering if {@link showCueText} is enabled.
+   * If {@link showCueText} is disabled, minimal height becomes {@link itemMinHeightToShowText}
+   */
+  itemMinHeightToShowTimestamps: number;
 }
 
-export interface TextTrackLaneConfig extends TrackLaneConfig {}
+export interface TextTrackLaneElementProps extends UiElementProps {
+  inForeground?: boolean | undefined;
+}
+
+export interface TextTrackLaneConfig extends TrackLaneConfig {
+  showCueText: boolean;
+  showCueTimestamps: boolean;
+}
 
 const configDefault: TextTrackLaneConfig = {
   ...TIMELINE_LANE_CONFIG_DEFAULT,
+  showCueText: false,
+  showCueTimestamps: false,
 };
 
 export enum TextTrackLaneEventType {
   TIMELINE_TEXT_TRACK_LANE_ITEM_CLICK = 'TIMELINE_TEXT_TRACK_LANE_ITEM_CLICK',
   TIMELINE_TEXT_TRACK_LANE_ITEM_MOUSE_ENTER = 'TIMELINE_TEXT_TRACK_LANE_ITEM_MOUSE_ENTER',
   TIMELINE_TEXT_TRACK_LANE_ITEM_MOUSE_LEAVE = 'TIMELINE_TEXT_TRACK_LANE_ITEM_MOUSE_LEAVE',
+
+  TIMELINE_TEXT_TRACK_LANE_ITEM_IN_FOREGROUND_CHANGE = 'TIMELINE_TEXT_TRACK_LANE_ITEM_IN_FOREGROUND_CHANGE',
 }
 
 export interface TextTrackLaneEventData {
-  cues: TextCue[];
+  cues: TextCueState[];
+  cuesInForeground: TextCueState[];
 }
 
 export type TextTrackLaneEventTypeDataMap = {
   [TextTrackLaneEventType.TIMELINE_TEXT_TRACK_LANE_ITEM_CLICK]: TextTrackLaneEventData;
   [TextTrackLaneEventType.TIMELINE_TEXT_TRACK_LANE_ITEM_MOUSE_ENTER]: TextTrackLaneEventData;
   [TextTrackLaneEventType.TIMELINE_TEXT_TRACK_LANE_ITEM_MOUSE_LEAVE]: TextTrackLaneEventData;
+
+  [TextTrackLaneEventType.TIMELINE_TEXT_TRACK_LANE_ITEM_IN_FOREGROUND_CHANGE]: {
+    cuesInForeground: TextCueState[];
+  };
 };
 
 export type TextTrackLaneEvent = {
@@ -68,7 +107,7 @@ export type TextTrackLaneEvent = {
 
 export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackLaneStyle, TextTrack> {
   private readonly _onEvent$: Subject<TextTrackLaneEvent> = new Subject<TextTrackLaneEvent>();
-  protected _eventsBreaker = new ObserverBreaker();
+
   protected _textMarkingsGroup?: Konva.Group;
   protected _textCueVisualizations: Map<number, TextCueVisualization> = new Map();
   protected _squashedCueGroups: TextCue[][] = [];
@@ -76,6 +115,8 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
   protected _session?: SessionApi;
   /** A render asked for while the window was mid-move, to be run once it settles. */
   protected _renderPending = false;
+
+  private _squashedCueClick$: Subject<Position> = new Subject();
 
   constructor(configAndStyle?: ConfigAndStyle<TextTrackLaneConfig, TextTrackLaneStyle>) {
     super(
@@ -100,6 +141,10 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
           this.render();
         }
       });
+
+    this._squashedCueClick$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe((position) => {
+      this.handleSquashedCueClick(position);
+    });
   }
 
   override setTrack(track: TextTrack) {
@@ -126,10 +171,23 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
     super.handleStyleUpdate();
 
     this._textCueVisualizations.forEach((visualization) => {
-      visualization.style = {
-        fill: this.style.textLaneItemFill,
-        opacity: this.style.textLaneItemOpacity,
-      };
+      visualization.style = removeEmptyValues<Partial<TextCueVisualizationStyle>>({
+        fill: this.style.itemFill,
+        opacity: this.style.itemOpacity,
+        borderSize: this.style.itemBorderSize,
+        borderColor: this.style.itemBorderColor,
+        borderRadius: this.style.itemBorderRadius,
+        contentPadding: this.style.itemContentPadding,
+        minWidthToShowContent: this.style.itemMinWidthToShowContent,
+        textFontSize: this.style.itemTextFontSize,
+        textFontFamily: this.style.itemTextFontFamily,
+        textFill: this.style.itemTextFill,
+        minHeightToShowText: this.style.itemMinHeightToShowText,
+        timestampsFontSize: this.style.itemTimestampsFontSize,
+        timestampsFontFamily: this.style.itemTimestampsFontFamily,
+        timestampsFill: this.style.itemTimestampsFill,
+        minHeightToShowTimestamps: this.style.itemMinHeightToShowTimestamps,
+      });
     });
   }
 
@@ -175,6 +233,17 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
         }
       });
 
+    this._ui!.onEvent$.pipe(filter((event) => event.type === UiEventType.UI_ELEMENT_UPDATED))
+      .pipe(filter((event) => !!this.getCueVisualization(event.data.element.id)))
+      .pipe(takeUntil(this._uiBreaker.observer))
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe((event) => {
+        const element = this._ui!.getElement<TextTrackLaneElementProps>(event.data.element.id);
+        if (element) {
+          this.handleForegroundUpdate(element.id, !!element.props?.inForeground);
+        }
+      });
+
     this._prepared.next(true);
   }
 
@@ -199,8 +268,10 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
 
   clearContent(): void {
     super.clearContent();
-    this._eventsBreaker.break();
-    this._textCueVisualizations.forEach((v) => konvaUnlistener(v.konvaNode));
+    this._textCueVisualizations.forEach((v) => {
+      konvaUnlistener(v.konvaNode);
+      v.destroy();
+    });
     this._textMarkingsGroup?.destroyChildren();
     this._textCueVisualizations.clear();
     this._squashedCueGroups = [];
@@ -297,6 +368,91 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
     this.render();
   }
 
+  protected handleForegroundUpdate(cueId: TextCue['id'], inForeground: boolean): void {
+    this.checkIsPrepared();
+
+    const cueTextVisualization = this.getCueVisualization(cueId);
+    const itemsInForeground = this.getItemsInForeground();
+
+    if (!cueTextVisualization) {
+      return;
+    }
+
+    const removeCueForeground = (itemId: string) => {
+      this._ui!.updateElement<TextTrackLaneElementProps>({
+        id: itemId,
+        props: {
+          inForeground: void 0,
+        },
+      });
+    };
+
+    if (!inForeground) {
+      cueTextVisualization.konvaNode.moveToBottom();
+
+      this._onEvent$.next({
+        type: TextTrackLaneEventType.TIMELINE_TEXT_TRACK_LANE_ITEM_IN_FOREGROUND_CHANGE,
+        data: {
+          cuesInForeground: this.getItemsInForeground().map((cv) => cv.state),
+        },
+      });
+    } else {
+      this._textMarkingsGroup?.moveToTop();
+      cueTextVisualization.konvaNode.moveToTop();
+
+      this._onEvent$.next({
+        type: TextTrackLaneEventType.TIMELINE_TEXT_TRACK_LANE_ITEM_IN_FOREGROUND_CHANGE,
+        data: {
+          cuesInForeground: this.getItemsInForeground().map((cv) => cv.state),
+        },
+      });
+
+      let foregroundGroupTemporal = this.getGroupTemporal(cueTextVisualization.cues);
+      let foregroundItemStartTime = parseFloat(foregroundGroupTemporal.start);
+      let foregroundItemEndTime = parseFloat(foregroundGroupTemporal.end);
+
+      itemsInForeground
+        .filter((p) => !cueTextVisualization.cues.includes(p))
+        .forEach((cue) => {
+          if (!isNullOrUndefined(foregroundItemStartTime) && !isNullOrUndefined(foregroundItemEndTime)) {
+            if (TimedItemTemporalUtil.touchesTimeRange(cue.temporal, foregroundItemStartTime, foregroundItemEndTime)) {
+              removeCueForeground(cue.id);
+            }
+          } else {
+            let startTime = TimedItemTemporalUtil.extractStartTime(cue.temporal);
+            let endTime = TimedItemTemporalUtil.extractEndTime(cue.temporal);
+
+            if (isNullOrUndefined(startTime) && !isNullOrUndefined(endTime) && TimedItemTemporalUtil.touchesTimeRange(foregroundGroupTemporal, startTime!, endTime!)) {
+              removeCueForeground(cue.id);
+            }
+          }
+        });
+    }
+  }
+
+  moveToForeground(itemIndex: number): void {
+    const cueTextVisualization = this._textCueVisualizations.get(itemIndex);
+    if (!cueTextVisualization || cueTextVisualization.cues.find((cue) => this.getItemsInForeground().includes(cue))) {
+      return;
+    }
+
+    cueTextVisualization.cues.forEach((cue) => {
+      this._ui!.updateElement<TextTrackLaneElementProps>({
+        id: cue.id,
+        props: {
+          inForeground: true,
+        },
+      });
+    });
+  }
+
+  private getItemsInForeground(): TextCue[] {
+    if (!this._ui) {
+      return [];
+    }
+    return Array.from(this._textCueVisualizations.values()).flatMap((cv) => cv.cues.filter((cue) => !!this._ui?.getElement<TextTrackLaneElementProps>(cue.id)?.props?.inForeground));
+  }
+
   private squashCues(cues: TextCue[]): TextCue[][] {
     if (!cues.length) {
       return [];
@@ -309,26 +465,31 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
 
     const squashedGroups: TextCue[][] = [];
     let currentGroup: TextCue[] = [cues[0]!];
-    let lastEnd = parseFloat((cues[0]!.temporal as SpanTemporal).end);
+    let lastCue: TextCue = cues[0]!;
+    let lastEnd = TimedItemTemporalUtil.extractEndTime(cues[0]!.temporal) ?? this._player!.getDuration();
 
     for (let i = 1; i < cues.length; i++) {
       const cue = cues[i]!;
-      const start = parseFloat((cue.temporal as SpanTemporal).start);
+      const start = TimedItemTemporalUtil.extractStartTime(cue.temporal) ?? 0;
 
-      if (start - lastEnd >= threshold) {
-        const firstStart = parseFloat((currentGroup[0]!.temporal as SpanTemporal).start);
+      if (this.isCueContentVisible(lastCue)) {
+        squashedGroups.push(currentGroup);
+        currentGroup = [];
+      } else if (start - lastEnd >= threshold) {
+        const firstStart = TimedItemTemporalUtil.extractStartTime(currentGroup[0]!.temporal) ?? 0;
         if (lastEnd - firstStart >= threshold) {
           squashedGroups.push(currentGroup);
         }
         currentGroup = [];
       }
       currentGroup.push(cue);
-      lastEnd = parseFloat((cue.temporal as SpanTemporal).end);
+      lastCue = cue;
+      lastEnd = TimedItemTemporalUtil.extractEndTime(cue.temporal) ?? this._player!.getDuration();
     }
 
     if (currentGroup.length > 0) {
-      const firstStart = parseFloat((currentGroup[0]!.temporal as SpanTemporal).start);
-      if (lastEnd - firstStart >= threshold) {
+      const firstStart = TimedItemTemporalUtil.extractStartTime(currentGroup[0]!.temporal) ?? 0;
+      if (this.isCueContentVisible(currentGroup[0]!) || lastEnd - firstStart >= threshold) {
         squashedGroups.push(currentGroup);
       }
     }
@@ -342,8 +503,9 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
     const newIndices = new Set<number>();
 
     this._squashedCueGroups.forEach((group, index) => {
-      const start = parseFloat((group[0]!.temporal as SpanTemporal).start);
-      const end = parseFloat((group[group.length - 1]!.temporal as SpanTemporal).end);
+      const groupTemporal = this.getGroupTemporal(group);
+      const start = parseFloat(groupTemporal.start);
+      const end = parseFloat(groupTemporal.end);
       const visible = !(end < visibleRange.start || start > visibleRange.end);
 
       const existing = this._textCueVisualizations.get(index);
@@ -351,7 +513,7 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
       if (!visible) {
         if (existing) {
           konvaUnlistener(existing.konvaNode);
-          existing.konvaNode.destroy();
+          existing.destroy();
           this._textCueVisualizations.delete(index);
         }
         return;
@@ -366,19 +528,42 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
         existing.konvaNode.setAttrs({x: xStart, width: xEnd - xStart, height: cueHeight});
         existing.onMeasurementsChange();
       } else {
-        const cueVisualization = new TextCueVisualization({
-          style: {
-            x: xStart,
-            width: xEnd - xStart,
-            height: cueHeight,
-            fill: this.style.textLaneItemFill,
-            opacity: this.style.textLaneItemOpacity,
+        const cueVisualization = new TextCueVisualization(
+          {
+            showText: this._config.showCueText,
+            showTimestamps: this._config.showCueTimestamps,
+            style: removeEmptyValues<Partial<TextCueVisualizationStyle>>({
+              x: xStart,
+              width: xEnd - xStart,
+              height: cueHeight,
+              fill: this.style.itemFill,
+              opacity: this.style.itemOpacity,
+              borderSize: this.style.itemBorderSize,
+              borderColor: this.style.itemBorderColor,
+              borderRadius: this.style.itemBorderRadius,
+              contentPadding: this.style.itemContentPadding,
+              minWidthToShowContent: this.style.itemMinWidthToShowContent,
+              textFontSize: this.style.itemTextFontSize,
+              textFontFamily: this.style.itemTextFontFamily,
+              textFill: this.style.itemTextFill,
+              minHeightToShowText: this.style.itemMinHeightToShowText,
+              timestampsFontSize: this.style.itemTimestampsFontSize,
+              timestampsFontFamily: this.style.itemTimestampsFontFamily,
+              timestampsFill: this.style.itemTimestampsFill,
+              minHeightToShowTimestamps: this.style.itemMinHeightToShowTimestamps,
+            }),
           },
-        });
+          this._player
+        );
         cueVisualization.cues = group;
         this._textCueVisualizations.set(index, cueVisualization);
         this._textMarkingsGroup!.add(cueVisualization.konvaNode);
         this.attachCueListeners(cueVisualization);
+
+        const itemsInForeground = this.getItemsInForeground();
+        if (!group.find((cue) => itemsInForeground.includes(cue))) {
+          cueVisualization.konvaNode.moveToBottom();
+        }
       }
     });
 
@@ -392,10 +577,33 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
     }
   }
 
+  private getGroupTemporal(group: TextCue[]): SpanTemporal {
+    const start = group.reduce((min, curr) => {
+      let startTime = TimedItemTemporalUtil.extractStartTime(curr.temporal) ?? 0;
+      return startTime < min ? startTime : min;
+    }, Infinity);
+    const end = group.reduce((max, curr) => {
+      let endTime = TimedItemTemporalUtil.extractEndTime(curr.temporal) ?? this._player!.getDuration();
+      return endTime > max ? endTime : max;
+    }, -Infinity);
+
+    return {
+      type: TimedItemTemporalType.SPAN,
+      start: `${start}`,
+      end: `${end}`,
+    };
+  }
+
   private attachCueListeners(cueVisualization: TextCueVisualization): void {
     const node = cueVisualization.konvaNode;
     const emitEvent = (type: TextTrackLaneEventType) => {
-      this._onEvent$.next({type, data: {cues: cueVisualization.cues}} as TextTrackLaneEvent);
+      this._onEvent$.next({
+        type,
+        data: {
+          cues: cueVisualization.cues,
+          cuesInForeground: this.getItemsInForeground().map((cue) => cue.state),
+        },
+      } as TextTrackLaneEvent);
     };
 
     let isMouseOver = false;
@@ -414,7 +622,70 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
       }
     });
 
-    node.on('click touchend', () => emitEvent(TextTrackLaneEventType.TIMELINE_TEXT_TRACK_LANE_ITEM_CLICK));
+    node.on('click touchend', () => {
+      emitEvent(TextTrackLaneEventType.TIMELINE_TEXT_TRACK_LANE_ITEM_CLICK);
+      let position = this._timeline!.getTimecodedFloatingRelativePointerPosition();
+      if (position) {
+        this._squashedCueClick$.next(position);
+      }
+    });
+  }
+
+  private isCueContentVisible(cue: TextCue): boolean {
+    if (!this._config.showCueText && !this._config.showCueTimestamps) {
+      return false;
+    }
+
+    const start = TimedItemTemporalUtil.extractStartTime(cue.temporal) ?? 0;
+    const end = TimedItemTemporalUtil.extractEndTime(cue.temporal) ?? this._player!.getDuration();
+
+    const xStart = this._timeline!.timeToTimelinePosition(start);
+    const xEnd = this._timeline!.timeToTimelinePosition(end);
+
+    const contentWidth = xEnd - xStart;
+    const contentHeight = this.getContentHeight('right') - 2 * this.style.itemContentPadding - this.style.itemBorderSize;
+
+    return (
+      contentWidth >= this.style.itemMinWidthToShowContent &&
+      (this._config.showCueText ? contentHeight >= this.style.itemMinHeightToShowText : contentHeight >= this.style.itemMinHeightToShowTimestamps)
+    );
+  }
+
+  private handleSquashedCueClick(position: Position): void {
+    let seconds = this._timeline!.timelinePositionToTime(position.x);
+
+    let cueVisualizationsMap = Array.from(this._textCueVisualizations.entries())
+      .filter(([_, cueVisualization]) => {
+        const cues = cueVisualization.cues;
+        if (!cues.length) {
+          return false;
+        }
+
+        const groupTemporal = this.getGroupTemporal(cues);
+        const start = parseFloat(groupTemporal.start);
+        const end = parseFloat(groupTemporal.end);
+
+        return start <= seconds && end >= seconds;
+      })
+      .map(([index, v]) => ({
+        index,
+        v,
+      }));
+
+    if (!cueVisualizationsMap.length) {
+      return;
+    }
+
+    const index = cueVisualizationsMap.findIndex((p) => !!p.v.cues.find((cue) => this.getItemsInForeground().includes(cue)));
+    if (index !== -1) {
+      this.moveToForeground(index + 1 >= cueVisualizationsMap.length ? cueVisualizationsMap.at(0)!.index : cueVisualizationsMap.at(index + 1)!.index);
+    } else {
+      this.moveToForeground(cueVisualizationsMap.at(0)!.index);
+    }
+  }
+
+  private getCueVisualization(id: TextCue['id']): TextCueVisualization | undefined {
+    return [...this._textCueVisualizations.values()].find((p) => p.cues.map((cue) => cue.id).includes(id));
   }
 
   get onEvent$(): Observable<TextTrackLaneEvent> {
@@ -423,7 +694,7 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
 
   destroy() {
     super.destroy();
-    this._eventsBreaker.destroy();
-    this._onEvent$.complete();
+
+    freeObserver(this._onEvent$);
   }
 }

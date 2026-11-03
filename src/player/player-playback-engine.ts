@@ -19,12 +19,16 @@ import type {HlsPlayerPlaybackEngine} from '../hls';
 import type {Mp4PlayerPlaybackEngine} from '../mp4';
 import type {PlayerController} from './player-controller-api';
 import type {AudioFilePlayerPlaybackEngine} from '../audio/audio-file-playback-engine';
+import type {SlatePlayerPlaybackEngine} from '../slate/slate-player-playback-engine';
+import type {FrameImagePlayerPlaybackEngine} from '../frame-image';
 
 export type PlayerPlaybackEngineMapping = {
   [MainMediaType.HLS]: HlsPlayerPlaybackEngine;
   [MainMediaType.MP4]: Mp4PlayerPlaybackEngine;
   [MainMediaType.AUDIO_FILE]: AudioFilePlayerPlaybackEngine;
   [MainMediaType.TAMS]: HlsPlayerPlaybackEngine;
+  [MainMediaType.SLATE]: SlatePlayerPlaybackEngine;
+  [MainMediaType.FRAME_IMAGE]: FrameImagePlayerPlaybackEngine;
 };
 
 export interface PlayerPlaybackEngine {}

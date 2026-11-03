@@ -38,6 +38,22 @@ export class OmakaseDropdownToggle extends HTMLElement {
     return this._span;
   }
 
+  setLabel(label: string | undefined) {
+    if (!this._span) {
+      return;
+    }
+    this._span.innerText = label ?? '';
+    this.updateTitle();
+  }
+
+  private updateTitle() {
+    if (this._span && this._span.scrollWidth > this._span.clientWidth) {
+      this.title = this._span.innerText;
+    } else {
+      this.removeAttribute('title');
+    }
+  }
+
   get isDisabled() {
     return this.hasAttribute(OmakaseDropdownToggleAttributes.DISABLED);
   }
@@ -59,10 +75,9 @@ export class OmakaseDropdownToggle extends HTMLElement {
     if (!this.children.length) {
       this._span = document.createElement('span');
       this._span.classList.add('omakase-dropdown-toggle');
-      if (this._dropdown?.displayLabel) {
-        this._span.innerText = this._dropdown.displayLabel;
-      }
+      this.setLabel(this._dropdown?.displayLabel);
       this.appendChild(this._span);
+      this.addEventListener('mouseenter', () => this.updateTitle());
     }
     this.onclick = (event) => {
       if (this.isDisabled) {

@@ -14,16 +14,7 @@
  * limitations under the License.
  */
 
-import {
-  BaseTrack,
-  type BaseTrackArgs,
-  type BaseTrackLoadOptions,
-  type TrackEvent,
-  TrackEventType,
-  type TrackState,
-  TrackType,
-  type TrackUpdateableAttrs
-} from './track';
+import {BaseTrack, type BaseTrackArgs, type BaseTrackLoadOptions, type TrackEvent, TrackEventType, type TrackState, TrackType, type TrackUpdateableAttrs} from './track';
 import {UrlSource} from '../source';
 import {objectHasOwnProperty} from '../util/util-functions';
 
@@ -37,6 +28,28 @@ export enum AudioType {
   HLS_AUDIO = 'HLS_AUDIO',
   /** Audio track from an MP4 container. */
   MP4_AUDIO = 'MP4_AUDIO',
+}
+
+/**
+ * Discriminator for the downsampling method.
+ */
+export enum AudioObservationDownsampleStrategy {
+  /** Takes average value of multiple audio frames to get observation's value. */
+  AVG = 'AVG',
+  /** Takes minimal absolute value of multiple audio frames to get observation's value. */
+  MIN_ABS = 'MIN_ABS',
+  /** Takes maximal absolute value of multiple audio frames to get observation's value. */
+  MAX_ABS = 'MAX_ABS',
+}
+
+/**
+ * Discriminator for the audio observation track's observation type.
+ */
+export enum AudioObservationType {
+  /** Maps downsampled audio frames as an observation with a min and a max value. */
+  WAVEFORM = 'WAVEFORM',
+  /** Maps downsampled audio frames as an observation with a single negative value measured in decibels (dBFS). */
+  LEVELS = 'LEVELS',
 }
 
 /**
@@ -67,6 +80,25 @@ export interface AudioArgs extends BaseTrackArgs {
 /** Load options for audio tracks. */
 export interface AudioTrackLoadOptions extends BaseTrackLoadOptions {
   args?: AudioArgs;
+}
+
+export type AudioObservationTrackGenerationChannels = number[] | 'all' | 'none';
+
+/** Options for observation track generation from audio track. */
+export interface AudioObservationTrackGenerationOptions {
+  /** Type of audio observations' values. Defaults to WAVEFORM. */
+  observationType?: AudioObservationType | undefined;
+  /** Number of samples in one second of audio. Describes density of an observation track. Defaults to 1. */
+  samplesPerSecond?: number | undefined;
+  /**
+   * Strategy for downsampling multiple audio frames (supported values: AVG, MIN_ABS and MAX_ABS).
+   * If {@link observationType} is WAVEFORM, defaults to AVG. Otherwise, defaults to MAX_ABS.
+   */
+  downsampleStrategy?: AudioObservationDownsampleStrategy | undefined;
+  /** Channel types from which observation track will be created (supported values: number[] (1 - 6), `all` and `none`). Defaults to `all`. */
+  channels?: AudioObservationTrackGenerationChannels | undefined;
+  /** Combines all audio channels to generate audio observation track. Defaults to true. */
+  fullSoundField?: boolean | undefined;
 }
 
 /**
@@ -132,7 +164,9 @@ export abstract class Audio extends BaseTrack<AudioState, TrackEvent> {
   updateAttrs(attrs: AudioUpdateableAttrs) {
     this._onEvent$.next({
       type: TrackEventType.TRACK_UPDATING,
-      data: {},
+      data: {
+        trackState: this.state,
+      },
     });
 
     this._updateAttrs(attrs, false);

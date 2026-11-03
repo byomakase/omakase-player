@@ -23,7 +23,9 @@ import type {SessionStoreMessageChannel} from './impl/session-store-message-chan
 import type {PlayerDetachedMessageChannel} from './impl/player-detached-message-channel';
 import type {PlayerAudioInternalMessageChannel} from './impl/player-audio-internal-message-channel';
 import type {PlayerTextInternalMessageChannel} from './impl/player-text-internal-message-channel';
+import type {PlayerVideoInternalMessageChannel} from './impl/player-video-internal-message-channel';
 import type {ChromingDetachedMessageChannel} from './impl/chroming-detached-message-channel';
+import type {LocalizationDetachedMessageChannel} from './impl/localization-detached-message-channel';
 import type {OmakaseTrackApiMessageChannel} from './impl/omakase-track-api-message-channel';
 import type {TextTrackHandlerMessageChannel} from './impl/text-track-handler-message-channel';
 import type {AudioHandlerMessageChannel} from './impl/audio-handler-message-channel';
@@ -59,9 +61,12 @@ export type MessageChannelTypeMap = {
   PlayerDetached: PlayerDetachedMessageChannel;
   PlayerAudioInternal: PlayerAudioInternalMessageChannel;
   PlayerTextInternal: PlayerTextInternalMessageChannel;
+  PlayerVideoInternal: PlayerVideoInternalMessageChannel;
 
   ChromingDetached: ChromingDetachedMessageChannel;
   ChromingMarkerBarHandler: ChromingMarkerBarHandlerMessageChannel;
+
+  LocalizationDetached: LocalizationDetachedMessageChannel;
 
   TextTrackHandler: TextTrackHandlerMessageChannel;
   AudioHandler: AudioHandlerMessageChannel;

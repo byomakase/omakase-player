@@ -36,8 +36,12 @@ import type {Destroyable} from '../common/capabilities';
 import {concat, filter, map, Observable, Subject, take, takeUntil} from 'rxjs';
 import {type ChromingEvent, ChromingEventType} from './chroming-event';
 import {ObserverBreaker} from '../common/observer-breaker';
-import {PlayerAudioEventType, PlayerAudioMode, PlayerAudioType, PlayerEventType, PlayerTextEventType, type PlayerInternalApi} from '../player';
-import {ChromingDomController, type ChromingAudioTrack} from './chroming-dom';
+import {getPlayerAudioApi, getPlayerTextApi, PlayerAudioEventType, PlayerAudioType, PlayerEventType, PlayerTextEventType, type PlayerApi, type PlayerDetachedApi} from '../player';
+import type {PlayerAudioCommonApi} from '../player/player-audio-api';
+import type {PlayerTextCommonApi} from '../player/player-text-api';
+import {PlayerTextType} from '../player/player-text';
+import type {LocalizationApi} from '../localization';
+import {ChromingDomController} from './chroming-dom';
 import {LivePlaybackTracker, type LivePlaybackTrackerApi} from '../live/live-model';
 import {ChromingDomFactory} from './chroming-factory';
 import {DefaultDomController} from './themes/default-dom';
@@ -68,7 +72,9 @@ export abstract class BaseChroming implements ChromingInternalApi, Destroyable {
   protected _destroyBreaker = new ObserverBreaker();
 
   protected _config: ChromingInternalConfig;
-  protected _playerInternal: PlayerInternalApi | undefined;
+  protected _playerInternal: PlayerApi | PlayerDetachedApi | undefined;
+  protected _playerAudio: PlayerAudioCommonApi | undefined;
+  protected _playerText: PlayerTextCommonApi | undefined;
   protected _alertDuration = 3000;
 
   private _watermark: string | undefined;
@@ -189,8 +195,10 @@ export abstract class BaseChroming implements ChromingInternalApi, Destroyable {
       });
   }
 
-  setPlayerInternal(playerInternal: PlayerInternalApi) {
+  setPlayerInternal(playerInternal: PlayerApi | PlayerDetachedApi) {
     this._playerInternal = playerInternal;
+    this._playerAudio = getPlayerAudioApi(playerInternal);
+    this._playerText = getPlayerTextApi(playerInternal);
     this._domController.setPlayer(playerInternal);
     this._playerInternal.onEvent$
       .pipe(
@@ -209,143 +217,66 @@ export abstract class BaseChroming implements ChromingInternalApi, Destroyable {
       .subscribe((event) => {
         this._domController.setMediaRotation(event.data.mediaRotation);
       });
-    this._playerInternal.audioInternal.onEvent$
-      .pipe(
-        takeUntil(this._destroyBreaker.observer),
-        filter(
-          (event) =>
-            event.type === PlayerAudioEventType.PLAYER_AUDIO_LOADED ||
-            event.type === PlayerAudioEventType.PLAYER_AUDIO_UNLOADED ||
-            event.type === PlayerAudioEventType.PLAYER_AUDIO_TRACK_LOADED ||
-            event.type === PlayerAudioEventType.PLAYER_AUDIO_TRACK_UNLOADED ||
-            event.type === PlayerAudioEventType.PLAYER_AUDIO_CHANGE
-        )
-      )
-      .subscribe((event) => {
-        switch (event.type) {
-          case PlayerAudioEventType.PLAYER_AUDIO_LOADED:
-            const mainTracks: ChromingAudioTrack[] = event.data.playerAudio.tracks[PlayerAudioType.MAIN].map((playerTrack) => ({
-              type: PlayerAudioType.MAIN,
-              playerTrack,
-              audioTrack: this._playerInternal!.audioInternal.getTracks().find((track) => track.id === playerTrack.trackId)!,
-            }));
-            const mainTrackBreaker$ = this._playerInternal!.audioInternal.onEvent$.pipe(
-              filter((event) => event.type === PlayerAudioEventType.PLAYER_AUDIO_UNLOADED),
+    // Selectors follow the player's audio and text state themselves; the chroming only tells them when a loaded
+    // track is renamed, as the player doesn't emit an event for that
+    this._playerAudio!.onEvent$.pipe(
+      takeUntil(this._destroyBreaker.observer),
+      filter((event) => event.type === PlayerAudioEventType.PLAYER_AUDIO_LOADED || event.type === PlayerAudioEventType.PLAYER_AUDIO_TRACK_LOADED)
+    ).subscribe((event) => {
+      switch (event.type) {
+        case PlayerAudioEventType.PLAYER_AUDIO_LOADED:
+          const mainTrackBreaker$ = this._playerAudio!.onEvent$.pipe(
+            filter((event) => event.type === PlayerAudioEventType.PLAYER_AUDIO_UNLOADED),
+            takeUntil(this._destroyBreaker.observer)
+          );
+          for (const playerTrack of event.data.playerAudio.tracks[PlayerAudioType.MAIN]) {
+            this.addAudioTrackObserver(playerTrack.trackId, mainTrackBreaker$, PlayerAudioType.MAIN);
+          }
+          break;
+        case PlayerAudioEventType.PLAYER_AUDIO_TRACK_LOADED:
+          const sidecarTrackBreaker$ = this._playerAudio!.onEvent$.pipe(
+            filter(
+              (e) =>
+                e.type === PlayerAudioEventType.PLAYER_AUDIO_UNLOADED ||
+                (e.type === PlayerAudioEventType.PLAYER_AUDIO_TRACK_UNLOADED && e.data.playerAudioTrack.trackId === event.data.playerAudioTrack.trackId)
+            ),
+            takeUntil(this._destroyBreaker.observer)
+          );
+          this.addAudioTrackObserver(event.data.playerAudioTrack.trackId, sidecarTrackBreaker$, PlayerAudioType.SIDECAR);
+          break;
+      }
+    });
+    this._playerText!.onEvent$.pipe(
+      takeUntil(this._destroyBreaker.observer),
+      filter((event) => event.type === PlayerTextEventType.PLAYER_TEXT_LOADED || event.type === PlayerTextEventType.PLAYER_TEXT_TRACK_LOADED)
+    ).subscribe((event) => {
+      switch (event.type) {
+        case PlayerTextEventType.PLAYER_TEXT_LOADED:
+          for (const playerTrack of event.data.playerText.tracks[PlayerTextType.MAIN]) {
+            const mainTrackBreaker$ = this._playerText!.onEvent$.pipe(
+              filter((event) => event.type === PlayerTextEventType.PLAYER_TEXT_UNLOADED),
               takeUntil(this._destroyBreaker.observer)
             );
-            for (const track of mainTracks) {
-              this.addAudioTrackObserver(track.playerTrack.trackId, mainTrackBreaker$, PlayerAudioType.MAIN);
-            }
-            this._domController.setAudioTracks(PlayerAudioType.MAIN, mainTracks);
-            break;
-          case PlayerAudioEventType.PLAYER_AUDIO_UNLOADED:
-            this._domController.setAudioTracks(PlayerAudioType.MAIN, []);
-            this._domController.setAudioTracks(PlayerAudioType.SIDECAR, []);
-            break;
-          case PlayerAudioEventType.PLAYER_AUDIO_TRACK_LOADED:
-            if (this._playerInternal!.audioInternal.state.audioMode === PlayerAudioMode.SINGLE) {
-              this._domController.addAudioTrack(PlayerAudioType.MAIN, {
-                type: PlayerAudioType.SIDECAR,
-                playerTrack: event.data.playerAudioTrack,
-                audioTrack: this._playerInternal!.audioInternal.getTracks().find((track) => track.id === event.data.playerAudioTrack.trackId)!,
-              });
-            } else {
-              this._domController.addAudioTrack(PlayerAudioType.SIDECAR, {
-                type: PlayerAudioType.SIDECAR,
-                playerTrack: event.data.playerAudioTrack,
-                audioTrack: this._playerInternal!.audioInternal.getTracks().find((track) => track.id === event.data.playerAudioTrack.trackId)!,
-              });
-            }
-            const sidecarTrackBreaker$ = this._playerInternal!.audioInternal.onEvent$.pipe(
-              filter(
-                (e) =>
-                  e.type === PlayerAudioEventType.PLAYER_AUDIO_UNLOADED ||
-                  (e.type === PlayerAudioEventType.PLAYER_AUDIO_TRACK_UNLOADED && e.data.playerAudioTrack.trackId === event.data.playerAudioTrack.trackId)
-              ),
-              takeUntil(this._destroyBreaker.observer)
-            );
-            this.addAudioTrackObserver(event.data.playerAudioTrack.trackId, sidecarTrackBreaker$, PlayerAudioType.SIDECAR);
-            break;
-          case PlayerAudioEventType.PLAYER_AUDIO_TRACK_UNLOADED:
-            if (this._playerInternal!.audioInternal.state.audioMode === PlayerAudioMode.SINGLE) {
-              this._domController.removeAudioTrack(PlayerAudioType.MAIN, event.data.playerAudioTrack.trackId);
-            } else {
-              this._domController.removeAudioTrack(PlayerAudioType.SIDECAR, event.data.playerAudioTrack.trackId);
-            }
-            break;
-          case PlayerAudioEventType.PLAYER_AUDIO_CHANGE:
-            if (this._playerInternal!.audioInternal.state.audioMode === PlayerAudioMode.SINGLE) {
-              this._domController.updateAudioTracks(PlayerAudioType.MAIN, [
-                ...event.data.playerAudio.tracks[PlayerAudioType.MAIN].map((playerTrack) => ({type: PlayerAudioType.MAIN, playerTrack})),
-                ...event.data.playerAudio.tracks[PlayerAudioType.SIDECAR].map((playerTrack) => ({type: PlayerAudioType.SIDECAR, playerTrack})),
-              ]);
-            } else {
-              this._domController.updateAudioTracks(
-                PlayerAudioType.MAIN,
-                event.data.playerAudio.tracks[PlayerAudioType.MAIN].map((playerTrack) => ({type: PlayerAudioType.MAIN, playerTrack}))
-              );
-              this._domController.updateAudioTracks(
-                PlayerAudioType.SIDECAR,
-                event.data.playerAudio.tracks[PlayerAudioType.SIDECAR].map((playerTrack) => ({type: PlayerAudioType.SIDECAR, playerTrack}))
-              );
-            }
-            break;
-        }
-      });
-    this._playerInternal.textInternal.onEvent$
-      .pipe(
-        takeUntil(this._destroyBreaker.observer),
-        filter(
-          (event) =>
-            event.type === PlayerTextEventType.PLAYER_TEXT_LOADED ||
-            event.type === PlayerTextEventType.PLAYER_TEXT_UNLOADED ||
-            event.type === PlayerTextEventType.PLAYER_TEXT_TRACK_LOADED ||
-            event.type === PlayerTextEventType.PLAYER_TEXT_TRACK_UNLOADED ||
-            event.type === PlayerTextEventType.PLAYER_TEXT_CHANGE
-        )
-      )
-      .subscribe((event) => {
-        switch (event.type) {
-          case PlayerTextEventType.PLAYER_TEXT_LOADED:
-            const mainTracks = event.data.playerText.tracks[PlayerAudioType.MAIN].map((playerTrack) => ({
-              playerTrack,
-              textTrack: this._playerInternal!.textInternal.getTracks().find((track) => track.id === playerTrack.trackId)!,
-            }));
-            for (const track of mainTracks) {
-              const mainTrackBreaker$ = this._playerInternal!.textInternal.onEvent$.pipe(
-                filter((event) => event.type === PlayerTextEventType.PLAYER_TEXT_UNLOADED),
-                takeUntil(this._destroyBreaker.observer)
-              );
-              this.addTextTrackObserver(track.playerTrack.trackId, mainTrackBreaker$);
-            }
-            this._domController.setTextTracks(mainTracks);
-            break;
-          case PlayerTextEventType.PLAYER_TEXT_UNLOADED:
-            this._domController.setTextTracks([]);
-            break;
-          case PlayerTextEventType.PLAYER_TEXT_TRACK_LOADED:
-            this._domController.addTextTrack({
-              playerTrack: event.data.playerTextTrack,
-              textTrack: this._playerInternal!.textInternal.getTracks().find((track) => track.id === event.data.playerTextTrack.trackId)!,
-            });
-            const sidecarTrackBreaker$ = this._playerInternal!.textInternal.onEvent$.pipe(
-              filter(
-                (e) =>
-                  e.type === PlayerTextEventType.PLAYER_TEXT_UNLOADED ||
-                  (e.type === PlayerTextEventType.PLAYER_TEXT_TRACK_UNLOADED && e.data.playerTextTrack.trackId === event.data.playerTextTrack.trackId)
-              ),
-              takeUntil(this._destroyBreaker.observer)
-            );
-            this.addTextTrackObserver(event.data.playerTextTrack.trackId, sidecarTrackBreaker$);
-            break;
-          case PlayerTextEventType.PLAYER_TEXT_TRACK_UNLOADED:
-            this._domController.removeTextTrack(event.data.playerTextTrack.trackId);
-            break;
-          case PlayerTextEventType.PLAYER_TEXT_CHANGE:
-            this._domController.updateTextTracks([...event.data.playerText.tracks[PlayerAudioType.MAIN], ...event.data.playerText.tracks[PlayerAudioType.SIDECAR]]);
-            break;
-        }
-      });
+            this.addTextTrackObserver(playerTrack.trackId, mainTrackBreaker$);
+          }
+          break;
+        case PlayerTextEventType.PLAYER_TEXT_TRACK_LOADED:
+          const sidecarTrackBreaker$ = this._playerText!.onEvent$.pipe(
+            filter(
+              (e) =>
+                e.type === PlayerTextEventType.PLAYER_TEXT_UNLOADED ||
+                (e.type === PlayerTextEventType.PLAYER_TEXT_TRACK_UNLOADED && e.data.playerTextTrack.trackId === event.data.playerTextTrack.trackId)
+            ),
+            takeUntil(this._destroyBreaker.observer)
+          );
+          this.addTextTrackObserver(event.data.playerTextTrack.trackId, sidecarTrackBreaker$);
+          break;
+      }
+    });
+  }
+
+  setLocalizationInternal(localization: LocalizationApi) {
+    this._domController.setLocalization(localization);
   }
 
   get onEvent$(): Observable<ChromingEvent> {

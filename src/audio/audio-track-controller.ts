@@ -59,6 +59,7 @@ import {AUDIO_DEFAULTS} from '../constants';
 import {DomElementEventType} from '../dom/dom-element';
 import {DomAudioElement, HTMLMediaElementEvent} from '../dom/dom-media-element';
 import {OmakaseAudioContextProvider} from '../omakase-audio-context-provider';
+import {isMediaElementBuffered, SeekStepper, SeekStepPlaybackUtil} from '../common/seek-step-playback';
 
 const audioDriftHistoryMaxLength = 15;
 
@@ -100,6 +101,14 @@ export abstract class BaseAudioTrackController extends BaseTrackController<Audio
   protected isPlayerPlaying(): boolean {
     let state = this._playerController.mediaElementPlayback!.state;
     return state.playing && !(state.waiting || state.buffering || state.ended || state.seeking || state.pausing);
+  }
+
+  /**
+   * Sidecar audio can't play backwards nor faster than {@link SEEK_STEP_PLAYBACK_DEFAULTS.maxNativePlaybackRate}. It is paused at such main media playback rates,
+   * and synced once main media plays at playback rate it can play at.
+   */
+  protected isSeekStepPlayback(): boolean {
+    return SeekStepPlaybackUtil.isSeekStepPlaybackRate(this._playerController.playbackRate);
   }
 
   protected isLoaded(): boolean {
@@ -144,6 +153,8 @@ export class MediaElementAudioTrackController extends BaseAudioTrackController {
 
   protected _audioDriftHistory: number[] = [];
   protected _isBrowserFirefox = BrowserProvider.instance.isFirefox;
+  /** Seeks paused audio element in steps while main media plays at playback rate it can't play at, so that audio at main media time starts buffering. */
+  protected _seekStepper = new SeekStepper();
 
   constructor(trackState: AudioState, playerController: PlayerController) {
     super(trackState, playerController);
@@ -250,13 +261,24 @@ export class MediaElementAudioTrackController extends BaseAudioTrackController {
             }
             break;
           case PlayerControllerEventType.PLAYER_CONTROLLER_PLAYBACK_RATE_UPDATE:
-            this._domAudioElement.htmlElement.playbackRate = event.data.playbackRate;
+            if (this.isSeekStepPlayback()) {
+              // audio element doesn't support playback rate, it is paused and seeked in steps, first seek step is issued right away
+              this.audioPause();
+              this._seekStepper.reset();
+            } else {
+              this._domAudioElement.htmlElement.playbackRate = event.data.playbackRate;
+              this.playOrPause();
+            }
             break;
         }
       });
 
     let bufferPrecision = 2;
     let checkIsBuffering: () => boolean = () => {
+      if (this.isSeekStepPlayback()) {
+        // paused while it can't play at main media playback rate, main media doesn't wait for it
+        return false;
+      }
       let currentTime = this._playerController.getCurrentTime();
       let isInDuration = currentTime <= this._domAudioElement.htmlElement.duration;
       if (this._isBrowserFirefox) {
@@ -317,6 +339,36 @@ export class MediaElementAudioTrackController extends BaseAudioTrackController {
       .subscribe((event) => {
         this.checkAudioDriftAndTrySync(event.data.currentTime);
       });
+
+    this._playerController.onEvent$
+      .pipe(createEnabledFilter())
+      .pipe(createLoadedFilter())
+      .pipe(filter((p) => p.type === PlayerControllerEventType.PLAYER_CONTROLLER_PLAYBACK_PROGRESS))
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe((event) => {
+        this.seekStep(event.data.currentTime);
+      });
+  }
+
+  /**
+   * Active sidecar audio paused at playback rate it can't play at is seeked in steps ahead of main media time, see {@link SeekStepper},
+   * so that audio where playback resumes at least starts buffering, and playback resumes quickly once main media plays at playback rate it can play at.
+   * Main media doesn't wait for seek steps.
+   */
+  protected seekStep(mainTime: number) {
+    if (!this.isSeekStepPlayback() || !this.isPlayerPlaying()) {
+      return;
+    }
+    let audioElement = this._domAudioElement.htmlElement;
+    let seekTime = this._seekStepper.resolveSeekTime(mainTime, {
+      playbackRate: this._playerController.playbackRate,
+      seeking: audioElement.seeking,
+      mapTime: (leadTime) => Math.min(Math.max(leadTime, 0), Number.isFinite(audioElement.duration) ? audioElement.duration : leadTime),
+      isBuffered: (seekTime) => isMediaElementBuffered(audioElement, seekTime),
+    });
+    if (seekTime !== void 0) {
+      this.seekToTime(seekTime);
+    }
   }
 
   loadSource(): Observable<void> {
@@ -324,7 +376,7 @@ export class MediaElementAudioTrackController extends BaseAudioTrackController {
       throw new Error('Track.source not set');
     }
 
-    let url = SourceUtil.resolveUrlFromSourceState(this._trackState.source);
+    let url = SourceUtil.resolveUrlFromSourceStateOrFail(this._trackState.source);
 
     return new Observable<void>((observer) => {
       this._loadStage.start();
@@ -438,7 +490,7 @@ export class MediaElementAudioTrackController extends BaseAudioTrackController {
   }
 
   protected audioPlay() {
-    if (this.isLoaded() && !this._mediaElementPlayback.playing) {
+    if (this.isLoaded() && !this._mediaElementPlayback.playing && !this.isSeekStepPlayback()) {
       this.syncWithVideo();
       this._domAudioElement.htmlElement.play().catch((e) => {
         // we'll just ignore play / pause interruptions
@@ -572,7 +624,7 @@ export class AudioBufferAudioTrackController extends BaseAudioTrackController {
       throw new Error('Track.source not set');
     }
 
-    let url = SourceUtil.resolveUrlFromSourceState(this._trackState.source);
+    let url = SourceUtil.resolveUrlFromSourceStateOrFail(this._trackState.source);
 
     return new Observable<void>((observer) => {
       this._loadStage.start();
@@ -643,7 +695,7 @@ export class AudioBufferAudioTrackController extends BaseAudioTrackController {
   }
 
   protected audioPlay(): void {
-    if (this.isLoaded() && !this._mediaElementPlayback.playing) {
+    if (this.isLoaded() && !this._mediaElementPlayback.playing && !this.isSeekStepPlayback()) {
       this.stopSourceNode();
       this.createSourceNode();
 

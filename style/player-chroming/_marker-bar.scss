@@ -1,0 +1,145 @@
+/*
+ * Copyright 2026 ByOmakase, LLC (https://byomakase.org)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+omakase-marker-bars {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+omakase-marker-bar {
+  --marker-track-border-size-default: 1px;
+  --marker-track-border-color-default: #525252;
+  --marker-track-background-color-default: #333;
+  --time-range-height-default: 16px;
+  display: flex;
+  width: 100%;
+  height: var(--marker-track-height, var(--time-range-height, var(--time-range-height-default)));
+  border-bottom: var(--marker-track-border-size, var(--marker-track-border-size-default)) solid var(--marker-track-border-color, var(--marker-track-border-color-default));
+
+  &:nth-child(1 of :not(.d-none)) {
+    border-top: var(--marker-track-border-top-size, var(--marker-track-border-size, var(--marker-track-border-size-default))) solid
+      var(--marker-track-border-top-color, var(--marker-track-border-color, var(--marker-track-border-color-default)));
+  }
+
+  &:nth-last-child(1 of :not(.d-none)) {
+    border-bottom: var(--marker-track-border-bottom-size, var(--marker-track-border-size, var(--marker-track-border-size-default))) solid
+      var(--marker-track-border-bottom-color, var(--marker-track-border-color, var(--marker-track-border-color-default)));
+  }
+
+  .omakase-marker-bar-container {
+    margin: 0 auto;
+    width: 100%;
+    position: relative;
+    overflow-x: hidden;
+    background-color: var(--marker-track-background-color, var(--marker-track-background-color-default));
+  }
+
+  .omakase-moment-marker {
+    position: absolute;
+    top: 0;
+    cursor: pointer;
+
+    .omakase-moment-marker-circle {
+      position: absolute;
+      border-radius: 100%;
+    }
+
+    .omakase-moment-marker-line {
+      position: absolute;
+      width: 1px;
+      transform: translateX(-0.5px);
+      top: 0;
+    }
+
+    .omakase-moment-marker-selected-area {
+      position: absolute;
+      width: 5px;
+      transform: translateX(-2.5px);
+      top: 0;
+      opacity: 0;
+    }
+
+    &.active-marker {
+      .omakase-moment-marker-line {
+        position: absolute;
+        width: 2px;
+        transform: translateX(-1px);
+      }
+
+      .omakase-moment-marker-selected-area {
+        opacity: 0.4;
+      }
+    }
+
+    &.focused-marker {
+      z-index: 10;
+    }
+  }
+
+  .omakase-period-marker {
+    position: absolute;
+    top: 0;
+
+    .omakase-period-marker-rectangle {
+      position: absolute;
+      cursor: pointer;
+      width: 100%;
+      left: 0;
+    }
+
+    &.readonly-marker {
+      .omakase-period-marker-start-line,
+      .omakase-period-marker-end-line {
+        pointer-events: none;
+      }
+    }
+
+    .omakase-period-marker-start-line,
+    .omakase-period-marker-end-line {
+      position: absolute;
+      background-clip: content-box;
+      cursor: ew-resize;
+      width: 1px;
+      padding: 0 3px;
+      top: 0;
+    }
+
+    .omakase-period-marker-start-line {
+      left: -3.5px;
+    }
+
+    .omakase-period-marker-end-line {
+      right: -3.5px;
+    }
+
+    .omakase-period-marker-selected-area {
+      position: absolute;
+      pointer-events: none;
+      width: 100%;
+      opacity: 0;
+    }
+
+    &.active-marker .omakase-period-marker-selected-area {
+      opacity: 0.4;
+    }
+
+    &.focused-marker {
+      z-index: 10;
+    }
+  }
+}

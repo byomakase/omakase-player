@@ -14,15 +14,22 @@
  * limitations under the License.
  */
 
-import {type Track} from '../media';
+import {type Track, type TrackEvent} from '../media';
 import type {TrackUtilsApi} from './track-utils';
 import {Observable} from 'rxjs';
 import type {Source} from '../source';
 import type {TrackLoadOptions} from './track-load-options';
+import type {TrackRepositoryEvent} from '../repository';
 
 export interface OmakaseTrackApi extends OmakaseTrackCommonApi {
   /** Utility helpers for working with tracks. */
   utils: TrackUtilsApi;
+
+  /** Emits track repository events, such as tracks being added or deleted. */
+  onEvent$: Observable<TrackRepositoryEvent>;
+
+  /** Emits events from all tracks in the repository. */
+  onTrackEvent$: Observable<TrackEvent>;
 
   /**
    * Returns the track with the given ID, or `undefined` if not found.

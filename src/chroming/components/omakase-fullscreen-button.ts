@@ -15,16 +15,17 @@
  */
 
 import {MediaFullscreenButton} from 'media-chrome';
-import type {PlayerInternalApi} from '../../player';
+import type {PlayerApi, PlayerDetachedApi} from '../../player';
+import {ControlBarComponent} from '../../control-bar/control-bar-component';
 
-export class OmakaseFullscreenButton extends MediaFullscreenButton {
-  private _player: PlayerInternalApi | undefined;
+export class OmakaseFullscreenButton extends ControlBarComponent(MediaFullscreenButton) {
+  private _player: PlayerApi | PlayerDetachedApi | undefined;
 
   get player() {
     return this._player;
   }
 
-  set player(player: PlayerInternalApi | undefined) {
+  set player(player: PlayerApi | PlayerDetachedApi | undefined) {
     this._player = player;
   }
 

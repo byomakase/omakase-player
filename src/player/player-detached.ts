@@ -14,10 +14,13 @@
  * limitations under the License.
  */
 
-import {concat, filter, forkJoin, from, mergeMap, Observable, Subject, switchMap, takeUntil, tap} from 'rxjs';
+import {catchError, concat, EMPTY, filter, forkJoin, from, mergeMap, Observable, of, Subject, switchMap, takeUntil, tap} from 'rxjs';
 import {
   type AudioState,
   type AudioUpdateableAttrs,
+  type MediaContainerTrackState,
+  isMediaContainerTrackType,
+  type MediaContainerTrackUpdateableAttrs,
   type MainMedia,
   type MainMediaErrorEventData,
   MainMediaEventType,
@@ -31,6 +34,8 @@ import {
   type Track,
   TrackEventType,
   TrackType,
+  type VideoKeyframe,
+  type VideoKeyframeOptions,
 } from '../media';
 import {OpStageStatus} from '../common/op-stage';
 import {describedObservable, errorCompleteObserver, freeObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
@@ -55,6 +60,9 @@ import {PlayerTextInternal, PlayerTextType} from './player-text';
 import {PlayerTextEventType, type PlayerTextInternalApi, type PlayerTextState} from './player-text-api';
 import {PlayerInternalUtil} from './player-internal-util';
 import type {PlayerAudioLoadOptions} from './player-audio-track';
+import {PlayerVideoEventType, PlayerVideoInternal, type PlayerVideoState} from './player-video';
+import type {PlayerVideoInternalApi} from './player-video-api';
+import type {PlayerVideoLoadOptions} from './player-video-track';
 import type {PlayerPlayback} from './player';
 import {PLAYER_PLAYBACK_DEFAULT} from '../constants';
 import {PlayerTextHandlerType, type PlayerTextTrackLoadOptions} from './player-text-track';
@@ -64,7 +72,6 @@ import {MediaFactory} from '../media/media-factory';
 import type {MainMediaSessionRemote} from '../remoting/main-media-session-remote';
 import type {AlertsManagerProxy} from '../remoting/impl/alerts-manager-proxy';
 import type {TrackLoadOptions} from '../track';
-import type {VideoKeyframe, VideoKeyframeOptions} from '../tools/keyframe-extractor';
 
 export const DETACHED_PLAYER_CONFIG_DEFAULT: PlayerDetachedConfig = {
   ...COMMON_PLAYER_CONFIG_DEFAULT,
@@ -89,6 +96,10 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
 
   private _playerAudioInternal: PlayerAudioInternal;
   private _playerTextInternal: PlayerTextInternal;
+  private _playerVideoInternal: PlayerVideoInternal;
+
+  /** Ids of sidecar audio and video tracks requesting main media to wait, main media waits while any track requests it. */
+  private _syncedMediaWaiting = new Set<Track['id']>();
 
   private _playerController: PlayerController | undefined;
   private _mainMediaSessionRemote: MainMediaSessionRemote | undefined;
@@ -115,6 +126,7 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
     this._playerTextInternal = new PlayerTextInternal({
       textMode: this._config.textMode,
     });
+    this._playerVideoInternal = new PlayerVideoInternal(this._config.sidecarVideo, this._config.controllerConfig?.[MainMediaType.FRAME_IMAGE]?.frameImageConfig);
   }
 
   setChromingInternal(chromingInternal: ChromingInternalApi): void {
@@ -145,6 +157,10 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
       .pipe(filter((p) => p.type === TrackEventType.TRACK_UPDATED))
       .pipe(takeUntil(this._destroyBreaker.observer))
       .subscribe((event) => {
+        if (isMediaContainerTrackType(event.data.trackState.trackType)) {
+          this._playerVideoInternal.updateTrack(event.data.trackState as MediaContainerTrackState);
+          return;
+        }
         switch (event.data.trackState.trackType) {
           case TrackType.AUDIO:
             this._playerAudioInternal.updateTrack(event.data.trackState as AudioState);
@@ -180,6 +196,8 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
 
     this._playerAudioInternal.teardown();
     this._playerTextInternal.teardown();
+    this._playerVideoInternal.teardown();
+    this.resetSyncedMediaWaiting();
 
     return new Observable<void>((observer) => {
       if (playerSession.mainMediaId) {
@@ -217,6 +235,7 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
 
                     this._sessionStore!.setPlayer(this.playerSession).subscribe(() => {
                       this._playerAudioInternal.setup(playerController, mainMediaState);
+                      this._playerVideoInternal.setup(playerController);
                       this._playerTextInternal.setup(playerController, mainMediaState, PlayerInternalUtil.resolveTextMainTracksHandler(this._config.textMainTracksHandler, mainMediaState));
 
                       this.wireEvents().subscribe(() => {
@@ -334,6 +353,26 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
               })
             );
 
+            let sidecarVideos$ = describeMe(
+              `Sidecar videos`,
+              new Observable<void>((o) => {
+                this._trackRepository!.find().subscribe((tracks) => {
+                  // find tracks that are not part of main media
+                  let sidecarTracks = tracks
+                    .filter(
+                      (p) =>
+                        isMediaContainerTrackType(p.trackType) &&
+                        p.loadStage.status === OpStageStatus.SUCCESS &&
+                        !p.relations.find((relation) => relation.relationType === RelationType.PART_OF && relation.entityId === mainMediaState.id)
+                    )
+                    .map((p) => p as MediaContainerTrackState);
+                  this.restoreLoadSidecarVideos(sidecarTracks, playerSession.video).subscribe(() => {
+                    nextCompleteObserver(o);
+                  });
+                });
+              })
+            );
+
             let playback$ = describeMe(
               `Playback`,
               PlayerInternalUtil.restorePlayback(this, playerSession, (message) => {
@@ -344,7 +383,7 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
             describedObservable(
               `Restore player session`,
               new Observable((o) => {
-                concat(restoreMainMediaSession$, sidecarAudios$, sidecarTextTracks$, playback$).subscribe({
+                concat(restoreMainMediaSession$, sidecarAudios$, sidecarTextTracks$, sidecarVideos$, playback$).subscribe({
                   complete: () => {
                     this._onEvent$.next({
                       type: PlayerEventType.PLAYER_SESSION_RESTORED,
@@ -502,6 +541,7 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
                             concat(this.wireEvents()).subscribe({
                               complete: () => {
                                 this._playerAudioInternal.setup(playerController, mainMediaState);
+                                this._playerVideoInternal.setup(playerController);
                                 this._playerTextInternal.setup(playerController, mainMediaState, PlayerInternalUtil.resolveTextMainTracksHandler(this._config.textMainTracksHandler, mainMediaState));
 
                                 this.loadMainTextTracksAsSidecars(mainMediaState);
@@ -569,7 +609,7 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
   protected wireEvents(): Observable<void> {
     return new Observable<void>((observer) => {
       this._wiredEventsBreaker.break();
-      forkJoin([this.wirePlayerEvents(), this.wirePlayerAudioEvents(), this.wirePlayerTextEvents(), this.wireChromingEvents()]).subscribe(() => {
+      forkJoin([this.wirePlayerEvents(), this.wirePlayerAudioEvents(), this.wirePlayerTextEvents(), this.wirePlayerVideoEvents(), this.wireChromingEvents()]).subscribe(() => {
         nextCompleteObserver(observer);
       });
     });
@@ -768,7 +808,7 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
                 });
                 break;
               case PlayerAudioEventType.PLAYER_AUDIO_TRACKS_REQUESTING_BUFFERING_CHANGE:
-                this._playerController?.setWaitingForSyncedMedia(event.data.playerAudioTracks.length > 0);
+                this.updateSyncedMediaWaiting(event.data.playerAudioTrack.trackId, event.data.bufferingRequired);
                 break;
             }
           },
@@ -776,6 +816,51 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
 
       nextCompleteObserver(observer);
     });
+  }
+
+  protected wirePlayerVideoEvents(): Observable<void> {
+    return new Observable<void>((observer) => {
+      this._playerVideoInternal.onEvent$
+        .pipe(takeUntil(this._wiredEventsBreaker.observer))
+        .pipe(takeUntil(this._destroyBreaker.observer))
+        .subscribe({
+          next: (event) => {
+            switch (event.type) {
+              case PlayerVideoEventType.PLAYER_VIDEO_CHANGE:
+                this._sessionStore!.updatePlayer({
+                  video: this._playerVideoInternal.state,
+                }).subscribe(() => {
+                  this._onEvent$.next({
+                    type: PlayerEventType.PLAYER_VIDEO_CHANGE,
+                    data: event.data,
+                  });
+                });
+                break;
+              case PlayerVideoEventType.PLAYER_VIDEO_TRACKS_REQUESTING_BUFFERING_CHANGE:
+                this.updateSyncedMediaWaiting(event.data.playerVideoTrack.trackId, event.data.bufferingRequired);
+                break;
+              case PlayerVideoEventType.PLAYER_VIDEO_TRACKS_VISIBLE_CHANGE:
+                // sidecar video covering main media replaces its audio as well
+                this._playerAudioInternal.setOutputSuppressed(event.data.playerVideoTracks.length > 0);
+                break;
+            }
+          },
+        });
+      nextCompleteObserver(observer);
+    });
+  }
+
+  protected updateSyncedMediaWaiting(trackId: Track['id'], waiting: boolean) {
+    if (waiting) {
+      this._syncedMediaWaiting.add(trackId);
+    } else {
+      this._syncedMediaWaiting.delete(trackId);
+    }
+    this._playerController?.setWaitingForSyncedMedia(this._syncedMediaWaiting.size > 0);
+  }
+
+  protected resetSyncedMediaWaiting() {
+    this._syncedMediaWaiting.clear();
   }
 
   protected wirePlayerTextEvents(): Observable<void> {
@@ -837,6 +922,8 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
     this._wiredEventsBreaker.break();
     this._playerAudioInternal.teardown();
     this._playerTextInternal.teardown();
+    this._playerVideoInternal.teardown();
+    this.resetSyncedMediaWaiting();
 
     this._playerController?.destroy();
     this._playerController = void 0;
@@ -884,6 +971,10 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
 
   get isMainMediaLoaded(): boolean {
     return !!this._mainMediaState;
+  }
+
+  get mainMediaType(): MainMediaType | undefined {
+    return this._mainMediaState?.mainMediaType;
   }
 
   play(): Observable<void> {
@@ -1014,6 +1105,9 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
     this.checkIsMediaLoaded();
     return this._trackRepository!.getOrFail(trackId).pipe(
       switchMap((track) => {
+        if (isMediaContainerTrackType(track.trackType)) {
+          return this.loadSidecarVideo(track as MediaContainerTrackState, loadOptions as PlayerVideoLoadOptions | undefined);
+        }
         switch (track.trackType) {
           case TrackType.AUDIO:
             return this.loadSidecarAudio(track as AudioState, loadOptions as PlayerAudioLoadOptions | undefined);
@@ -1107,10 +1201,61 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
     });
   }
 
+  protected loadSidecarVideo(trackState: MediaContainerTrackState, loadOptions?: PlayerVideoLoadOptions | undefined): Observable<void> {
+    return new Observable<void>((observer) => {
+      let trackUpdater: (attrs: MediaContainerTrackUpdateableAttrs) => Observable<MediaContainerTrackState> = (attrs: MediaContainerTrackUpdateableAttrs) => {
+        return new Observable<MediaContainerTrackState>((observer) => {
+          this._remoteNode!.getOrCreateProxy('Track', trackState.id)
+            .updateAttrs(attrs)
+            .subscribe((trackState) => {
+              nextCompleteObserver(observer, trackState as MediaContainerTrackState);
+            });
+        });
+      };
+      this._playerVideoInternal.loadSidecarTrack(trackState, trackUpdater, loadOptions).subscribe({
+        next: () => {
+          nextCompleteObserver(observer);
+        },
+        error: (error) => {
+          errorCompleteObserver(observer, error);
+        },
+      });
+    });
+  }
+
+  /**
+   * Reloads sidecar videos that were loaded in the session, with their session load options.
+   * Tracks not loaded in the session are skipped, a failed track doesn't stop the restore.
+   */
+  protected restoreLoadSidecarVideos(trackStates: MediaContainerTrackState[], playerVideoState: PlayerVideoState | undefined): Observable<void> {
+    return new Observable((observer) => {
+      let loaders$ = trackStates
+        .map((trackState) => ({trackState, playerVideoTrackState: playerVideoState?.tracks.find((p) => p.trackId === trackState.id)}))
+        .filter((p) => !!p.playerVideoTrackState)
+        .map((p) =>
+          this.loadSidecarVideo(p.trackState, p.playerVideoTrackState!.loadOptions).pipe(
+            switchMap(() => (p.playerVideoTrackState!.active ? this._playerVideoInternal.switchTrack(p.trackState.id) : of(void 0))),
+            catchError((error) => {
+              console.error(`Failed to restore sidecar video id=${p.trackState.id}`, error);
+              return EMPTY;
+            })
+          )
+        );
+      concat(...loaders$).subscribe({
+        complete: () => {
+          nextCompleteObserver(observer);
+        },
+      });
+    });
+  }
+
   removeSidecarTrack(trackId: Track['id']): Observable<void> {
     this.checkIsMediaLoaded();
     return this._trackRepository!.getOrFail(trackId).pipe(
       switchMap((track) => {
+        if (isMediaContainerTrackType(track.trackType)) {
+          return this._playerVideoInternal.removeSidecarTrack(track.id);
+        }
         switch (track.trackType) {
           case TrackType.AUDIO:
             return this._playerAudioInternal.removeSidecarTrack(track.id);
@@ -1125,7 +1270,7 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
 
   removeAllSidecarTracks(): Observable<void> {
     return passiveObservable((observer) => {
-      forkJoin([this._playerAudioInternal.removeAllSidecarTracks(), this._playerTextInternal.removeAllSidecarTracks()]).subscribe({
+      forkJoin([this._playerAudioInternal.removeAllSidecarTracks(), this._playerTextInternal.removeAllSidecarTracks(), this._playerVideoInternal.removeAllSidecarTracks()]).subscribe({
         next: () => {
           nextCompleteObserver(observer);
         },
@@ -1171,6 +1316,7 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
 
     this._playerAudioInternal.destroy();
     this._playerTextInternal.destroy();
+    this._playerVideoInternal.destroy();
 
     freeObserver(this._onEvent$);
   }
@@ -1183,12 +1329,17 @@ export class PlayerDetached implements PlayerDetachedApi, Destroyable {
     return this._playerTextInternal;
   }
 
+  get videoInternal(): PlayerVideoInternalApi {
+    return this._playerVideoInternal;
+  }
+
   get playerSession(): PlayerSession {
     return {
       mainMediaId: this._mainMediaState?.id,
       playback: this._playerPlayback,
       audio: this._playerAudioInternal.state,
       text: this._playerTextInternal.state,
+      video: this._playerVideoInternal.state,
       liveTimelineAnchor: PlayerInternalUtil.resolveLiveTimelineAnchor(this._latestLiveState ?? this._mainMediaState?.liveState),
       liveState: this._latestLiveState,
     };

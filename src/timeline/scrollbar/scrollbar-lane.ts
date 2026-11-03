@@ -42,10 +42,13 @@ export interface ScrollbarLaneStyle extends TimelineLaneStyle {
   scrollbarJustify: 'start' | 'center' | 'end';
 }
 
-export interface ScrollbarLaneConfig extends TimelineLaneConfig {}
+export interface ScrollbarLaneConfig extends TimelineLaneConfig {
+  zoomMax: number;
+}
 
 const configDefault: ScrollbarLaneConfig = {
   ...TIMELINE_LANE_CONFIG_DEFAULT,
+  zoomMax: 2000,
 };
 
 export const TIMELINE_SCROLLBAR_LANE_STYLE_DEFAULT: ScrollbarLaneStyle = {
@@ -68,6 +71,7 @@ export class ScrollbarLane extends BaseTimelineLane<ScrollbarLaneConfig, Scrollb
 
   protected _scrollbar?: ZoomScrollbar;
 
+  private _timelineScrollInProgress = false;
   private _timelineZoomInProgress = false;
 
   constructor(configAndStyle?: ConfigAndStyle<ScrollbarLaneConfig, ScrollbarLaneStyle>) {
@@ -119,6 +123,7 @@ export class ScrollbarLane extends BaseTimelineLane<ScrollbarLaneConfig, Scrollb
     this._timeline!.addToTimecodedStaticContent(this._contentFlexGroup.contentNode.konvaNode);
 
     this._scrollbar = new ZoomScrollbar(ompProvider, {
+      zoomMax: this._config.zoomMax,
       style: removeEmptyValues({
         height: this.resolveScrollbarHeight(),
         backgroundFill: this._style?.scrollbarBackgroundFill,
@@ -166,7 +171,7 @@ export class ScrollbarLane extends BaseTimelineLane<ScrollbarLaneConfig, Scrollb
     this._timeline!.onEvent$.pipe(filter((p) => p.type === TimelineEventType.TIMELINE_SCROLL))
       .pipe(takeUntil(this._destroyBreaker.observer))
       .subscribe((event) => {
-        if (!this._timelineZoomInProgress) {
+        if (!this._timelineZoomInProgress && !this._timelineScrollInProgress) {
           this._scrollbar!.updateScrollHandle(this._timeline!);
         }
       });
@@ -174,7 +179,9 @@ export class ScrollbarLane extends BaseTimelineLane<ScrollbarLaneConfig, Scrollb
     this._scrollbar.onEvent$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe((event) => {
       switch (event.type) {
         case ZoomScrollbarEventType.SCROLLBAR_SCROLL:
+          this._timelineScrollInProgress = true;
           this._timeline!.scrollHorizontallyToPercent(this._scrollbar!.getScrollHandlePercent());
+          this._timelineScrollInProgress = false;
           break;
         case ZoomScrollbarEventType.SCROLLBAR_ZOOM:
           this._timelineZoomInProgress = true;
@@ -226,7 +233,7 @@ export class ScrollbarLane extends BaseTimelineLane<ScrollbarLaneConfig, Scrollb
       timecodedRect.height,
       FlexSpacingBuilder.create().topRightBottomLeft([timecodedRect.y, 0, 0, 0]).build()
     );
-    if (!this._timelineZoomInProgress) {
+    if (!this._timelineZoomInProgress && !this._timelineScrollInProgress) {
       this._scrollbar!.updateScrollHandle(this._timeline!);
     }
   }

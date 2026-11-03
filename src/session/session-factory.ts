@@ -32,6 +32,7 @@ export class SessionFactory {
       alerts: [],
       player: SessionFactory.createEmptyPlayerSession(),
       chroming: SessionFactory.createEmptyChromingSession(),
+      localization: void 0,
     };
   }
 
@@ -59,6 +60,7 @@ export class SessionFactory {
       },
       audio: void 0,
       text: void 0,
+      video: void 0,
     };
   }
 

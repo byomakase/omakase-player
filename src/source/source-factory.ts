@@ -14,13 +14,17 @@
  * limitations under the License.
  */
 
-import {type Source, type SourceState, SourceType, SourceUtil, UrlSource} from './source';
+import {InternalSource, type InternalSourceState, type Source, type SourceState, SourceType, SourceUtil, TrackSource, type TrackSourceState, UrlSource} from './source';
 
 export class SourceFactory {
   static create(sourceState: SourceState): Source {
     switch (sourceState.type) {
       case SourceType.URL:
-        return new UrlSource(SourceUtil.resolveUrlFromSourceState(sourceState));
+        return new UrlSource(SourceUtil.resolveUrlFromSourceStateOrFail(sourceState));
+      case SourceType.TRACK:
+        return TrackSource.fromState(sourceState as TrackSourceState);
+      case SourceType.INTERNAL:
+        return InternalSource.fromState(sourceState as InternalSourceState);
       default:
         throw new Error(`Cannot create source from: '${JSON.stringify(sourceState)}'`);
     }

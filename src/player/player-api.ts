@@ -14,24 +14,38 @@
  * limitations under the License.
  */
 
+import type {PlayerVideoConfig} from './player-video';
 import {Observable} from 'rxjs';
-import {type MainMedia, type MainMediaLoadOptions, type MainMediaState, MainMediaType, type MediaRotationValue, SlateType, type Track} from '../media';
+import {
+  type MainMedia,
+  type MainMediaLoadOptions,
+  type MainMediaState,
+  MainMediaType,
+  type MediaRotationValue,
+  type SlateMainMediaLoadOptions,
+  type Track,
+  type VideoKeyframe,
+  type VideoKeyframeOptions,
+} from '../media';
+import type {SlateType} from '../slate/slate-main-media';
 import type {PlayerEvent} from './player-event';
 import {MediaTemporalFormat, type MediaTemporalFormatValueMap} from '../common';
-import {type PlayerAudioApi, type PlayerAudioInternalApi, PlayerAudioMode} from './player-audio-api';
+import {type PlayerAudioApi, type PlayerAudioCommonApi, type PlayerAudioInternalApi, PlayerAudioMode} from './player-audio-api';
 import type {PlayerSession} from '../session';
 import type {Destroyable} from '../common/capabilities';
 import type {PlayerPlaybackEngineMapping} from './player-playback-engine';
 import type {Source} from '../source';
-import {type PlayerTextApi, type PlayerTextInternalApi, PlayerTextMode} from './player-text-api';
+import {type PlayerTextApi, type PlayerTextCommonApi, type PlayerTextInternalApi, PlayerTextMode} from './player-text-api';
+import type {PlayerVideoApi, PlayerVideoCommonApi, PlayerVideoInternalApi} from './player-video-api';
 import {PlayerTextHandlerType} from './player-text-track';
 import type {ChromingInternalApi} from '../chroming';
 import type {HlsPlayerControllerConfig} from '../hls';
 import type {Mp4PlayerControllerConfig} from '../mp4';
 import type {AudioFilePlayerControllerConfig} from '../audio/audio-file-player-controller';
+import type {SlatePlayerControllerConfig} from '../slate/slate-player-controller';
 import type {PlayerTextType} from './player-text';
 import type {TrackLoadOptions} from '../track';
-import type {VideoKeyframe, VideoKeyframeOptions} from '../tools/keyframe-extractor';
+import type {FrameImagePlayerControllerConfig} from '../frame-image/frame-image-player-controller';
 
 /**
  * Default player configuration values.
@@ -63,6 +77,11 @@ export interface PlayerApi extends PlayerCommonApi {
   text: PlayerTextApi;
 
   /**
+   * Sidecar video API.
+   */
+  video: PlayerVideoApi;
+
+  /**
    * The currently loaded main media, or `undefined` if nothing is loaded.
    */
   mainMedia: MainMedia | undefined;
@@ -84,6 +103,9 @@ export interface PlayerApi extends PlayerCommonApi {
   /**
    * Loads a sidecar track (audio or text) from a {@link Source} object or URL string.
    *
+   * `TrackSource` pointing to thumbnail track loads frame image track derived from it, from the same VTT url, or trick track
+   * when `trackType` is `TrackType.TRICK_TRACK`. Derived track is emitted, and reused on next load.
+   *
    * @param source - A {@link Source} object or URL string pointing to the sidecar data.
    * @param loadOptions - Optional configuration specifying track type, text, or audio options.
    * @returns Observable that emits the loaded {@link Track}.
@@ -95,9 +117,10 @@ export interface PlayerApi extends PlayerCommonApi {
    * Replaces the current media with a slate (e.g. a black frame placeholder).
    *
    * @param slateType - The type of slate to load.
+   * @param loadOptions - Optional load options, override slate type defaults (ie. duration, frameRate).
    * @returns Observable that emits the slate as a {@link MainMedia} instance.
    */
-  loadSlate(slateType: SlateType): Observable<MainMedia>;
+  loadSlate(slateType: SlateType, loadOptions?: SlateMainMediaLoadOptions | undefined): Observable<MainMedia>;
 
   /** Removes a single sidecar track by its id. */
   removeSidecarTrack(id: Track['id']): Observable<void>;
@@ -115,6 +138,8 @@ export interface PlayerApi extends PlayerCommonApi {
   getPlaybackEngine(mainMediaType: MainMediaType.MP4): PlayerPlaybackEngineMapping[MainMediaType.MP4];
   /** @ignore */
   getPlaybackEngine(mainMediaType: MainMediaType.AUDIO_FILE): PlayerPlaybackEngineMapping[MainMediaType.AUDIO_FILE];
+  /** @ignore */
+  getPlaybackEngine(mainMediaType: MainMediaType.SLATE): PlayerPlaybackEngineMapping[MainMediaType.SLATE];
   /**
    * Returns the playback engine instance for the given media type, providing
    * access to engine-specific configuration (e.g. HLS.js internals).
@@ -145,6 +170,7 @@ export interface PlayerLocalApi extends PlayerInternalApi, Destroyable {
   getPlaybackEngine(mainMediaType: MainMediaType.HLS): PlayerPlaybackEngineMapping[MainMediaType.HLS];
   getPlaybackEngine(mainMediaType: MainMediaType.MP4): PlayerPlaybackEngineMapping[MainMediaType.MP4];
   getPlaybackEngine(mainMediaType: MainMediaType.AUDIO_FILE): PlayerPlaybackEngineMapping[MainMediaType.AUDIO_FILE];
+  getPlaybackEngine(mainMediaType: MainMediaType.SLATE): PlayerPlaybackEngineMapping[MainMediaType.SLATE];
   getPlaybackEngine<T extends MainMediaType>(mainMediaType: T): PlayerPlaybackEngineMapping[T];
 }
 
@@ -152,6 +178,24 @@ export interface PlayerDetachedConfig extends PlayerInternalConfig {}
 
 export interface PlayerDetachedApi extends PlayerInternalApi, Destroyable {
   loadMainMedia(mainMediaId: MainMedia['id']): Observable<MainMediaState>;
+
+  /**
+   * The type of the currently loaded main media, or `undefined` if nothing is loaded. Unlike {@link PlayerApi.mainMedia},
+   * available synchronously regardless of how the session was established (freshly loaded or restored, e.g. after detaching).
+   */
+  mainMediaType: MainMediaType | undefined;
+}
+
+export function getPlayerAudioApi(player: PlayerApi | PlayerDetachedApi): PlayerAudioCommonApi {
+  return 'audio' in player ? player.audio : player.audioInternal;
+}
+
+export function getPlayerTextApi(player: PlayerApi | PlayerDetachedApi): PlayerTextCommonApi {
+  return 'text' in player ? player.text : player.textInternal;
+}
+
+export function getPlayerVideoApi(player: PlayerApi | PlayerDetachedApi): PlayerVideoCommonApi {
+  return 'video' in player ? player.video : player.videoInternal;
 }
 
 export interface PlayerInternalConfig extends PlayerCommonConfig {}
@@ -160,6 +204,8 @@ export interface PlayerInternalApi extends PlayerCommonApi {
   audioInternal: PlayerAudioInternalApi;
 
   textInternal: PlayerTextInternalApi;
+
+  videoInternal: PlayerVideoInternalApi;
 
   restorePlayerSession(playerSession: PlayerSession): Observable<void>;
 
@@ -178,6 +224,8 @@ export type PlayerControllerConfigMap = {
   [MainMediaType.AUDIO_FILE]: AudioFilePlayerControllerConfig;
   // TAMS reuses the HLS controller config (it bridges to HLS)
   [MainMediaType.TAMS]: HlsPlayerControllerConfig;
+  [MainMediaType.SLATE]: SlatePlayerControllerConfig;
+  [MainMediaType.FRAME_IMAGE]: FrameImagePlayerControllerConfig;
 };
 
 /**
@@ -212,6 +260,9 @@ interface PlayerCommonConfig {
         [T in MainMediaType]?: Partial<PlayerControllerConfigMap[T]>;
       }
     | undefined;
+
+  /** Sidecar video configuration - first load concurrency, number of sidecar videos awake at once and metadata only first load. */
+  sidecarVideo?: Partial<PlayerVideoConfig> | undefined;
 }
 
 /**

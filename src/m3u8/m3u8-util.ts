@@ -14,17 +14,12 @@
  * limitations under the License.
  */
 
-// @ts-ignore
-import webvtt from 'node-webvtt';
 import {bufferCount, concatMap, defer, forkJoin, from, map, Observable, of, switchMap, toArray} from 'rxjs';
 import {M3u8File} from './m3u8-file';
 import {UrlUtil} from '../util/url-util';
-import {OmpError} from '../types';
-import {AuthConfig, type AuthenticationData} from '../common';
+import {AuthConfig, type AuthenticationData, FileFormatType} from '../common';
 import {httpGetText} from '../http';
-import type {ParsedVttFile} from '../vtt';
-
-const webvttParseOptions = {strict: false, meta: true};
+import {type OutputFormat, concatenate as concatSegmented} from '@byomakase/omakase-ttconv-ts';
 
 export class M3u8Util {
   static fetchVttSegmentedConcat(m3u8Url: string, authentication?: AuthenticationData, maxConcurrentRequests?: number): Observable<string | undefined> {
@@ -51,37 +46,21 @@ export class M3u8Util {
     const batchSize = maxConcurrentRequests ?? 50;
     return from(urls).pipe(
       bufferCount(batchSize),
-      concatMap((batch) =>
-        forkJoin(batch.map((url) => defer(() => from(httpGetText(url, AuthConfig.createRequestInit(url, authentication))))))
-      ),
+      concatMap((batch) => forkJoin(batch.map((url) => defer(() => from(httpGetText(url, AuthConfig.createRequestInit(url, authentication))))))),
       toArray(),
-      map((batches) => this.concatSegmented(batches.flat()))
+      map((batches) =>
+        concatSegmented(
+          batches.flat(),
+          FileFormatType.VTT.toLowerCase() as OutputFormat,
+          {
+            preserveTags: true,
+          },
+          {
+            styleRegion: true,
+            textAlign: true,
+          }
+        )
+      )
     );
-  }
-
-  static concatSegmented(vttTexts: string[]): string | undefined {
-    if (vttTexts && vttTexts.length > 0) {
-      if (vttTexts.length === 1) {
-        // nothing to concat, just return first one
-        return vttTexts[0];
-      } else {
-        let first: ParsedVttFile = webvtt.parse(vttTexts[0], webvttParseOptions);
-        if (first.errors.length) {
-          console.error(`Errors found while parsing vtt file: ${first.errors}`);
-        }
-        vttTexts
-          .filter((p, index) => index !== 0)
-          .forEach((vttText, index) => {
-            let vttFileParsed: ParsedVttFile = webvtt.parse(vttText, webvttParseOptions);
-            if (vttFileParsed.errors.length) {
-              throw new OmpError(`Errors found while parsing vtt file: ${vttFileParsed.errors}`);
-            }
-            first.cues = first.cues.concat(vttFileParsed.cues);
-          });
-        return webvtt.compile(first);
-      }
-    } else {
-      return void 0;
-    }
   }
 }

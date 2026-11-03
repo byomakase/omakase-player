@@ -33,6 +33,8 @@ export enum MainMediaType {
   MP4 = 'MP4',
   AUDIO_FILE = 'AUDIO_FILE',
   TAMS = 'TAMS',
+  SLATE = 'SLATE',
+  FRAME_IMAGE = 'FRAME_IMAGE',
 }
 
 /**
@@ -346,11 +348,20 @@ export interface TamsMainMediaLoadOptions extends BaseMainMediaLoadOptions {
   returnTamsMediaData?: boolean;
 }
 
+export interface FrameImageMainMediaLoadOptions extends BaseMainMediaLoadOptions {}
+
+/**
+ * Load options for virtual slate media.
+ */
+export interface SlateMainMediaLoadOptions extends BaseMainMediaLoadOptions {}
+
 export type MainMediaLoadOptionsMap = {
   [MainMediaType.HLS]: HlsMainMediaLoadOptions;
   [MainMediaType.MP4]: Mp4MainMediaLoadOptions;
   [MainMediaType.AUDIO_FILE]: AudioFileMainMediaLoadOptions;
   [MainMediaType.TAMS]: TamsMainMediaLoadOptions;
+  [MainMediaType.SLATE]: SlateMainMediaLoadOptions;
+  [MainMediaType.FRAME_IMAGE]: FrameImageMainMediaLoadOptions;
 };
 
 /**

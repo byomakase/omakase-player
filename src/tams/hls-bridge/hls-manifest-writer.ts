@@ -210,7 +210,13 @@ export class M3U8PlaylistWriter {
       output += `,URI="${media.uri}"\n`;
     });
 
+    let mapUri: string | undefined;
+
     playlist.segments.forEach((segment) => {
+      if (segment.map && segment.map.uri !== mapUri) {
+        mapUri = segment.map.uri;
+        output += `#EXT-X-MAP:URI="${mapUri}"\n`;
+      }
       if (segment.gap) {
         output += '#EXT-X-GAP\n';
       }

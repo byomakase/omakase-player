@@ -15,9 +15,9 @@
  */
 
 import {combineLatest, filter, Observable, take, takeUntil, tap} from 'rxjs';
-import type {PlayerDetachedApi, PlayerLiveState, PlayerTextInternalApi} from '../../player';
+import type {PlayerDetachedApi, PlayerLiveState, PlayerTextInternalApi, PlayerVideoInternalApi} from '../../player';
 import {PlayerEventType, type PlayerAudioInternalApi, type PlayerEvent} from '../../player';
-import {type MainMedia, MainMediaEventType, type MainMediaState, type MediaRotationValue} from '../../media';
+import {type MainMedia, MainMediaEventType, type MainMediaState, MainMediaType, type MediaRotationValue, type VideoKeyframe, type VideoKeyframeOptions} from '../../media';
 import {MediaTemporalConverter, MediaTemporalFormat, type MediaTemporalFormatValueMap} from '../../common';
 import {Validators} from '../../common/validators';
 import type {Destroyable} from '../../common/capabilities';
@@ -29,15 +29,16 @@ import {type PlayerDetachedMessageChannel} from './player-detached-message-chann
 import {BaseMessageChannelProxy} from '../message-channel-proxy';
 import type {Track} from 'hls.js';
 import {PlayerTextInternalProxy} from './player-text-internal-proxy';
+import {PlayerVideoInternalProxy} from './player-video-internal-proxy';
 import type {RemoteNode} from '../remote-node';
 import type {OmpProvider} from '../../omp-provider';
-import type {VideoKeyframe, VideoKeyframeOptions} from '../../tools/keyframe-extractor';
 
 const longTimeout = 10 * 60000;
 
 export class PlayerDetachedProxy extends BaseMessageChannelProxy<PlayerDetachedMessageChannel> implements PlayerDetachedApi, Destroyable {
   private readonly _playerAudioInternal: PlayerAudioInternalProxy;
   private readonly _playerTextInternal: PlayerTextInternalProxy;
+  private readonly _playerVideoInternal: PlayerVideoInternalProxy;
 
   protected _mainMedia: MainMedia | undefined;
   protected _mediaTemporalConverter: MediaTemporalConverter | undefined;
@@ -60,6 +61,7 @@ export class PlayerDetachedProxy extends BaseMessageChannelProxy<PlayerDetachedM
 
     this._playerAudioInternal = remoteNode.getProxyByName('PlayerAudioInternal');
     this._playerTextInternal = remoteNode.getProxyByName('PlayerTextInternal');
+    this._playerVideoInternal = remoteNode.getProxyByName('PlayerVideoInternal');
 
     this._mainMediaRepository.onEvent$
       .pipe(filter((p) => p.type === MainMediaRepositoryEventType.MAIN_MEDIA_DELETED))
@@ -248,6 +250,10 @@ export class PlayerDetachedProxy extends BaseMessageChannelProxy<PlayerDetachedM
     return !!this.playerSession.mainMediaId;
   }
 
+  get mainMediaType(): MainMediaType | undefined {
+    return this._mainMedia?.mainMediaType;
+  }
+
   get playerSession(): PlayerSession {
     return this._sessionStore.state.player;
   }
@@ -258,6 +264,10 @@ export class PlayerDetachedProxy extends BaseMessageChannelProxy<PlayerDetachedM
 
   get textInternal(): PlayerTextInternalApi {
     return this._playerTextInternal;
+  }
+
+  get videoInternal(): PlayerVideoInternalApi {
+    return this._playerVideoInternal;
   }
 
   destroy() {

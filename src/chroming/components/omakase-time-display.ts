@@ -16,7 +16,7 @@
 
 import {filter, of, takeUntil, tap} from 'rxjs';
 import {OmakaseTimeRange} from './omakase-time-range';
-import type {PlayerInternalApi} from '../../player';
+import type {PlayerApi, PlayerDetachedApi} from '../../player';
 import {PlayerEventType} from '../../player';
 import {ObserverBreaker} from '../../common/observer-breaker';
 import {MediaTemporalFormat} from '../../common';
@@ -24,6 +24,7 @@ import {MainMediaType} from '../../media';
 import {OmakaseInlineEdit} from '../../marker-list/components/omakase-inline-edit';
 import Decimal from 'decimal.js';
 import {PLAYER_CONTROLLER_DEFAULTS} from '../../constants';
+import {ControlBarComponent, ControlBarComponentAttributes} from '../../control-bar/control-bar-component';
 
 export const OmakaseTimeDisplayAttributes = {
   FORMAT: 'format',
@@ -36,25 +37,34 @@ export const OmakaseTimeDisplayAttributes = {
 export const OmakaseTimeDisplayDomClasses = {
   EDITING: 'omakase-time-display-editing',
   INVALID: 'omakase-time-display-invalid',
+  DURATION: 'omakase-time-display-duration',
 };
 
 export type OmakaseTimeDisplayFormat = 'timecode' | 'standard';
 
-export class OmakaseTimeDisplay extends HTMLElement {
-  static get observedAttributes() {
-    return [OmakaseTimeDisplayAttributes.EDITABLE, OmakaseTimeDisplayAttributes.FORMAT];
+export class OmakaseTimeDisplay extends ControlBarComponent(HTMLElement) {
+  static override get observedAttributes() {
+    return [
+      ...super.observedAttributes,
+      OmakaseTimeDisplayAttributes.EDITABLE,
+      OmakaseTimeDisplayAttributes.FORMAT,
+      OmakaseTimeDisplayAttributes.COUNTDOWN,
+      OmakaseTimeDisplayAttributes.WITH_DURATION,
+    ];
   }
 
-  private _player: PlayerInternalApi | undefined;
+  private _player: PlayerApi | PlayerDetachedApi | undefined;
   private _timeRange?: OmakaseTimeRange;
   private _mediaDuration = 0;
   protected _destroyBreaker = new ObserverBreaker();
   protected _playerBreaker = new ObserverBreaker();
   protected _timeRangeBreaker = new ObserverBreaker();
   private _editBreaker = new ObserverBreaker();
+  private _timecodeBreaker = new ObserverBreaker();
 
   private _innerSpan: HTMLSpanElement | null = null;
   private _inlineEdit: OmakaseInlineEdit | null = null;
+  private _durationSpan: HTMLSpanElement | null = null;
   private _isEditingTime = false;
 
   constructor() {
@@ -109,7 +119,7 @@ export class OmakaseTimeDisplay extends HTMLElement {
     }
   }
 
-  set player(player: PlayerInternalApi | undefined) {
+  set player(player: PlayerApi | PlayerDetachedApi | undefined) {
     this._player = player;
     this._playerBreaker.break();
     if (this._player) {
@@ -118,10 +128,14 @@ export class OmakaseTimeDisplay extends HTMLElement {
         if (this._inlineEdit) {
           this.setupInlineEditTimecode();
         }
+        if (!this._timeRange) {
+          this.displayTime(this._player.getCurrentTime());
+        }
       }
       this._player.onEvent$
         .pipe(
           filter((event) => event.type === PlayerEventType.PLAYER_MAIN_MEDIA_LOADED),
+          takeUntil(this._playerBreaker.observer),
           takeUntil(this._destroyBreaker.observer)
         )
         .subscribe((loaded) => {
@@ -134,15 +148,18 @@ export class OmakaseTimeDisplay extends HTMLElement {
             this.displayTime(this._player!.getCurrentTime());
           }
         });
-      this._player.onEvent$
-        .pipe(
-          filter((event) => event.type === PlayerEventType.PLAYER_PLAYBACK_PROGRESS),
-          takeUntil(this._destroyBreaker.observer),
-          takeUntil(this._timeRangeBreaker.observer)
-        )
-        .subscribe(() => {
-          this.displayTime(this._player!.getCurrentTime());
-        });
+      if (!this._timeRange) {
+        this._player.onEvent$
+          .pipe(
+            filter((event) => event.type === PlayerEventType.PLAYER_PLAYBACK_PROGRESS),
+            takeUntil(this._playerBreaker.observer),
+            takeUntil(this._timeRangeBreaker.observer),
+            takeUntil(this._destroyBreaker.observer)
+          )
+          .subscribe(() => {
+            this.displayTime(this._player!.getCurrentTime());
+          });
+      }
     }
   }
 
@@ -151,7 +168,7 @@ export class OmakaseTimeDisplay extends HTMLElement {
     this._timeRangeBreaker.break();
     this._timeRange.onMouseOver$
       .pipe(filter((p) => !!this._player?.isMainMediaLoaded))
-      .pipe(takeUntil(this._destroyBreaker.observer), takeUntil(this._playerBreaker.observer))
+      .pipe(takeUntil(this._timeRangeBreaker.observer), takeUntil(this._destroyBreaker.observer))
       .subscribe((time) => {
         this.displayTime(time);
       });
@@ -164,7 +181,7 @@ export class OmakaseTimeDisplay extends HTMLElement {
   }
 
   enableEditMode() {
-    if (this._inlineEdit) {
+    if (this._inlineEdit && this.enabled) {
       this._inlineEdit.enableEditMode();
     }
   }
@@ -184,7 +201,12 @@ export class OmakaseTimeDisplay extends HTMLElement {
       : this.formatMediaTime(this._player.convertTime(time, MediaTemporalFormat.SECONDS, this.isCountdown ? MediaTemporalFormat.COUNTDOWN_MEDIA_TIME : MediaTemporalFormat.MEDIA_TIME));
   }
 
+  private getDurationString(): string {
+    return this.displayFormat === 'timecode' ? this._player!.getDuration(MediaTemporalFormat.TIMECODE) : this.formatMediaTime(this._player!.getDuration(MediaTemporalFormat.MEDIA_TIME));
+  }
+
   private displayTime(time: number) {
+    this.renderDuration();
     if (this._player && this._player.isMainMediaLoaded) {
       const timeString = this.getTimeString(time);
       if (this._inlineEdit) {
@@ -194,7 +216,7 @@ export class OmakaseTimeDisplay extends HTMLElement {
       } else {
         this._innerSpan!.textContent = timeString;
         if (this.includeDuration) {
-          this._innerSpan!.textContent += ` / ${this.displayFormat === 'timecode' ? this._player.getDuration(MediaTemporalFormat.TIMECODE) : this.formatMediaTime(this._player.getDuration(MediaTemporalFormat.MEDIA_TIME))}`;
+          this._innerSpan!.textContent += ` / ${this.getDurationString()}`;
         }
       }
     } else {
@@ -208,11 +230,37 @@ export class OmakaseTimeDisplay extends HTMLElement {
     }
   }
 
+  private renderDuration() {
+    if (!this._inlineEdit || !this.includeDuration || !this._player?.isMainMediaLoaded) {
+      this._durationSpan?.remove();
+      this._durationSpan = null;
+      return;
+    }
+    if (!this._durationSpan) {
+      this._durationSpan = document.createElement('span');
+      this._durationSpan.classList.add(OmakaseTimeDisplayDomClasses.DURATION);
+      this.appendChild(this._durationSpan);
+    }
+    this._durationSpan.textContent = `\u00a0/\u00a0${this.getDurationString()}`;
+  }
+
+  private refresh() {
+    if (!this._innerSpan && !this._inlineEdit) {
+      return;
+    }
+    if (this._player && !this._timeRange) {
+      this.displayTime(this._player.getCurrentTime());
+    } else {
+      this.renderDuration();
+    }
+  }
+
   private setupInlineEditTimecode() {
     if (this._inlineEdit && this._player) {
       const timecode = this._player.getCurrentTime(this.temporalFormat);
       this._inlineEdit.setTimecode(timecode, this._player, this.temporalFormat);
-      this._inlineEdit.isValid$.pipe(takeUntil(this._destroyBreaker.observer), takeUntil(this._editBreaker.observer)).subscribe((isValid) => {
+      this._timecodeBreaker.break();
+      this._inlineEdit.isValid$.pipe(takeUntil(this._timecodeBreaker.observer), takeUntil(this._destroyBreaker.observer), takeUntil(this._editBreaker.observer)).subscribe((isValid) => {
         if (isValid) {
           this.classList.remove(OmakaseTimeDisplayDomClasses.INVALID);
         } else {
@@ -229,10 +277,23 @@ export class OmakaseTimeDisplay extends HTMLElement {
   connectedCallback() {
     this._teardownDOM();
     this._setupDOM(this.hasAttribute(OmakaseTimeDisplayAttributes.EDITABLE));
+    if (this._timeRange) {
+      this.timeRange = this._timeRange;
+    }
+    if (this._player) {
+      this.player = this._player;
+    }
   }
 
-  attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null) {
-    if (name === OmakaseTimeDisplayAttributes.EDITABLE) {
+  override attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null) {
+    super.attributeChangedCallback(name, oldValue, newValue);
+    if (name === ControlBarComponentAttributes.DISABLED) {
+      if (!this.enabled) {
+        this._inlineEdit?.cancelEditMode();
+      }
+    } else if (Object.values(ControlBarComponentAttributes).includes(name)) {
+      return;
+    } else if (name === OmakaseTimeDisplayAttributes.EDITABLE) {
       const wasEditable = oldValue !== null;
       const isEditable = newValue !== null;
       if (wasEditable !== isEditable) {
@@ -242,10 +303,11 @@ export class OmakaseTimeDisplay extends HTMLElement {
           this.displayTime(this._player.getCurrentTime());
         }
       }
-    } else if (name === OmakaseTimeDisplayAttributes.FORMAT) {
-      if (oldValue !== newValue && this._inlineEdit) {
+    } else if (oldValue !== newValue) {
+      if (this._inlineEdit && name !== OmakaseTimeDisplayAttributes.WITH_DURATION) {
         this._inlineEdit.setFormat(this.temporalFormat);
       }
+      this.refresh();
     }
   }
 
@@ -263,10 +325,7 @@ export class OmakaseTimeDisplay extends HTMLElement {
         return this._player
           ? this._player.pause().pipe(
               tap(() => {
-                if (this.displayFormat !== 'timecode') {
-                  const time = this._player!.getCurrentTime(this.temporalFormat);
-                  this._inlineEdit!.setText(time);
-                }
+                this._inlineEdit!.setText(this._player!.getCurrentTime(this.temporalFormat));
               })
             )
           : of(undefined);
@@ -315,9 +374,13 @@ export class OmakaseTimeDisplay extends HTMLElement {
       this._innerSpan.remove();
       this._innerSpan = null;
     }
+    if (this._durationSpan) {
+      this._durationSpan.remove();
+      this._durationSpan = null;
+    }
   }
 
   disconnectedCallback() {
-    this._destroyBreaker.destroy();
+    this._destroyBreaker.break();
   }
 }

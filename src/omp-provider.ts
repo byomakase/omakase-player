@@ -24,7 +24,6 @@ import {Ui} from './ui';
 import {AudioEffectsRegistry} from './audio';
 import {MediaDeserializer} from './media/media-deserializer';
 import {MainMediaSessionManager} from './media/main-media-session-manager';
-import {SlateProvider} from './media';
 import type {Destroyable} from './common/capabilities';
 
 export class OmpProvider implements Destroyable {
@@ -38,7 +37,6 @@ export class OmpProvider implements Destroyable {
   readonly ui: Ui;
   readonly audioEffectsRegistry: AudioEffectsRegistry;
   readonly mediaDeserializer: MediaDeserializer;
-  readonly slateProvider: SlateProvider;
 
   constructor() {
     this.alertsManager = new AlertsManager();
@@ -51,7 +49,6 @@ export class OmpProvider implements Destroyable {
     this.ui = new Ui();
     this.audioEffectsRegistry = new AudioEffectsRegistry();
     this.mediaDeserializer = new MediaDeserializer();
-    this.slateProvider = new SlateProvider();
   }
 
   destroy() {
@@ -64,7 +61,6 @@ export class OmpProvider implements Destroyable {
     this.alertsManager.destroy();
     this.audioEffectsRegistry.destroy();
     this.mediaDeserializer.destroy();
-    this.slateProvider.destroy();
     this.ui.destroy();
   }
 }

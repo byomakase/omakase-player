@@ -16,10 +16,9 @@
 
 import {z} from 'zod';
 import {MediaTemporalFormat} from './media-temporal';
-import {MainMediaType, type MediaRotationValue, TrackType} from '../media';
+import {MainMediaType, type MediaRotationValue, TrackType, VideoKeyframeType} from '../media';
 import {AUDIO_DEFAULTS} from '../constants';
-import {PlayerTextHandlerType} from '../player';
-import {VideoKeyframeType} from '../tools/keyframe-extractor';
+import {PlayerTextHandlerType} from '../player/player-text-handler-type';
 
 export class Validators {
   public static id(): (value: string) => string {
@@ -46,9 +45,13 @@ export class Validators {
     };
   }
 
+  // created lazily and reused, called on hot paths (getDuration, getCurrentTime) where building schema per call is expensive
+  private static _mediaTemporalFormatSchema?: z.ZodEnum<typeof MediaTemporalFormat>;
+
   public static mediaTemporalFormat(): (value: MediaTemporalFormat) => MediaTemporalFormat {
     return (value: MediaTemporalFormat) => {
-      return z.enum(MediaTemporalFormat).parse(value);
+      Validators._mediaTemporalFormatSchema ??= z.enum(MediaTemporalFormat);
+      return Validators._mediaTemporalFormatSchema.parse(value);
     };
   }
 

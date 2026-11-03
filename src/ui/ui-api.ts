@@ -18,7 +18,7 @@ import {type ClassStyleRule, type StyledElement, type StyleRule, UiStyleEngine} 
 import {StringUtil} from '../util/string-util';
 import {asyncScheduler, Observable, observeOn, Subject, takeUntil} from 'rxjs';
 import {DEFAULT_ELEMENT_STYLES, type ElementStyleByName, type ElementStyleName} from './styles';
-import {type UiElement, UiElementPropsEngine} from './ui-element-props';
+import {type UiElement, type UiElementProps, UiElementPropsEngine} from './ui-element-props';
 import {ObserverBreaker} from '../common/observer-breaker';
 import type {Destroyable} from '../common/capabilities';
 
@@ -127,13 +127,13 @@ export interface UiApi {
    * - If the element does not exist and has at least one non-undefined prop, it
    *   is created and `UI_ELEMENT_UPDATED` is emitted.
    */
-  updateElement(element: UiElement): void;
+  updateElement<S extends UiElementProps>(element: UiElement<S>): void;
 
   /**
    * Gets an element by id, or `undefined` if it doesn't exist.
    * @param id Requested element's id
    */
-  getElement(id: UiElement['id']): UiElement | undefined;
+  getElement<S extends UiElementProps>(id: UiElement['id']): UiElement<S> | undefined;
 }
 
 export class Ui implements UiApi, Destroyable {
@@ -209,7 +209,7 @@ export class Ui implements UiApi, Destroyable {
     this._styleEngine.removeRules(predicate);
   }
 
-  updateElement(element: UiElement): void {
+  updateElement<S extends UiElementProps>(element: UiElement<S>): void {
     this._elementPropsEngine.updateElement(element);
   }
 
@@ -221,8 +221,8 @@ export class Ui implements UiApi, Destroyable {
     this._elementPropsEngine.removeElements(id);
   }
 
-  getElement(id: UiElement['id']): UiElement | undefined {
-    return this._elementPropsEngine.elements.get(id);
+  getElement<S extends UiElementProps>(id: UiElement['id']): UiElement<S> | undefined {
+    return this._elementPropsEngine.elements.get(id) as UiElement<S> | undefined;
   }
 
   get elements(): UiElement[] {

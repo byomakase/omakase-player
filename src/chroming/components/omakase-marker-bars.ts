@@ -14,14 +14,22 @@
  * limitations under the License.
  */
 
+import {Subject, takeUntil, type Observable} from 'rxjs';
 import type {MarkerState, MarkerTrackState} from '../../media/marker-track';
+import type {Ui} from '../../ui';
+import type {UiProxy} from '../../remoting/impl/ui-proxy';
+import type {ChromingMarkerBarElementEvent} from '../chroming-marker-bar';
 import type {UiLiveModel} from '../../live/live-model';
 import {OmakaseMarkerTrackAttributes, type OmakaseMarkerBar} from './omakase-marker-bar';
+import {ControlBarComponent} from '../../control-bar/control-bar-component';
 
-export class OmakaseMarkerBars extends HTMLElement {
+export class OmakaseMarkerBars extends ControlBarComponent(HTMLElement) {
+  protected readonly _onEvent$ = new Subject<ChromingMarkerBarElementEvent>();
+
   private _markerBars: OmakaseMarkerBar[] = [];
   private _mediaDuration?: number;
   private _containerSize?: number;
+  private _uiOrUiProxy?: Ui | UiProxy | undefined;
 
   private _liveModel?: UiLiveModel | undefined;
 
@@ -36,6 +44,24 @@ export class OmakaseMarkerBars extends HTMLElement {
     this._containerSize = containerSize;
     for (const markerTrack of this._markerBars) {
       markerTrack.containerSize = this._containerSize;
+    }
+  }
+
+  /**
+   * Events of all the marker bars
+   */
+  get onEvent$(): Observable<ChromingMarkerBarElementEvent> {
+    return this._onEvent$.asObservable();
+  }
+
+  /**
+   * Sets the UI used by the marker bars, also for the ones added later
+   * @param ui
+   */
+  setUiOrUiProxy(ui: Ui | UiProxy) {
+    this._uiOrUiProxy = ui;
+    for (const markerTrack of this._markerBars) {
+      markerTrack.setUiOrUiProxy(ui);
     }
   }
 
@@ -70,7 +96,11 @@ export class OmakaseMarkerBars extends HTMLElement {
     if (this._liveModel) {
       markerBar.setLiveModel(this._liveModel);
     }
+    if (this._uiOrUiProxy) {
+      markerBar.setUiOrUiProxy(this._uiOrUiProxy);
+    }
     this.appendChild(markerBar);
+    markerBar.onEvent$.pipe(takeUntil(markerBar.destroy$)).subscribe((event) => this._onEvent$.next(event));
     markerBar.mediaDuration = this._mediaDuration ?? 0;
     markerBar.containerSize = this._containerSize;
     this.markerBars.push(markerBar);

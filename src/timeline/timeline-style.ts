@@ -71,6 +71,7 @@ export const TIMELINE_STYLE_DEFAULT: TimelineStyle = {
 
   playheadVisible: true,
   playheadFill: '#f43530',
+  playheadFillOpacity: 1,
 
   playheadLineWidth: 2,
   playheadSymbolHeight: 15,
@@ -156,8 +157,21 @@ export const THUMBNAIL_TRACK_LANE_STYLE_DEFAULT: ThumbnailTrackLaneStyle = {
 export const TEXT_TRACK_LANE_STYLE_DEFAULT: TextTrackLaneStyle = {
   ...TIMELINE_LANE_STYLE_DEFAULT,
   height: 40,
-  textLaneItemOpacity: 0.9,
-  textLaneItemFill: 'rgba(255,73,145)',
+  itemOpacity: 0.9,
+  itemBorderSize: 0,
+  itemBorderColor: '#ffffff',
+  itemBorderRadius: 0,
+  itemFill: 'rgba(255,73,145)',
+  itemContentPadding: 0,
+  itemMinWidthToShowContent: 40,
+  itemTextFontSize: 10,
+  itemTextFontFamily: TIMELINE_STYLE_DEFAULT.textFontFamily,
+  itemTextFill: '#efefef',
+  itemMinHeightToShowText: 40,
+  itemTimestampsFontSize: 10,
+  itemTimestampsFontFamily: TIMELINE_STYLE_DEFAULT.textFontFamily,
+  itemTimestampsFill: '#efefef',
+  itemMinHeightToShowTimestamps: 70,
 };
 
 export const LABEL_LANE_STYLE_DEFAULT: LabelLaneStyle = {

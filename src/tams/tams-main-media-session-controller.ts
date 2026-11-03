@@ -85,7 +85,7 @@ export class TamsMainMediaSessionController implements MainMediaSessionControlle
    * cannot produce playable media.
    */
   prepare(): Observable<void> {
-    const url = SourceUtil.resolveUrlFromSource(this._mainMedia.source);
+    const url = SourceUtil.resolveUrlFromSourceOrFail(this._mainMedia.source);
     const parsed = TamsUtil.extractApiEndpointAndId(url);
     if (!parsed) {
       return throwError(() => new OmpError(`Invalid TAMS URL: ${url}`));

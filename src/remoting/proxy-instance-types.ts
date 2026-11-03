@@ -23,7 +23,9 @@ import {SessionStoreProxy} from './impl/session-store-proxy';
 import {PlayerDetachedProxy} from './impl/player-detached-proxy';
 import {PlayerAudioInternalProxy} from './impl/player-audio-internal-proxy';
 import {PlayerTextInternalProxy} from './impl/player-text-internal-proxy';
+import {PlayerVideoInternalProxy} from './impl/player-video-internal-proxy';
 import {ChromingDetachedProxy} from './impl/chroming-detached-proxy';
+import {LocalizationDetachedProxy} from './impl/localization-detached-proxy';
 import {OmakaseTrackApiProxy} from './impl/omakase-track-api-proxy';
 import {AudioHandlerProxy} from './impl/audio-handler-proxy';
 import {TextTrackHandlerProxy} from './impl/text-track-handler-proxy';
@@ -56,9 +58,12 @@ export const getMessageChannelProxyMap = () => ({
   PlayerDetached: PlayerDetachedProxy,
   PlayerAudioInternal: PlayerAudioInternalProxy,
   PlayerTextInternal: PlayerTextInternalProxy,
+  PlayerVideoInternal: PlayerVideoInternalProxy,
 
   ChromingDetached: ChromingDetachedProxy,
   ChromingMarkerBarHandler: ChromingMarkerBarHandlerProxy,
+
+  LocalizationDetached: LocalizationDetachedProxy,
 
   LivePlaybackTracker: LivePlaybackTrackerProxy,
 

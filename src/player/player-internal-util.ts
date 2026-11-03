@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {concat, Observable, timeout} from 'rxjs';
+import {catchError, concat, Observable, of, timeout} from 'rxjs';
 import {nextCompleteObserver} from '../util/rxjs-util';
 import type {PlayerConfig, PlayerInternalApi} from './player-api';
 import type {PlayerSession} from '../session';
@@ -62,7 +62,13 @@ export class PlayerInternalUtil {
   static restorePlayback(player: PlayerInternalApi, playerSession: PlayerSession, nonFatalMessageHandler?: (message: string) => void): Observable<void> {
     return new Observable((observer) => {
       let currentTime$ = player.seekTo(playerSession.playback.currentTime);
-      let playbackRate$ = player.setPlaybackRate(playerSession.playback.playbackRate);
+      let playbackRate$ = player.setPlaybackRate(playerSession.playback.playbackRate).pipe(
+        catchError((err) => {
+          // e.g. backwards playback rate once trick track failed to load, playback is restored at current playback rate
+          console.debug(`Restoring playback rate ${playerSession.playback.playbackRate} failed`, err);
+          return of(void 0);
+        })
+      );
 
       concat(playbackRate$, currentTime$).subscribe({
         complete: () => {

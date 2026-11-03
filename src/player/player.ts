@@ -16,13 +16,31 @@
 
 import {COMMON_PLAYER_CONFIG_DEFAULT, type PlayerApi, type PlayerConfig, type PlayerDetachedApi, type PlayerInternalApi, type PlayerLocalApi} from './player-api';
 import type {Destroyable} from '../common/capabilities';
-import {filter, finalize, map, Observable, of, Subject, switchMap, takeUntil} from 'rxjs';
-import {type PlayerEvent} from './player-event';
+import {catchError, filter, finalize, map, Observable, of, Subject, switchMap, takeUntil} from 'rxjs';
+import {PlayerEventType, type PlayerEvent} from './player-event';
 import {MainMediaRepository, MainMediaRepositoryEventType, TrackRepository} from '../repository';
 import {ObserverBreaker} from '../common/observer-breaker';
 import {errorCompleteObserver, freeObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
-import {MediaTemporalFormat, type MediaTemporalFormatValueMap, WindowPlaybackMode} from '../common';
-import {type MainMedia, type MainMediaLoadOptions, MainMediaType, type MediaRotationValue, SlateProvider, SlateType, type Track, TrackType} from '../media';
+import {FileFormatType, MediaTemporalFormat, type MediaTemporalFormatValueMap, WindowPlaybackMode} from '../common';
+import {
+  type MainMedia,
+  type MainMediaLoadOptions,
+  MainMediaType,
+  type MediaContainerTrackLoadOptions,
+  Relation,
+  RelationType,
+  type ThumbnailTrack,
+  type MediaRotationValue,
+  type SlateMainMediaLoadOptions,
+  type Track,
+  TrackType,
+  type VideoKeyframe,
+  type VideoKeyframeOptions,
+} from '../media';
+import {SlateMainMedia, SlateType} from '../slate/slate-main-media';
+import {type FrameImageTrackArgs, FrameImageTrack} from '../frame-image/frame-image-track';
+import {FrameImageManifest} from '../frame-image/frame-image-manifest';
+import {TrickTrack} from '../frame-image/trick-track';
 import {PlayerLocal} from './player-local';
 import {type MediaLoadRequest, type PlayerSession, SessionStore} from '../session';
 import {type PlayerAudioApi} from './player-audio-api';
@@ -30,11 +48,13 @@ import {PlayerAudio} from './player-audio';
 import type {ChromingInternalApi} from '../chroming';
 import {UnsupportedMethodInDetachedError} from '../types';
 import type {PlayerPlaybackEngineMapping} from './player-playback-engine';
-import {type Source, SourceType, TrackSource, UrlSource} from '../source';
+import {InternalSource, type Source, SourceType, TrackSource, UrlSource} from '../source';
 import {MediaFactory} from '../media/media-factory';
 import type {MainMediaSessionManager} from '../media/main-media-session-manager';
 import {isString} from '../util/util-functions';
 import {PlayerText} from './player-text';
+import {PlayerVideo} from './player-video';
+import type {PlayerVideoApi} from './player-video-api';
 import type {PlayerTextApi} from './player-text-api';
 import {OpStageStatus} from '../common/op-stage';
 import {Fullscreen} from '../common/fullscreen';
@@ -44,10 +64,10 @@ import type {TrackLoadOptions, TrackLoadOptionsMap} from '../track';
 import {TrackUtils} from '../track/track-utils';
 import {TextTrackUtil} from '../text/text-track-util';
 import type {OmpProvider} from '../omp-provider';
-import type {VideoKeyframe, VideoKeyframeOptions} from '../tools/keyframe-extractor';
 import {extractErrorMessage} from '../util/error-util';
 import {Validators} from '../common/validators';
 import {LivePlaybackTracker, type LivePlaybackTrackerApi} from '../live/live-model';
+import {CryptoUtil} from '../util/crypto-util';
 
 export const PLAYER_CONFIG_DEFAULT: PlayerConfig = {
   ...COMMON_PLAYER_CONFIG_DEFAULT,
@@ -83,13 +103,13 @@ export class Player implements PlayerApi, Destroyable {
   protected _mainMediaSessionManager: MainMediaSessionManager;
   protected _trackRepository: TrackRepository;
   protected _trackUtils: TrackUtils;
-  protected _slateProvider: SlateProvider;
 
   private _playerLocal: PlayerLocalApi;
   private _playerDetached?: PlayerDetachedApi | undefined;
 
   protected _playerAudio: PlayerAudio;
   protected _playerText: PlayerText;
+  protected _playerVideo: PlayerVideo;
 
   protected _livePlaybackTracker: LivePlaybackTracker = new LivePlaybackTracker();
 
@@ -104,7 +124,6 @@ export class Player implements PlayerApi, Destroyable {
     this._mainMediaSessionManager = ompProvider.mainMediaSessionManager;
     this._trackRepository = ompProvider.trackRepository;
     this._trackUtils = ompProvider.trackUtils;
-    this._slateProvider = ompProvider.slateProvider;
 
     this._config = {
       ...PLAYER_CONFIG_DEFAULT,
@@ -114,6 +133,7 @@ export class Player implements PlayerApi, Destroyable {
     this._playerLocal = new PlayerLocal(ompProvider, this._config);
     this._playerAudio = new PlayerAudio(ompProvider, this._playerLocal);
     this._playerText = new PlayerText(ompProvider, this._playerLocal);
+    this._playerVideo = new PlayerVideo(ompProvider, this._playerLocal);
 
     this.wireLocal();
 
@@ -153,6 +173,7 @@ export class Player implements PlayerApi, Destroyable {
 
     this._playerAudio.wirePlayer(playerInternal);
     this._playerText.wirePlayer(playerInternal);
+    this._playerVideo.wirePlayer(playerInternal);
     this._livePlaybackTracker.wirePlayer(playerInternal);
   }
 
@@ -221,14 +242,31 @@ export class Player implements PlayerApi, Destroyable {
   loadMainMedia(url: string, loadOptions?: MainMediaLoadOptions | undefined): Observable<MainMedia> {
     this.checkIsStableWindowPlayback();
     let resolvedLoadOptions = loadOptions?.mediaRotation !== undefined ? {...loadOptions, mediaRotation: this.sanitizeMediaRotation(loadOptions.mediaRotation)} : loadOptions;
+    let urlSource = UrlSource.of(url);
     return passiveObservable((observer) => {
       let mediaLoadRequest = this._sessionStore.createMediaLoadRequest();
 
+      this._onEvent$.next({
+        type: PlayerEventType.PLAYER_MAIN_MEDIA_LOAD_REQUESTED,
+        data: {source: urlSource.state, loadOptions: resolvedLoadOptions},
+      });
+
       this.unloadMainMedia()
         .pipe(
-          switchMap(() => MediaFactory.createMainMedia(UrlSource.of(url), resolvedLoadOptions)),
+          switchMap(() => MediaFactory.createMainMedia(urlSource, resolvedLoadOptions)),
+          catchError((err) => {
+            this._onEvent$.next({
+              type: PlayerEventType.PLAYER_MAIN_MEDIA_LOAD_ERROR,
+              data: {source: urlSource.state, error: extractErrorMessage(err)},
+            });
+            throw err;
+          }),
           switchMap((mainMedia) => {
             mediaLoadRequest.mediaId = mainMedia.id;
+            this._onEvent$.next({
+              type: PlayerEventType.PLAYER_MAIN_MEDIA_CREATED,
+              data: {mainMediaState: mainMedia.state},
+            });
             if (mainMedia.mainMediaType === MainMediaType.AUDIO_FILE && loadOptions?.mediaRotation !== undefined) {
               console.warn(`mediaRotation is ignored for audio-only main media`);
             }
@@ -299,8 +337,8 @@ export class Player implements PlayerApi, Destroyable {
         const existingTrack = this._trackRepository.getOrFail((sourceOrUrl as TrackSource).trackId);
         mediaLoadRequest.mediaId = existingTrack.id;
 
-        // update args immediately if they're provided
-        if (loadOptions?.args) {
+        // update args immediately if they're provided, thumbnail track args are applied to frame image track derived from it
+        if (loadOptions?.args && existingTrack.trackType !== TrackType.THUMBNAIL_TRACK) {
           existingTrack.updateAttrs(loadOptions.args);
         }
 
@@ -329,6 +367,10 @@ export class Player implements PlayerApi, Destroyable {
                       return track;
                     })
                   );
+              case TrackType.THUMBNAIL_TRACK:
+                let frameImageTrack = this.resolveThumbnailFrameImageTrack(track, loadOptions);
+                mediaLoadRequest.mediaId = frameImageTrack.id;
+                return of(frameImageTrack);
               default:
                 return of(track);
             }
@@ -368,11 +410,52 @@ export class Player implements PlayerApi, Destroyable {
     });
   }
 
-  loadSlate(slateType: SlateType): Observable<MainMedia> {
+  /**
+   * Frame image track, or trick track when requested with `trackType`, derived from thumbnail track. Loaded from the same VTT url,
+   * or from thumbnails, when thumbnail track has no url source, ie. it was created in code. Thumbnails are copied when track is derived.
+   * Track derived earlier is reused, load options args are applied to it.
+   */
+  protected resolveThumbnailFrameImageTrack(thumbnailTrack: Track, loadOptions?: TrackLoadOptions | undefined): Track {
+    let trackType = loadOptions?.trackType === TrackType.TRICK_TRACK ? TrackType.TRICK_TRACK : TrackType.FRAME_IMAGE_TRACK;
+    let args = (loadOptions as MediaContainerTrackLoadOptions | undefined)?.args;
+
+    let derivedTrack = this._trackRepository.findFirst(
+      (p) => p.trackType === trackType && p.relations.some((relation) => relation.relationType === RelationType.DERIVED_FROM && relation.entityId === thumbnailTrack.id)
+    );
+    if (derivedTrack) {
+      if (args) {
+        derivedTrack.updateAttrs(args);
+      }
+      return derivedTrack;
+    }
+
+    let frameImageTrackArgs: FrameImageTrackArgs = {
+      ...args,
+      label: thumbnailTrack.label,
+    };
+    if (thumbnailTrack.source instanceof UrlSource) {
+      frameImageTrackArgs.source = UrlSource.of(thumbnailTrack.source.url);
+      frameImageTrackArgs.sourceFileFormatType = FileFormatType.VTT;
+    } else {
+      let frameImages = FrameImageManifest.fromThumbnails((thumbnailTrack as ThumbnailTrack).timedItemsSorted);
+      if (frameImages.length === 0) {
+        throw new Error(`Thumbnail track has no thumbnails with start and end, id=${thumbnailTrack.id}`);
+      }
+      frameImageTrackArgs.frameImages = frameImages;
+    }
+    let frameImageTrack = trackType === TrackType.TRICK_TRACK ? new TrickTrack(frameImageTrackArgs) : new FrameImageTrack(frameImageTrackArgs);
+    frameImageTrack.addRelation(Relation.of(RelationType.DERIVED_FROM, thumbnailTrack.id, thumbnailTrack.mediaType));
+    this._trackRepository.add(frameImageTrack);
+    frameImageTrack.loadStart();
+    frameImageTrack.loadSuccess();
+    return frameImageTrack;
+  }
+
+  loadSlate(slateType: SlateType, loadOptions?: SlateMainMediaLoadOptions | undefined): Observable<MainMedia> {
     this.checkIsStableWindowPlayback();
     return passiveObservable((observer) => {
       this.unloadMainMedia().subscribe(() => {
-        let mainMedia = this._slateProvider.getMainMedia(slateType);
+        let mainMedia = this.createSlate(slateType, loadOptions);
         this._loadMainMedia(mainMedia).subscribe({
           next: () => {
             nextCompleteObserver(observer, mainMedia);
@@ -383,6 +466,24 @@ export class Player implements PlayerApi, Destroyable {
           },
         });
       });
+    });
+  }
+
+  /**
+   * Creates virtual slate main media, provided load options override slate defaults
+   * @param slateType not used for now, {@link SlateType.BLACK} is the only slate type
+   * @param loadOptions
+   */
+  protected createSlate(slateType: SlateType, loadOptions?: SlateMainMediaLoadOptions | undefined): SlateMainMedia {
+    return new SlateMainMedia({
+      source: InternalSource.of(CryptoUtil.uuid()),
+      loadOptions: {
+        // single frame black slate
+        duration: 1 / 30,
+        frameRate: 30,
+        ...loadOptions,
+        mainMediaType: MainMediaType.SLATE,
+      },
     });
   }
 
@@ -503,6 +604,7 @@ export class Player implements PlayerApi, Destroyable {
   getPlaybackEngine(mainMediaType: MainMediaType.HLS): PlayerPlaybackEngineMapping[MainMediaType.HLS];
   getPlaybackEngine(mainMediaType: MainMediaType.MP4): PlayerPlaybackEngineMapping[MainMediaType.MP4];
   getPlaybackEngine(mainMediaType: MainMediaType.AUDIO_FILE): PlayerPlaybackEngineMapping[MainMediaType.AUDIO_FILE];
+  getPlaybackEngine(mainMediaType: MainMediaType.SLATE): PlayerPlaybackEngineMapping[MainMediaType.SLATE];
   getPlaybackEngine(mainMediaType: MainMediaType): PlayerPlaybackEngineMapping[MainMediaType] | undefined {
     if (this.isAttached()) {
       return this._playerLocal.getPlaybackEngine(mainMediaType);
@@ -569,6 +671,10 @@ export class Player implements PlayerApi, Destroyable {
     return this._playerText;
   }
 
+  get video(): PlayerVideoApi {
+    return this._playerVideo;
+  }
+
   destroy(): void {
     this._destroyBreaker.destroy();
     this._playerInternalSwitchBreaker.destroy();
@@ -577,6 +683,7 @@ export class Player implements PlayerApi, Destroyable {
     this._playerDetached?.destroy();
     this._playerAudio.destroy();
     this._playerText.destroy();
+    this._playerVideo.destroy();
     this._livePlaybackTracker.destroy();
 
     freeObserver(this._onEvent$);

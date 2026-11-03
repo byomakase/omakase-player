@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type {AudioFlow, Flow, FlowSegment, VideoFlow} from '../tams-model';
+import type {AudioFlow, Flow, FlowSegment, FlowSegmentGetUrlsInner, VideoFlow} from '../tams-model';
 import {TimeRangeUtil} from '../time-range-util';
 import {M3U8Segment, M3U8StreamInfo} from './model/m3u8-model';
 import type {TamsMediaData} from './model/tams-media-data-model';
@@ -71,7 +71,8 @@ export function buildTamsSources(tamsMediaData: TamsMediaData, playback: TamsPla
     logFlowTimeline(flowObj, segments, playableSegments);
 
     const m3u8Segments = playableSegments.map((playable) => playable.segment);
-    const metadata = toPlaylistMetadata(playback, mediaSequences?.get(flowId) ?? 0, resolveProgramDateTime(playableSegments[0]!.source));
+    const hasInitSegment = m3u8Segments.some((segment) => segment.map !== undefined);
+    const metadata = toPlaylistMetadata(playback, mediaSequences?.get(flowId) ?? 0, resolveProgramDateTime(playableSegments[0]!.source), hasInitSegment);
 
     if (flowObj.format === TAMS_FORMAT.video) {
       sources.push({segments: m3u8Segments, metadata, id: flowId, streamInfo: toStreamInfo(flowObj as VideoFlow)});
@@ -95,8 +96,12 @@ export function resolveRenderedSegments(flow: Flow, segments: FlowSegment[]): Pl
   return toPlayableSegments(timelineSegments);
 }
 
-function toPlaylistMetadata(playback: TamsPlayback, mediaSequence: number, programDateTime: string | undefined): Partial<M3U8ManifestMetadata> {
-  const base = {version: 3, independentSegments: true, ...(programDateTime ? {programDateTime: programDateTime} : {})};
+function toPlaylistMetadata(playback: TamsPlayback, mediaSequence: number, programDateTime: string | undefined, hasInitSegment: boolean): Partial<M3U8ManifestMetadata> {
+  const base = {
+    version: hasInitSegment ? TAMS_MANIFEST.mediaPlaylistVersionWithMap : TAMS_MANIFEST.mediaPlaylistVersion,
+    independentSegments: true,
+    ...(programDateTime ? {programDateTime: programDateTime} : {}),
+  };
 
   switch (playback.mode) {
     case TamsPlaybackMode.VOD:
@@ -221,18 +226,18 @@ function toPlayableSegments(segments: FlowSegment[]): PlayableSegment[] {
       // an unbounded or zero length segment timerange cannot be expressed as EXTINF
       continue;
     }
-    const url = resolveSegmentUrl(segment) ?? NON_PLAYABLE_GAP_URI;
-    result.push({source: segment, segment: new M3U8Segment(duration, url)});
+    const url = resolveGetUrl(segment.get_urls) ?? NON_PLAYABLE_GAP_URI;
+    const initUrl = resolveGetUrl(segment.init_object?.get_urls);
+    result.push({source: segment, segment: new M3U8Segment(duration, url, initUrl ? {uri: initUrl} : undefined)});
   }
   return result;
 }
 
-function resolveSegmentUrl(segment: FlowSegment): string | undefined {
-  const urls = segment.get_urls;
+function resolveGetUrl(urls: FlowSegmentGetUrlsInner[] | undefined): string | undefined {
   if (!urls || urls.length === 0) {
     return undefined;
   }
-  const presigned = urls.find((u) => (u as {presigned?: boolean}).presigned === true || u.label?.includes('presigned'));
+  const presigned = urls.find((u) => u.presigned === true || u.label?.includes('presigned'));
   const chosen = presigned ?? urls[urls.length - 1];
   return chosen?.url;
 }

@@ -46,7 +46,8 @@ import type {ChromingDomController} from '../../chroming/chroming-dom';
 import {filter, Observable, takeUntil} from 'rxjs';
 import {type ChromingEvent, ChromingEventType} from '../../chroming/chroming-event';
 import type {ChromingState} from '../../chroming/chroming-state';
-import {type PlayerInternalApi} from '../../player';
+import {type PlayerApi, type PlayerDetachedApi} from '../../player';
+import type {LocalizationApi} from '../../localization';
 import {UnsupportedMethodInDetachedError} from '../../types';
 import type {RemoteNode} from '../remote-node';
 import {type ChromingMarkerBarConfig, type ChromingMarkerBarHandlerApi, type ChromingMarkerBarState} from '../../chroming/chroming-marker-bar';
@@ -243,7 +244,11 @@ export class ChromingDetachedProxy extends BaseMessageChannelProxy<ChromingDetac
     throw new UnsupportedMethodInDetachedError();
   }
 
-  setPlayerInternal(playerInternal: PlayerInternalApi): void {
+  setPlayerInternal(playerInternal: PlayerApi | PlayerDetachedApi): void {
+    throw new UnsupportedMethodInDetachedError();
+  }
+
+  setLocalizationInternal(localization: LocalizationApi): void {
     throw new UnsupportedMethodInDetachedError();
   }
 

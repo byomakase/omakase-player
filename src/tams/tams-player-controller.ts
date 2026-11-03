@@ -16,7 +16,7 @@
 
 import {map, type Observable, of, type Subscription, switchMap, takeUntil, tap, throwError} from 'rxjs';
 import type {HlsConfig} from 'hls.js';
-import {HlsPlayerController, type HlsPlayerControllerConfig} from '../hls';
+import {HlsPlayerController, type HlsPlayerControllerConfig} from '../hls/hls-player-controller';
 import {type LiveTimelineAnchor, type LoadMainMediaArgsType, type PlayerDomController} from '../player';
 import {ThumbnailTrack} from '../media';
 import {FileFormatType} from '../common';

@@ -26,13 +26,14 @@ import {
   type TextTrackState,
   type Track,
   type MediaRotationValue,
+  type VideoKeyframe,
+  type VideoKeyframeOptions,
 } from '../media';
 import {Observable} from 'rxjs';
 import type {Destroyable} from '../common/capabilities';
 import type {AudioTrackIdentifier, TextTrackIdentifier} from './player-controller';
 import type {BufferedTimeRange} from '../dom/dom-media-element';
 import type {Alert} from '../session/alerts-api';
-import type {VideoKeyframe, VideoKeyframeOptions} from '../tools/keyframe-extractor';
 
 export enum PlayerControllerEventType {
   PLAYER_CONTROLLER_MEDIA_ELEMENT_PLAYBACK_CHANGE = 'PLAYER_CONTROLLER_MEDIA_ELEMENT_PLAYBACK_CHANGE',
@@ -193,7 +194,10 @@ export interface LiveTimelineAnchor {
 
 export type MainMediaEssentialArgsHookType = (args: MainMediaUpdateableAttrs) => Observable<void>;
 export type LoadMainMediaArgsType = {
-  url: string;
+  /**
+   * Main media url, `undefined` for main media without url (ie. slate with {@link SourceType.INTERNAL} source)
+   */
+  url?: string | undefined;
   loadOptions?: MainMediaLoadOptions | undefined;
   mainMediaEssentialArgsHook: MainMediaEssentialArgsHookType;
   tracksCreatedHook: (tracks: Track[]) => Observable<void>;
@@ -222,11 +226,17 @@ export interface PlayerController extends Destroyable {
 
   mediaTemporalConverter: MediaTemporalConverter | undefined;
 
-  videoElement: HTMLVideoElement;
+  /**
+   * Undefined for controllers that play virtual media without media element (ie. slate)
+   */
+  videoElement: HTMLVideoElement | undefined;
 
   textMediaCaptionsElement: HTMLElement;
 
   textImscElement: HTMLElement;
+
+  /** Element sidecar videos without own host element are mounted into, layered over main media. */
+  sidecarVideosElement: HTMLElement;
 
   loadMainMedia(args: LoadMainMediaArgsType): Observable<boolean>;
 
@@ -316,6 +326,18 @@ export interface PlayerController extends Destroyable {
   playbackRate: number;
   setPlaybackRate(playbackRate: number): Observable<void>;
 
+  /**
+   * Whether main media video element can't play at {@link playbackRate} - backwards, or faster than {@link SEEK_STEP_PLAYBACK_DEFAULTS.maxNativePlaybackRate}.
+   * Main media time then runs on controller clock, video element is paused and seeked in steps.
+   */
+  seekStepPlayback: boolean;
+
+  /**
+   * Enables or disables playback rates main media video element can't play at, they are enabled only while trick track is loaded.
+   * No-op for controllers not playing main media in seek steps at such playback rates.
+   */
+  setSeekStepPlaybackEnabled(enabled: boolean): void;
+
   mediaRotation: MediaRotationValue;
 
   // region audio
@@ -349,6 +371,9 @@ export interface PlayerDomController {
   textMediaCaptionsElement: HTMLElement;
 
   textImscElement: HTMLElement;
+
+  /** Element sidecar videos without own host element are mounted into, layered over main media. */
+  sidecarVideosElement: HTMLElement;
 
   resetMainMediaVideoElement(): void;
 

@@ -15,20 +15,24 @@
  */
 
 import {type BaseMainMediaArgs, type MainMedia, type MainMediaState, MainMediaType} from './main-media';
-import {HlsAudio, type HlsAudioState, HlsMainMedia, type HlsMainMediaState, HlsTextTrack, type HlsTextTrackState, HlsVideo, type HlsVideoState} from '../hls';
-import {type Source, SourceFactory, type SourceState, SourceType, TrackSource, type TrackSourceState, UrlSource, type UrlSourceState} from '../source';
+import {HlsAudio, type HlsAudioState, HlsMainMedia, type HlsMainMediaState, HlsTextTrack, type HlsTextTrackState, HlsTrack, HlsVideo, type HlsVideoState} from '../hls';
+import {InternalSource, type InternalSourceState, type Source, SourceFactory, type SourceState, SourceType, TrackSource, type TrackSourceState, UrlSource, type UrlSourceState} from '../source';
 import {type BaseTrackArgs, type Track, type TrackState, TrackType} from './track';
 import {Relation} from './relation';
 import type {BaseMediaEntityArgs, MediaEntityState} from './media-entity';
 import {isNullOrUndefined} from '../util/util-functions';
-import {Mp4Audio, Mp4MainMedia, Mp4Video} from '../mp4';
+import {Mp4Audio, Mp4MainMedia, Mp4Track, Mp4Video} from '../mp4';
 import {AudioMainMedia} from '../audio/audio-file-main-media';
 import {TamsMainMedia, type TamsMainMediaState} from '../tams/tams-main-media';
+import {SlateMainMedia} from '../slate/slate-main-media';
+import {FrameImageTrack, type FrameImageTrackState} from '../frame-image/frame-image-track';
+import {TrickTrack} from '../frame-image/trick-track';
 import {Video, type VideoArgs, type VideoState, VideoType} from './video';
 import {Audio, type AudioArgs, AudioFile, type AudioState, AudioType} from './audio';
 import {MarkerTrack, type MarkerTrackArgs, type MarkerTrackState} from './marker-track';
 import {ThumbnailTrack, type ThumbnailTrackState} from './thumbnail-track';
 import {type TextTrackArgs, TextTrackFile, type TextTrackState, TextTrackType} from './text-track';
+import type {MediaContainerTrackArgs, MediaContainerTrackState} from './media-container-track';
 import {OpStage, type OpStageState} from '../common/op-stage';
 import type {TimedItemsTrackArgs, TimedItemsTrackState} from './timed-items-track';
 import type {Destroyable} from '../common/capabilities';
@@ -46,6 +50,8 @@ export class MediaDeserializer implements Destroyable {
         return this.createAudioFileMainMedia(state);
       case MainMediaType.TAMS:
         return this.createTamsMainMedia(state as TamsMainMediaState);
+      case MainMediaType.SLATE:
+        return this.createSlateMainMedia(state);
       default:
         throw new Error('niy');
     }
@@ -67,6 +73,12 @@ export class MediaDeserializer implements Destroyable {
 
   protected static createHlsMainMedia(state: HlsMainMediaState): HlsMainMedia {
     return new HlsMainMedia({
+      ...this.createBaseMainMediaArgs(state),
+    });
+  }
+
+  protected static createSlateMainMedia(state: MainMediaState): SlateMainMedia {
+    return new SlateMainMedia({
       ...this.createBaseMainMediaArgs(state),
     });
   }
@@ -107,6 +119,24 @@ export class MediaDeserializer implements Destroyable {
         return this.createThumbnailTrack(state as ThumbnailTrackState);
       case TrackType.TEXT_TRACK:
         return this.createTextTrack(state as TextTrackState);
+      case TrackType.MP4_TRACK:
+        return new Mp4Track({
+          ...this.createMediaContainerTrackArgs(state as MediaContainerTrackState),
+        });
+      case TrackType.HLS_TRACK:
+        return new HlsTrack({
+          ...this.createMediaContainerTrackArgs(state as MediaContainerTrackState),
+        });
+      case TrackType.FRAME_IMAGE_TRACK:
+        return new FrameImageTrack({
+          ...this.createMediaContainerTrackArgs(state as MediaContainerTrackState),
+          frameImages: (state as FrameImageTrackState).frameImages,
+        });
+      case TrackType.TRICK_TRACK:
+        return new TrickTrack({
+          ...this.createMediaContainerTrackArgs(state as MediaContainerTrackState),
+          frameImages: (state as FrameImageTrackState).frameImages,
+        });
       default:
         throw new Error('niy -> ' + state.trackType);
     }
@@ -209,6 +239,17 @@ export class MediaDeserializer implements Destroyable {
     };
   }
 
+  protected static createMediaContainerTrackArgs(state: MediaContainerTrackState): MediaContainerTrackArgs {
+    return {
+      ...this.createBaseTrackArgs(state),
+      url: state.url,
+      duration: state.duration,
+      cutStartTime: state.cutStartTime,
+      cutEndTime: state.cutEndTime,
+      playerStartTime: state.playerStartTime,
+    };
+  }
+
   protected static createTextTrackArgs(state: TextTrackState): TextTrackArgs {
     return {
       ...this.createBaseTimedItemsTrackArgs(state),
@@ -237,6 +278,8 @@ export class MediaDeserializer implements Destroyable {
         return UrlSource.fromState(state as UrlSourceState);
       case SourceType.TRACK:
         return TrackSource.fromState(state as TrackSourceState);
+      case SourceType.INTERNAL:
+        return InternalSource.fromState(state as InternalSourceState);
       default:
         throw new Error('niy');
     }

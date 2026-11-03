@@ -30,6 +30,7 @@ import type {ScrubberStyle} from './scrubber/scrubber';
 import type {LiveEdgeOverlayStyle} from './live/live-edge-overlay';
 import type {EvictedRegionOverlayStyle} from './live/evicted-region-overlay';
 import type {VerticalScrollOptions} from './vertical-scroll';
+import type {PlayerLiveState} from '../player';
 
 export type ConfigAndStyle<C, S> = Partial<C> & {style?: Partial<S>};
 
@@ -52,10 +53,26 @@ export enum TimelineEventType {
 }
 
 export interface TimelineState {
-  /** Whether the timeline is currently rendering live media. When false, {@link liveExtentEnd} is meaningless. */
+  /** Whether the timeline is currently rendering live media. When false, the other live-only fields are meaningless. */
   isLive: boolean;
   /** Right edge of the live coordinate domain (media-element-absolute time), including any reserved locked region. */
   liveExtentEnd: number;
+  /**
+   * The buffer/slack amount (seconds) actually reserved past the live edge as of the last time it
+   * was resolved — the static {@link TimelineConfig.liveEdgeBufferSpace} when no {@link
+   * TimelineConfig.liveEdgeBufferSpaceUpdate} is configured (or it hasn't produced a value yet), or
+   * whatever {@link TimelineConfig.liveEdgeBufferSpaceUpdate} last resolved to otherwise. Unlike the
+   * static config value, this can change over the life of the timeline. `undefined` when neither is
+   * configured (no buffer reserved at all).
+   */
+  liveEdgeBufferSpace: number | undefined;
+  /**
+   * How much of {@link liveEdgeBufferSpace} is still unconsumed right now — the gap between {@link
+   * liveExtentEnd} and the current live edge. Shrinks as manifest growth is absorbed without a
+   * reflow, and resets back to the full {@link liveEdgeBufferSpace} on the next reflow. `undefined`
+   * when {@link liveEdgeBufferSpace} isn't configured or the timeline isn't live.
+   */
+  liveEdgeBufferSpaceAvailable: number | undefined;
 }
 
 export interface TimelineEventData extends Serializable {
@@ -153,7 +170,22 @@ export interface TimelineConfig {
   zoomScaleWheel: number;
 
   zoomBaseline: number;
-  zoomMax: number;
+
+  /**
+   * Defines the maximal timeline zoom value. When undefined or set to Infinity,
+   * maximal zoom restriction is disabled.
+   */
+  zoomMax?: number;
+
+  /**
+   * Live mode only. A live reflow whose natural (pixels-per-second-preserving) width would exceed
+   * {@link zoomMax} would otherwise just get pinned at {@link zoomMax} and stay wedged there for the
+   * rest of the stream, since every further reflow keeps demanding an even wider width, always
+   * re-clamped to the same max. When that happens, the zoom instead resets to this percentage — a
+   * usable zoom level rather than staying pinned at an increasingly meaningless max. Clamped down to
+   * {@link zoomMax} itself if a custom `zoomMax` is configured below this value.
+   */
+  liveZoomMaxOverflowFallback: number;
 
   layoutEasingDuration: number;
   zoomEasingDuration: number;
@@ -161,6 +193,17 @@ export interface TimelineConfig {
 
   scrubberClickSeek: boolean;
   timecodeClickEdit: boolean;
+
+  /**
+   * Initial visibility of the description (left) pane. Can be changed later with {@link TimelineApi.setDescriptionPaneVisible}.
+   */
+  descriptionPaneVisible: boolean;
+
+  /**
+   * Whether live button is shown below the timecode while live main media is loaded. Its indicator is lit while playback is pinned to the live edge,
+   * clicking it seeks to the live edge. Defaults to `false`.
+   */
+  liveButtonVisible: boolean;
 
   /**
    * Live mode only. Seconds of "excess space" manually reserved as a locked/unreachable region past the
@@ -173,8 +216,45 @@ export interface TimelineConfig {
    * which alone makes the timeline reflow-eligible — this option only governs whether the *extent*
    * side of that reflow also grows, not whether a reflow happens at all. {@link liveReflowCadence} is
    * the setting that actually throttles reflow frequency for CONTINUOUS streams.
+   *
+   * Only ever governs the *first* reservation (iteration `0`, seeded the moment the timeline first
+   * observes live state) when {@link liveEdgeBufferSpaceUpdate} is also configured — see that option
+   * for how the reservation is resolved afterwards, and for the case where this is left undefined but
+   * {@link liveEdgeBufferSpaceUpdate} is set.
    */
   liveEdgeBufferSpace?: number;
+
+  /**
+   * Live mode only. Dynamically resolves a fresh buffer/slack amount for {@link liveEdgeBufferSpace}
+   * once the currently-reserved amount's slack is actually exhausted, instead of reserving one fixed
+   * amount for the life of the stream. Either a plain number (the same reservation reused every
+   * time it's resolved), or a function `(playerLiveState, currentTime, iteration) => number` resolved
+   * fresh each time — `iteration` is a 0-based counter of how many times the reservation has been
+   * resolved so far (incremented on every resolution, including this one), so the function can
+   * grow/shrink the reservation over the life of the stream, e.g. by iteration count or by
+   * `playerLiveState`/`currentTime`.
+   *
+   * Deliberately **not** consulted on every manifest update/growth check — only when there's a fresh
+   * reservation to make: the initial one (iteration `0`, seeded the moment the timeline first
+   * observes live state) and, from then on, only once growth has consumed all of the previously
+   * reserved slack (iteration `1`, `2`, ...). While slack from the current reservation remains, that
+   * growth is absorbed silently and this option isn't consulted at all — see {@link
+   * liveEdgeBufferSpace} for what "slack" means.
+   *
+   * Precedence, per resolution:
+   * - Iteration `0` (the initial reservation): {@link liveEdgeBufferSpace} is used when configured;
+   *   only when it's `undefined` does this option get consulted for the very first value.
+   * - Every later iteration (each time the current reservation's slack runs out): this option is
+   *   consulted first — a number is used as-is, a function is called with the current
+   *   `(playerLiveState, currentTime, iteration)`. Only when this option is undefined, or its
+   *   function returns `undefined`, does the static {@link liveEdgeBufferSpace} apply instead — so a
+   *   plain `liveEdgeBufferSpace` with no update function behaves exactly as before: one fixed
+   *   reservation, unchanged for the life of the stream.
+   *
+   * If neither option is configured, there is no reserved buffer at all — the historical default
+   * behavior described in {@link liveEdgeBufferSpace}.
+   */
+  liveEdgeBufferSpaceUpdate?: number | ((playerLiveState: PlayerLiveState, currentTime: number, iteration: number) => number);
 
   /**
    * Live mode only. Minimum accumulated growth of `liveEdgeDuration` (seconds) required between

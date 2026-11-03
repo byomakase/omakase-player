@@ -16,9 +16,11 @@
 
 @use 'player-chroming/dropdown';
 @use 'player-chroming/audio-router';
+@use 'player-chroming/marker-bar';
 @use 'player-chroming/vu-meter';
 @use 'player-chroming/inline-edit';
 @use 'player-chroming/timecode-edit';
+@use 'control-bar';
 @use 'timeline';
 
 @font-face {

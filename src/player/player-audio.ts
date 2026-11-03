@@ -16,12 +16,19 @@
 
 import type {Destroyable} from '../common/capabilities';
 import {type PlayerController} from './player-controller-api';
-import {Audio, type AudioState, type AudioUpdateableAttrs, type MainMediaState, type TrackState, TrackType} from '../media';
+import {Audio, type AudioState, type AudioUpdateableAttrs, type MainMediaState, MainMediaType, type TrackState, TrackType} from '../media';
 import {ObserverBreaker} from '../common/observer-breaker';
 import {concat, filter, forkJoin, merge, Observable, observeOn, queueScheduler, Subject, take, takeUntil} from 'rxjs';
 import {type PlayerAudioApi, type PlayerAudioEvent, PlayerAudioEventType, type PlayerAudioInternalApi, PlayerAudioMode, type PlayerAudioState} from './player-audio-api';
 import {PlayerTrackEventType} from './player-track';
-import {type AudioHandlerApi, AudioHandlerEventType, DisabledMediaElementSourcePlayerAudioHandler, GainPlayerAudioHandler, MediaElementPlayerAudioHandler, type PlayerAudioHandlerApi,} from '../audio/audio-handler';
+import {
+  type AudioHandlerApi,
+  AudioHandlerEventType,
+  DisabledMediaElementSourcePlayerAudioHandler,
+  GainPlayerAudioHandler,
+  MediaElementPlayerAudioHandler,
+  type PlayerAudioHandlerApi,
+} from '../audio/audio-handler';
 import {CryptoUtil} from '../util/crypto-util';
 import {StringUtil} from '../util/string-util';
 import {SessionStore} from '../session';
@@ -213,7 +220,10 @@ export class PlayerAudioInternal implements PlayerAudioInternalApi, Destroyable 
     [PlayerAudioType.SIDECAR]: PlayerAudioHandlerApi[];
   };
 
-  private _playerTracksRequestingBuffering: Set<PlayerSidecarAudioTrack> = new Set<PlayerSidecarAudioTrack>();
+  private _playerTracksRequestingBuffering: Set<PlayerAudioTrack> = new Set<PlayerAudioTrack>();
+
+  /** Whether audio output is silenced while sidecar video covers main media, see {@link setOutputSuppressed} */
+  private _outputSuppressed = false;
 
   private _eventBreaker = new ObserverBreaker();
   private _destroyBreaker = new ObserverBreaker();
@@ -253,6 +263,9 @@ export class PlayerAudioInternal implements PlayerAudioInternalApi, Destroyable 
     [...this._playerTracks[PlayerAudioType.SIDECAR]].forEach((p) => {
       this._playerTracks[PlayerAudioType.SIDECAR].splice(this._playerTracks[PlayerAudioType.SIDECAR].indexOf(p), 1);
       this._handlers[PlayerAudioType.SIDECAR].splice(this._handlers[PlayerAudioType.SIDECAR].indexOf(p.playerAudioHandler), 1);
+
+      // removed track must not keep main media waiting
+      this.updateRequestingBuffering(p, false);
 
       const state = p.state;
       p.destroy();
@@ -313,13 +326,27 @@ export class PlayerAudioInternal implements PlayerAudioInternalApi, Destroyable 
     let outputAudioHandler = new GainPlayerAudioHandler(CryptoUtil.uuid());
     outputAudioHandler.setChannelCount(OmakaseAudioContextProvider.audioContext.destination.maxChannelCount); // the maximum number of channels that this hardware is capable of supporting
     outputAudioHandler.outputAudioNode.connect(OmakaseAudioContextProvider.audioContext.destination);
+    outputAudioHandler.setSuppressed(this._outputSuppressed);
 
     let createMainAudioHandler = () => {
       let playerAudioHandler: PlayerAudioHandlerApi;
-      if (playerController.createMediaElementSourceEnabled) {
-        playerAudioHandler = new MediaElementPlayerAudioHandler(CryptoUtil.uuid(), playerController.videoElement);
+      let videoElement = playerController.videoElement;
+
+      if (videoElement) {
+        if (playerController.createMediaElementSourceEnabled) {
+          playerAudioHandler = new MediaElementPlayerAudioHandler(CryptoUtil.uuid(), videoElement);
+        } else {
+          playerAudioHandler = new DisabledMediaElementSourcePlayerAudioHandler(CryptoUtil.uuid(), videoElement, outputAudioHandler);
+        }
       } else {
-        playerAudioHandler = new DisabledMediaElementSourcePlayerAudioHandler(CryptoUtil.uuid(), playerController.videoElement, outputAudioHandler);
+        if (mainMediaState.mainMediaType === MainMediaType.SLATE) {
+          // virtual media, main audio is silent but volume and routing stay operational
+          playerAudioHandler = new GainPlayerAudioHandler(CryptoUtil.uuid());
+        } else if (mainMediaState.mainMediaType === MainMediaType.FRAME_IMAGE) {
+          playerAudioHandler = new GainPlayerAudioHandler(CryptoUtil.uuid());
+        } else {
+          throw new Error('Could not resolve main audio handler');
+        }
       }
       // some browsers automatically set <video> element volume to last value set in previous sessions, lets reset it to default
       playerAudioHandler.setVolume(AUDIO_DEFAULTS.volume);
@@ -546,23 +573,7 @@ export class PlayerAudioInternal implements PlayerAudioInternalApi, Destroyable 
         .pipe(takeUntil(onUnloaded$))
         .pipe(takeUntil(this._eventBreaker.observer), takeUntil(this._destroyBreaker.observer))
         .subscribe((bufferingRequired) => {
-          let emitEvent = false;
-          if (bufferingRequired && !this._playerTracksRequestingBuffering.has(playerTrack)) {
-            this._playerTracksRequestingBuffering.add(playerTrack);
-            emitEvent = true;
-          } else if (!bufferingRequired && this._playerTracksRequestingBuffering.has(playerTrack)) {
-            this._playerTracksRequestingBuffering.delete(playerTrack);
-            emitEvent = true;
-          }
-
-          if (emitEvent) {
-            this._onEventQueue$.next({
-              type: PlayerAudioEventType.PLAYER_AUDIO_TRACKS_REQUESTING_BUFFERING_CHANGE,
-              data: {
-                playerAudioTracks: [...this._playerTracksRequestingBuffering.values()].map((p) => p.state),
-              },
-            });
-          }
+          this.updateRequestingBuffering(playerTrack, bufferingRequired);
         });
 
       playerTrack.playerAudioHandler.onEvent$
@@ -661,6 +672,28 @@ export class PlayerAudioInternal implements PlayerAudioInternalApi, Destroyable 
     return this._removeSidecarTrack(id);
   }
 
+  protected updateRequestingBuffering(playerTrack: PlayerAudioTrack, bufferingRequired: boolean) {
+    let emitEvent = false;
+    if (bufferingRequired && !this._playerTracksRequestingBuffering.has(playerTrack)) {
+      this._playerTracksRequestingBuffering.add(playerTrack);
+      emitEvent = true;
+    } else if (!bufferingRequired && this._playerTracksRequestingBuffering.has(playerTrack)) {
+      this._playerTracksRequestingBuffering.delete(playerTrack);
+      emitEvent = true;
+    }
+
+    if (emitEvent) {
+      this._onEventQueue$.next({
+        type: PlayerAudioEventType.PLAYER_AUDIO_TRACKS_REQUESTING_BUFFERING_CHANGE,
+        data: {
+          playerAudioTrack: playerTrack.state,
+          bufferingRequired: bufferingRequired,
+          playerAudioTracks: [...this._playerTracksRequestingBuffering.values()].map((p) => p.state),
+        },
+      });
+    }
+  }
+
   protected _removeSidecarTrack(id: TrackState['id']): Observable<void> {
     return new Observable<void>((observer) => {
       const playerTrack = this._playerTracks[PlayerAudioType.SIDECAR].find((p) => p.trackState.id === id);
@@ -673,6 +706,9 @@ export class PlayerAudioInternal implements PlayerAudioInternalApi, Destroyable 
       const doRemove = () => {
         this._playerTracks[PlayerAudioType.SIDECAR].splice(this._playerTracks[PlayerAudioType.SIDECAR].indexOf(playerTrack), 1);
         this._handlers[PlayerAudioType.SIDECAR].splice(this._handlers[PlayerAudioType.SIDECAR].indexOf(playerTrack.playerAudioHandler), 1);
+
+        // removed track must not keep main media waiting
+        this.updateRequestingBuffering(playerTrack, false);
 
         const state = playerTrack.state;
         playerTrack.destroy();
@@ -801,6 +837,15 @@ export class PlayerAudioInternal implements PlayerAudioInternalApi, Destroyable 
       throw new Error(`Audio not set up`);
     }
     return handler;
+  }
+
+  /**
+   * Silences audio output - main media and sidecar audio - without changing its muted state, while sidecar video covers main media.
+   * Sidecar video plays its own audio, it is not routed through audio output.
+   */
+  setOutputSuppressed(suppressed: boolean): void {
+    this._outputSuppressed = suppressed;
+    this._handlers[PlayerAudioType.OUTPUT]?.setSuppressed(suppressed);
   }
 
   get muted(): boolean {

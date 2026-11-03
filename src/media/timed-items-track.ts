@@ -119,10 +119,17 @@ export class TimedItemTemporalUtil {
     }
   }
 
-  static compareByStartTime(a: TimedItemTemporal, b: TimedItemTemporal): number {
+  static compareByTime(a: TimedItemTemporal, b: TimedItemTemporal): number {
     const aStart = TimedItemTemporalUtil.extractStartTime(a);
     const bStart = TimedItemTemporalUtil.extractStartTime(b);
-    if (aStart === undefined && bStart === undefined) return 0;
+    if (aStart === undefined && bStart === undefined) {
+      const aEnd = TimedItemTemporalUtil.extractEndTime(a);
+      const bEnd = TimedItemTemporalUtil.extractEndTime(b);
+      if (aEnd === undefined && bEnd === undefined) return 0;
+      if (aEnd === undefined) return -1;
+      if (bEnd === undefined) return 1;
+      return aEnd - bEnd;
+    }
     if (aStart === undefined) return -1;
     if (bStart === undefined) return 1;
     return aStart - bStart;
@@ -449,7 +456,7 @@ export abstract class BaseTimedItemsTrack<T extends TimedItem, TM extends T & Mu
   }
 
   private sortTimedItemsSorted(): void {
-    this._timedItemsSorted.sort((a, b) => TimedItemTemporalUtil.compareByStartTime(a.temporal, b.temporal));
+    this._timedItemsSorted.sort((a, b) => TimedItemTemporalUtil.compareByTime(a.temporal, b.temporal));
   }
 
   private matchesTime(temporal: TimedItemTemporal, time: number): boolean {
@@ -581,7 +588,9 @@ export abstract class BaseTimedItemsTrack<T extends TimedItem, TM extends T & Mu
     if (timedItems.length > 0) {
       this._onEvent$.next({
         type: TrackEventType.TRACK_UPDATING,
-        data: {},
+        data: {
+          trackState: this.state,
+        },
       });
 
       timedItems.forEach((timedItem) => {

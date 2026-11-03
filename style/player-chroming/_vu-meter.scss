@@ -19,7 +19,7 @@ omakase-vu-meter {
   --padding: var(--omakase-vu-meter-padding, 5px);
   --background-color: var(--omakase-vu-meter-background-color, transparent);
   --label-background-color: var(--omakase-vu-meter-label-background-color, transparent);
-  --label-color: var(--omakase-vu-meter-label-color, #333);
+  --label-color: var(--omakase-vu-meter-label-text-color, #333);
   --label-gap: var(--omakase-vu-meter-label-gap, 5px);
   --label-width: var(--omakase-vu-meter-label-width, 20px);
   --label-height: var(--omakase-vu-meter-label-height, 20px);

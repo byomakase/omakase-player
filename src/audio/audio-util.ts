@@ -18,6 +18,9 @@ import type {AudioRoutingConnection} from './audio-router';
 import {AuthConfig, type AuthenticationData} from '../common/authentication';
 import {bufferCount, catchError, concatMap, defer, forkJoin, from, map, type Observable, of, toArray} from 'rxjs';
 import {httpGetArrayBuffer} from '../http';
+import {AudioObservationDownsampleStrategy} from '../media';
+import {OmpError} from '../types';
+import Decimal from 'decimal.js';
 
 export class AudioUtil {
   static resolveDefaultAudioRouting(inputsNumber: number, outputsNumber: number): AudioRoutingConnection[] {
@@ -102,9 +105,7 @@ export class AudioUtil {
     const batchSize = maxConcurrentRequests ?? 20;
     return from(urls).pipe(
       bufferCount(batchSize),
-      concatMap((batch) =>
-        forkJoin(batch.map((url) => defer(() => this.fetchAudioFile(url, authentication))))
-      ),
+      concatMap((batch) => forkJoin(batch.map((url) => defer(() => this.fetchAudioFile(url, authentication))))),
       toArray(),
       map((batches) => this.mergeBuffers(batches.flat()))
     );
@@ -119,6 +120,27 @@ export class AudioUtil {
     );
   }
 
+  static downsample(values: number[], downsampleStrategy: AudioObservationDownsampleStrategy): number {
+    if (!values.length) {
+      return 0;
+    }
+
+    switch (downsampleStrategy) {
+      case AudioObservationDownsampleStrategy.AVG:
+        return values.reduce((sum, val) => sum + val, 0) / values.length;
+      case AudioObservationDownsampleStrategy.MAX_ABS:
+        return values.reduce((best, v) => (Math.abs(v) > Math.abs(best) ? v : best), values[0]!);
+      case AudioObservationDownsampleStrategy.MIN_ABS:
+        return values.reduce((best, v) => (Math.abs(v) < Math.abs(best) ? v : best), values[0]!);
+      default:
+        throw new OmpError(`Unknown audio waveform downsampling strategy: ${downsampleStrategy}`);
+    }
+  }
+
+  static dbFromFloat(floatVal: number): number {
+    return this.getBaseLog(10, floatVal) * 20;
+  }
+
   private static mergeBuffers(buffers: ArrayBuffer[]): ArrayBuffer {
     const totalLength = buffers.reduce((acc, buf) => acc + buf.byteLength, 0);
     const mergedBuffer = new Uint8Array(totalLength);
@@ -130,5 +152,9 @@ export class AudioUtil {
     }
 
     return mergedBuffer.buffer;
+  }
+
+  private static getBaseLog(x: number, y: number): number {
+    return Math.log(y) / Math.log(x);
   }
 }

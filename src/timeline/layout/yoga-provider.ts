@@ -50,7 +50,7 @@ export class YogaProvider {
         console.debug('[YogaProvider] yoga WASM loaded successfully');
       });
     } else {
-      console.debug('[YogaProvider] init() — yoga already loading, awaiting shared promise', new Error('second init() call stack').stack);
+      // console.debug('[YogaProvider] init() — yoga already loading, awaiting shared promise,', `${new Error('second init() call stack: ').stack}`.replace('Error: ', ''));
     }
     return from(YogaProvider._loadingPromise);
   }

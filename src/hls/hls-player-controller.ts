@@ -17,7 +17,7 @@
 import Hls, {ErrorDetails, Events as HlsEvents, type FragLoadedData, type HlsConfig, type ManifestParsedData, type MediaKeySessionContext, type MediaPlaylist} from 'hls.js';
 import Decimal from 'decimal.js';
 import {type AudioState, LiveMode, type MainMediaLoadOptions, type MainMediaState, type MainMediaUpdateableAttrs, type TextTrackState} from '../media';
-import {combineLatest, filter, fromEvent, interval, map, Observable, of, Subject, type Subscription, switchMap, take, takeUntil, timeout} from 'rxjs';
+import {combineLatest, filter, fromEvent, interval, map, Observable, of, Subject, type Subscription, switchMap, take, takeUntil, throwError, timeout} from 'rxjs';
 import {errorCompleteObserver, nextCompleteObserver} from '../util/rxjs-util';
 import {HlsJsFactory} from './hls-js-factory';
 import {createHlsPlaylistAlignLoader, resolvePlaylistMediaSequence} from './hls-playlist-align-loader';
@@ -29,7 +29,7 @@ import {HlsAudio, type HlsAudioState, HlsTextTrack, type HlsTextTrackState, HlsV
 import {type AudioTrackIdentifier, BasePlayerController, type PlayerControllerConfig, type TextTrackIdentifier} from '../player/player-controller';
 import {z} from 'zod';
 import {BrowserProvider} from '../common/browser-provider';
-import {type LiveTimelineAnchor, type LoadMainMediaArgsType, PlayerControllerEventType, type PlayerDomController, type PlayerLiveState, toMediaLiveState} from '../player';
+import {type LiveTimelineAnchor, type LoadMainMediaArgsType, PlayerControllerEventType, type PlayerDomController, type PlayerLiveState, toMediaLiveState} from '../player/player-controller-api';
 import {UrlSource} from '../source';
 import {AuthConfig, FileFormatType, MediaTemporalFormat, type MediaTemporalFormatValueMap} from '../common';
 import {StringUtil} from '../util/string-util';
@@ -102,6 +102,11 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
   loadMainMedia(args: LoadMainMediaArgsType): Observable<boolean> {
     // console.debug(`loadMainMedia args: `, args);
 
+    let url = args.url;
+    if (!url) {
+      return throwError(() => new Error(`Main media url not provided`));
+    }
+
     this._loadBreaker.break();
 
     this._wasLive = false;
@@ -112,7 +117,6 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
 
     this.unwireEvents();
 
-    let url = args.url;
     let loadOptions = args.loadOptions;
 
     return new Observable<boolean>((rootObserver) => {

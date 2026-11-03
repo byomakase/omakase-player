@@ -24,7 +24,7 @@ import type {ConfigAndStyle} from '../timeline-api';
 import {omitKeys} from '../../util/object-util';
 import {KonvaFactory} from '../konva/konva-factory';
 import {TIMELINE} from '../../constants';
-import  {type OmpProvider} from '../../omp-provider';
+import {type OmpProvider} from '../../omp-provider';
 import {affectsStyledElement, type StyledElementWithId, Ui} from '../../ui';
 import {animate} from '../animation-util';
 import {CryptoUtil} from '../../util/crypto-util';
@@ -50,6 +50,7 @@ export interface ZoomScrollbarConfig {
   x: number;
   y: number;
   width: number;
+  minHandleWidth: number;
   zoomMax: number;
   scrollStepNumberOfDivisions: number;
   scrollEasingDuration: number;
@@ -59,6 +60,7 @@ const configDefault: ZoomScrollbarConfig = {
   x: 0,
   y: 0,
   width: 0,
+  minHandleWidth: 50,
   zoomMax: 2000,
   scrollStepNumberOfDivisions: 10,
   scrollEasingDuration: 100,
@@ -132,7 +134,7 @@ export class ZoomScrollbar extends BaseKonvaComponent2<Konva.Group> implements O
       classes: [this._ui.resolveStyleClass('Scrollbar')],
     };
     if (this._providedStyle) {
-      this.setStyle(this._providedStyle)
+      this.setStyle(this._providedStyle);
     }
 
     this._style = this._ui.resolveStyle<ZoomScrollbarStyle>(this._styledElement) as ZoomScrollbarStyle;
@@ -457,11 +459,18 @@ export class ZoomScrollbar extends BaseKonvaComponent2<Konva.Group> implements O
   }
 
   private calculateHandleBarWidthFromZoomRatioPercent(): number {
-    return this._group.width() > 0 ? new Decimal(this._group.width()).mul(100).div(this._config.zoomMax).toNumber() : 0;
+    return this._group.width() > 0 ? new Decimal(this._group.width()).minus(this._config.minHandleWidth).mul(100).div(this._config.zoomMax).plus(this._config.minHandleWidth).toNumber() : 0;
   }
 
   getZoomPercent(): number {
-    return this._group.width() === this._handleBar.width() ? 100 : new Decimal(this._group.width()).mul(100).div(this._handleBar.width()).toNumber();
+    if (this._group.width() === this._handleBar.width()) {
+      return 100;
+    }
+
+    let handleBarWidth = new Decimal(this._handleBar.width());
+    let zoom = new Decimal(this._group.width()).minus(this._config.minHandleWidth).mul(100).div(handleBarWidth.minus(this._config.minHandleWidth)).toNumber();
+
+    return zoom > this._config.zoomMax ? this._config.zoomMax : zoom;
   }
 
   getScrollHandlePercent(): number {
@@ -475,10 +484,21 @@ export class ZoomScrollbar extends BaseKonvaComponent2<Konva.Group> implements O
   }
 
   updateScrollHandle(scrollable: ScrollableHorizontally) {
-    let horizontals = scrollable.getScrollHandleHorizontals(this._group.width());
+    let groupWidth = this._group.width();
+    if (isNaN(groupWidth)) {
+      return;
+    }
+    let horizontals = scrollable.getScrollHandleHorizontals(groupWidth);
+
+    let newWidth = Math.max(new Decimal(groupWidth).minus(this._config.minHandleWidth).mul(horizontals.width).div(groupWidth).plus(this._config.minHandleWidth).toNumber(), this._minHandleBarWidth);
+
+    let realMaxX = new Decimal(groupWidth).minus(horizontals.width).toNumber();
+    let newMaxX = new Decimal(groupWidth).minus(newWidth).toNumber();
+    let newX = realMaxX > 0 ? new Decimal(horizontals.x).div(realMaxX).mul(newMaxX).toNumber() : 0;
 
     this._handleBar.setAttrs({
-      ...horizontals,
+      x: newX,
+      width: newWidth,
     });
 
     this.syncLeftRightHandles();

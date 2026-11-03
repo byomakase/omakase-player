@@ -48,6 +48,7 @@ export class TimelineScrollbar extends ScrollbarFlexItem {
   private _timeline: TimelineImpl;
   private _scrollbar: ZoomScrollbar;
 
+  private _timelineScrollInProgress = false;
   private _timelineZoomInProgress = false;
 
   protected _destroyBreaker = new ObserverBreaker();
@@ -62,7 +63,7 @@ export class TimelineScrollbar extends ScrollbarFlexItem {
       .pipe(filter((p) => p.type === TimelineEventType.TIMELINE_SCROLL))
       .pipe(takeUntil(this._destroyBreaker.observer))
       .subscribe((event) => {
-        if (!this._timelineZoomInProgress) {
+        if (!this._timelineZoomInProgress && !this._timelineScrollInProgress) {
           this._scrollbar.updateScrollHandle(this._timeline);
         }
       });
@@ -71,7 +72,9 @@ export class TimelineScrollbar extends ScrollbarFlexItem {
       next: (event) => {
         switch (event.type) {
           case ZoomScrollbarEventType.SCROLLBAR_SCROLL:
+            this._timelineScrollInProgress = true;
             this._timeline.scrollHorizontallyToPercent(this._scrollbar.getScrollHandlePercent());
+            this._timelineScrollInProgress = false;
             break;
           case ZoomScrollbarEventType.SCROLLBAR_ZOOM:
             this._timelineZoomInProgress = true;

@@ -11,6 +11,7 @@ Omakase Player is an open source JavaScript player for building frame accurate v
 - [Marker List Component](https://api.player.byomakase.org/interfaces/MarkerListApi.html) as Segments visualization and control surface organized into cut-lists
 - [Tools](https://api.player.byomakase.org/interfaces/OmakaseToolsApi.html) and [Alerts](https://api.player.byomakase.org/interfaces/AlertsApi.html) as helpers for various general utils and interaction with end users with alerts
 - [VU Meter](https://api.player.byomakase.org/interfaces/VuMeterApi.html) as Volume levels visualization tool
+- [Control Bar](https://api.player.byomakase.org/interfaces/ControlBarApi.html) as a control surface that is detached from the Player Component
 
 > For versions prior to v1.0.0 please refer to [v0.25.4 API documentation](https://api.player.byomakase.org/archive/0.25.4/index.html)
 
@@ -123,6 +124,17 @@ let omakasePlayer = new OmakasePlayer({
 ```
 
 More information about Player Chroming customization and specific theme configurations is available in [Player Chroming](https://api.player.byomakase.org/documents/ChromingApi.README.html) manual.
+
+Strings rendered by the player and its chroming (such as the live indicator button text) can be localized with the `localization` property. It is read-only — set once at construction and not changeable afterwards. Only known keys are accepted; any other key is ignored, and any key left unset falls back to its default value.
+
+```javascript
+let omakasePlayer = new OmakasePlayer({
+  chromingTheme: ChromingTheme.OMAKASE,
+  localization: {
+    live: 'We are live!',
+  },
+});
+```
 
 ## Player API
 
@@ -296,6 +308,19 @@ omakasePlayer.player.onEvent$.pipe(filter((event) => event.type === PlayerEventT
 ```
 
 Full `liveState` payload is available in API Reference Docs.
+
+## Localization API
+
+Complete list of Localization API methods is available in API Reference Docs. Exposed at the top level as `omakasePlayer.localization`, alongside `omakasePlayer.player` and `omakasePlayer.chroming`.
+
+#### `getLocalization(key: LocalizationKey): string`
+
+Fetches the localized string for a given key, falling back to its default value if no override was configured via `localization` (see [Player Initialization](#player-initialization)).
+
+```javascript
+const liveLabel = omakasePlayer.localization.getLocalization('live');
+console.log(liveLabel); // 'LIVE', or the configured override
+```
 
 ## Audio API
 
@@ -502,6 +527,8 @@ let routerVisualizationComponent = new RouterVisualization(
 );
 ```
 
+For detailed styling variables please check [Audio Router](https://api.player.byomakase.org/documents/OmakasePlayer.STYLING.html#audio-router) in Styling documentation.
+
 ### Audio Effects
 
 Omakase Player supports applying audio effects on main, sidecar, and output audio handlers. Effects are added using `AudioEffectDef` interface that Omakase Player instantiates into corresponding specific `AudioEffect` and includes it into the handlers audio chain. To use effects not provided by Omakase Player, you need to register the factory functions that will convert effect definitions to concrete effect objects. User never creates specific effects, only their definitions.
@@ -593,26 +620,7 @@ omakasePlayer.player.audio.getHandler(PlayerAudioType.MAIN).effects.setEffectGra
 
 ## Styling
 
-Omakase Player elements (including media chrome elements) can be styled with CSS/SCSS. The CSS structure is shown below.
-
-![Omakase Player CSS structure](https://api.player.byomakase.org/static/styling-diagram.svg)
-
-### Sizing
-
-The player's dimensions can be controlled with three CSS custom properties set on the player's container element or any ancestor:
-
-| CSS Variable                    | Description                                                                                                                                        |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--omakase-player-width`        | Sets the width of the player. Accepts any valid CSS length value (e.g. `800px`, `100%`).                                                           |
-| `--omakase-player-height`       | Sets the height of the player. Accepts any valid CSS length value (e.g. `450px`, `50vh`).                                                          |
-| `--omakase-player-aspect-ratio` | Sets the aspect ratio of the player (e.g. `16 / 9`, `4 / 3`). When not specified, the aspect ratio is derived automatically from the loaded media. |
-
-```css
-#omakase-player {
-  --omakase-player-width: 100%;
-  --omakase-player-aspect-ratio: 16 / 9;
-}
-```
+For detailed styling structure and variables please check [Styling](https://api.player.byomakase.org/documents/OmakasePlayer.STYLING.html#styling).
 
 ## Text API
 
@@ -860,6 +868,8 @@ const nearest = track.findNearestTimedItem(45);
 
 The **timeline** is an interactive canvas-based interface. It renders a playhead, a scrubber, optional thumbnails, and any number of **timeline lanes** that visualise track data.
 
+For detailed styling variables please check [Timeline](https://api.player.byomakase.org/documents/OmakasePlayer.STYLING.html#timeline) in Styling documentation.
+
 ### Creating a timeline
 
 Call `createTimeline` on the player instance. It returns an `Observable<TimelineApi>` that emits once the timeline canvas has been mounted.
@@ -893,7 +903,24 @@ omakasePlayer
   });
 ```
 
-The created timeline is also accessible at `omakasePlayer.timeline` after creation.
+Created timelines are accessible via `omakasePlayer.timelines` and `omakasePlayer.getTimeline(id)`. The `omakasePlayer.timeline` getter still returns the first created timeline but is deprecated.
+
+### Multiple timelines
+
+Several timelines can exist at the same time, all driven by the same player. Each timeline is appended to the end of the DOM element given by `htmlElementId`, so timelines can share an element (stacked in creation order) or live in separate elements.
+
+```ts
+omakasePlayer.createTimeline({htmlElementId: 'timeline-overview'}).subscribe((overview) => {
+  // ...
+});
+
+omakasePlayer.createTimeline({htmlElementId: 'timeline-detail'}).subscribe((detail) => {
+  omakasePlayer.timelines; // [overview, detail]
+  omakasePlayer.getTimeline(detail.id); // detail
+});
+```
+
+Destroying a timeline with `timeline.destroy()` removes its DOM from the host element and removes it from `omakasePlayer.timelines`; other timelines in the same element are not affected. A timeline lane instance can belong to only one timeline, so create a separate lane for each timeline.
 
 ### Configuration
 
@@ -901,7 +928,7 @@ The created timeline is also accessible at `omakasePlayer.timeline` after creati
 
 | Field                               | Type      | Default              | Description                                                                                                                  |
 | ----------------------------------- | --------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `htmlElementId`                     | `string`  | `'omakase-timeline'` | Id of the DOM element the timeline canvas mounts into.                                                                       |
+| `htmlElementId`                     | `string`  | `'omakase-timeline'` | Id of the DOM element the timeline is appended to.                                                                           |
 | `scrubberSnapArea`                  | `number`  | `5`                  | Pixel distance from the playhead within which the hover scrubber snaps to it.                                                |
 | `playheadDragScrollMaxSpeedAfterPx` | `number`  | `100`                | Pixel distance past the viewport edge, while dragging the playhead, beyond which auto-scroll speed is capped at its maximum. |
 | `zoomWheelEnabled`                  | `boolean` | `true`               | Enables zooming the timeline with the mouse wheel.                                                                           |
@@ -914,6 +941,7 @@ The created timeline is also accessible at `omakasePlayer.timeline` after creati
 | `scrollEasingDuration`              | `number`  | `200`                | Default easing duration in milliseconds for `scrollToEased`/`scrollToPlayheadEased`.                                         |
 | `scrubberClickSeek`                 | `boolean` | `true`               | Clicking the timecode axis seeks playback to that position.                                                                  |
 | `timecodeClickEdit`                 | `boolean` | `true`               | Double-clicking the CTI timecode display toggles it into an editable state (see `toggleTimecodeEdit()`).                     |
+| `descriptionPaneVisible`            | `boolean` | `true`               | Initial visibility of the description (left) pane. Toggle later with `setDescriptionPaneVisible()`.                          |
 
 ```ts
 omakasePlayer.createTimeline({
@@ -1555,6 +1583,8 @@ const markerList = new MarkerList(
 );
 ```
 
+For detailed styling variables please check [Marker List](https://api.player.byomakase.org/documents/OmakasePlayer.STYLING.html#marker-list) in Styling documentation.
+
 ### Events
 
 All events are emitted via the `onEvent$` observable. The following event types are available:
@@ -1698,32 +1728,7 @@ Default `levelColors` for `LED` theme:
 
 ### Styling
 
-The VU Meter component exposes the following CSS variables for visual customization:
-
-| CSS Variable                                   | Default       | Description                                                                                        |
-| ---------------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------- |
-| `--omakase-vu-meter-font-size`                 | `12px`        | Font size for channel labels and scale text                                                        |
-| `--omakase-vu-meter-padding`                   | `5px`         | Padding around the entire VU meter component                                                       |
-| `--omakase-vu-meter-background-color`          | `transparent` | Background color of the entire VU meter component                                                  |
-| `--omakase-vu-meter-label-background-color`    | `transparent` | Background color of the area behind channel labels                                                 |
-| `--omakase-vu-meter-label-color`               | `#333`        | Text color of the channel labels                                                                   |
-| `--omakase-vu-meter-label-gap`                 | `5px`         | Gap between each channel label and its level bar                                                   |
-| `--omakase-vu-meter-label-width`               | `20px`        | Width of the channel label area (horizontal orientation only)                                      |
-| `--omakase-vu-meter-label-height`              | `20px`        | Height of the channel label area (vertical orientation only)                                       |
-| `--omakase-vu-meter-bar-size`                  | `16px`        | Bar width in vertical orientation; bar height in horizontal orientation                            |
-| `--omakase-vu-meter-bar-gap`                   | `5px`         | Gap between adjacent channel bars                                                                  |
-| `--omakase-vu-meter-bars-padding`              | `0px`         | Padding around the bar area                                                                        |
-| `--omakase-vu-meter-scale-color`               | `#333`        | Color of scale tick marks and label text                                                           |
-| `--omakase-vu-meter-scale-danger-color`        | `red`         | Color of +6, +9 and +12 marks in NORDIC scale                                                      |
-| `--omakase-vu-meter-scale-background-color`    | `transparent` | Background color of the scale area                                                                 |
-| `--omakase-vu-meter-scale-padding`             | `0px`         | Padding inside the scale container                                                                 |
-| `--omakase-vu-meter-scale-size`                | `16px`        | Width of the tick column in vertical orientation; height of the tick row in horizontal orientation |
-| `--omakase-vu-meter-scale-gap`                 | `4px`         | Gap between the scale label column and the scale tick column                                       |
-| `--omakase-vu-meter-scale-margin`              | `5px`         | Margin between the scale and the bar area                                                          |
-| `--omakase-vu-meter-scale-thickness`           | `1px`         | Thickness of main scale division tick marks                                                        |
-| `--omakase-vu-meter-scale-subdivision-opacity` | `0.7`         | Opacity of subdivision tick marks                                                                  |
-| `--omakase-vu-meter-scale-label-width`         | `20px`        | Width of the scale label column (vertical orientation only)                                        |
-| `--omakase-vu-meter-transition`                | `0.2s`        | Duration of bar fill and clip-path transition animations                                           |
+For detailed styling variables please check [VU Meter](https://api.player.byomakase.org/documents/OmakasePlayer.STYLING.html#vu-meter) in Styling documentation.
 
 ## Development
 

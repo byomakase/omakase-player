@@ -43,6 +43,8 @@ export const MarkerListDomClasses = {
   DRAG_ITEM: 'drag-item',
 };
 
+const COLLAPSIBLE_COLUMNS = ['duration', 'end', 'start', 'thumbnail'];
+
 export enum MarkerListMode {
   TIMELINE = 'TIMELINE',
   CUTLIST = 'CUTLIST',
@@ -74,6 +76,7 @@ export class MarkerListComponent extends HTMLElement {
   private _mode: MarkerListMode = MarkerListMode.TIMELINE;
   private _modeController: MarkerListComponentModeController = new TimelineMarkerListComponentModeController();
   private _sortable?: Sortable;
+  private _resizeObserver: ResizeObserver;
   protected _destroyBreaker = new ObserverBreaker();
 
   constructor() {
@@ -113,6 +116,9 @@ export class MarkerListComponent extends HTMLElement {
     wrapper.appendChild(this._listElement);
     this.shadowRoot!.appendChild(style);
     this.shadowRoot!.appendChild(wrapper);
+
+    this._resizeObserver = new ResizeObserver(() => this.updateColumnVisibility());
+    this._resizeObserver.observe(this._listElement);
 
     this.renderList();
   }
@@ -273,6 +279,7 @@ export class MarkerListComponent extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this._resizeObserver.disconnect();
     this._destroyBreaker.destroy();
   }
 
@@ -310,6 +317,7 @@ export class MarkerListComponent extends HTMLElement {
 
     if (!this._markers.length) {
       this._listElement.appendChild(this._emptyElement);
+      this.updateColumnVisibility();
       return;
     }
 
@@ -325,6 +333,20 @@ export class MarkerListComponent extends HTMLElement {
       const element = this.addMarkerToDom(template, this._listBodyElement, item);
       this._markersById.set(item.markerId, {item, element});
     });
+
+    this.updateColumnVisibility();
+  }
+
+  private updateColumnVisibility(): void {
+    const firstRow = this._listBodyElement.querySelector('.flex-row') ?? this._listBodyElement.firstElementChild;
+    const isOverflowing = () => this._listElement.scrollWidth > this._listElement.clientWidth || (!!firstRow && firstRow.scrollWidth > firstRow.clientWidth);
+    COLLAPSIBLE_COLUMNS.forEach((column) => this._listElement.classList.remove(`hide-${column}`));
+    for (const column of COLLAPSIBLE_COLUMNS) {
+      if (!isOverflowing()) {
+        break;
+      }
+      this._listElement.classList.add(`hide-${column}`);
+    }
   }
 
   private getTemplate(): HTMLTemplateElement {
@@ -405,7 +427,11 @@ export class MarkerListComponent extends HTMLElement {
           inlineEdit!.setOptions(this._labelOptions);
         }
       } else {
-        nameSlot.innerText = item.label ?? '';
+        const nameText = document.createElement('span');
+        nameText.className = 'name-cell-text';
+        nameText.innerText = item.label ?? '';
+        nameText.title = item.label ?? '';
+        nameSlot.replaceChildren(nameText);
       }
     }
     const trackSlot = element.querySelector<HTMLElement>('[slot="track"]');

@@ -28,9 +28,9 @@ export default defineConfig({
       entryRoot: 'src',
     }),
     styleUpdatePlugin(),
-    // imsc/subtitle-converter
+    // imsc
     nodePolyfills({
-      include: ['stream', 'util', 'timers'],
+      include: ['stream', 'util'],
     }),
   ],
   build: {

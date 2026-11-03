@@ -390,6 +390,7 @@ export class OmakaseMarkerBar extends HTMLElement implements ChromingMarkerBarEl
     selectedDiv.style.backgroundColor = style.markerColor;
     if (this.isOmakase) {
       selectedDiv.style.width = circleDiv.style.width;
+      selectedDiv.style.transform = circleDiv.style.transform;
     }
     selectedDiv.classList.add(OmakaseMarkerTrackDomClasses.MOMENT_MARKER_SELECTED_AREA);
     markerContainer.appendChild(selectedDiv);

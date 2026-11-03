@@ -16,72 +16,72 @@
 
 omakase-audio-router,
 omakase-router-visualization {
-  font-size: 12px;
-  font-weight: 400;
+  font-size: var(--omakase-audio-router-font-size, 12px);
+  font-weight: var(--omakase-audio-router-font-weight, 400);
 
   .omakase-router-container {
-    border: 1px solid #c2e9ff;
-    border-radius: 3px;
+    border: 1px solid var(--omakase-audio-router-border-color, #c2e9ff);
+    border-radius: var(--omakase-audio-router-border-radius, 3px);
     display: inline-block;
-    background: #e9f7ff;
+    background: var(--omakase-audio-router-background-color, #e9f7ff);
 
     &.size-small {
-      font-size: 11px;
+      font-size: var(--omakase-audio-router-font-size-small, 11px);
       .omakase-router-table {
         td {
-          padding: 0 5px;
+          padding: var(--omakase-audio-router-cell-padding-small, 0 5px);
         }
       }
       .omakase-router-toggle {
-        width: 14px;
-        height: 14px;
+        width: var(--omakase-audio-router-toggle-size-small, 14px);
+        height: var(--omakase-audio-router-toggle-size-small, 14px);
         .omakase-router-toggle-inner {
-          width: 6px;
-          height: 6px;
+          width: var(--omakase-audio-router-toggle-inner-size-small, 6px);
+          height: var(--omakase-audio-router-toggle-inner-size-small, 6px);
         }
       }
     }
     &.size-medium {
-      font-size: 12px;
+      font-size: var(--omakase-audio-router-font-size-medium, 12px);
       .omakase-router-table {
         td {
-          padding: 2px 7px;
+          padding: var(--omakase-audio-router-cell-padding-medium, 2px 7px);
         }
       }
       .omakase-router-toggle {
-        width: 16px;
-        height: 16px;
+        width: var(--omakase-audio-router-toggle-size-medium, 16px);
+        height: var(--omakase-audio-router-toggle-size-medium, 16px);
         .omakase-router-toggle-inner {
-          width: 8px;
-          height: 8px;
+          width: var(--omakase-audio-router-toggle-inner-size-medium, 8px);
+          height: var(--omakase-audio-router-toggle-inner-size-medium, 8px);
         }
       }
     }
     &.size-large {
-      font-size: 13px;
+      font-size: var(--omakase-audio-router-font-size-large, 13px);
       .omakase-router-table {
         td {
-          padding: 5px 9px;
+          padding: var(--omakase-audio-router-cell-padding-large, 5px 9px);
         }
         tbody tr {
           &:first-child td {
-            padding-top: 20px;
+            padding-top: var(--omakase-audio-router-row-padding-large, 20px);
           }
           &:last-child td {
-            padding-bottom: 20px;
+            padding-bottom: var(--omakase-audio-router-row-padding-large, 20px);
           }
         }
         thead th {
-          padding-top: 15px;
-          padding-bottom: 10px;
+          padding-top: var(--omakase-audio-router-header-padding-top-large, 15px);
+          padding-bottom: var(--omakase-audio-router-header-padding-bottom-large, 10px);
         }
       }
       .omakase-router-toggle {
-        width: 20px;
-        height: 20px;
+        width: var(--omakase-audio-router-toggle-size-large, 20px);
+        height: var(--omakase-audio-router-toggle-size-large, 20px);
         .omakase-router-toggle-inner {
-          width: 12px;
-          height: 12px;
+          width: var(--omakase-audio-router-toggle-inner-size-large, 12px);
+          height: var(--omakase-audio-router-toggle-inner-size-large, 12px);
         }
       }
     }
@@ -90,17 +90,17 @@ omakase-router-visualization {
       width: 100%;
 
       tbody {
-        border-top: 1px solid #c2e9ff;
+        border-top: 1px solid var(--omakase-audio-router-border-color, #c2e9ff);
 
         tr {
           &:first-child {
             td {
-              padding-top: 10px;
+              padding-top: var(--omakase-audio-router-row-padding, 10px);
             }
           }
           &:last-child {
             td {
-              padding-bottom: 10px;
+              padding-bottom: var(--omakase-audio-router-row-padding, 10px);
             }
           }
         }
@@ -109,7 +109,7 @@ omakase-router-visualization {
       th,
       td {
         text-align: center;
-        padding: 5px;
+        padding: var(--omakase-audio-router-cell-padding, 5px);
 
         &.align-left {
           text-align: left;
@@ -120,15 +120,15 @@ omakase-router-visualization {
         }
 
         &:first-child {
-          padding-left: 10px;
-          min-width: 80px;
+          padding-left: var(--omakase-audio-router-first-cell-padding-left, 10px);
+          min-width: var(--omakase-audio-router-first-cell-min-width, 80px);
         }
         &:last-child {
-          padding-right: 10px;
+          padding-right: var(--omakase-audio-router-last-cell-padding-right, 10px);
         }
 
         &.router-visualization-label {
-          max-width: 200px;
+          max-width: var(--omakase-audio-router-label-max-width, 200px);
           text-overflow: ellipsis;
           overflow: hidden;
           white-space: nowrap;
@@ -140,7 +140,7 @@ omakase-router-visualization {
         position: relative;
 
         &:last-child {
-          width: 60px;
+          width: var(--omakase-audio-router-actions-column-width, 60px);
         }
 
         div {
@@ -167,11 +167,10 @@ omakase-router-visualization {
       }
     }
     .omakase-router-toggle {
-      width: 16px;
-      height: 16px;
+      width: var(--omakase-audio-router-toggle-size-medium, 16px);
+      height: var(--omakase-audio-router-toggle-size-medium, 16px);
       border: 1px solid var(--omakase-primary-color, #009ceb);
       border-radius: 50%;
-      border: 1px solid var(--omakase-primary-color, #009ceb);
       display: inline-block;
       cursor: pointer;
       position: relative;
@@ -184,25 +183,25 @@ omakase-router-visualization {
       }
 
       &.disabled {
-        opacity: 0.4;
+        opacity: var(--omakase-audio-router-disabled-opacity, 0.4);
         pointer-events: none;
         cursor: default;
       }
 
       .omakase-router-toggle-inner {
         position: absolute;
-        left: 4px;
-        top: 4px;
-        width: 8px;
-        height: 8px;
+        left: var(--omakase-audio-router-toggle-inner-offset, 4px);
+        top: var(--omakase-audio-router-toggle-inner-offset, 4px);
+        width: var(--omakase-audio-router-toggle-inner-size-medium, 8px);
+        height: var(--omakase-audio-router-toggle-inner-size-medium, 8px);
         border-radius: 50%;
         background-color: var(--omakase-primary-color, #009ceb);
       }
     }
 
     .omakase-router-icon {
-      width: 20px;
-      height: 20px;
+      width: var(--omakase-audio-router-icon-size, 20px);
+      height: var(--omakase-audio-router-icon-size, 20px);
       display: inline-block;
       cursor: pointer;
       background-repeat: no-repeat;
@@ -210,31 +209,31 @@ omakase-router-visualization {
       vertical-align: middle;
 
       &.icon-deselect-all {
-        background-image: url(/images/router-visualization/audio-deselect-all.svg);
+        background-image: var(--omakase-audio-router-deselect-all-icon, url(/images/router-visualization/audio-deselect-all.svg));
         background-size: 100%;
-        margin-right: 5px;
+        margin-right: var(--omakase-audio-router-icon-gap, 5px);
       }
 
       &.icon-reset-all {
-        background-image: url(/images/router-visualization/audio-reset-all.svg);
+        background-image: var(--omakase-audio-router-reset-all-icon, url(/images/router-visualization/audio-reset-all.svg));
         background-size: 100%;
       }
 
       &.icon-deselect {
-        background-image: url(/images/router-visualization/audio-deselect.svg);
-        margin-right: 5px;
+        background-image: var(--omakase-audio-router-deselect-icon, url(/images/router-visualization/audio-deselect.svg));
+        margin-right: var(--omakase-audio-router-icon-gap, 5px);
       }
 
       &.icon-reset {
-        background-image: url(/images/router-visualization/audio-reset.svg);
+        background-image: var(--omakase-audio-router-reset-icon, url(/images/router-visualization/audio-reset.svg));
       }
 
       &.icon-outputs-few {
-        background-image: url(/images/router-visualization/audio-outputs-few.svg);
+        background-image: var(--omakase-audio-router-few-outputs-icon, url(/images/router-visualization/audio-outputs-few.svg));
       }
 
       &.icon-outputs-many {
-        background-image: url(/images/router-visualization/audio-outputs-many.svg);
+        background-image: var(--omakase-audio-router-many-outputs-icon, url(/images/router-visualization/audio-outputs-many.svg));
       }
     }
   }

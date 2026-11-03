@@ -19,6 +19,7 @@ import {BaseMessageChannelBinding, MessageChannel, type MessageChannelBinding} f
 import {takeUntil} from 'rxjs';
 import {type PlayerAudioInternalMessageChannel, PlayerAudioInternalMessageChannelBinding} from './player-audio-internal-message-channel';
 import {type PlayerTextInternalMessageChannel, PlayerTextInternalMessageChannelBinding} from './player-text-internal-message-channel';
+import {type PlayerVideoInternalMessageChannel, PlayerVideoInternalMessageChannelBinding} from './player-video-internal-message-channel';
 import type {OmpProvider} from '../../omp-provider';
 
 export interface PlayerDetachedMessageChannel extends PlayerDetachedApi {}
@@ -33,6 +34,7 @@ export class PlayerDetachedMessageChannelBinding extends BaseMessageChannelBindi
     messageChannel: MessageChannel<PlayerDetachedMessageChannel>,
     playerAudioInternalMessageChannel: MessageChannel<PlayerAudioInternalMessageChannel>,
     playerTextInternalMessageChannel: MessageChannel<PlayerTextInternalMessageChannel>,
+    playerVideoInternalMessageChannel: MessageChannel<PlayerVideoInternalMessageChannel>,
     playerDetached: PlayerDetachedApi,
     ompProvider: OmpProvider
   ) {
@@ -43,6 +45,7 @@ export class PlayerDetachedMessageChannelBinding extends BaseMessageChannelBindi
     this._innerBindings = [
       new PlayerAudioInternalMessageChannelBinding(playerAudioInternalMessageChannel, this._playerDetached, ompProvider),
       new PlayerTextInternalMessageChannelBinding(playerTextInternalMessageChannel, this._playerDetached, ompProvider),
+      new PlayerVideoInternalMessageChannelBinding(playerVideoInternalMessageChannel, this._playerDetached, ompProvider),
     ];
   }
 

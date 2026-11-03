@@ -125,9 +125,15 @@ export interface PlayerAudioHandlerApi extends AudioHandlerApi, Destroyable {
 
   state: PlayerAudioHandlerState;
 
+  /** Whether handler is silenced without changing its muted state, see {@link setSuppressed}. */
+  suppressed: boolean;
+
   setChannelCount(channelCount: number): Observable<void>;
 
   restoreState(state: PlayerAudioHandlerState): Observable<void>;
+
+  /** Silences handler without changing its muted state, ie. while sidecar video covers main media. */
+  setSuppressed(suppressed: boolean): void;
 }
 
 export abstract class BasePlayerAudioHandler implements PlayerAudioHandlerApi {
@@ -141,6 +147,7 @@ export abstract class BasePlayerAudioHandler implements PlayerAudioHandlerApi {
   protected _volume: number;
   protected _muted: boolean;
   protected _enabled: boolean = true;
+  protected _suppressed = false;
 
   protected _audioPeakProcessor: AudioPeakProcessorApi | undefined;
   protected _audioRouter: AudioRouter | undefined;
@@ -202,6 +209,17 @@ export abstract class BasePlayerAudioHandler implements PlayerAudioHandlerApi {
 
   get enabled(): boolean {
     return this.getEnabled();
+  }
+
+  get suppressed(): boolean {
+    return this._suppressed;
+  }
+
+  setSuppressed(suppressed: boolean): void {
+    if (suppressed !== this._suppressed) {
+      this._suppressed = suppressed;
+      this._setVolumeMuted(this.volume, this.muted, true);
+    }
   }
 
   get channelCount(): number {
@@ -703,7 +721,7 @@ export class GainPlayerAudioHandler extends BasePlayerAudioHandler {
     this._muted = muted;
 
     if (this._enabled) {
-      this._inputGainNode.gain.value = this.muted ? 0 : this.volume;
+      this._inputGainNode.gain.value = this.muted || this._suppressed ? 0 : this.volume;
     } else {
       this._inputGainNode.gain.value = 0;
     }
@@ -881,7 +899,7 @@ export class DisabledMediaElementSourcePlayerAudioHandler extends BasePlayerAudi
     this._muted = muted;
 
     if (this._enabled) {
-      const shouldMute = this._outputAudioHandler.muted || this._muted;
+      const shouldMute = this._outputAudioHandler.muted || this._outputAudioHandler.suppressed || this._muted;
       this._mediaElement.volume = shouldMute ? 0 : this._volume;
     } else {
       this._mediaElement.volume = 0;

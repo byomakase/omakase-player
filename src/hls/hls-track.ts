@@ -21,12 +21,15 @@ import {
   AudioType,
   BaseTextCue,
   BaseTextTrack,
+  MediaContainerTrack,
+  type MediaContainerTrackArgs,
   type TextCue,
   type TextTrackArgs,
   type TextTrackEvent,
   type TextTrackKind,
   type TextTrackState,
   TextTrackType,
+  TrackType,
   type TrackUpdateableAttrs,
   Video,
   type VideoArgs,
@@ -173,5 +176,16 @@ export class HlsTextTrack extends BaseTextTrack<TextCue, BaseTextCue, HlsTextTra
       ...super._getState(),
       mediaPlaylist: this._mediaPlaylist,
     };
+  }
+}
+
+/**
+ * HLS stream loaded as sidecar container track.
+ */
+export class HlsTrack extends MediaContainerTrack {
+  protected _trackType = TrackType.HLS_TRACK;
+
+  constructor(args: MediaContainerTrackArgs) {
+    super(args);
   }
 }

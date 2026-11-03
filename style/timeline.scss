@@ -16,34 +16,53 @@
 
 .omakase-timeline-overlay {
   position: absolute;
-  z-index: 100;
+  z-index: var(--omakase-timeline-overlay-z-index, 100);
 
   .omakase-timeline-timecode {
     position: absolute;
-    padding-left: 10px;
-    padding-top: 10px;
+    padding-left: var(--omakase-timeline-timecode-offset-left, 10px);
+    padding-top: var(--omakase-timeline-timecode-offset-top, 10px);
     overflow: hidden;
 
     .omakase-time-edit {
       .omakase-time-edit-input {
-        font-size: 10pt;
-        height: 15px;
+        font-size: var(--omakase-timeline-time-edit-font-size, 10pt);
+        height: var(--omakase-timeline-time-edit-height, 15px);
       }
 
       input {
-        padding: 0 5px;
-        width: 100px;
-        border-radius: 5px;
-        border: 1px solid #5db7e8;
+        padding: var(--omakase-timeline-time-edit-input-padding, 0 5px);
+        width: var(--omakase-timeline-time-edit-input-width, 100px);
+        border-radius: var(--omakase-timeline-time-edit-input-border-radius, 5px);
+        border: 1px solid var(--omakase-timeline-time-edit-input-border-color, #5db7e8);
 
         &:disabled {
-          background-color: #ccc;
+          background-color: var(--omakase-timeline-time-edit-input-disabled-background, #ccc);
         }
 
         &.omakase-time-edit-input-invalid {
-          border: 1px solid #fa6664;
+          border: 1px solid var(--omakase-timeline-time-edit-input-invalid-border-color, #fa6664);
         }
       }
     }
+  }
+
+  // Sized wrapper: the live button compacts (hides its label) based on its parent's width, and the
+  // overlay itself is 0px wide, so the button needs a parent exactly as wide as itself.
+  .omakase-timeline-live-button-container {
+    position: absolute;
+    width: max-content;
+    padding-left: var(--omakase-timeline-live-button-offset-left, 10px);
+    padding-top: var(--omakase-timeline-live-button-offset-top, 25px);
+    overflow: hidden;
+  }
+
+  .omakase-timeline-live-button {
+    --media-control-background: var(--omakase-timeline-live-button-background, transparent);
+    --media-control-hover-background: var(--omakase-timeline-live-button-hover-background, transparent);
+    --media-button-padding: var(--omakase-timeline-live-button-padding, 0);
+    --media-font-size: var(--omakase-timeline-live-button-font-size, 10px);
+    --media-text-color: var(--omakase-timeline-live-button-color, currentColor);
+    --omakase-live-button-indicator-size: var(--omakase-timeline-live-button-indicator-size, 6px);
   }
 }

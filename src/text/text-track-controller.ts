@@ -70,8 +70,12 @@ export class NativeTextTrackController extends BaseTextTrackController {
       this._domTextTrackElement = new DomTextTrackElement(this._trackState);
       this._domTextTrackElement
         .load((htmlElement: HTMLTrackElement) => {
-          this._playerController.videoElement.appendChild(htmlElement);
-          let textTrack = this._playerController.videoElement.textTracks.getTrackById(htmlElement.id);
+          let videoElement = this._playerController.videoElement;
+          if (!videoElement) {
+            throw new Error(`Video element not available, cannot append text track`);
+          }
+          videoElement.appendChild(htmlElement);
+          let textTrack = videoElement.textTracks.getTrackById(htmlElement.id);
           if (textTrack) {
             this._videoElementTextTrack = textTrack;
             return textTrack;

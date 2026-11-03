@@ -183,6 +183,16 @@ export class M3U8Media {
 }
 
 /**
+ * Media Initialization Section a segment needs before it can be decoded (EXT-X-MAP).
+ */
+export type M3U8SegmentMap = {
+  /**
+   * URI pointing to the initialisation segment.
+   */
+  uri: string;
+};
+
+/**
  * Represents an individual segment within the playlist.
  */
 export class M3U8Segment {
@@ -196,8 +206,17 @@ export class M3U8Segment {
    */
   uri: string;
 
-  constructor(duration: number, uri: string) {
+  /**
+   * Initialisation segment required to decode this segment, for CMAF / fMP4 sources. Undefined for
+   * self-contained segments; the writer emits one EXT-X-MAP per run of segments that share it.
+   */
+  map?: M3U8SegmentMap;
+
+  constructor(duration: number, uri: string, map?: M3U8SegmentMap) {
     this.duration = duration;
     this.uri = uri;
+    if (map) {
+      this.map = map;
+    }
   }
 }

@@ -29,6 +29,7 @@ import {type FlexNode, FlexSpacingBuilder, type FlexSpacing} from './layout/flex
 import {ObserverBreaker} from '../common/observer-breaker';
 import type {MediaElementPlaybackState} from '../common/media-element-playback';
 import {type PlayerApi, PlayerEventType, type PlayerLiveState} from '../player';
+import type {LocalizationApi} from '../localization';
 import {AuthConfig, MediaTemporalFormat} from '../common';
 import Decimal from 'decimal.js';
 import {animate} from './animation-util';
@@ -37,6 +38,8 @@ import {Playhead, type PlayheadStyle} from './playhead';
 import {PlayheadBuffer, type PlayheadBufferStyle} from './playhead-buffer';
 import {LiveEdgeOverlay, type LiveEdgeOverlayStyle} from './live/live-edge-overlay';
 import {EvictedRegionOverlay, type EvictedRegionOverlayStyle} from './live/evicted-region-overlay';
+import {LivePlaybackTracker, type UiLiveModel} from '../live/live-model';
+import {OmakaseLiveButton} from '../chroming/components';
 import {Scrubber, type ScrubberStyle} from './scrubber/scrubber';
 import {TimelineSlotVerticalScrollAdapter, VerticalScrollbar, VerticalScrollbarEventType, type VerticalScrollbarStyle} from './scrollbar/vertical-scrollbar';
 import {MeasurementUtil} from './measurement-util';
@@ -58,7 +61,6 @@ import {type TimelineSlotApi, type TimelineSlotEvent, TimelineSlotEventType} fro
 import type {VerticalScrollApi, VerticalScrollEvent, VerticalScrollOptions} from './vertical-scroll';
 import {NoopVerticalScrollAdapter, VerticalScrollAdapter} from './vertical-scroll';
 import {isNullOrUndefined} from '../util/util-functions';
-import {PLAYER_CONTROLLER_DEFAULTS} from '../constants';
 
 const configDefault: TimelineConfig = {
   htmlElementId: 'omakase-timeline',
@@ -73,6 +75,7 @@ const configDefault: TimelineConfig = {
 
   zoomBaseline: 100,
   zoomMax: 2000,
+  liveZoomMaxOverflowFallback: 120,
 
   layoutEasingDuration: 500,
   zoomEasingDuration: 800,
@@ -80,12 +83,20 @@ const configDefault: TimelineConfig = {
 
   scrubberClickSeek: true,
   timecodeClickEdit: true,
+
+  descriptionPaneVisible: true,
+
+  liveButtonVisible: false,
 };
 
 interface DragConditions {
   positionBeforeDrag: Position | undefined;
   playbackState: MediaElementPlaybackState | undefined;
   isPlayheadDrag: boolean;
+  /** Locked in on the first nonzero-movement dragmove tick, then held until dragend. */
+  axis: 'horizontal' | 'vertical' | undefined;
+  /** MAIN's getScrollY() baseline, captured once `axis` becomes 'vertical'. */
+  scrollYBeforeDrag: number | undefined;
 }
 
 class ThumbnailHoverWrapper implements Destroyable {
@@ -186,6 +197,8 @@ const domClasses = {
   timelineOverlay: 'omakase-timeline-overlay',
   canvas: 'omakase-timeline-canvas',
   timecode: 'omakase-timeline-timecode',
+  liveButtonContainer: 'omakase-timeline-live-button-container',
+  liveButton: 'omakase-timeline-live-button',
 };
 
 type ZoomDirection = 'zoom_in' | 'zoom_out';
@@ -209,6 +222,7 @@ export class TimelineImpl implements TimelineApi, Destroyable {
   private readonly _ready: boolean = false;
 
   private readonly _player: PlayerApi;
+  private readonly _localization: LocalizationApi;
 
   protected _dragBreaker = new ObserverBreaker();
   protected _dragConditions?: DragConditions;
@@ -219,6 +233,12 @@ export class TimelineImpl implements TimelineApi, Destroyable {
   private _timelineOverlayElement!: HTMLDivElement;
   private _timecodeElement!: HTMLDivElement;
   private _timecodeEdit: OmakaseTimeEdit | undefined;
+  /**
+   * Sized wrapper the live button sits in. The button measures its parent to decide whether to go
+   * compact, and the overlay itself is 0px wide, so without this wrapper the label would always be hidden.
+   */
+  private _liveButtonContainer: HTMLDivElement | undefined;
+  private _liveButton: OmakaseLiveButton | undefined;
   // endregion
 
   // region slots
@@ -303,8 +323,6 @@ export class TimelineImpl implements TimelineApi, Destroyable {
    * actually committed this tick.
    */
   private _liveTrueStartTime = 0;
-  /** Playhead within edge of liveSyncPosition — locked region recedes to its automatic minimum. */
-  private _liveNearEdge = false;
   private _liveEdgeOverlay!: LiveEdgeOverlay;
   private _evictedRegionOverlay!: EvictedRegionOverlay;
   /**
@@ -316,6 +334,18 @@ export class TimelineImpl implements TimelineApi, Destroyable {
    */
   private _liveReflowBaseline: PlayerLiveState | undefined;
   /**
+   * 0-based count of how many times {@link resolveLiveEdgeBufferSpace} has resolved a reservation
+   * for the current live session — passed to {@link TimelineConfig.liveEdgeBufferSpaceUpdate} as its
+   * `iteration` argument. Reset alongside {@link _liveReflowBaseline} whenever a live session ends.
+   */
+  private _liveEdgeBufferSpaceIteration = 0;
+  /**
+   * Last value {@link resolveLiveEdgeBufferSpace} resolved — surfaced via {@link state} instead of
+   * reading {@link TimelineConfig.liveEdgeBufferSpace} directly, since {@link
+   * TimelineConfig.liveEdgeBufferSpaceUpdate} can make the effective reservation change over time.
+   */
+  private _lastLiveEdgeBufferSpace: number | undefined;
+  /**
    * Latches like {@link LivePlaybackTracker}'s `pinnedToLive`: true by default while live, broken by
    * a manual scroll-drag away from the live edge, re-engaged by a manual drag back to it. Gates
    * the automatic scroll-to-live-edge snap in {@link reconcileLiveGeometry} — without this, the
@@ -323,12 +353,16 @@ export class TimelineImpl implements TimelineApi, Destroyable {
    * making it impossible to actually stay looking at earlier content while still playing.
    */
   private _pinnedToLiveEdge = true;
+  /** Drives the live button shown below the timecode (isLive/pinnedToLive/go-to-live sync position), wired only if {@link TimelineConfig.liveButtonVisible}. */
+  private readonly _livePlaybackTracker = new LivePlaybackTracker();
   // endregion
 
   private readonly _mediaBreaker = new ObserverBreaker();
   private readonly _destroyBreaker = new ObserverBreaker();
+  private readonly _onDestroyed$ = new Subject<void>();
+  private _destroyed = false;
 
-  constructor(player: PlayerApi, ompProvider: OmpProvider, configAndStyle?: ConfigAndStyle<TimelineConfig, TimelineStyle>) {
+  constructor(player: PlayerApi, localization: LocalizationApi, ompProvider: OmpProvider, configAndStyle?: ConfigAndStyle<TimelineConfig, TimelineStyle>) {
     this._ompProvider = ompProvider;
     this._ui = ompProvider.ui;
     this._trackRepository = ompProvider.trackRepository;
@@ -337,6 +371,7 @@ export class TimelineImpl implements TimelineApi, Destroyable {
       ...omitKeys(configAndStyle, 'style'),
     };
     this._player = player;
+    this._localization = localization;
 
     this._id = CryptoUtil.uuid();
 
@@ -369,9 +404,14 @@ export class TimelineImpl implements TimelineApi, Destroyable {
         this.handleLiveStateUpdate(this._player.playerSession.liveState);
       });
 
+    if (this._config.liveButtonVisible) {
+      this._livePlaybackTracker.wirePlayer(this._player);
+    }
+
     this.createDom();
     this.createCanvas();
-    this.settleLayout();
+    // applies initial left pane width and settles layout
+    this.setDescriptionPaneVisible(this._config.descriptionPaneVisible);
 
     this._player.onEvent$
       .pipe(filter((p) => p.type === PlayerEventType.PLAYER_MAIN_MEDIA_LOADING || p.type === PlayerEventType.PLAYER_MAIN_MEDIA_UNLOADING))
@@ -392,6 +432,12 @@ export class TimelineImpl implements TimelineApi, Destroyable {
         this.onMainMediaLoaded();
       });
 
+    if (this._config.liveButtonVisible) {
+      this._livePlaybackTracker.onChange$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe((model) => {
+        this.syncLiveButton(model);
+      });
+    }
+
     this._ready = true;
     this._onEvent$.next({
       type: TimelineEventType.TIMELINE_READY,
@@ -402,8 +448,10 @@ export class TimelineImpl implements TimelineApi, Destroyable {
   }
 
   private createDom() {
-    this._rootElement = DomUtil.getElementByIdOrFail(this._config.htmlElementId);
+    // each timeline gets its own root element appended to the host, so that multiple timelines can share the same host
+    let hostElement = DomUtil.getElementByIdOrFail<HTMLElement>(this._config.htmlElementId);
 
+    this._rootElement = document.createElement('div');
     DomUtil.setAttributes(this._rootElement, {
       'data-omakase-timeline-id': this._id,
       class: domClasses.root,
@@ -415,6 +463,8 @@ export class TimelineImpl implements TimelineApi, Destroyable {
 <div class="${domClasses.canvas}"></div>
     `;
 
+    hostElement.appendChild(this._rootElement);
+
     this._timelineOverlayElement = this.getElementOrFail<HTMLDivElement>(domClasses.timelineOverlay);
     this._timecodeElement = this.getElementOrFail<HTMLDivElement>(domClasses.timecode);
     this._canvasElement = this.getElementOrFail<HTMLDivElement>(domClasses.canvas);
@@ -423,6 +473,30 @@ export class TimelineImpl implements TimelineApi, Destroyable {
       this._timecodeElement.addEventListener('dblclick', () => {
         this.toggleTimecodeEdit();
       });
+    }
+  }
+
+  /** Creates the live button on first going live, destroys it on dropping out of live - mirrors ChromingDom's own `_syncLiveButton`. */
+  private syncLiveButton(model: UiLiveModel): void {
+    if (model.isLive) {
+      if (!this._liveButton) {
+        this._liveButtonContainer = document.createElement('div');
+        this._liveButtonContainer.classList.add(domClasses.liveButtonContainer);
+
+        this._liveButton = document.createElement('omakase-live-button') as OmakaseLiveButton;
+        this._liveButton.classList.add(domClasses.liveButton);
+        this._liveButton.player = this._player;
+        this._liveButton.localization = this._localization;
+
+        this._liveButtonContainer.appendChild(this._liveButton);
+        this._timelineOverlayElement.appendChild(this._liveButtonContainer);
+        this.positionLiveButton();
+      }
+      this._liveButton.setLiveModel(model);
+    } else if (this._liveButton) {
+      this._liveButtonContainer?.remove();
+      this._liveButtonContainer = undefined;
+      this._liveButton = undefined;
     }
   }
 
@@ -697,7 +771,77 @@ export class TimelineImpl implements TimelineApi, Destroyable {
     // Drag on any slot's floating group — for horizontal timeline scroll and playhead drag.
     // All three slots' floating groups are kept at identical width/x (see layersSync()), so
     // this works identically regardless of which slot's group is actually being dragged.
-    const attachTimecodedDragHandlers = (floatingGroup: Konva.Group) => {
+    const attachTimecodedDragHandlers = (floatingGroup: Konva.Group, allowVertical: boolean) => {
+      // 45–135°/225–315° bands (dy-dominant, y-down screen coords) reduce to |dy| >= |dx|.
+      let resolveDragAxis = (dx: number, dy: number): 'horizontal' | 'vertical' => (Math.abs(dy) >= Math.abs(dx) ? 'vertical' : 'horizontal');
+
+      let doHorizontalDragMove = () => {
+        WindowUtil.cursor('grabbing');
+        floatingGroup.y(0);
+        this.scrollTimeline(floatingGroup.x());
+        // Pin the dragged node itself to the constrained position too. Konva's native drag
+        // tracks the pointer unconditionally, so past the start/end boundary (where
+        // scrollTimeline stops applying changes) the node would otherwise keep drifting with
+        // the pointer, unbounded. That slack then has to be "walked back" before reversing
+        // the drag direction does anything, which is exactly what feels broken/stuck.
+        floatingGroup.x(this.constrainTimecodedFloatingPosition(floatingGroup.x()));
+      };
+
+      let preventDragMove = () => {
+        floatingGroup.setPosition(this._dragConditions!.positionBeforeDrag!);
+      };
+
+      // Hands the gesture off from Konva's own native drag on `floatingGroup` — the node that
+      // holds ALL of this slot's rendered timecoded content (thumbnails, markers, everything) —
+      // to plain window pointer listeners, the moment a drag is identified as vertical. Letting
+      // Konva keep natively dragging that large node for the rest of the gesture, even just to
+      // reset it back to its original position every tick, schedules a redraw of that entire
+      // content subtree on every pointer move — that's what made vertical scrolling stutter.
+      // From here on only MAIN's lane content itself needs to move (TimelineSlot.
+      // setVerticalScroll), exactly as cheap as dragging the vertical scrollbar's own tiny handle
+      // already is; horizontal pointer movement is read nowhere below, so it's ignored outright,
+      // and the axis — set by the caller before invoking this — never changes for the rest of
+      // the gesture.
+      let beginManualVerticalScroll = (anchorClientY: number) => {
+        this._dragConditions!.scrollYBeforeDrag = this._mainSlot.getScrollY();
+        WindowUtil.cursor('grabbing');
+
+        fromEvent<PointerEvent>(window, 'pointermove')
+          .pipe(takeUntil(fromEvent(window, 'pointerup')))
+          .pipe(takeUntil(this._dragBreaker.observer))
+          .subscribe((domEvent) => {
+            let dy = domEvent.clientY - anchorClientY;
+            this._mainSlot.setVerticalScroll(this._dragConditions!.scrollYBeforeDrag! - dy);
+            // Keeps the scrollbar thumb (and TIMELINE_SLOT_SCROLL listeners, e.g. a lane hiding a
+            // hover popup anchored to its old position) live during the drag. Cheap: unlike
+            // scroll.scrollTo(), refreshOffset() has no passiveObservable/Promise wrapping — it's
+            // a plain percent recompute + a single Subject emission, which the existing onScroll$
+            // subscription already turns into a handle reposition for free.
+            this._mainVScrollAdapter?.refreshOffset();
+          });
+
+        fromEvent(window, 'pointerup')
+          .pipe(take(1))
+          .pipe(takeUntil(this._dragBreaker.observer))
+          .subscribe(() => {
+            WindowUtil.cursor('default');
+            // refreshOffset() above already kept the adapter/scrollbar/event chain live during
+            // the drag — this is just a final, fully-clamped resync through the real scrollTo()
+            // path (cheap, called once) so the end state is exactly consistent.
+            this.settleVerticalDragScroll();
+            this._dragBreaker.break();
+          });
+
+        // Ends Konva's own tracking of `floatingGroup` — the listeners above now own the gesture
+        // until pointerup. This fires floatingGroup's 'dragend' synchronously; it's a no-op there
+        // (see the axis === 'vertical' guard below) since real cleanup happens above instead.
+        floatingGroup.stopDrag();
+        // stopDrag() freezes the node wherever Konva's native tracking last placed it (a few
+        // pixels of horizontal/vertical drift from the movement that decided the axis) — snap it
+        // back exactly once, since nothing will touch it again for the rest of this gesture.
+        floatingGroup.setPosition(this._dragConditions!.positionBeforeDrag!);
+      };
+
       floatingGroup.on('dragstart', (event) => {
         let startDrag = () => {
           this._dragBreaker.break();
@@ -723,6 +867,8 @@ export class TimelineImpl implements TimelineApi, Destroyable {
           positionBeforeDrag: floatingGroup.getPosition(),
           isPlayheadDrag: isPointerOnScrubberLane(),
           playbackState: this._player.playerSession.playback,
+          axis: undefined,
+          scrollYBeforeDrag: undefined,
         };
 
         if (this._player.isMainMediaLoaded) {
@@ -745,7 +891,9 @@ export class TimelineImpl implements TimelineApi, Destroyable {
               this._playhead.dragStart();
             }
           } else {
-            if (this.getZoomPercent() === 100) {
+            const canPanHorizontal = this.getZoomPercent() !== 100;
+            const canPanVertical = allowVertical && this._mainSlot.getScrollRange() > 0;
+            if (!canPanHorizontal && !canPanVertical) {
               stopDrag();
             } else {
               startDrag();
@@ -756,23 +904,7 @@ export class TimelineImpl implements TimelineApi, Destroyable {
         }
       });
 
-      floatingGroup.on('dragmove', () => {
-        let doDragMove = () => {
-          WindowUtil.cursor('grabbing');
-          floatingGroup.y(0);
-          this.scrollTimeline(floatingGroup.x());
-          // Pin the dragged node itself to the constrained position too. Konva's native drag
-          // tracks the pointer unconditionally, so past the start/end boundary (where
-          // scrollTimeline stops applying changes) the node would otherwise keep drifting with
-          // the pointer, unbounded. That slack then has to be "walked back" before reversing
-          // the drag direction does anything, which is exactly what feels broken/stuck.
-          floatingGroup.x(this.constrainTimecodedFloatingPosition(floatingGroup.x()));
-        };
-
-        let preventDragMove = () => {
-          floatingGroup.setPosition(this._dragConditions!.positionBeforeDrag!);
-        };
-
+      floatingGroup.on('dragmove', (event) => {
         if (this._dragConditions!.isPlayheadDrag) {
           preventDragMove();
           let timecodedFloatingGroupRPP = floatingGroup.getRelativePointerPosition();
@@ -780,13 +912,35 @@ export class TimelineImpl implements TimelineApi, Destroyable {
             this._playhead.dragMove(timecodedFloatingGroupRPP.x);
           }
           this._dragConditions!.positionBeforeDrag = floatingGroup.getPosition();
-        } else {
-          doDragMove();
+          return;
         }
+
+        // Axis is locked from the first tick with real movement and held for the rest of the
+        // gesture — a single drag must not mix horizontal pan and vertical scroll.
+        if (this._dragConditions!.axis === undefined) {
+          let dx = floatingGroup.x() - this._dragConditions!.positionBeforeDrag!.x;
+          let dy = floatingGroup.y();
+          if (dx !== 0 || dy !== 0) {
+            this._dragConditions!.axis = allowVertical ? resolveDragAxis(dx, dy) : 'horizontal';
+            if (this._dragConditions!.axis === 'vertical') {
+              beginManualVerticalScroll(event.evt.clientY);
+              return; // gesture handed off — see beginManualVerticalScroll
+            }
+          }
+        }
+
+        doHorizontalDragMove();
       });
 
       floatingGroup.on('dragend', () => {
         if (!this._player.isMainMediaLoaded) {
+          return;
+        }
+
+        if (this._dragConditions!.axis === 'vertical') {
+          // Real cleanup for a vertical drag happens in beginManualVerticalScroll's pointerup
+          // subscription — this dragend is just an artifact of the stopDrag() call there that
+          // hands the gesture off to it.
           return;
         }
 
@@ -813,7 +967,10 @@ export class TimelineImpl implements TimelineApi, Destroyable {
       });
     };
 
-    [this._headerSlot, this._mainSlot, this._footerSlot].forEach((slot) => attachTimecodedDragHandlers(slot._timecodedFloatingGroup));
+    // Only MAIN has real vertical overflow to scroll — HEADER/FOOTER stay horizontal-only.
+    attachTimecodedDragHandlers(this._headerSlot._timecodedFloatingGroup, false);
+    attachTimecodedDragHandlers(this._mainSlot._timecodedFloatingGroup, true);
+    attachTimecodedDragHandlers(this._footerSlot._timecodedFloatingGroup, false);
 
     // scrubber lane hover events
     this._scrubberLane.onMouseMove$
@@ -910,6 +1067,7 @@ export class TimelineImpl implements TimelineApi, Destroyable {
 
       visible: this.style.playheadVisible,
       fill: this.style.playheadFill,
+      fillOpacity: this.style.playheadFillOpacity,
       lineWidth: this.style.playheadLineWidth,
       symbolHeight: this.style.playheadSymbolHeight,
       textFill: this.style.playheadTextFill,
@@ -975,6 +1133,20 @@ export class TimelineImpl implements TimelineApi, Destroyable {
       borderWidth: this.style.liveEdgeOverlayBorderWidth,
       borderOpacity: this.style.liveEdgeOverlayBorderOpacity,
       borderDash: this.style.liveEdgeOverlayBorderDash,
+
+      bufferFill: this.style.liveEdgeOverlayBufferFill,
+      bufferFillOpacity: this.style.liveEdgeOverlayBufferFillOpacity,
+
+      bufferHatchStroke: this.style.liveEdgeOverlayBufferHatchStroke,
+      bufferHatchOpacity: this.style.liveEdgeOverlayBufferHatchOpacity,
+      bufferHatchLineWidth: this.style.liveEdgeOverlayBufferHatchLineWidth,
+      bufferHatchSpacing: this.style.liveEdgeOverlayBufferHatchSpacing,
+      bufferHatchMirrored: this.style.liveEdgeOverlayBufferHatchMirrored,
+
+      bufferBorderColor: this.style.liveEdgeOverlayBufferBorderColor,
+      bufferBorderWidth: this.style.liveEdgeOverlayBufferBorderWidth,
+      bufferBorderOpacity: this.style.liveEdgeOverlayBufferBorderOpacity,
+      bufferBorderDash: this.style.liveEdgeOverlayBufferBorderDash,
     };
   }
 
@@ -1138,7 +1310,18 @@ export class TimelineImpl implements TimelineApi, Destroyable {
 
       this._timecodeElement.style.fontStyle = `${this.style.textFontStyle}`;
       this._timecodeElement.style.fontFamily = `${this.style.textFontFamily}`;
+
+      this.positionLiveButton(position);
     }
+  }
+
+  /** Aligns the live button's top edge with the timecode's - computes its own position when called outside {@link settleDom} (e.g. right after creation). */
+  private positionLiveButton(position?: Position): void {
+    if (!this._liveButtonContainer || !this.scrubberLane) {
+      return;
+    }
+    const resolvedPosition = position ?? this.scrubberLane.mainLeftFlexGroup.contentNode.konvaNode.absolutePosition();
+    this._liveButtonContainer.style.top = `${resolvedPosition.y}px`;
   }
 
   settleLayout(): void {
@@ -1432,6 +1615,17 @@ export class TimelineImpl implements TimelineApi, Destroyable {
     });
   }
 
+  /**
+   * Resyncs the MAIN vertical scroll adapter/scrollbar/TIMELINE_SLOT_SCROLL to the current
+   * (already-applied via TimelineSlot.setVerticalScroll during the drag) position. Called once
+   * at the end of a vertical drag-scroll gesture — see doVerticalDragMove's per-tick fast path.
+   */
+  private settleVerticalDragScroll() {
+    let range = this._mainSlot.getScrollRange();
+    let percent = range > 0 ? (this._mainSlot.getScrollY() / range) * 100 : 0;
+    this.getSlot(TimelineSlotType.MAIN).scroll.scrollTo(percent);
+  }
+
   scrollTimeline(x: number) {
     // Read "current" x from a slot that isn't the one actively being Konva-dragged: when MAIN
     // itself is being dragged, Konva has already moved MAIN's own node to track the pointer
@@ -1481,7 +1675,11 @@ export class TimelineImpl implements TimelineApi, Destroyable {
   }
 
   zoomTo(percent: number, zoomFocusPercent: number | undefined = void 0): number {
-    let percentSafeParsed = z.coerce.number().min(this._config.zoomBaseline).max(this._config.zoomMax).safeParse(percent);
+    let percentSafeParsed = z.coerce
+      .number()
+      .min(this._config.zoomBaseline)
+      .max(this.isZoomMaxDisabled() ? Infinity : this._config.zoomMax!)
+      .safeParse(percent);
 
     if (percentSafeParsed.success) {
       percent = this.getConstrainedZoomPercent(percentSafeParsed.data);
@@ -1494,7 +1692,11 @@ export class TimelineImpl implements TimelineApi, Destroyable {
   }
 
   zoomToEased(percent: number, zoomFocusPercent: number | undefined = void 0): Observable<number> {
-    let percentSafeParsed = z.coerce.number().min(this._config.zoomBaseline).max(this._config.zoomMax).safeParse(percent);
+    let percentSafeParsed = z.coerce
+      .number()
+      .min(this._config.zoomBaseline)
+      .max(this.isZoomMaxDisabled() ? Infinity : this._config.zoomMax!)
+      .safeParse(percent);
 
     if (percentSafeParsed.success) {
       let timecodedContainerFocus = zoomFocusPercent ? this.resolveTimecodedFloatingPosition(zoomFocusPercent) : this.resolveTimelineContainerZoomFocusPosition();
@@ -1518,11 +1720,14 @@ export class TimelineImpl implements TimelineApi, Destroyable {
   }
 
   zoomToMaxEased(): Observable<number> {
-    return this.zoomByPercentEased(this._config.zoomMax, this.resolveTimelineContainerZoomFocusPosition());
+    if (this.isZoomMaxDisabled()) {
+      throw new Error('Can not zoom to max. zoomMax is either undefined or infinite');
+    }
+    return this.zoomByPercentEased(this._config.zoomMax!, this.resolveTimelineContainerZoomFocusPosition());
   }
 
   private zoomByStep(direction: ZoomDirection, zoomScale: number, timecodedContainerFocus: number) {
-    if ((direction === 'zoom_in' && this.getZoomPercent() === this._config.zoomMax) || (direction === 'zoom_out' && this.getZoomPercent() === 100)) {
+    if ((direction === 'zoom_in' && !this.isZoomMaxDisabled() && this.getZoomPercent() === this._config.zoomMax) || (direction === 'zoom_out' && this.getZoomPercent() === 100)) {
       return;
     }
 
@@ -1616,13 +1821,33 @@ export class TimelineImpl implements TimelineApi, Destroyable {
    * reconcileLiveGeometry}) to pin the view to the live edge (right-aligned) instead of preserving
    * the pre-reflow scroll position. VOD's call site never sets this, so VOD is unaffected.
    */
-  private adjustLiveTimecodedTransform(oldOrigin: number, oldExtent: number, newOrigin: number, newExtent: number, snapToRightEdge = false, preserveScrollPercent = false): void {
+  private adjustLiveTimecodedTransform(
+    oldOrigin: number,
+    oldExtent: number,
+    newOrigin: number,
+    newExtent: number,
+    snapToRightEdge = false,
+    preserveScrollPercent = false,
+    resetToFallbackZoomOnMaxOverflow = false
+  ): void {
     let currentWidth = this.getTimecodedFloatingDimension().width;
     let currentX = this.getTimecodedFloatingPosition().x;
     let containerDimension = this.getTimecodedContainerDimension();
     let currentScrollPercent = this.getHorizontalScrollPercent();
 
-    let newWidth = this.getConstrainedTimecodedWidth(new Decimal(currentWidth).mul(newExtent).div(oldExtent).round().toNumber());
+    let rawNewWidth = new Decimal(currentWidth).mul(newExtent).div(oldExtent).round().toNumber();
+    let newWidth = this.getConstrainedTimecodedWidth(rawNewWidth);
+
+    // A live reflow whose natural (px/sec-preserving) width would exceed TimelineConfig.zoomMax
+    // would otherwise just get pinned there by getConstrainedTimecodedWidth above, staying pinned
+    // at that extreme zoom for the rest of the stream (every further reflow keeps demanding an even
+    // wider width, always re-clamped to the same max). Landing on TimelineConfig.liveZoomMaxOverflowFallback
+    // instead gives a usable zoom level rather than staying wedged at zoomMax indefinitely.
+    if (resetToFallbackZoomOnMaxOverflow && rawNewWidth > newWidth) {
+      // Still respects a custom zoomMax configured below the fallback itself (an unusual setup,
+      // but the fallback must never re-exceed the ceiling it's reacting to).
+      newWidth = this.calculateTimecodedWidthFromZoomRatioPercent(Math.min(this._config.liveZoomMaxOverflowFallback, this.isZoomMaxDisabled() ? Infinity : this._config.zoomMax!));
+    }
 
     let slope = currentWidth / oldExtent;
     let compensatedX = currentX + slope * (newOrigin - oldOrigin);
@@ -1728,7 +1953,11 @@ export class TimelineImpl implements TimelineApi, Destroyable {
   private getConstrainedTimecodedWidth(newWidth: number): number {
     let containerDimension = this.getTimecodedContainerDimension();
     if (newWidth >= containerDimension.width) {
-      let maxTimecodedGroupWidth = this.calculateTimecodedWidthFromZoomRatioPercent(this._config.zoomMax);
+      if (this.isZoomMaxDisabled()) {
+        return newWidth;
+      }
+
+      let maxTimecodedGroupWidth = this.calculateTimecodedWidthFromZoomRatioPercent(this._config.zoomMax!);
       return newWidth <= maxTimecodedGroupWidth ? newWidth : maxTimecodedGroupWidth;
     } else {
       return containerDimension.width;
@@ -1736,11 +1965,15 @@ export class TimelineImpl implements TimelineApi, Destroyable {
   }
 
   private getConstrainedZoomPercent(percent: number): number {
-    return percent < this._config.zoomBaseline ? this._config.zoomBaseline : percent > this._config.zoomMax ? this._config.zoomMax : percent;
+    return percent < this._config.zoomBaseline ? this._config.zoomBaseline : this.isZoomMaxDisabled() ? percent : percent > this._config.zoomMax! ? this._config.zoomMax! : percent;
   }
 
   private getConstrainedScrollPercent(scrollPercent: number): number {
     return scrollPercent < 0 ? 0 : scrollPercent > 100 ? 100 : scrollPercent;
+  }
+
+  private isZoomMaxDisabled(): boolean {
+    return isNullOrUndefined(this._config.zoomMax) || this._config.zoomMax === Infinity;
   }
 
   // endregion
@@ -1748,7 +1981,10 @@ export class TimelineImpl implements TimelineApi, Destroyable {
   // region playhead
 
   private scrubberMove() {
-    if (this._player.isMainMediaLoaded && this._scrubber) {
+    // Hidden scrubber means the pointer isn't over the timeline, and Konva may have no pointer
+    // position registered at all (e.g. a seek from player controls before the timeline was ever
+    // hovered), in which case reading it logs a "Pointer position is missing" warning
+    if (this._player.isMainMediaLoaded && this._scrubber && this._scrubber.style.visible) {
       let isSnapped = false;
       let pointerPosition = this.getTimecodedFloatingRelativePointerPosition();
 
@@ -1873,7 +2109,6 @@ export class TimelineImpl implements TimelineApi, Destroyable {
       });
     }
 
-    this.refreshLiveEdgeProximity();
     if (!this._timecodeEdit) {
       this.refreshTimecode();
     }
@@ -1897,8 +2132,9 @@ export class TimelineImpl implements TimelineApi, Destroyable {
         this._liveExtentEnd = 0;
         this._liveDisplayOrigin = 0;
         this._liveTrueStartTime = 0;
-        this._liveNearEdge = false;
         this._liveReflowBaseline = void 0;
+        this._liveEdgeBufferSpaceIteration = 0;
+        this._lastLiveEdgeBufferSpace = void 0;
         this._pinnedToLiveEdge = true;
         this._liveEdgeOverlay.setVisible(false);
         this._evictedRegionOverlay.setVisible(false);
@@ -1911,7 +2147,8 @@ export class TimelineImpl implements TimelineApi, Destroyable {
 
     if (!wasLive || !this._liveReflowBaseline) {
       // First observation while live — seed the extent and reflow baseline together.
-      this._liveExtentEnd = isNullOrUndefined(this._config.liveEdgeBufferSpace) ? liveState!.liveEdgeDuration : liveState!.liveEdgeDuration + this._config.liveEdgeBufferSpace;
+      const seedBuffer = this.resolveLiveEdgeBufferSpace(liveState!);
+      this._liveExtentEnd = isNullOrUndefined(seedBuffer) ? liveState!.liveEdgeDuration : liveState!.liveEdgeDuration + seedBuffer;
       this._liveDisplayOrigin = liveState!.liveStartTime;
       this._liveReflowBaseline = liveState!;
       this._pinnedToLiveEdge = true;
@@ -1934,9 +2171,38 @@ export class TimelineImpl implements TimelineApi, Destroyable {
       this.reconcileLiveGeometry(this._liveReflowBaseline, liveState!);
     }
 
-    this.refreshLiveEdgeProximity();
     this.updateLiveEdgeOverlay();
     this.updateEvictedRegionOverlay();
+  }
+
+  /**
+   * Resolves a fresh buffer/slack amount (seconds) to reserve past the live edge — the seed in
+   * {@link handleLiveStateUpdate} (iteration `0`), or, in {@link reconcileLiveGeometry}, only once
+   * the previously reserved amount's slack is fully consumed (iteration `1`, `2`, ...). Deliberately
+   * NOT called on every growth check — {@link TimelineConfig.liveEdgeBufferSpaceUpdate} would
+   * otherwise be consulted on every manifest update, defeating its own "reserve ahead" purpose. See
+   * {@link TimelineConfig.liveEdgeBufferSpace}/{@link TimelineConfig.liveEdgeBufferSpaceUpdate} for
+   * the precedence rule this implements. Always advances {@link _liveEdgeBufferSpaceIteration} and
+   * records the result on {@link _lastLiveEdgeBufferSpace} (surfaced via {@link state}), even when
+   * it resolves to `undefined`.
+   */
+  private resolveLiveEdgeBufferSpace(playerLiveState: PlayerLiveState): number | undefined {
+    const iteration = this._liveEdgeBufferSpaceIteration++;
+    const staticValue = this._config.liveEdgeBufferSpace;
+    const preferStatic = iteration === 0 && !isNullOrUndefined(staticValue);
+
+    const resolved = preferStatic ? staticValue : (this.resolveLiveEdgeBufferSpaceUpdate(playerLiveState, iteration) ?? staticValue);
+
+    this._lastLiveEdgeBufferSpace = resolved;
+    return resolved;
+  }
+
+  private resolveLiveEdgeBufferSpaceUpdate(playerLiveState: PlayerLiveState, iteration: number): number | undefined {
+    const update = this._config.liveEdgeBufferSpaceUpdate;
+    if (isNullOrUndefined(update)) {
+      return undefined;
+    }
+    return typeof update === 'number' ? update : update(playerLiveState, this._player.getCurrentTime(), iteration);
   }
 
   /**
@@ -1955,13 +2221,19 @@ export class TimelineImpl implements TimelineApi, Destroyable {
 
     let candidateExtentEnd = oldExtentEnd;
     if (current.liveEdgeDuration > baseline.liveEdgeDuration) {
-      const buffer = this._config.liveEdgeBufferSpace;
+      // The gate uses the reservation already in effect (last resolved, at the seed or at the last
+      // exhaustion) — NOT a fresh resolution. liveEdgeBufferSpaceUpdate must only be consulted once
+      // that reservation's slack actually runs out, not on every growth check; see
+      // resolveLiveEdgeBufferSpace's call below.
+      const buffer = this._lastLiveEdgeBufferSpace;
       const slack = oldExtentEnd - baseline.liveEdgeDuration;
       const delta = current.liveEdgeDuration - baseline.liveEdgeDuration;
       const fitsInSlack = !isNullOrUndefined(buffer) && delta <= slack;
 
       if (!fitsInSlack) {
-        candidateExtentEnd = isNullOrUndefined(buffer) ? current.liveEdgeDuration : current.liveEdgeDuration + buffer;
+        // Slack exhausted (or no reservation was ever in effect) — resolve/reserve a fresh amount now.
+        const nextBuffer = this.resolveLiveEdgeBufferSpace(current);
+        candidateExtentEnd = isNullOrUndefined(nextBuffer) ? current.liveEdgeDuration : current.liveEdgeDuration + nextBuffer;
       }
       // else: absorbed into the existing locked space — extentEnd unchanged, the overlay's
       // left edge just advances with liveSyncPosition (handled by updateLiveEdgeOverlay()).
@@ -2012,7 +2284,7 @@ export class TimelineImpl implements TimelineApi, Destroyable {
     // out, with no interaction from the user. Holding the *relative* scroll position steady instead
     // keeps them looking at "the same place in the window" rather than chasing a doomed absolute time.
     const preserveScrollPercent = !playing && current.liveMode === LiveMode.CONTINUOUS;
-    this.adjustLiveTimecodedTransform(oldOrigin, oldExtent, newOrigin, newExtent, snapToRightEdge, preserveScrollPercent);
+    this.adjustLiveTimecodedTransform(oldOrigin, oldExtent, newOrigin, newExtent, snapToRightEdge, preserveScrollPercent, true);
     this.updateEvictedRegionOverlay();
 
     if (newOrigin > oldOrigin) {
@@ -2096,32 +2368,17 @@ export class TimelineImpl implements TimelineApi, Destroyable {
     return current.liveEdgeDuration - baseline.liveEdgeDuration >= cadence;
   }
 
-  /**
-   * Tracks whether the playhead is within edge threshold of
-   * liveSyncPosition. This only governs the locked region's *rendered* boundary (receding to the
-   * automatic minimum) — {@link _liveExtentEnd} itself, and the timeline's width, are untouched by
-   * playback proximity; reflow stays exclusively an manifest-growth concern. The
-   * playhead itself needs no special handling here: it already renders at
-   * `timeToTimelinePosition(player.getCurrentTime())` (see {@link Playhead}), which converges on
-   * liveSyncPosition as playback catches up, now that the coordinate mapping is live-aware.
-   */
-  private refreshLiveEdgeProximity(): void {
-    if (!this._isLive || !this._liveState) {
-      return;
-    }
-    const distance = this._liveState.liveSyncPosition - this._player.getCurrentTime();
-    this._liveNearEdge = distance <= PLAYER_CONTROLLER_DEFAULTS.liveEdgeThreshold / 1000;
-    this.updateLiveEdgeOverlay();
-  }
-
   private updateLiveEdgeOverlay(): void {
     if (!this._isLive || !this._liveState) {
       return;
     }
     const start = this._liveState.liveSyncPosition;
-    const end = this._liveNearEdge ? this._liveState.liveEdgeDuration : this._liveExtentEnd;
+    const end = this._liveExtentEnd;
     this._liveEdgeOverlay.setVisible(true);
-    this._liveEdgeOverlay.update({startTime: start, endTime: Math.max(start, end)});
+    // bufferStartTime splits off the pure liveEdgeBufferSpace slack (liveEdgeDuration..end) from
+    // the genuinely not-yet-synced sub-region (start..liveEdgeDuration) — always rendered in full,
+    // regardless of playhead proximity to the live edge.
+    this._liveEdgeOverlay.update({startTime: start, endTime: Math.max(start, end), bufferStartTime: this._liveState.liveEdgeDuration});
   }
 
   /**
@@ -2169,8 +2426,15 @@ export class TimelineImpl implements TimelineApi, Destroyable {
     this._laneSlotMap.set(timelineLane.id, slot);
 
     this._preparingToSlot = slot;
-    timelineLane.prepareForTimeline(this, this._player, this._ompProvider);
-    this._preparingToSlot = undefined;
+    try {
+      timelineLane.prepareForTimeline(this, this._player, this._ompProvider);
+    } catch (e) {
+      this._allLanesMap.delete(timelineLane.id);
+      this._laneSlotMap.delete(timelineLane.id);
+      throw e;
+    } finally {
+      this._preparingToSlot = undefined;
+    }
 
     slot.addLane(timelineLane, resolvedIndex);
   }
@@ -2415,13 +2679,13 @@ export class TimelineImpl implements TimelineApi, Destroyable {
   }
 
   getTimecodedFloatingRelativePointerPosition(): Position | undefined {
-    if (this._konvaStage.getPointersPositions().length > 0) {
-      // Try MAIN first, then HEADER
-      let rpp = this._mainSlot._timecodedFloatingGroup.getRelativePointerPosition() ?? this._headerSlot._timecodedFloatingGroup.getRelativePointerPosition();
-      return rpp ?? void 0;
-    } else {
-      return void 0;
-    }
+    // Konva's getPointersPositions() (plural) is empty on touchend since there are no more
+    // active touches, but getRelativePointerPosition() falls back to stage.getPointerPosition()
+    // (singular), which still resolves from changedTouches, so calling it directly here works
+    // for both mouse clicks and touchend.
+    // Try MAIN first, then HEADER
+    let rpp = this._mainSlot._timecodedFloatingGroup.getRelativePointerPosition() ?? this._headerSlot._timecodedFloatingGroup.getRelativePointerPosition();
+    return rpp ?? void 0;
   }
 
   getTimecodedFloatingRect(): RectMeasurement {
@@ -2551,8 +2815,9 @@ export class TimelineImpl implements TimelineApi, Destroyable {
     this._liveExtentEnd = 0;
     this._liveDisplayOrigin = 0;
     this._liveTrueStartTime = 0;
-    this._liveNearEdge = false;
     this._liveReflowBaseline = void 0;
+    this._liveEdgeBufferSpaceIteration = 0;
+    this._lastLiveEdgeBufferSpace = void 0;
     this._pinnedToLiveEdge = true;
     this._liveEdgeOverlay.setVisible(false);
     this._evictedRegionOverlay.setVisible(false);
@@ -2732,6 +2997,15 @@ export class TimelineImpl implements TimelineApi, Destroyable {
     return this._id;
   }
 
+  /** Emits once when the timeline is destroyed, whether directly or by its owner. */
+  get onDestroyed$(): Observable<void> {
+    return this._onDestroyed$.asObservable();
+  }
+
+  get isDestroyed(): boolean {
+    return this._destroyed;
+  }
+
   get timecodedFloatingGroup(): Konva.Group {
     return this._mainSlot._timecodedFloatingGroup;
   }
@@ -2745,16 +3019,26 @@ export class TimelineImpl implements TimelineApi, Destroyable {
   }
 
   get state(): TimelineState {
+    const buffer = this._lastLiveEdgeBufferSpace;
+    const available = this._isLive && !isNullOrUndefined(buffer) && this._liveState ? Math.max(0, this._liveExtentEnd - this._liveState.liveEdgeDuration) : void 0;
     return {
       isLive: this._isLive,
       liveExtentEnd: this._liveExtentEnd,
+      liveEdgeBufferSpace: buffer,
+      liveEdgeBufferSpaceAvailable: available,
     };
   }
 
   destroy(): void {
+    if (this._destroyed) {
+      return;
+    }
+    this._destroyed = true;
+
     this._destroyBreaker.destroy();
     this._dragBreaker.destroy();
     this._mediaBreaker.destroy();
+    this._thumbnailTrackBreaker.destroy();
 
     this._playhead.destroy();
     this._playheadBuffer.destroy();
@@ -2763,6 +3047,7 @@ export class TimelineImpl implements TimelineApi, Destroyable {
     this._liveEdgeOverlay.destroy();
     this._evictedRegionOverlay.destroy();
     this._verticalScrollbar.destroy();
+    this._livePlaybackTracker.destroy();
 
     this._destroySlots([this._headerSlot, this._mainSlot, this._footerSlot]);
     this._allLanesMap.clear();
@@ -2780,8 +3065,12 @@ export class TimelineImpl implements TimelineApi, Destroyable {
       this._timecodeEdit = void 0;
     }
 
-    this._rootElement.innerHTML = '';
+    this._rootElement.remove();
 
+    this._ui.removeStyleRules((rule) => 'id' in rule && rule.id === this._id);
+
+    this._onDestroyed$.next();
+    freeObserver(this._onDestroyed$);
     freeObserver(this._onEvent$);
   }
 

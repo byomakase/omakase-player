@@ -64,14 +64,6 @@ export abstract class AudioLevelSource implements AudioLevelSourceApi {
 
   abstract get channelCount(): number | undefined;
 
-  protected getBaseLog(x: number, y: number): number {
-    return Math.log(y) / Math.log(x);
-  }
-
-  protected dbFromFloat(floatVal: number): number {
-    return this.getBaseLog(10, floatVal) * 20;
-  }
-
   destroy() {
     this._destroyBreaker.destroy();
     this._onEvent$.complete();

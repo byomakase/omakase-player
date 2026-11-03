@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-import {Subject} from 'rxjs';
+import {type Observable, of, Subject} from 'rxjs';
+import {type ThumbnailState, ThumbnailTrack, type Track} from '../media';
+import type {OmakaseTrackApi} from '../track';
 
 export class ChromingUtil {
   private static _onResize$: Subject<void> = new Subject();
@@ -37,5 +39,10 @@ export class ChromingUtil {
 
   public static disconnectResizeObserver() {
     this._resizeObserver.disconnect();
+  }
+
+  public static findThumbnail(trackApi: OmakaseTrackApi, trackId: Track['id'], time: number): Observable<ThumbnailState | undefined> {
+    const track = trackApi.get(trackId);
+    return of(track instanceof ThumbnailTrack ? track.findNearestTimedItem(time) : undefined);
   }
 }

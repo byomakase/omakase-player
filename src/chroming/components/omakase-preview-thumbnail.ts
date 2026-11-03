@@ -18,12 +18,14 @@ import {Observable, takeUntil} from 'rxjs';
 import {OmakaseTimeRange} from './omakase-time-range';
 import type {ThumbnailState, ThumbnailTrackState} from '../../media/thumbnail-track';
 import {ObserverBreaker} from '../../common/observer-breaker';
+import {ControlBarComponent} from '../../control-bar/control-bar-component';
 
-export class OmakasePreviewThumbnail extends HTMLElement {
+export class OmakasePreviewThumbnail extends ControlBarComponent(HTMLElement) {
   private _timeRange?: OmakaseTimeRange;
   private _thumbnailTrack?: ThumbnailTrackState | undefined;
   private _thumbnailFn?: (trackId: string, time: number) => Observable<ThumbnailState | undefined>;
   protected _destroyBreaker = new ObserverBreaker();
+  protected _timeRangeBreaker = new ObserverBreaker();
 
   constructor() {
     super();
@@ -40,7 +42,8 @@ export class OmakasePreviewThumbnail extends HTMLElement {
 
   set timeRange(timeRange: OmakaseTimeRange) {
     this._timeRange = timeRange;
-    this._timeRange.onMouseOver$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe((time) => {
+    this._timeRangeBreaker.break();
+    this._timeRange.onMouseOver$.pipe(takeUntil(this._timeRangeBreaker.observer), takeUntil(this._destroyBreaker.observer)).subscribe((time) => {
       if (this._thumbnailTrack && this._thumbnailFn) {
         this._thumbnailFn(this._thumbnailTrack.id, time)
           .pipe(takeUntil(this._destroyBreaker.observer))
@@ -55,9 +58,12 @@ export class OmakasePreviewThumbnail extends HTMLElement {
 
   connectedCallback() {
     this.innerHTML = `<img src=""/>`;
+    if (this._timeRange) {
+      this.timeRange = this._timeRange;
+    }
   }
 
   disconnectedCallback() {
-    this._destroyBreaker.destroy();
+    this._destroyBreaker.break();
   }
 }

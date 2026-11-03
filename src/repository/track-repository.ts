@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {type Track, type TrackEvent, type TrackState} from '../media';
+import {BaseTrack, type Track, type TrackEvent, type TrackState} from '../media';
 import {BaseRepository} from './repository';
 import {filter, map, type Observable, Subject, takeUntil} from 'rxjs';
 
@@ -55,7 +55,6 @@ export class TrackRepository extends BaseRepository<Track> implements Destroyabl
   get onTrackEvent$(): Observable<TrackEvent> {
     return this._onTrackEvent$.asObservable();
   }
-
 
   add(entity: Track): Track {
     let track = super.add(entity);
@@ -108,6 +107,7 @@ export class TrackRepository extends BaseRepository<Track> implements Destroyabl
             trackState: track.state,
           },
         });
+        this.destroyTrack(track);
       }
       return result;
     } else {
@@ -127,6 +127,7 @@ export class TrackRepository extends BaseRepository<Track> implements Destroyabl
             trackState: track.state,
           },
         });
+        this.destroyTrack(track);
       });
     }
     return result;
@@ -136,6 +137,12 @@ export class TrackRepository extends BaseRepository<Track> implements Destroyabl
     return this.onEvent$
       .pipe(filter((p) => p.type === TrackRepositoryEventType.TRACK_DELETED && p.data.trackState.id === trackId))
       .pipe(map((p) => p as TrackRepositoryEvent<TrackRepositoryEventType.TRACK_DELETED>));
+  }
+
+  protected destroyTrack(track: Track) {
+    if (track instanceof BaseTrack) {
+      track.destroy();
+    }
   }
 
   destroy() {

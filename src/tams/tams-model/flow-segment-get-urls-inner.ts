@@ -18,5 +18,17 @@ export interface FlowSegmentGetUrlsInner {
      * A URL to which a GET request can be made to directly retrieve the contents of the segment. Clients should include credentials if the provide URL is on the same origin as the API endpoint
      */
     url: string;
+    /**
+     * The identifier of the Storage Backend this URL resides in.
+     */
+    storage_id?: string;
+    /**
+     * Whether this URL is on a Storage Backend controlled by the service. Assumed to be `true` if not set.
+     */
+    controlled?: boolean;
+    /**
+     * If `true`, this URL is pre-signed. How long it remains valid is determined by the service endpoint.
+     */
+    presigned?: boolean;
 }
 

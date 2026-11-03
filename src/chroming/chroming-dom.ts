@@ -20,9 +20,12 @@ import {DomUtil} from '../dom/dom-util';
 import type {MediaChromeButton, MediaController} from 'media-chrome';
 import type {MediaThemeElement} from 'media-chrome/media-theme-element';
 import {CryptoUtil} from '../util/crypto-util';
-import type {PlayerAudioState, PlayerAudioTrackState, PlayerDomController, PlayerInternalApi, PlayerPlayback, PlayerTextTrackState} from '../player';
-import {PlayerAudioMode, PlayerAudioType, PlayerEventType} from '../player';
-import {debounceTime, distinctUntilChanged, filter, fromEvent, merge, Observable, Subject, takeUntil} from 'rxjs';
+import {getPlayerAudioApi, getPlayerTextApi, getPlayerVideoApi, type PlayerApi, type PlayerAudioState, type PlayerDetachedApi, type PlayerDomController, type PlayerPlayback} from '../player';
+import type {PlayerAudioCommonApi} from '../player/player-audio-api';
+import type {PlayerTextCommonApi} from '../player/player-text-api';
+import type {LocalizationApi} from '../localization';
+import {PlayerAudioType, PlayerEventType, PlayerVideoEventType} from '../player';
+import {debounceTime, distinctUntilChanged, filter, fromEvent, Observable, Subject, takeUntil} from 'rxjs';
 import type {Destroyable} from '../common/capabilities';
 import {ObserverBreaker} from '../common/observer-breaker';
 import {
@@ -35,7 +38,6 @@ import {
   type DefaultThemeConfig,
   FullscreenChroming,
   type HelpMenuGroup,
-  type OmakaseDropdownListItem,
   type OmakaseThemeConfig,
   type PlayerChromingCommonConfig,
   type PlayerChromingThemeConfig,
@@ -56,8 +58,6 @@ import {errorCompleteObserver, freeObserver, nextCompleteObserver, passiveObserv
 import {Fullscreen} from '../common/fullscreen';
 import type {Alert, AlertState} from '../session/alerts-api';
 import {
-  OmakaseDropdown,
-  OmakaseDropdownList,
   OmakaseFullscreenButton,
   OmakaseLiveButton,
   OmakaseMarkerBar,
@@ -67,14 +67,30 @@ import {
   OmakasePreviewThumbnail,
   OmakaseTimeDisplay,
   OmakaseTimeRange,
-  OmakaseVolumeRange,
+  OmakaseTimeSkipButton,
+  type OmakaseAudioSelector,
+  type OmakaseDetachToggle,
+  type OmakaseTextSelector,
+  type OmakaseTrackSelector,
 } from './components';
-import {MainMediaType, type AudioState, type MarkerState, type MarkerTrackState, type MediaRotationValue, type TextTrackState, type ThumbnailState, type ThumbnailTrackState} from '../media';
+import {isAudioRouterUpdated as isHandlerRouterUpdated} from './components/omakase-track-selector';
+import {
+  MainMediaType,
+  type AudioState,
+  type MarkerState,
+  type MarkerTrackState,
+  type MediaRotationValue,
+  type TextTrackState,
+  type ThumbnailState,
+  type ThumbnailTrackState,
+  TrackType,
+  type VideoKeyframe,
+  type VideoKeyframeOptions,
+} from '../media';
 import {ChromingUtil} from './chroming-util';
 import {UI_LIVE_MODEL_NOT_LIVE, type UiLiveModel} from '../live/live-model';
-import type {OmakaseRouterVisualization} from './components/omakase-router-visualization';
 import type {AudioHandlerApi} from '../audio';
-import {type VideoKeyframe, VideoKeyframeExtractor, type VideoKeyframeOptions} from '../tools/keyframe-extractor';
+import {VideoKeyframeExtractor} from '../tools/keyframe-extractor';
 import {AudioLevelSource, PeakProcessorAudioLevelSource, VuMeter, VuMeterOrientation, VuMeterScale} from '../vu-meter';
 
 export interface ChromingDomConfig<T extends ChromingTheme> extends PlayerChromingThemeConfig<T>, PlayerChromingCommonConfig {
@@ -89,20 +105,6 @@ export interface ChromingDomConfig<T extends ChromingTheme> extends PlayerChromi
   mediaElement?: Partial<Pick<DomMediaElementConfig, 'crossOrigin'>>;
 }
 
-export interface ChromingAudioTrackUpdateAttrs {
-  type: PlayerAudioType;
-  playerTrack: PlayerAudioTrackState;
-}
-
-export interface ChromingAudioTrack extends ChromingAudioTrackUpdateAttrs {
-  audioTrack: AudioState;
-}
-
-export interface ChromingTextTrack {
-  playerTrack: PlayerTextTrackState;
-  textTrack: TextTrackState;
-}
-
 export const ChromingDomClasses = {
   video: 'omakase-video',
   videoFill: 'omakase-video-fill',
@@ -112,8 +114,10 @@ export const ChromingDomClasses = {
   fullscreenChromingDisabled: 'omakase-fullscreen-chroming-disabled',
   simpleFullscreen: 'omakase-simple-fullscreen',
   simpleFullscreenMiddle: 'omakase-simple-fullscreen-middle',
+  simpleFullscreenStart: 'omakase-simple-fullscreen-start',
   simpleFullscreenCenter: 'omakase-simple-fullscreen-center',
   simpleFullscreenTimecode: 'omakase-simple-fullscreen-timecode',
+  simpleFullscreenLiveButton: 'omakase-simple-fullscreen-live-button',
 
   backgroundImage: 'omakase-background-image',
   backgroundLogo: 'omakase-background-logo',
@@ -126,6 +130,7 @@ export const ChromingDomClasses = {
   watermark: 'omakase-watermark',
   mediaCaptions: 'omakase-media-captions',
   imsc: 'omakase-imsc',
+  sidecarVideos: 'omakase-sidecar-videos',
 
   sectionTopLeft: 'omakase-section-top-left',
   sectionTopRight: 'omakase-section-top-right',
@@ -150,10 +155,6 @@ export const ChromingDomClasses = {
   mediaChromeButton: 'media-chrome-button',
   mediaChromePlay: 'media-chrome-play',
   mediaChromePause: 'media-chrome-pause',
-  mediaRewindButton: 'media-chrome-frame-backwards',
-  mediaFastRewindButton: 'media-chrome-ten-frames-backwards',
-  mediaForwardButton: 'media-chrome-frame-forward',
-  mediaFastForwardButton: 'media-chrome-ten-frames-forward',
   mediaChromeFullscreenEnter: 'media-chrome-fullscreen-enter',
   mediaChromeFullscreenExit: 'media-chrome-fullscreen-exit',
   mediaChromeDetach: 'media-chrome-detach',
@@ -181,6 +182,15 @@ export const ChromingDomClasses = {
   mediaChromeClose: 'media-chrome-close',
   mediaChromeBack: 'media-chrome-back',
   mediaChromeVuMeterToggle: 'media-chrome-vu-meter-toggle',
+  mediaChromeVuMeterToggleEnabled: 'media-chrome-vu-meter-toggle-enabled',
+  mediaChromeVuMeterToggleDisabled: 'media-chrome-vu-meter-toggle-disabled',
+  mediaChromeRewindAndPlay: 'media-chrome-rewind-and-play',
+  mediaChromePlayAndRewind: 'media-chrome-play-and-rewind',
+  mediaChromeHome: 'media-chrome-home',
+  mediaChromeEnd: 'media-chrome-end',
+  mediaChromeKeyframe: 'media-chrome-keyframe',
+  mediaChromeSafeZoneOn: 'media-chrome-safe-zone-on',
+  mediaChromeSafeZoneOff: 'media-chrome-safe-zone-off',
   mediaControlBar: 'media-control-bar',
   omakaseControlBar: 'omakase-control-bar',
   timecodeContainer: 'timecode-container',
@@ -205,6 +215,8 @@ export const ChromingDomClasses = {
   speedDropdown: 'omakase-speed-dropdown',
   audioTextDropdownTop: 'omakase-audio-text-dropdown-top',
   audioTextDropdownBottom: 'omakase-audio-text-dropdown-bottom',
+  trackSelectorTop: 'omakase-track-selector-top',
+  trackSelectorBottom: 'omakase-track-selector-bottom',
   audioDropdownList: 'omakase-audio-dropdown-list',
   sidecarDropdownList: 'omakase-sidecar-dropdown-list',
   textDropdownList: 'omakase-text-dropdown-list',
@@ -243,7 +255,10 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
   protected _themeConfigChange$ = new Subject<void>();
 
   protected _config: ChromingDomConfig<T>;
-  protected _playerInternal: PlayerInternalApi | undefined;
+  protected _playerInternal: PlayerApi | PlayerDetachedApi | undefined;
+  protected _playerAudio: PlayerAudioCommonApi | undefined;
+  protected _playerText: PlayerTextCommonApi | undefined;
+  protected _localization: LocalizationApi | undefined;
   protected _mainMediaType: MainMediaType | undefined;
   protected _mediaRotation: MediaRotationValue = 0;
 
@@ -276,23 +291,15 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
 
   protected _textMediaCaptionsElement: HTMLElement;
   protected _textImscElement: HTMLElement;
+  protected _sidecarVideosElement: HTMLElement;
 
   protected _markerBar?: OmakaseMarkerBar;
   protected _timeRange?: OmakaseTimeRange;
   protected _liveButton?: OmakaseLiveButton | undefined;
-  protected _attachDetachButton?: MediaChromeButton;
+  protected _attachDetachButton?: OmakaseDetachToggle;
 
   protected _vuMeterToggle?: MediaChromeButton;
   protected _audioLevelSource?: AudioLevelSource;
-
-  protected _audioDropdownLists: {
-    [PlayerAudioType.MAIN]: OmakaseDropdownList[];
-    [PlayerAudioType.SIDECAR]: OmakaseDropdownList[];
-  } = {
-    [PlayerAudioType.MAIN]: [],
-    [PlayerAudioType.SIDECAR]: [],
-  };
-  protected _textDropdownLists: OmakaseDropdownList[] = [];
 
   protected _vuMeters: {
     [ChromingVuMeterPosition.CONTROL_BAR]: VuMeter | undefined;
@@ -371,6 +378,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     this._divSafeZoneWrapperVideoRegion = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.safeZoneWrapperVideoRegion);
     this._textMediaCaptionsElement = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.mediaCaptions);
     this._textImscElement = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.imsc);
+    this._sidecarVideosElement = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.sidecarVideos);
     this._divBackground = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.backgroundImage);
     this._divPlaybackButtons = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.playbackButtons);
     this._divActionIcons = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.actionIcons);
@@ -404,6 +412,9 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
         this._mediaControllerElement.classList.remove(ChromingDomClasses.playerFullscreen);
         this._themeElement.removeAttribute('fullscreen');
         this._simpleFullscreenBreaker.break();
+        if (this._config?.fullscreenChroming === FullscreenChroming.SIMPLE && this.uiLiveModel) {
+          queueMicrotask(() => this._syncLiveButton(this.uiLiveModel!));
+        }
       }
     };
 
@@ -472,7 +483,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     }
     this.updateCssClassesAndVariables();
     this.wireVuMeters();
-    this.updateFloatingVuMeterToggle(this._playerInternal!.audioInternal.state);
+    this.updateFloatingVuMeterToggle(this._playerAudio!.state);
   }
 
   private updateCssClassesAndVariables() {
@@ -541,10 +552,24 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     this._attachDetachButtonEnabled$.next(enabled);
   }
 
-  setPlayer(playerInternal: PlayerInternalApi) {
+  setPlayer(playerInternal: PlayerApi | PlayerDetachedApi) {
     this.resetMainMediaVideoElement();
     this._playerInternal = playerInternal;
+    this._playerAudio = getPlayerAudioApi(playerInternal);
+    this._playerText = getPlayerTextApi(playerInternal);
     this.wirePlayer();
+  }
+
+  protected getAudioTracks(playerAudioType?: PlayerAudioType.MAIN | PlayerAudioType.SIDECAR) {
+    const player = this._playerInternal!;
+    return 'audio' in player ? player.audio.getTracks(playerAudioType as PlayerAudioType.MAIN) : player.audioInternal.getTracks(playerAudioType as PlayerAudioType.MAIN);
+  }
+
+  setLocalization(localization: LocalizationApi) {
+    this._localization = localization;
+    if (this._liveButton) {
+      this._liveButton.localization = localization;
+    }
   }
 
   setLiveModel(model: UiLiveModel): void {
@@ -562,19 +587,33 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     return undefined;
   }
 
+  private _resolveLiveButtonContainer(): HTMLElement | undefined {
+    if (this._config?.fullscreenChroming === FullscreenChroming.SIMPLE) {
+      const overlayContainer = this.getShadowElement<HTMLElement>(`.${ChromingDomClasses.simpleFullscreenLiveButton}`);
+      if (overlayContainer) {
+        return overlayContainer;
+      }
+    }
+    return this._liveButtonContainer();
+  }
+
   private _syncLiveButton(model: UiLiveModel): void {
-    if (model.isLive) {
-      const container = this._liveButtonContainer();
-      if (!container) {
-        return; // theme opts out of a live button
+    const container = this._resolveLiveButtonContainer();
+    if (model.isLive && container) {
+      if (this._liveButton && this._liveButton.parentElement !== container) {
+        this._liveButton.remove();
+        this._liveButton = undefined;
       }
       if (!this._liveButton) {
         const liveButton = document.createElement('omakase-live-button') as OmakaseLiveButton;
         liveButton.className = `${ChromingDomClasses.mediaChromeButton} ${ChromingDomClasses.omakaseLiveButton}`;
+        if (this._localization) {
+          liveButton.localization = this._localization;
+        }
         if (this._playerInternal) {
           liveButton.player = this._playerInternal;
         }
-        container.appendChild(liveButton);
+        container.insertBefore(liveButton, container.querySelector(`:scope > .${ChromingDomClasses.vuMeterControlBar}`));
         this._liveButton = liveButton;
       }
       this._liveButton.setLiveModel(model);
@@ -616,6 +655,11 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
   }
 
   createMainMediaVideoElement() {
+    if (this._mainMediaVideoElement) {
+      //unload media before removing the element
+      this._mainMediaVideoElement.src = '';
+      this._mainMediaVideoElement.load();
+    }
     this._themeElement.innerHTML = `<video id="${this._videoElementId}" class="${ChromingDomClasses.video}" slot="media" ${StringUtil.isNonEmpty(this._config.mediaElement?.crossOrigin) ? `crossorigin="${this._config.mediaElement?.crossOrigin}"` : ``}></video>`;
     this._mainMediaVideoElement = DomUtil.getElementByIdOrFail<HTMLVideoElement>(this._videoElementId, this._themeElement);
   }
@@ -631,6 +675,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
             <div class="${ChromingDomClasses.backgroundLogo}"></div>
           </div>
           <slot name="media" slot="media"></slot>
+          <div class="${ChromingDomClasses.sidecarVideos}" noautohide></div>
           ${
             this._config?.fullscreenChroming === FullscreenChroming.SIMPLE
               ? `<template if="fullscreen">
@@ -642,26 +687,23 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
                       </div>
                     </omakase-time-range>
                     <div class="${ChromingDomClasses.simpleFullscreenMiddle}">
-                      <div class="volume-container">
-                        <omakase-mute-button class="${ChromingDomClasses.mediaChromeButton} shadow">
-                          <span slot="high" class="${ChromingDomClasses.mediaChromeAudioHigh}"></span>
-                          <span slot="medium" class="${ChromingDomClasses.mediaChromeAudioMedium}"></span>
-                          <span slot="low" class="${ChromingDomClasses.mediaChromeAudioLow}"></span>
-                          <span slot="off" class="${ChromingDomClasses.mediaChromeAudioMute}"></span>
+                      <div class="${ChromingDomClasses.simpleFullscreenStart}">
+                        <omakase-mute-button class="${ChromingDomClasses.mediaChromeButton} shadow" volume-flyout="right">
+                            <span slot="high" class="${ChromingDomClasses.mediaChromeAudioHigh}"></span>
+                            <span slot="medium" class="${ChromingDomClasses.mediaChromeAudioMedium}"></span>
+                            <span slot="low" class="${ChromingDomClasses.mediaChromeAudioLow}"></span>
+                            <span slot="off" class="${ChromingDomClasses.mediaChromeAudioMute}"></span>
+                            <omakase-volume-range slot="volume"></omakase-volume-range>
                         </omakase-mute-button>
-                        <omakase-volume-range></omakase-volume-range>
+                        <div class="${ChromingDomClasses.simpleFullscreenLiveButton}"></div>
                       </div>
                       <div class="${ChromingDomClasses.simpleFullscreenCenter}">
-                        <media-chrome-button class="${ChromingDomClasses.mediaChromeButton} ${ChromingDomClasses.frameBackwardsButton}">
-                          <span class="${ChromingDomClasses.mediaRewindButton}"></span>
-                        </media-chrome-button>
+                        <omakase-time-skip-button unit="frame" amount="-1" class="${ChromingDomClasses.mediaChromeButton} ${ChromingDomClasses.frameBackwardsButton}"></omakase-time-skip-button>
                         <omakase-play-button class="${ChromingDomClasses.mediaChromeButton}">
                           <span slot="play" class="${ChromingDomClasses.mediaChromePlay}"></span>
                           <span slot="pause" class="${ChromingDomClasses.mediaChromePause}"></span>
                         </omakase-play-button>
-                        <media-chrome-button class="${ChromingDomClasses.mediaChromeButton} ${ChromingDomClasses.frameForwardButton}">
-                          <span class="${ChromingDomClasses.mediaForwardButton}"></span>
-                        </media-chrome-button>
+                        <omakase-time-skip-button unit="frame" amount="1" class="${ChromingDomClasses.mediaChromeButton} ${ChromingDomClasses.frameForwardButton}"></omakase-time-skip-button>
                       </div>
                       <omakase-fullscreen-button class="${ChromingDomClasses.mediaChromeButton}">
                         <span slot="enter" class="${ChromingDomClasses.mediaChromeFullscreenEnter}"></span>
@@ -802,7 +844,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
         this._audioLevelSource = new PeakProcessorAudioLevelSource();
       }
       if (this._audioLevelSource instanceof PeakProcessorAudioLevelSource) {
-        let handler = this._playerInternal.audioInternal.getHandler(PlayerAudioType.OUTPUT);
+        let handler = this._playerAudio!.getHandler(PlayerAudioType.OUTPUT);
         if (handler) {
           this._audioLevelSource.setHandler(handler);
         }
@@ -871,6 +913,18 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
       this._divButtonOverlayAttach,
     ];
 
+    // failed sidecar video load is followed by unload
+    getPlayerVideoApi(playerInternal)
+      .onEvent$.pipe(
+        filter((event) => event.type === PlayerVideoEventType.PLAYER_VIDEO_TRACK_LOADING || event.type === PlayerVideoEventType.PLAYER_VIDEO_TRACK_UNLOADED),
+        takeUntil(this._playerBreaker.observer),
+        takeUntil(this._destroyBreaker.observer)
+      )
+      .subscribe(() => {
+        this.updatePiPAvailability();
+      });
+    this.updatePiPAvailability();
+
     playerInternal.onEvent$
       .pipe(
         filter((event) =>
@@ -915,6 +969,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
               break;
             case PlayerEventType.PLAYER_MAIN_MEDIA_LOADED:
               this.showLoaded();
+              this.updatePiPAvailability();
               if (this._markerBar) {
                 this._markerBar.mediaDuration = playerInternal.getDuration();
               }
@@ -1018,7 +1073,9 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
         next: (event) => {
           const composedTarget = event.composedPath()?.[0] as HTMLElement;
           const allowList = ['video', 'media-controller'];
-          if (allowList.includes(composedTarget?.localName)) {
+          // any element in media slot, ie. slate that replaces video element
+          const isMediaSlotElement = composedTarget?.slot === 'media';
+          if (allowList.includes(composedTarget?.localName) || isMediaSlotElement) {
             if (this._mediaControllerElement.classList.contains('omakase-player-detached')) {
               this._config.requestAttachFn();
             } else if (playerInternal.isMainMediaLoaded && !this.isLoading()) {
@@ -1051,71 +1108,6 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     if (this.uiLiveModel) {
       this._syncLiveButton(this.uiLiveModel);
     }
-  }
-
-  protected wireAudioTextDropdown(audioTextDropdown: OmakaseDropdown) {
-    this.checkPlayerInternal();
-    let playerInternal = this._playerInternal!;
-
-    const audioDropdownList = audioTextDropdown.querySelector<OmakaseDropdownList>(`.${ChromingDomClasses.audioDropdownList}`);
-    const sidecarDropdownList = audioTextDropdown.querySelector<OmakaseDropdownList>(`.${ChromingDomClasses.sidecarDropdownList}`);
-    const textDropdownList = audioTextDropdown.querySelector<OmakaseDropdownList>(`.${ChromingDomClasses.textDropdownList}`);
-
-    if (playerInternal.audioInternal.state.audioMode === PlayerAudioMode.SINGLE) {
-      audioDropdownList!.type = 'radio';
-      audioDropdownList!.setTitle('AUDIO');
-      textDropdownList!.type = 'radio';
-    } else {
-      audioDropdownList!.type = 'checkbox';
-      audioDropdownList!.setTitle('MAIN AUDIO');
-      textDropdownList!.type = 'checkbox';
-    }
-
-    audioTextDropdown.onClose$.pipe(takeUntil(this._destroyBreaker.observer), takeUntil(this._playerBreaker.observer)).subscribe(() => {
-      this.hideAudioRouter(audioTextDropdown);
-    });
-
-    merge(audioDropdownList!.selectedOption$, sidecarDropdownList!.selectedOption$)
-      .pipe(takeUntil(this._playerBreaker.observer), takeUntil(this._destroyBreaker.observer))
-      .subscribe({
-        next: (audioOption) => {
-          if (audioOption) {
-            if (!audioOption.active) {
-              playerInternal.audioInternal.switchTrack(audioOption.value, true).subscribe();
-            } else if (playerInternal.audioInternal.state.audioMode === PlayerAudioMode.MULTIPLE) {
-              playerInternal.audioInternal.switchTrack(audioOption.value, false).subscribe();
-            }
-          }
-        },
-      });
-
-    audioDropdownList!.selectedAction$.pipe(takeUntil(this._playerBreaker.observer), takeUntil(this._destroyBreaker.observer)).subscribe({
-      next: (trackOption) => {
-        if (this._playerInternal!.audioInternal.getTracks(PlayerAudioType.SIDECAR).find((track) => track.id === trackOption.value)) {
-          this.displayAudioRouter(trackOption.value, PlayerAudioType.SIDECAR, audioTextDropdown, playerInternal);
-        } else {
-          this.displayAudioRouter(trackOption.value, PlayerAudioType.MAIN, audioTextDropdown, playerInternal);
-        }
-      },
-    });
-
-    sidecarDropdownList!.selectedAction$.pipe(takeUntil(this._playerBreaker.observer), takeUntil(this._destroyBreaker.observer)).subscribe({
-      next: (sidecarTrack) => {
-        this.displayAudioRouter(sidecarTrack.value, PlayerAudioType.SIDECAR, audioTextDropdown, playerInternal);
-      },
-    });
-
-    textDropdownList!.selectedOption$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe({
-      next: (textOption) => {
-        if (textOption) {
-          if (!textOption.active) {
-            playerInternal.textInternal.switchTrack(textOption.value, true).subscribe();
-          } else if (playerInternal.audioInternal.state.audioMode === PlayerAudioMode.MULTIPLE) {
-            playerInternal.textInternal.switchTrack(textOption.value, false).subscribe();
-          }
-        }
-      },
-    });
   }
 
   protected checkPlayerInternal() {
@@ -1270,28 +1262,28 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     const timeRange = simpleFullscreenQuery<OmakaseTimeRange>('omakase-time-range');
     const fullscreenButton = simpleFullscreenQuery<OmakaseFullscreenButton>('omakase-fullscreen-button');
     const muteButton = simpleFullscreenQuery<OmakaseMuteButton>('omakase-mute-button');
-    const volumeRange = simpleFullscreenQuery<OmakaseVolumeRange>('omakase-volume-range');
     const timeDisplay = simpleFullscreenQuery<OmakaseTimeDisplay>(`.${ChromingDomClasses.simpleFullscreenTimecode}`);
     const previewTimecode = simpleFullscreenQuery<OmakaseTimeDisplay>(`.${ChromingDomClasses.mediaChromePreviewTimecode}`);
     const previewThumbnail = simpleFullscreenQuery<OmakasePreviewThumbnail>('omakase-preview-thumbnail');
-    const frameBackwardButton = simpleFullscreenQuery<MediaChromeButton>(`.${ChromingDomClasses.frameBackwardsButton}`);
-    const frameForwardButton = simpleFullscreenQuery<MediaChromeButton>(`.${ChromingDomClasses.frameForwardButton}`);
+    const frameBackwardButton = simpleFullscreenQuery<OmakaseTimeSkipButton>(`.${ChromingDomClasses.frameBackwardsButton}`);
+    const frameForwardButton = simpleFullscreenQuery<OmakaseTimeSkipButton>(`.${ChromingDomClasses.frameForwardButton}`);
 
-    if (!playButton || !timeRange || !fullscreenButton || !muteButton || !volumeRange || !timeDisplay || !frameBackwardButton || !frameForwardButton) {
+    if (!playButton || !timeRange || !fullscreenButton || !muteButton || !timeDisplay || !frameBackwardButton || !frameForwardButton) {
       return;
     }
 
     playButton.player = playerInternal;
     fullscreenButton.player = playerInternal;
     timeRange.player = playerInternal;
+    // also wires the mute button's volume range
     muteButton.player = playerInternal;
-    volumeRange.player = playerInternal;
     timeDisplay.player = playerInternal;
+    frameBackwardButton.player = playerInternal;
+    frameForwardButton.player = playerInternal;
     this.applySimpleFullscreenTimeFormat(timeDisplay);
-    // .player only repaints on the next PLAYER_PLAYBACK_PROGRESS tick, which doesn't fire while
-    // paused, and this element is created after PLAYER_MAIN_MEDIA_LOADED already fired - so it'd
-    // otherwise stay blank until playback starts
     timeDisplay.updateTime();
+    const playerAudio = getPlayerAudioApi(playerInternal);
+    muteButton.setVolumeLevel(playerAudio.muted, playerAudio.volume);
 
     if (previewTimecode) {
       previewTimecode.player = playerInternal;
@@ -1326,16 +1318,20 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
           playerInternal.seekFromCurrentTime(1, MediaTemporalFormat.FRAME_COUNT);
         });
       });
+
+    if (this.uiLiveModel) {
+      this._syncLiveButton(this.uiLiveModel);
+    }
   }
 
   enablePiP(): Observable<void> {
     return passiveObservable((observer) => {
-      if (!this._playerInternal?.isMainMediaLoaded) {
-        errorCompleteObserver(observer, 'Video is not loaded');
-      } else if (!this.isPiPSupported()) {
-        errorCompleteObserver(observer, 'Picture in picture is not supported in this browser');
+      const pipDisabledReason = this.getPiPDisabledReason();
+      if (pipDisabledReason) {
+        console.warn(pipDisabledReason);
+        nextCompleteObserver(observer);
       } else {
-        if (!document.pictureInPictureElement && document.pictureInPictureEnabled) {
+        if (!document.pictureInPictureElement) {
           this._mainMediaVideoElement.requestPictureInPicture().then(() => {
             console.debug('Video entered picture in picture mode');
             if (this._enterPictureInPictureHandler) {
@@ -1366,8 +1362,60 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     });
   }
 
+  /**
+   * Whether picture in picture can be entered for the loaded media, see {@link getPiPDisabledReason}.
+   */
   isPiPSupported(): boolean {
-    return !BrowserProvider.instance.isFirefox && !this._mainMediaVideoElement.disablePictureInPicture;
+    return !this.getPiPDisabledReason();
+  }
+
+  /**
+   * Returns why picture in picture can't be entered, or `undefined` if it can.
+   */
+  protected getPiPDisabledReason(): string | undefined {
+    if (BrowserProvider.instance.isFirefox || !document.pictureInPictureEnabled) {
+      return 'Picture in picture is not supported in this browser';
+    }
+    if (this._mainMediaVideoElement.disablePictureInPicture) {
+      return 'Picture in picture is disabled on main media video element';
+    }
+    const player = this._playerInternal;
+    if (!player?.isMainMediaLoaded) {
+      return 'Picture in picture is disabled while main media is not loaded';
+    }
+    const mainMediaType = 'mainMediaType' in player ? player.mainMediaType : player.mainMedia?.mainMediaType;
+    if (mainMediaType === MainMediaType.AUDIO_FILE) {
+      return 'Picture in picture is disabled while an audio file is loaded as main media';
+    }
+    if (mainMediaType === MainMediaType.SLATE) {
+      return 'Picture in picture is disabled while a slate is loaded as main media';
+    }
+    if (mainMediaType === MainMediaType.FRAME_IMAGE) {
+      return 'Picture in picture is disabled while frame images are loaded as main media';
+    }
+    const videoTracks: {trackType: TrackType}[] = 'video' in player ? player.video.getTracks() : player.videoInternal.getTracks();
+    if (videoTracks.some((p) => p.trackType === TrackType.TRICK_TRACK)) {
+      return 'Picture in picture is disabled while a trick track is loaded';
+    }
+    if (videoTracks.length > 0) {
+      return 'Picture in picture is disabled while sidecar videos are loaded';
+    }
+    return void 0;
+  }
+
+  /**
+   * Disables the picture in picture button and leaves picture in picture if it can't be entered for the loaded media.
+   * In detached window the same button attaches the player back, so it stays enabled.
+   */
+  protected updatePiPAvailability() {
+    if (this._config.playerDetachable || this._config.playerWindowPlaybackMode === WindowPlaybackMode.DETACHED || !this._attachDetachButton) {
+      return;
+    }
+    const pipDisabled = !this.isPiPSupported();
+    this._attachDetachButton.enabled = !pipDisabled;
+    if (pipDisabled && document.pictureInPictureElement === this._mainMediaVideoElement) {
+      this.disablePiP().subscribe();
+    }
   }
 
   protected togglePiP(): Observable<void> {
@@ -1376,16 +1424,13 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
 
   protected addPiPListeners() {
     if (!this._config.playerDetachable && this._attachDetachButton) {
-      if (this.isPiPSupported()) {
-        if (this._enterPictureInPictureHandler) {
-          this._mainMediaVideoElement.addEventListener(HTMLVideoElementEvent.ENTERPIP, this._enterPictureInPictureHandler);
-        }
-        if (this._leavePictureInPictureHandler) {
-          this._mainMediaVideoElement.addEventListener(HTMLVideoElementEvent.LEAVEPIP, this._leavePictureInPictureHandler);
-        }
-      } else {
-        DomUtil.hideElements(this._attachDetachButton);
+      if (this._enterPictureInPictureHandler) {
+        this._mainMediaVideoElement.addEventListener(HTMLVideoElementEvent.ENTERPIP, this._enterPictureInPictureHandler);
       }
+      if (this._leavePictureInPictureHandler) {
+        this._mainMediaVideoElement.addEventListener(HTMLVideoElementEvent.LEAVEPIP, this._leavePictureInPictureHandler);
+      }
+      this.updatePiPAvailability();
     }
   }
 
@@ -1491,103 +1536,13 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     }
   }
 
-  setAudioTracks(type: PlayerAudioType.MAIN | PlayerAudioType.SIDECAR, tracks: ChromingAudioTrack[]) {
-    for (const dropdownList of this._audioDropdownLists[type]) {
-      this.setDropdownOptions(
-        dropdownList,
-        tracks.map((track, index) => this.getAudioDropdownOption(track, this.getDefaultAudioLabel(type, index)))
-      );
-    }
-  }
-
-  updateAudioTracks(type: PlayerAudioType.MAIN | PlayerAudioType.SIDECAR, tracks: ChromingAudioTrackUpdateAttrs[]) {
-    for (const dropdownList of this._audioDropdownLists[type]) {
-      this.updateDropdownOptions(
-        dropdownList,
-        tracks.map((track) => ({value: track.playerTrack.trackId, active: track.playerTrack.active, actionClass: this.getAudioDropdownOptionActionClass(track.type, track.playerTrack)}))
-      );
-    }
-  }
-
-  updateAudioTrackRouters() {
-    if (this._playerInternal) {
-      for (const dropdownList of this._audioDropdownLists[PlayerAudioType.MAIN]) {
-        this.updateDropdownOptions(
-          dropdownList,
-          this._playerInternal.audioInternal.state.tracks[PlayerAudioType.MAIN].map((track) => ({
-            value: track.trackId,
-            actionClass: this.getAudioDropdownOptionActionClass(PlayerAudioType.MAIN, track),
-          }))
-        );
-      }
-      for (const dropdownList of this._audioDropdownLists[PlayerAudioType.SIDECAR]) {
-        this.updateDropdownOptions(
-          dropdownList,
-          this._playerInternal.audioInternal.state.tracks[PlayerAudioType.SIDECAR].map((track) => ({
-            value: track.trackId,
-            actionClass: this.getAudioDropdownOptionActionClass(PlayerAudioType.SIDECAR, track),
-          }))
-        );
-      }
-    }
-  }
-
+  // the player doesn't emit an event when a track is renamed, so the selectors listing it are refreshed from here
   updateAudioTrackLabel(type: PlayerAudioType.MAIN | PlayerAudioType.SIDECAR, track: AudioState) {
-    for (const dropdownList of this._audioDropdownLists[type]) {
-      this.updateDropdownOptions(dropdownList, [{value: track.id, label: track.label ?? ''}]);
-    }
-  }
-
-  addAudioTrack(type: PlayerAudioType.MAIN | PlayerAudioType.SIDECAR, track: ChromingAudioTrack) {
-    for (const dropdownList of this._audioDropdownLists[type]) {
-      this.addDropdownOption(dropdownList, this.getAudioDropdownOption(track, this.getDefaultAudioLabel(track.type, dropdownList.options.length)));
-    }
-  }
-
-  removeAudioTrack(type: PlayerAudioType.MAIN | PlayerAudioType.SIDECAR, trackId: AudioState['id']) {
-    for (const dropdownList of this._audioDropdownLists[type]) {
-      this.removeDropdownOption(dropdownList, trackId);
-    }
-  }
-
-  setTextTracks(tracks: ChromingTextTrack[]) {
-    for (const dropdownList of this._textDropdownLists) {
-      this.setDropdownOptions(
-        dropdownList,
-        tracks.map((track, index) => this.getTextDropdownOption(track, this.getDefaultTextLabel(index)))
-      );
-    }
-  }
-
-  updateTextTracks(tracks: PlayerTextTrackState[]) {
-    for (const dropdownList of this._textDropdownLists) {
-      this.updateDropdownOptions(
-        dropdownList,
-        tracks.map((track) => ({value: track.trackId, active: track.active}))
-      );
-    }
+    this.getShadowElements<OmakaseAudioSelector | OmakaseTrackSelector>('omakase-audio-selector, omakase-track-selector')?.forEach((selector) => selector.refresh());
   }
 
   updateTextTrackLabel(track: TextTrackState) {
-    for (const dropdownList of this._textDropdownLists) {
-      this.updateDropdownOptions(dropdownList, [{value: track.id, label: track.label ?? ''}]);
-    }
-  }
-
-  addTextTrack(track: ChromingTextTrack) {
-    for (const dropdownList of this._textDropdownLists) {
-      this.addDropdownOption(dropdownList, this.getTextDropdownOption(track, this.getDefaultTextLabel(dropdownList.options.length)), this.getTextTrackIndex(track));
-    }
-  }
-
-  removeTextTrack(trackId: TextTrackState['id']) {
-    for (const dropdownList of this._textDropdownLists) {
-      this.removeDropdownOption(dropdownList, trackId);
-    }
-  }
-
-  protected getTextTrackIndex(track: ChromingTextTrack): number | undefined {
-    return this._playerInternal?.textInternal.getTracks().findIndex((t) => t.id === track.textTrack.id);
+    this.getShadowElements<OmakaseTextSelector | OmakaseTrackSelector>('omakase-text-selector, omakase-track-selector')?.forEach((selector) => selector.refresh());
   }
 
   private clearShowTemporaryOnMouseMoveTimeoutId() {
@@ -1616,167 +1571,8 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     return false;
   }
 
-  protected getAudioDropdownOptionActionClass(type: PlayerAudioType, track: PlayerAudioTrackState) {
-    const handler =
-      type === PlayerAudioType.MAIN ? this._playerInternal!.audioInternal.getHandler(PlayerAudioType.MAIN) : this._playerInternal!.audioInternal.getHandler(PlayerAudioType.SIDECAR, track.trackId);
-    return this.includeAudioRouter() && track.active && (type !== PlayerAudioType.MAIN || this.isMainAudioRouterSupported())
-      ? `${ChromingDomClasses.audioRouter} ${this.isAudioRouterUpdated(handler!) ? ChromingDomClasses.audioRouterChanged : ChromingDomClasses.audioRouterDefault}`
-      : '';
-  }
-
-  protected getDefaultAudioLabel(type: PlayerAudioType, index: number): string {
-    return `${type.toLowerCase()} ${index + 1}`;
-  }
-
-  protected getDefaultTextLabel(index: number): string {
-    return `captions ${index + 1}`;
-  }
-
-  protected getAudioDropdownOption(track: ChromingAudioTrack, defaultLabel: string): OmakaseDropdownListItem {
-    return {
-      value: track.playerTrack.trackId,
-      label: track.audioTrack.label ?? defaultLabel,
-      active: track.playerTrack.active,
-      actionClass: this.getAudioDropdownOptionActionClass(track.type, track.playerTrack),
-    };
-  }
-
-  protected getTextDropdownOption(track: ChromingTextTrack, defaultLabel: string): OmakaseDropdownListItem {
-    return {
-      value: track.playerTrack.trackId,
-      label: track.textTrack.label ?? defaultLabel,
-      active: track.playerTrack.active,
-    };
-  }
-
-  protected registerAudioTextDropdown(dropdown: OmakaseDropdown) {
-    const audioDropdownList = dropdown.querySelector<OmakaseDropdownList>(`.${ChromingDomClasses.audioDropdownList}`);
-    const sidecarDropdownList = dropdown.querySelector<OmakaseDropdownList>(`.${ChromingDomClasses.sidecarDropdownList}`);
-    const textDropdownList = dropdown.querySelector<OmakaseDropdownList>(`.${ChromingDomClasses.textDropdownList}`);
-    if (audioDropdownList) {
-      this._audioDropdownLists[PlayerAudioType.MAIN].push(audioDropdownList);
-    }
-    if (sidecarDropdownList) {
-      this._audioDropdownLists[PlayerAudioType.SIDECAR].push(sidecarDropdownList);
-    }
-    if (textDropdownList) {
-      this._textDropdownLists.push(textDropdownList);
-    }
-  }
-
-  protected setDropdownOptions(dropdownList: OmakaseDropdownList, options: OmakaseDropdownListItem[]) {
-    dropdownList.setOptions(options);
-    if (options.length) {
-      DomUtil.showElements(dropdownList);
-    } else {
-      DomUtil.hideElements(dropdownList);
-    }
-    if (dropdownList.parentElement?.classList.contains(ChromingDomClasses.audioTextDropdown)) {
-      this.setAudioTextDropdownMaxWidth(dropdownList.parentElement as OmakaseDropdown);
-    }
-  }
-
-  protected addDropdownOption(dropdownList: OmakaseDropdownList, option: OmakaseDropdownListItem, index?: number) {
-    dropdownList.addOption(option, index);
-    if (!DomUtil.isShown(dropdownList)) {
-      DomUtil.showElements(dropdownList);
-    }
-    if (dropdownList.parentElement?.classList.contains(ChromingDomClasses.audioTextDropdown)) {
-      this.setAudioTextDropdownMaxWidth(dropdownList.parentElement as OmakaseDropdown);
-    }
-  }
-  protected removeDropdownOption(dropdownList: OmakaseDropdownList, value: any) {
-    dropdownList.removeOption(value);
-    if (!dropdownList.options.length) {
-      DomUtil.hideElements(dropdownList);
-    }
-    if (dropdownList.parentElement?.classList.contains(ChromingDomClasses.audioTextDropdown)) {
-      this.setAudioTextDropdownMaxWidth(dropdownList.parentElement as OmakaseDropdown);
-    }
-  }
-
-  protected updateDropdownOptions(dropdownList: OmakaseDropdownList, options: Partial<OmakaseDropdownListItem>[]) {
-    dropdownList.updateOptions(options);
-  }
-
-  protected setAudioTextDropdownMaxWidth(audioTextDropdown: OmakaseDropdown) {
-    const audioDropdownList = audioTextDropdown.querySelector<OmakaseDropdownList>(`.${ChromingDomClasses.audioDropdownList}`);
-    const sidecarDropdownList = audioTextDropdown.querySelector<OmakaseDropdownList>(`.${ChromingDomClasses.sidecarDropdownList}`);
-    const textDropdownList = audioTextDropdown.querySelector<OmakaseDropdownList>(`.${ChromingDomClasses.textDropdownList}`);
-    const listCount = [audioDropdownList, sidecarDropdownList, textDropdownList].filter((el) => el && DomUtil.isShown(el)).length;
-    const minListSize = Math.min(...[audioDropdownList, sidecarDropdownList, textDropdownList].filter((el) => el && DomUtil.isShown(el)).map((el) => el!.width));
-    let totalWidth = 0;
-    [audioDropdownList, sidecarDropdownList, textDropdownList].forEach((element) => {
-      if (element && DomUtil.isShown(element)) {
-        element.width = listCount > 1 ? 125 : 150;
-        element.maxWidth = Math.round(Math.max(minListSize * 2, element.width));
-        totalWidth += element.width;
-      }
-    });
-    audioTextDropdown.style.minWidth = DomUtil.getPixelValue(totalWidth);
-  }
-
-  protected displayAudioRouter(trackId: string, audioType: PlayerAudioType.MAIN | PlayerAudioType.SIDECAR, audioTextDropdown: OmakaseDropdown, player: PlayerInternalApi) {
-    audioTextDropdown.classList.add(ChromingDomClasses.audioRouterDropdown);
-    const backButton = document.createElement('media-chrome-button');
-    backButton.classList.add(ChromingDomClasses.mediaChromeBack);
-    backButton.onclick = () => {
-      this.hideAudioRouter(audioTextDropdown);
-    };
-    const audioRouter = document.createElement('omakase-router-visualization') as OmakaseRouterVisualization;
-    audioTextDropdown.appendChild(audioRouter);
-    audioTextDropdown.appendChild(backButton);
-    audioRouter.player = player;
-    if (audioType === PlayerAudioType.MAIN) {
-      const mainTrack = player.audioInternal.getTracks(PlayerAudioType.MAIN).find((track) => track.id === trackId);
-      if (mainTrack) {
-        audioRouter.mainTrack = {
-          track: {
-            name: mainTrack.label,
-            maxInputNumber: mainTrack.channels!,
-            inputNumber: mainTrack.channels!,
-          },
-        };
-      }
-    } else if (audioType === PlayerAudioType.SIDECAR) {
-      const sidecarTrack = player.audioInternal.getTracks(PlayerAudioType.SIDECAR).find((track) => track.id === trackId);
-      if (sidecarTrack) {
-        audioRouter.sidecarTracks = {
-          tracks: [
-            {
-              trackId: sidecarTrack.id,
-              name: sidecarTrack.label,
-              maxInputNumber: sidecarTrack.channels!,
-              inputNumber: sidecarTrack.channels!,
-            },
-          ],
-        };
-      }
-    }
-  }
-
-  protected hideAudioRouter(audioTextDropdown: OmakaseDropdown) {
-    audioTextDropdown.querySelector('omakase-router-visualization')?.remove();
-    audioTextDropdown.querySelector(`.${ChromingDomClasses.mediaChromeBack}`)?.remove();
-    audioTextDropdown.classList.remove(ChromingDomClasses.audioRouterDropdown);
-  }
-
   protected isAudioRouterUpdated(handler: AudioHandlerApi): boolean {
-    if (!handler?.router) {
-      return false;
-    }
-    const connections = handler.router.state.routingConnections;
-    const defaultConnections = handler.router.getDefaultRoutingConnections();
-    let i = 0;
-    for (const row of connections) {
-      for (const connection of row) {
-        const defaultConnection = defaultConnections[i++];
-        if (!defaultConnection || connection.connected !== defaultConnection.connected) {
-          return true;
-        }
-      }
-    }
-    return false;
+    return isHandlerRouterUpdated(handler);
   }
 
   protected isMainAudioRouterSupported(): boolean {
@@ -1876,6 +1672,10 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
 
   get textImscElement(): HTMLElement {
     return this._textImscElement;
+  }
+
+  get sidecarVideosElement(): HTMLElement {
+    return this._sidecarVideosElement;
   }
 
   get alertClosed$(): Observable<Alert['id']> {

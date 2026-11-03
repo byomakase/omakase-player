@@ -25,14 +25,12 @@ import {
   AudioThemeFloatingControl,
   AudioPlayerSize,
   type AudioThemeConfigUpdateableAttrs,
-  type OmakaseDropdownListItem,
 } from '../chroming-api';
-import {ChromingDomClasses, ChromingDomController, type ChromingDomConfig, type ChromingTextTrack} from '../chroming-dom';
+import {ChromingDomClasses, ChromingDomController, type ChromingDomConfig} from '../chroming-dom';
 import {OmakaseTimeDisplayAttributes} from '../components/omakase-time-display';
 import type {
   OmakaseAudioVisualization,
   OmakaseDropdown,
-  OmakaseDropdownList,
   OmakaseDropdownToggle,
   OmakaseMarkerBar,
   OmakaseMuteButton,
@@ -40,17 +38,15 @@ import type {
   OmakasePreviewThumbnail,
   OmakaseTimeDisplay,
   OmakaseTimeRange,
-  OmakaseVolumeRange,
+  OmakasePlaybackRateSelector,
+  OmakaseTextSelector,
 } from '../components';
-import {PlayerAudioType, PlayerEventType, type PlayerInternalApi, type PlayerTextTrackState} from '../../player';
+import {PlayerAudioType, PlayerEventType, type PlayerApi, type PlayerDetachedApi} from '../../player';
 import {DomUtil} from '../../dom/dom-util';
 import type {ThumbnailTrackState} from '../../media/thumbnail-track';
-import {PlayerTextType} from '../../player/player-text';
-import {MainMediaType, type TextTrackState} from '../../media';
+import {MainMediaType} from '../../media';
 import type {OmakaseRouterVisualization} from '../components/omakase-router-visualization';
 import {ChromingUtil} from '../chroming-util';
-import {OmakaseDropdownToggleAttributes} from '../components/omakase-dropdown-toggle';
-import {isNullOrUndefined} from '../../util/util-functions';
 
 export class AudioDomController extends ChromingDomController<ChromingTheme.AUDIO> {
   protected _themeConfig: AudioThemeConfig;
@@ -58,18 +54,14 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
   protected _playButton?: OmakasePlayButton;
   protected _muteButton?: OmakaseMuteButton;
   protected _timeRange?: OmakaseTimeRange;
-  protected _volumeRange?: OmakaseVolumeRange;
   protected _audioVisualization?: OmakaseAudioVisualization;
   protected _routerVisualization?: OmakaseRouterVisualization | undefined;
   protected _audioBackground?: HTMLElement;
 
-  protected _speedDropdown?: OmakaseDropdown;
-  protected _textDropdown?: OmakaseDropdown;
   protected _routerDropdown?: OmakaseDropdown;
 
-  protected _speedDropdownList?: OmakaseDropdownList;
-  protected _textDropdownList?: OmakaseDropdownList;
-  protected _textDropdownToggle?: OmakaseDropdownToggle;
+  protected _playbackRateSelector?: OmakasePlaybackRateSelector;
+  protected _textSelector?: OmakaseTextSelector;
   protected _routerDropdownToggle?: OmakaseDropdownToggle;
 
   protected _currentTimecode?: OmakaseTimeDisplay;
@@ -107,26 +99,18 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
     this._playButton = this.getShadowElement<OmakasePlayButton>('omakase-play-button');
     this._muteButton = this.getShadowElement<OmakaseMuteButton>('omakase-mute-button');
     this._timeRange = this.getShadowElement<OmakaseTimeRange>('omakase-time-range');
-    this._volumeRange = this.getShadowElement<OmakaseVolumeRange>('omakase-volume-range');
     this._markerBar = this.getShadowElement<OmakaseMarkerBar>('omakase-marker-bars');
     this._previewThumbnail = this.getShadowElement<OmakasePreviewThumbnail>('omakase-preview-thumbnail');
     this._audioVisualization = this.getShadowElement<OmakaseAudioVisualization>('omakase-audio-visualization');
 
     this._currentTimecode = this.getShadowElementByClass<OmakaseTimeDisplay>(ChromingDomClasses.mediaChromeCurrentTimecode);
     this._previewTimecode = this.getShadowElementByClass<OmakaseTimeDisplay>(ChromingDomClasses.mediaChromePreviewTimecode);
-    this._speedDropdown = this.getShadowElementByClass<OmakaseDropdown>(ChromingDomClasses.speedDropdown);
-    this._speedDropdownList = this.getShadowElementByClass<OmakaseDropdownList>(ChromingDomClasses.speedDropdownList);
-    this._textDropdown = this.getShadowElementByClass<OmakaseDropdown>(ChromingDomClasses.audioTextDropdown);
-    this._textDropdownList = this.getShadowElementByClass<OmakaseDropdownList>(ChromingDomClasses.textDropdownList);
+    this._playbackRateSelector = this.getShadowElement<OmakasePlaybackRateSelector>('omakase-playback-rate-selector');
+    this._textSelector = this.getShadowElement<OmakaseTextSelector>('omakase-text-selector');
     this._routerDropdown = this.getShadowElementByClass<OmakaseDropdown>(ChromingDomClasses.audioRouterDropdown);
     this._audioBackground = this.getShadowElementByClass<HTMLElement>(ChromingDomClasses.audioBackground);
 
     this._routerDropdownToggle = this.getShadowElementByClass<OmakaseDropdownToggle>(this.getControlBarClass(AudioThemeControl.ROUTER));
-    this._textDropdownToggle = this.getShadowElementByClass<OmakaseDropdownToggle>(this.getControlBarClass(AudioThemeControl.TRACK_SELECTOR));
-
-    if (this._textDropdownList) {
-      this._textDropdownLists.push(this._textDropdownList);
-    }
 
     if (this._timeRange) {
       ChromingUtil.observeElementResize(this._timeRange);
@@ -154,36 +138,23 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
                     <omakase-time-display format="${this._themeConfig.timeFormat === ChromingTimeFormat.TIMECODE ? 'timecode' : 'standard'}" ${this._themeConfig.timeFormat === ChromingTimeFormat.COUNTDOWN_MEDIA_TIME ? 'countdown ' : ''} class="${ChromingDomClasses.mediaChromePreviewTimecode}"></omakase-time-display>
                 </div>
             </omakase-time-range>
-            ${
-              this._themeConfig.playbackRates
-                ? `<omakase-dropdown id="speed-dropdown-${this._config.playerHtmlElementId}" class="omakase-speed-dropdown" alignment="center">
-                    <omakase-dropdown-list id="speed-dropdown-list-${this._config.playerHtmlElementId}" class="omakase-speed-dropdown-list" title="SPEED" width="76">
-                    ${this._themeConfig.playbackRates
-                      .map((rate) => {
-                        if (rate === 1) return `<omakase-dropdown-option selected value="${rate}">${rate}x</omakase-dropdown-option>`;
-                        else return `<omakase-dropdown-option value="${rate}">${rate}x</omakase-dropdown-option>`;
-                      })
-                      .join('\n')}
-                    </omakase-dropdown-list>
-                </omakase-dropdown>`
-                : ''
-            }
             <slot name="dropdown-container"></slot>
-            ${this.createAudioTextDropdownDom()}
             ${this.createAudioRouterDropdownDom()}
         </media-control-bar>
         <media-control-bar class="lower-control-bar" noautohide>
             <div class="start-container">
-                <div class="volume-container ${this.getControlBarClass(AudioThemeControl.VOLUME)}">
-                    <omakase-mute-button class="${ChromingDomClasses.mediaChromeButton} omakase-player-mute">
+                <omakase-mute-button class="${this.getControlBarClass(AudioThemeControl.VOLUME)} ${ChromingDomClasses.mediaChromeButton} omakase-player-mute" volume-flyout="right">
                     <span slot="high" class="${ChromingDomClasses.mediaChromeAudioHigh}"></span>
                     <span slot="medium" class="${ChromingDomClasses.mediaChromeAudioMedium}"></span>
                     <span slot="low" class="${ChromingDomClasses.mediaChromeAudioLow}"></span>
                     <span slot="off" class="${ChromingDomClasses.mediaChromeAudioMute}"></span>
-                    </omakase-mute-button>
-                    <omakase-volume-range class="omakase-volume-range"></omakase-volume-range>
-                </div>
-                <omakase-dropdown-toggle class="${this.getControlBarClass(AudioThemeControl.PLAYBACK_RATE)}" dropdown="speed-dropdown-${this._config.playerHtmlElementId}"></omakase-dropdown-toggle>
+                    <omakase-volume-range slot="volume" class="omakase-volume-range"></omakase-volume-range>
+                </omakase-mute-button>
+                ${
+                  this._themeConfig.playbackRates
+                    ? `<omakase-playback-rate-selector class="${this.getControlBarClass(AudioThemeControl.PLAYBACK_RATE)}" dropdown="speed-dropdown-${this._config.playerHtmlElementId}" rates="${this._themeConfig.playbackRates.join(',')}"></omakase-playback-rate-selector>`
+                    : ''
+                }
                 <slot name="start-container"></slot>
             </div>
             <div class="center-container">
@@ -203,21 +174,14 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
                             <span class="${ChromingDomClasses.audioRouter} ${ChromingDomClasses.audioRouterDefault}"></span>
                         </media-chrome-button>
                     </omakase-dropdown-toggle>
-                    <omakase-dropdown-toggle class="${this.getControlBarClass(AudioThemeControl.TRACK_SELECTOR)}" id="audio-dropdown-toggle-${this._config.playerHtmlElementId}" dropdown="audio-dropdown-${this._config.playerHtmlElementId}">
-                        <media-chrome-button class="${ChromingDomClasses.mediaChromeButton} omakase-player-audio-text">
+                    <omakase-text-selector class="${this.getControlBarClass(AudioThemeControl.TRACK_SELECTOR)}" dropdown="audio-dropdown-${this._config.playerHtmlElementId}" alignment="right" off-option>
+                        <media-chrome-button slot="toggle" class="${ChromingDomClasses.mediaChromeButton} omakase-player-audio-text">
                             <span class="${ChromingDomClasses.mediaChromeAudio}"></span>
                         </media-chrome-button>
-                    </omakase-dropdown-toggle>
+                    </omakase-text-selector>
                 </div>
             </div>
         </media-control-bar>`;
-  }
-
-  protected createAudioTextDropdownDom() {
-    return `
-          <omakase-dropdown class="${ChromingDomClasses.audioTextDropdown}" id="audio-dropdown-${this._config.playerHtmlElementId}" style="display:none;right:20px">
-              <omakase-dropdown-list class="omakase-text-dropdown-list align-left" id="text-dropdown-list-${this._config.playerHtmlElementId}" title="TEXT" width="150" max-width="250" type="radio"></omakase-dropdown-list>
-          </omakase-dropdown>`;
   }
 
   protected createAudioRouterDropdownDom() {
@@ -285,24 +249,11 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
         DomUtil.hideElements(this.getShadowElementByClass(this.getControlBarClass(control)));
       }
     }
-    this.setTrackSelectorEnabled(!!this._playerInternal && !!this._textDropdownList && this._textDropdownList.options.length > 1);
-    if (!this._themeConfig.controlBar?.includes(AudioThemeControl.TRACK_SELECTOR) && this._textDropdown) {
-      this._textDropdown.style.display = 'none';
+    if (!this._themeConfig.controlBar?.includes(AudioThemeControl.TRACK_SELECTOR) && this._textSelector) {
+      this._textSelector.style.display = 'none';
     }
-    if (!this._themeConfig.controlBar?.includes(AudioThemeControl.PLAYBACK_RATE) && this._speedDropdown) {
-      this._speedDropdown.style.display = 'none';
-    }
-  }
-
-  protected setTrackSelectorEnabled(enabled: boolean) {
-    if (this._textDropdownToggle) {
-      if (enabled) {
-        this._textDropdownToggle.removeAttribute(OmakaseDropdownToggleAttributes.DISABLED);
-        this._textDropdownToggle.querySelector('media-chrome-button')?.removeAttribute(OmakaseDropdownToggleAttributes.DISABLED);
-      } else {
-        this._textDropdownToggle.setAttribute(OmakaseDropdownToggleAttributes.DISABLED, '');
-        this._textDropdownToggle.querySelector('media-chrome-button')?.setAttribute(OmakaseDropdownToggleAttributes.DISABLED, '');
-      }
+    if (!this._themeConfig.controlBar?.includes(AudioThemeControl.PLAYBACK_RATE) && this._playbackRateSelector) {
+      this._playbackRateSelector.style.display = 'none';
     }
   }
 
@@ -321,9 +272,6 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
     if (this._muteButton) {
       this._muteButton.player = playerInternal;
     }
-    if (this._volumeRange) {
-      this._volumeRange.player = playerInternal;
-    }
     if (this._currentTimecode) {
       this._currentTimecode.player = playerInternal;
     }
@@ -340,7 +288,7 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
         )
         .subscribe({
           next: () => {
-            this._audioVisualization!.wirePlayer(playerInternal);
+            this._audioVisualization!.player = playerInternal;
           },
         });
     }
@@ -355,33 +303,11 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
         this._previewThumbnail.timeRange = this._timeRange;
       }
     }
-    if (this._speedDropdownList) {
-      this._speedDropdownList.selectedOption$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe({
-        next: (speedOption) => {
-          if (speedOption && parseFloat(speedOption.value) !== playerInternal.playerSession.playback.playbackRate) {
-            playerInternal.setPlaybackRate(parseFloat(speedOption.value));
-          }
-        },
-      });
-      playerInternal.onEvent$
-        .pipe(
-          filter((event) => event.type === PlayerEventType.PLAYER_PLAYBACK_RATE_UPDATE),
-          takeUntil(this._playerBreaker.observer),
-          takeUntil(this._destroyBreaker.observer)
-        )
-        .subscribe({
-          next: (event) => {
-            if (event.data.playbackRate.toString() !== this._speedDropdownList?.selectedOption$.getValue()?.value) {
-              this._speedDropdownList!.selectedOption$.next({
-                value: event.data.playbackRate.toString(),
-                label: `${event.data.playbackRate}x`,
-              });
-            }
-          },
-        });
+    if (this._playbackRateSelector) {
+      this._playbackRateSelector.player = playerInternal;
     }
-    if (this._textDropdown) {
-      this.wireTextDropdown(playerInternal);
+    if (this._textSelector) {
+      this._textSelector.player = playerInternal;
     }
     if (this._themeConfig.controlBar.includes(AudioThemeControl.ROUTER) && this._routerDropdown && this._routerDropdownToggle) {
       playerInternal.onEvent$
@@ -396,7 +322,7 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
           } else if (event.type === PlayerEventType.PLAYER_AUDIO_CHANGE) {
             const routerIcon = this._routerDropdownToggle!.querySelector(`.${ChromingDomClasses.audioRouter}`);
             if (routerIcon) {
-              const isRouterChanged = this.isAudioRouterUpdated(playerInternal.audioInternal.getHandler(PlayerAudioType.MAIN)!);
+              const isRouterChanged = this.isAudioRouterUpdated(this._playerAudio!.getHandler(PlayerAudioType.MAIN)!);
               if (isRouterChanged) {
                 routerIcon.classList.remove(ChromingDomClasses.audioRouterDefault);
                 routerIcon.classList.add(ChromingDomClasses.audioRouterChanged);
@@ -407,26 +333,6 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
             }
           }
         });
-    }
-  }
-
-  wireTextDropdown(playerInternal: PlayerInternalApi) {
-    if (this._textDropdownList) {
-      this._textDropdownList.selectedOption$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe({
-        next: (textOption) => {
-          if (textOption) {
-            if (!textOption.value) {
-              playerInternal.textInternal.hide();
-            } else if (!textOption.active) {
-              if (textOption.value === this.getActiveTextTrack()?.trackId) {
-                playerInternal.textInternal.show();
-              } else {
-                playerInternal.textInternal.switchTrack(textOption.value, true).subscribe();
-              }
-            }
-          }
-        },
-      });
     }
   }
 
@@ -461,88 +367,7 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
     }
   }
 
-  setTextTracks(tracks: ChromingTextTrack[]): void {
-    super.setTextTracks(tracks);
-    this.updateOffOption();
-    this.updateCaptionClasses();
-  }
-
-  updateTextTracks(tracks: PlayerTextTrackState[]) {
-    for (const dropdownList of this._textDropdownLists) {
-      this.updateDropdownOptions(
-        dropdownList,
-        tracks.map((track) => ({value: track.trackId, active: track.active && track.shown}))
-      );
-    }
-    this.updateOffOption();
-  }
-
-  addTextTrack(track: ChromingTextTrack): void {
-    super.addTextTrack(track);
-    this.updateOffOption();
-    this.updateCaptionClasses();
-  }
-
-  removeTextTrack(trackId: TextTrackState['id']): void {
-    super.removeTextTrack(trackId);
-    this.updateOffOption();
-    this.updateCaptionClasses();
-  }
-
-  protected getTextDropdownOption(track: ChromingTextTrack, defaultLabel: string): OmakaseDropdownListItem {
-    return {
-      value: track.playerTrack.trackId,
-      label: track.textTrack.label ?? defaultLabel,
-      active: track.playerTrack.active && track.playerTrack.shown,
-    };
-  }
-
-  protected override getTextTrackIndex(track: ChromingTextTrack): number | undefined {
-    const index = super.getTextTrackIndex(track);
-    if (!isNullOrUndefined(index) && index !== -1) {
-      return index + 1;
-    } else {
-      return undefined;
-    }
-  }
-
-  protected setDropdownOptions(dropdownList: OmakaseDropdownList, options: OmakaseDropdownListItem[]) {
-    dropdownList.setOptions([{label: 'Off', value: '', active: this.getOffOptionActive()}, ...options]);
-  }
-
-  protected updateDropdownOptions(dropdownList: OmakaseDropdownList, options: Partial<OmakaseDropdownListItem>[]) {
-    dropdownList.updateOptions([{value: '', active: this.getOffOptionActive()}, ...options]);
-  }
-
-  private updateCaptionClasses() {
-    const textOptions = this._textDropdownList!.options;
-    this.setTrackSelectorEnabled(textOptions.length > 1);
-  }
-
-  private updateOffOption() {
-    for (const dropdownList of this._textDropdownLists) {
-      dropdownList.updateOptions([{value: '', active: this.getOffOptionActive()}]);
-    }
-  }
-
-  private getOffOptionActive() {
-    if (this._playerInternal) {
-      const textTracks = [...this._playerInternal.textInternal.state.tracks[PlayerTextType.MAIN], ...this._playerInternal.textInternal.state.tracks[PlayerTextType.SIDECAR]];
-      const activeTrack = textTracks.find((track) => track.shown && track.active);
-      return !activeTrack;
-    } else {
-      return true;
-    }
-  }
-
-  private getActiveTextTrack(): PlayerTextTrackState | undefined {
-    return (
-      this._playerInternal?.textInternal.state.tracks[PlayerTextType.MAIN].find((track) => track.active) ??
-      this._playerInternal?.textInternal.state.tracks[PlayerTextType.SIDECAR].find((track) => track.active)
-    );
-  }
-
-  private initializeAudioRouter(playerInternal: PlayerInternalApi) {
+  private initializeAudioRouter(playerInternal: PlayerApi | PlayerDetachedApi) {
     if (this._routerVisualization) {
       this._routerVisualization.destroy();
       this._routerVisualization.remove();
@@ -550,8 +375,8 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
     this._routerVisualization = document.createElement('omakase-router-visualization') as OmakaseRouterVisualization;
     this._routerDropdown?.appendChild(this._routerVisualization);
     this._routerVisualization.player = playerInternal;
-    const activeTrackId = playerInternal.audioInternal.state.tracks[PlayerAudioType.MAIN].find((track) => track.active)?.trackId;
-    const mainTrack = playerInternal.audioInternal.getTracks(PlayerAudioType.MAIN).find((track) => track.id === activeTrackId);
+    const activeTrackId = this._playerAudio!.state.tracks[PlayerAudioType.MAIN].find((track) => track.active)?.trackId;
+    const mainTrack = this.getAudioTracks(PlayerAudioType.MAIN).find((track) => track.id === activeTrackId);
     if (mainTrack) {
       this._routerVisualization.mainTrack = {
         track: {
@@ -565,11 +390,8 @@ export class AudioDomController extends ChromingDomController<ChromingTheme.AUDI
 
   resetMainMediaVideoElement(): void {
     super.resetMainMediaVideoElement();
-    if (this._speedDropdownList) {
-      this._speedDropdownList.selectedOption$.next({
-        value: 1,
-        label: '1x',
-      });
+    if (this._playbackRateSelector) {
+      this._playbackRateSelector.playbackRate = 1;
     }
     if (this._themeConfig.playerSize === AudioPlayerSize.COMPACT) {
       DomUtil.hideElements(this._mainMediaVideoElement);

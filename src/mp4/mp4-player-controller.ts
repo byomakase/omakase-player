@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {first, forkJoin, fromEvent, Observable, of, Subject, take, takeUntil} from 'rxjs';
+import {first, forkJoin, fromEvent, Observable, of, Subject, take, takeUntil, throwError} from 'rxjs';
 import {MediaMetadataResolver} from '../tools';
 import {type FrameRateModel, FrameRateResolver} from '../common/frame-rate';
 import {Mp4Audio, type Mp4AudioState, Mp4Video} from './mp4-track';
@@ -40,6 +40,9 @@ export class Mp4PlayerController extends BasePlayerController<Mp4PlayerControlle
 
   loadMainMedia(args: LoadMainMediaArgsType): Observable<boolean> {
     let url = args.url;
+    if (!url) {
+      return throwError(() => new Error(`Main media url not provided`));
+    }
     let loadOptions = args.loadOptions;
 
     return new Observable<boolean>((observer) => {

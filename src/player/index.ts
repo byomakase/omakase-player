@@ -24,3 +24,6 @@ export * from './player-audio';
 export * from './player-text';
 export * from './player-text-api';
 export * from './player-text-track';
+export * from './player-video';
+export * from './player-video-api';
+export * from './player-video-track';

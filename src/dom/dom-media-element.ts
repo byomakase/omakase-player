@@ -30,6 +30,7 @@ export const HTMLMediaElementEvent = {
   LOADEDDATA: 'loadeddata',
   LOADEDMETEDATA: 'loadedmetadata',
   PAUSE: 'pause',
+  PLAY: 'play',
   PLAYING: 'playing',
   PROGRESS: 'progress',
   RATECHANGE: 'ratechange',
@@ -228,6 +229,53 @@ export class DomAudioElement extends BaseDomMediaElement<HTMLAudioElement, DomMe
       this._htmlElement.pause();
       this._htmlElement.src = '';
       this._htmlElement.load();
+    }
+    super.destroy();
+  }
+}
+
+export interface DomVideoElementConfig extends DomMediaElementConfig {
+  muted?: boolean;
+  playsInline?: boolean;
+}
+
+export class DomVideoElement extends BaseDomMediaElement<HTMLVideoElement, DomMediaElementState> {
+  constructor(config?: DomVideoElementConfig) {
+    super(document.createElement('video'));
+
+    if (config && config.loop !== void 0) {
+      this._htmlElement.loop = config.loop;
+    }
+    if (StringUtil.isNonEmpty(config?.crossOrigin)) {
+      this._htmlElement.crossOrigin = config!.crossOrigin!;
+    }
+
+    if (StringUtil.isNonEmpty(config?.preload)) {
+      this._htmlElement.preload = config!.preload!;
+    } else {
+      this._htmlElement.preload = 'auto';
+    }
+
+    // muted is set both as property and attribute, attribute is needed for autoplay policies in some browsers
+    this._htmlElement.muted = config?.muted ?? true;
+    this._htmlElement.defaultMuted = this._htmlElement.muted;
+    this._htmlElement.playsInline = config?.playsInline ?? true;
+  }
+
+  protected getState(): DomMediaElementState {
+    return {
+      id: this._id,
+      source: this._source?.state,
+      loadStage: this._loadStage.state,
+    };
+  }
+
+  destroy() {
+    if (this._htmlElement) {
+      this._htmlElement.pause();
+      this._htmlElement.removeAttribute('src');
+      this._htmlElement.load();
+      this._htmlElement.remove();
     }
     super.destroy();
   }

@@ -37,20 +37,19 @@ import {
 } from './chroming-api';
 import type {Destroyable} from '../common/capabilities';
 import {filter, Observable, Subject, takeUntil} from 'rxjs';
-import type {PlayerInternalApi} from '../player';
+import type {PlayerApi, PlayerDetachedApi} from '../player';
+import type {LocalizationApi} from '../localization';
 import type {ChromingEvent} from './chroming-event';
 import {ChromingLocal} from './chroming-local';
 import {ObserverBreaker} from '../common/observer-breaker';
 import {WindowPlaybackMode} from '../common';
-import {type ChromingSession, SessionStore} from '../session';
+import {type ChromingSession, SessionEventType, SessionStore} from '../session';
 import {errorCompleteObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
 import type {ChromingState} from './chroming-state';
 import type {Source} from '../source';
 import type {ChromingMarkerBarConfig, ChromingMarkerBarHandlerApi} from './chroming-marker-bar';
 import type {TrackLoadOptions} from '../track';
 import type {OmpProvider} from '../omp-provider';
-import {DefaultDomController} from './themes/default-dom';
-import {OmakaseDomController} from './themes/omakase-dom';
 import type {LivePlaybackTrackerApi} from '../live/live-model';
 
 export class Chroming implements ChromingApi, Destroyable {
@@ -62,6 +61,8 @@ export class Chroming implements ChromingApi, Destroyable {
 
   private _chromingLocal: ChromingLocalApi;
   private _chromingDetached?: ChromingDetachedApi | undefined;
+
+  private _playerInternal?: PlayerApi | PlayerDetachedApi | undefined;
 
   protected _chromingInternalSwitchBreaker = new ObserverBreaker();
 
@@ -80,10 +81,16 @@ export class Chroming implements ChromingApi, Destroyable {
     );
 
     this.wireLocal();
+    this.wireSession();
   }
 
-  setPlayerInternal(playerInternal: PlayerInternalApi) {
+  setPlayerInternal(playerInternal: PlayerApi | PlayerDetachedApi) {
+    this._playerInternal = playerInternal;
     this.getChromingInternalOrFail().setPlayerInternal(playerInternal);
+  }
+
+  setLocalizationInternal(localization: LocalizationApi) {
+    this.getChromingInternalOrFail().setLocalizationInternal(localization);
   }
 
   wireLocal() {
@@ -93,6 +100,32 @@ export class Chroming implements ChromingApi, Destroyable {
   wireDetached(chromingDetached: ChromingDetachedApi) {
     this._chromingDetached = chromingDetached;
     this.wireChromingInternal(this._chromingDetached);
+  }
+
+  protected wireSession() {
+    let previousWindowPlaybackMode: WindowPlaybackMode | undefined;
+    this._sessionStore.onEvent$
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .pipe(filter((p) => p.type === SessionEventType.SESSION_WINDOW_PLAYBACK_UPDATED))
+      .subscribe((event) => {
+        let mode = event.data.windowPlayback.mode;
+        switch (mode) {
+          case WindowPlaybackMode.ATTACHING:
+            this.prepareDomForAttaching(!!this._sessionStore.state.player.mainMediaId);
+            this._chromingLocal.domController.showLoading();
+            break;
+          case WindowPlaybackMode.ATTACHED:
+            if (previousWindowPlaybackMode !== WindowPlaybackMode.ATTACHED && this._playerInternal?.isMainMediaLoaded) {
+              this._chromingLocal.domController.showLoaded();
+            }
+            this._chromingLocal.domController.setAttachDetachButtonEnabled(event.data.windowPlayback.canDetach);
+            break;
+          case WindowPlaybackMode.DETACHING:
+            this.prepareDomForDetaching();
+            break;
+        }
+        previousWindowPlaybackMode = mode;
+      });
   }
 
   protected wireChromingInternal(chromingInternal: ChromingInternalApi) {

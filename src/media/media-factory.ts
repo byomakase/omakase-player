@@ -17,6 +17,7 @@
 import {
   AudioFile,
   type AudioTrackLoadOptions,
+  type MediaContainerTrackLoadOptions,
   type MainMedia,
   type MainMediaLoadOptions,
   MainMediaType,
@@ -30,10 +31,10 @@ import {
   TrackType,
 } from './index';
 import {Validators} from '../common/validators';
-import {HlsMainMedia, HlsMainMediaSessionController} from '../hls';
+import {HlsMainMedia, HlsMainMediaSessionController, HlsTrack} from '../hls';
 import type {TrackRepository} from '../repository';
 import {type Source, UrlSource} from '../source';
-import {Mp4MainMedia} from '../mp4';
+import {Mp4MainMedia, Mp4Track} from '../mp4';
 import {AudioMainMedia} from '../audio/audio-file-main-media';
 import {TamsMainMedia} from '../tams/tams-main-media';
 import {TamsMainMediaSessionController} from '../tams/tams-main-media-session-controller';
@@ -41,11 +42,14 @@ import {TamsMainMediaSessionRemote} from '../remoting/impl/tams-main-media-sessi
 import type {MainMediaSessionController} from './main-media-session-controller';
 import type {MainMediaSessionRemote} from '../remoting/main-media-session-remote';
 import {MarkerTrack} from './marker-track';
+import {SlateMainMedia} from '../slate/slate-main-media';
 import {ThumbnailTrack} from './thumbnail-track';
 import {OmakaseTools, type OmakaseToolsApi} from '../tools/omakase-tools-api';
-import {catchError, map, Observable, of} from 'rxjs';
+import {map, Observable, of} from 'rxjs';
 import {FileFormat, FileFormatType} from '../common';
 import type {TrackLoadOptions} from '../track';
+import {FrameImageMainMedia, FrameImageTrack, TrickTrack} from '../frame-image';
+import {checkSidecarVideoTrackTypeEnabled} from './media-container-track';
 
 export class MediaFactory {
   protected static get _tools(): OmakaseToolsApi {
@@ -58,6 +62,9 @@ export class MediaFactory {
     [MainMediaType.AUDIO_FILE]: [...FileFormat.AUDIO.map((p) => p.type)],
     // TAMS is bridged to HLS internally
     [MainMediaType.TAMS]: [FileFormatType.HLS],
+    // SLATE is virtual, it has no file format
+    [MainMediaType.SLATE]: [],
+    [MainMediaType.FRAME_IMAGE]: [FileFormatType.VTT],
   };
 
   private static readonly TRACK_TYPE_FORMATS: Partial<Record<TrackType, readonly FileFormatType[]>> = {
@@ -66,12 +73,19 @@ export class MediaFactory {
     [TrackType.MARKER_TRACK]: [FileFormatType.VTT],
     [TrackType.THUMBNAIL_TRACK]: [FileFormatType.VTT],
     [TrackType.OBSERVATION_TRACK]: [FileFormatType.VTT],
+    [TrackType.MP4_TRACK]: [FileFormatType.MP4, FileFormatType.MOV],
+    [TrackType.HLS_TRACK]: [FileFormatType.HLS],
+    [TrackType.FRAME_IMAGE_TRACK]: [FileFormatType.VTT],
+    [TrackType.TRICK_TRACK]: [FileFormatType.VTT],
   };
+
+  /** Track types that are never resolved from file format due to collisions, they have to be requested explicitly with trackType. */
+  private static readonly EXPLICIT_TRACK_TYPES: readonly TrackType[] = [TrackType.MP4_TRACK, TrackType.HLS_TRACK, TrackType.FRAME_IMAGE_TRACK, TrackType.TRICK_TRACK];
 
   static createMainMedia(urlSource: UrlSource, loadOptions?: MainMediaLoadOptions | undefined): Observable<MainMedia> {
     return this.resolveMainMediaType(urlSource, loadOptions).pipe(
       map(({mainMediaType, fileFormat}) => {
-        const sourceFileFormatType = fileFormat.type;
+        const sourceFileFormatType = fileFormat?.type;
         switch (mainMediaType) {
           case MainMediaType.HLS:
             return new HlsMainMedia({source: urlSource, sourceFileFormatType, loadOptions});
@@ -85,6 +99,10 @@ export class MediaFactory {
             return new AudioMainMedia({source: urlSource, sourceFileFormatType, loadOptions});
           case MainMediaType.TAMS:
             return new TamsMainMedia({source: urlSource, sourceFileFormatType, loadOptions});
+          case MainMediaType.SLATE:
+            return new SlateMainMedia({source: urlSource, sourceFileFormatType, loadOptions});
+          case MainMediaType.FRAME_IMAGE:
+            return new FrameImageMainMedia({source: urlSource, sourceFileFormatType, loadOptions});
         }
       })
     );
@@ -110,7 +128,7 @@ export class MediaFactory {
     }
   }
 
-  static resolveMainMediaType(urlSource: UrlSource, loadOptions?: MainMediaLoadOptions | undefined): Observable<{mainMediaType: MainMediaType; fileFormat: FileFormat}> {
+  static resolveMainMediaType(urlSource: UrlSource, loadOptions?: MainMediaLoadOptions | undefined): Observable<{mainMediaType: MainMediaType; fileFormat: FileFormat | undefined}> {
     const fileFormatType = loadOptions?.fileFormatType;
     const fileFormat = fileFormatType ? FileFormat.fromType(fileFormatType) : undefined;
     if (fileFormatType && !fileFormat) {
@@ -122,6 +140,11 @@ export class MediaFactory {
     // media file. It is bridged to HLS internally, so resolve directly without probing.
     if (mainMediaType === MainMediaType.TAMS) {
       return of({mainMediaType: MainMediaType.TAMS, fileFormat: FileFormat.fromType(FileFormatType.HLS)!});
+    }
+
+    // SLATE is virtual, any url is accepted and nothing is probed
+    if (mainMediaType === MainMediaType.SLATE) {
+      return of({mainMediaType: MainMediaType.SLATE, fileFormat: void 0});
     }
 
     // Validate fileFormat against mainMediaType if both are known
@@ -192,6 +215,30 @@ export class MediaFactory {
               sourceFileFormatType,
               ...(loadOptions as TextTrackLoadOptions | undefined)?.args,
             });
+          case TrackType.MP4_TRACK:
+            return new Mp4Track({
+              source: urlSource,
+              sourceFileFormatType,
+              ...(loadOptions as MediaContainerTrackLoadOptions | undefined)?.args,
+            });
+          case TrackType.HLS_TRACK:
+            return new HlsTrack({
+              source: urlSource,
+              sourceFileFormatType,
+              ...(loadOptions as MediaContainerTrackLoadOptions | undefined)?.args,
+            });
+          case TrackType.FRAME_IMAGE_TRACK:
+            return new FrameImageTrack({
+              source: urlSource,
+              sourceFileFormatType,
+              ...(loadOptions as MediaContainerTrackLoadOptions | undefined)?.args,
+            });
+          case TrackType.TRICK_TRACK:
+            return new TrickTrack({
+              source: urlSource,
+              sourceFileFormatType,
+              ...(loadOptions as MediaContainerTrackLoadOptions | undefined)?.args,
+            });
           default:
             throw new Error('niy');
         }
@@ -208,6 +255,7 @@ export class MediaFactory {
     const trackType = loadOptions?.trackType;
     if (trackType) {
       Validators.trackType()(trackType);
+      checkSidecarVideoTrackTypeEnabled(trackType);
     }
 
     // trackType provided and has no file format concept — resolve immediately
@@ -268,7 +316,9 @@ export class MediaFactory {
     if (!fileFormat) {
       return undefined;
     }
-    return (Object.entries(this.TRACK_TYPE_FORMATS) as [TrackType, readonly FileFormatType[]][]).find(([, formats]) => formats.includes(fileFormat.type))?.[0];
+    return (Object.entries(this.TRACK_TYPE_FORMATS) as [TrackType, readonly FileFormatType[]][])
+      .filter(([trackType]) => !this.EXPLICIT_TRACK_TYPES.includes(trackType))
+      .find(([, formats]) => formats.includes(fileFormat.type))?.[0];
   }
 
   static createTrack(source: Source, loadOptions?: TrackLoadOptions | undefined): Observable<Track> {

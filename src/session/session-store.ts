@@ -22,8 +22,9 @@ import {deepMerge} from '../util/util-functions';
 import {type WindowPlayback, WindowPlaybackMode} from '../common';
 import {type SessionEvent, SessionEventType} from './session-event';
 import {type MainMedia, type MainMediaState, MainMediaType, type MediaEntityState, type Track} from '../media';
-import type {LiveTimelineAnchor, PlayerAudioState, PlayerLiveState, PlayerPlayback, PlayerTextState} from '../player';
+import type {LiveTimelineAnchor, PlayerAudioState, PlayerLiveState, PlayerPlayback, PlayerTextState, PlayerVideoState} from '../player';
 import type {ChromingState} from '../chroming';
+import type {Localizations} from '../localization';
 import {freeObserver, nextCompleteObserver} from '../util/rxjs-util';
 import {CryptoUtil} from '../util/crypto-util';
 import {type SessionApi, WINDOW_PLAYBACK_MODE_TRANSITIONS} from './session-api';
@@ -53,6 +54,8 @@ export interface SessionState extends Serializable {
   player: PlayerSession;
   /** Chroming session state. */
   chroming: ChromingSession;
+  /** Localization overrides configured for the player, or `undefined` if none were configured. */
+  localization: Localizations | undefined;
 }
 
 export interface MediaLoadRequest {
@@ -70,6 +73,8 @@ export interface PlayerSession extends Serializable {
   audio: PlayerAudioState | undefined;
   /** Current text track state, or `undefined` if text is not initialized. */
   text: PlayerTextState | undefined;
+  /** Current sidecar video state, or `undefined` if video is not initialized. */
+  video: PlayerVideoState | undefined;
   /** Set while live media is loaded, so a window resuming the session lands on the same timeline. */
   liveTimelineAnchor: LiveTimelineAnchor | undefined;
   /**
@@ -285,6 +290,12 @@ export class SessionStore implements SessionApi, Destroyable {
 
     this.patch({
       chroming: deepMerge(this.state.chroming, patch),
+    });
+  }
+
+  setLocalization(localization: Localizations | undefined): void {
+    this.patch({
+      localization,
     });
   }
 

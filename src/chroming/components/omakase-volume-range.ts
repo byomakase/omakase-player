@@ -17,36 +17,50 @@
 import {MediaChromeRange} from 'media-chrome';
 import {takeUntil, filter} from 'rxjs';
 import {ObserverBreaker} from '../../common/observer-breaker';
-import type {PlayerInternalApi} from '../../player/player-api';
+import {getPlayerAudioApi, type PlayerApi, type PlayerDetachedApi} from '../../player/player-api';
+import type {PlayerAudioCommonApi} from '../../player/player-audio-api';
+import {PlayerAudioType} from '../../player/player-audio';
 import {PlayerEventType} from '../../player/player-event';
+import {AUDIO_DEFAULTS} from '../../constants';
+import {ControlBarComponent} from '../../control-bar/control-bar-component';
 
-export class OmakaseVolumeRange extends MediaChromeRange {
-  private _player: PlayerInternalApi | undefined;
+export class OmakaseVolumeRange extends ControlBarComponent(MediaChromeRange) {
+  private _player: PlayerApi | PlayerDetachedApi | undefined;
+  private _audio: PlayerAudioCommonApi | undefined;
+  protected _playerBreaker = new ObserverBreaker();
   protected _destroyBreaker = new ObserverBreaker();
 
   get player() {
     return this._player;
   }
 
-  set player(player: PlayerInternalApi | undefined) {
+  set player(player: PlayerApi | PlayerDetachedApi | undefined) {
     this._player = player;
+    this._audio = player ? getPlayerAudioApi(player) : undefined;
+    this._playerBreaker.break();
     if (this._player) {
+      this.setVolume(this.getVolume());
       this._player.onEvent$
         .pipe(
           filter((event) => event.type === PlayerEventType.PLAYER_AUDIO_CHANGE),
+          takeUntil(this._playerBreaker.observer),
           takeUntil(this._destroyBreaker.observer)
         )
         .subscribe(() => {
-          this.setVolume(this._player!.audioInternal.volume);
+          this.setVolume(this.getVolume());
         });
     }
+  }
+
+  private getVolume(): number {
+    return this._audio?.getHandler(PlayerAudioType.OUTPUT)?.volume ?? AUDIO_DEFAULTS.volume;
   }
 
   constructor() {
     super();
     this.range.addEventListener('input', () => {
-      if (this._player) {
-        this._player.audioInternal.setVolume(parseFloat(this.range.value));
+      if (this._audio) {
+        this._audio.setVolume(parseFloat(this.range.value));
       }
     });
     (this.shadowRoot!.querySelector('#progress') as HTMLDivElement).style.borderRadius = `var(--media-range-progress-border-radius, 0)`;

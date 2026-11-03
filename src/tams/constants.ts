@@ -49,6 +49,7 @@ export const TAMS_MANIFEST = {
   nonPlayableGapUri: 'http://byomakase.org/non-playable-gap',
   masterPlaylistVersion: 10,
   mediaPlaylistVersion: 3,
+  mediaPlaylistVersionWithMap: 6,
   gapToleranceSeconds: 0.001,
   minPlausibleVideoBitrate: 100_000,
 } as const;

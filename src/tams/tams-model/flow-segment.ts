@@ -8,6 +8,7 @@
  * Do not edit the class manually.
  */
 import type { FlowSegmentGetUrlsInner } from './flow-segment-get-urls-inner';
+import type { FlowSegmentInitObject } from './flow-segment-init-object';
 
 
 /**
@@ -46,5 +47,6 @@ export interface FlowSegment {
      * The number of key frames in the segment. This should be set greater than zero when the segment contains key frames that serve as a stream access point
      */
     key_frame_count?: number;
+    init_object?: FlowSegmentInitObject;
 }
 

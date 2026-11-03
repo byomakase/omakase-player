@@ -14,7 +14,20 @@
  * limitations under the License.
  */
 
-import {Audio, type AudioArgs, type AudioState, AudioType, type TrackUpdateableAttrs, Video, type VideoArgs, type VideoState, VideoType} from '../media';
+import {
+  Audio,
+  type AudioArgs,
+  type AudioState,
+  AudioType,
+  MediaContainerTrack,
+  type MediaContainerTrackArgs,
+  TrackType,
+  type TrackUpdateableAttrs,
+  Video,
+  type VideoArgs,
+  type VideoState,
+  VideoType,
+} from '../media';
 
 export interface Mp4VideoState extends VideoState {}
 
@@ -38,6 +51,17 @@ export class Mp4Audio extends Audio {
   protected _audioType: AudioType = AudioType.MP4_AUDIO;
 
   constructor(args: Mp4AudioArgs) {
+    super(args);
+  }
+}
+
+/**
+ * MP4 file loaded as sidecar container track.
+ */
+export class Mp4Track extends MediaContainerTrack {
+  protected _trackType = TrackType.MP4_TRACK;
+
+  constructor(args: MediaContainerTrackArgs) {
     super(args);
   }
 }

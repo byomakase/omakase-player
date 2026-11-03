@@ -36,11 +36,15 @@ import {ClientRemoteNode} from './remoting/client-remote-node';
 import {REMOTING} from './constants';
 import {prefixKeys} from './util/util-functions';
 import {OmpProvider} from './omp-provider';
+import {LocalizationDetached} from './localization/localization-detached';
+import type {LocalizationDetachedApi, Localizations} from './localization';
 
 export interface OmakasePlayerDetachedConfigApi {
   detachedBroadcastChannelId: string;
 
   authentication?: AuthenticationData;
+
+  localization?: Localizations | undefined;
 }
 
 export type OmakasePlayerDetachedConfig = OmakasePlayerDetachedConfigApi & PrefixKeys<PlayerDetachedConfig, 'player'> & PrefixKeys<PlayerChromingConfig, 'chroming'>;
@@ -64,6 +68,7 @@ export class OmakasePlayerDetached extends BaseOmakasePlayer implements OmakaseP
 
   protected _playerDetached: PlayerDetached;
   protected _chroming: ChromingDetached;
+  protected _localization: LocalizationDetachedApi;
 
   protected _destroyBreaker = new ObserverBreaker();
 
@@ -84,6 +89,10 @@ export class OmakasePlayerDetached extends BaseOmakasePlayer implements OmakaseP
       textMode: this._config.playerTextMode,
       textMainTracksHandler: this._config.playerTextMainTracksHandler,
       ...(this._config.playerControllerConfig ? {controllerConfig: this._config.playerControllerConfig} : {}),
+      ...(this._config.playerSidecarVideo ? {sidecarVideo: this._config.playerSidecarVideo} : {}),
+    });
+    this._localization = new LocalizationDetached({
+      localizations: this._config.localization,
     });
     this._chroming = new ChromingDetached({
       playerHtmlElementId: this._config.playerHtmlElementId,
@@ -103,9 +112,10 @@ export class OmakasePlayerDetached extends BaseOmakasePlayer implements OmakaseP
     });
     this._playerDetached.setChromingInternal(this._chroming);
     this._chroming.setPlayerInternal(this._playerDetached);
+    this._chroming.setLocalizationInternal(this._localization);
     this._ompProvider.omakaseTrack.setPlayerInternal(this._playerDetached);
 
-    let remoteNode = new ClientRemoteNode(this._config.detachedBroadcastChannelId, this._playerDetached, this._chroming, this._ompProvider);
+    let remoteNode = new ClientRemoteNode(this._config.detachedBroadcastChannelId, this._playerDetached, this._chroming, this._localization, this._ompProvider);
     this._remoteNode = remoteNode;
 
     let disconnect = () => {
@@ -155,7 +165,7 @@ export class OmakasePlayerDetached extends BaseOmakasePlayer implements OmakaseP
           },
         });
 
-        race(fromEvent(window, 'unload'), fromEvent(window, 'beforeunload'))
+        race(fromEvent(window, 'pagehide'), fromEvent(window, 'beforeunload'))
           .pipe(takeUntil(this._destroyBreaker.observer))
           .subscribe({
             next: (event) => {
@@ -178,8 +188,14 @@ export class OmakasePlayerDetached extends BaseOmakasePlayer implements OmakaseP
     return this._playerDetached;
   }
 
+  get localization(): LocalizationDetachedApi {
+    return this._localization;
+  }
+
   destroy(): void {
     super.destroy();
+
+    this._localization.destroy();
 
     this._playerDetached.destroy();
     this._chroming.destroy();

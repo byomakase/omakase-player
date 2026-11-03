@@ -22,6 +22,7 @@ const outputNames = {
   sync_audio_worklet_processor: 'sync-audio-worklet-processor.js',
   peak_sample_audio_worklet_processor: 'peak-sample-audio-worklet-processor.js',
   true_peak_audio_worklet_processor: 'true-peak-audio-worklet-processor.js',
+  frame_image_render_worker: 'frame-image-render-worker.js',
 };
 
 export default defineConfig({
@@ -42,6 +43,7 @@ export default defineConfig({
         sync_audio_worklet_processor: resolve(__dirname, 'src/worker/sync-audio-worklet-processor.ts'),
         peak_sample_audio_worklet_processor: resolve(__dirname, 'src/worker/peak-sample-audio-worklet-processor.ts'),
         true_peak_audio_worklet_processor: resolve(__dirname, 'src/worker/true-peak-audio-worklet-processor.ts'),
+        frame_image_render_worker: resolve(__dirname, 'src/worker/frame-image-render-worker.ts'),
       },
       formats: ['es'], // Only output ES format
       // fileName: (format, entryName) => `${entryName}.js`, // Use entry name for file name

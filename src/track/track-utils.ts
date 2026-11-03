@@ -14,8 +14,30 @@
  * limitations under the License.
  */
 
-import {Audio, AudioFile, AudioType, type OutputTextFileFormatType, Relation, RelationType, type SlewOptions, type TextTrack, type TextTrackArgs, type TextTrackConversionOptions, TextTrackFile, type TextTrackLoadOptions, TextTrackType, type TimedItemsTrack, type Track, TrackType,} from '../media';
-import {from, map, Observable, of, ReplaySubject, switchMap, tap, throwError} from 'rxjs';
+import {
+  Audio,
+  AudioFile,
+  type AudioObservationTrackGenerationOptions,
+  AudioObservationType,
+  AudioType,
+  DefaultObservation,
+  ObservationTrackFile,
+  type OutputTextFileFormatType,
+  Relation,
+  RelationType,
+  type SlewOptions,
+  type TextTrack,
+  type TextTrackArgs,
+  type TextTrackConversionOptions,
+  TextTrackFile,
+  type TextTrackLoadOptions,
+  type TextTrackState,
+  TextTrackType,
+  type TimedItemsTrack,
+  type Track,
+  TrackType,
+} from '../media';
+import {from, map, Observable, of, ReplaySubject, switchMap, tap} from 'rxjs';
 import {TrackRepository} from '../repository';
 import {HlsAudio, HlsTextTrack} from '../hls';
 import {errorCompleteObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
@@ -31,16 +53,15 @@ import {AudioUtil} from '../audio/audio-util';
 import {M3u8Util} from '../m3u8/m3u8-util';
 import {CryptoUtil} from '../util/crypto-util';
 import {TimedItemsFetcherFactory} from './timed-items-fetcher';
-
 import type {TrackLoadOptions} from './track-load-options';
 import type {OmakaseToolsApi} from '../tools';
 import {MediaFactory} from '../media/media-factory';
 import type {Destroyable} from '../common/capabilities';
-import {convert} from 'subtitle-converter';
-import {convert as ttconvConvert, type InputFormat, type OutputFormat, slew, type SlewFormat} from '@byomakase/omakase-ttconv-ts';
+import {convert, type InputFormat, type OutputFormat, slew, type SlewFormat} from '@byomakase/omakase-ttconv-ts';
 import {OmakaseTools} from '../tools/omakase-tools-api';
 import {isEmptyObject} from '../util/object-util';
 import {type DownsampleOptions, TimedItemsDownsamplerFactory} from './timed-items-downsampler';
+import {TimedItemsGeneratorFactory} from './timed-items-generator';
 
 interface AudioFileCreateArgs {
   hlsAudio: HlsAudio;
@@ -110,12 +131,27 @@ export interface TrackUtilsApi extends Destroyable {
    */
   convertTextTrack(source: Source, conversionOptions: TextTrackConversionOptions, loadOptions?: TextTrackLoadOptions): Observable<Track>;
   convertTextTrack(url: string, conversionOptions: TextTrackConversionOptions, loadOptions?: TextTrackLoadOptions): Observable<Track>;
+
+  /**
+   * Extracts audio levels and generates waveform from given track.
+   *
+   * Concurrent calls for the same track ID are deduplicated — subsequent subscribers
+   * receive the result of the in-flight request rather than starting a new one.
+   * The converted track is registered in the repository with a `DERIVED_FROM` relation
+   * pointing to the source track.
+   *
+   * @param id - The ID of the audio track from whom waveform should be generated.
+   * @param options - Waveform generation options (samples per second, downsampling strategy and sound field/channels).
+   * @returns An Observable that completes once the waveforms (observation tracks) have been loaded with timed items.
+   */
+  generateAudioObservationTracks(id: Track['id'], options?: AudioObservationTrackGenerationOptions): Observable<Track[]>;
 }
 
 export class TrackUtils implements TrackUtilsApi {
   protected readonly _tools: OmakaseToolsApi = OmakaseTools.instance;
   protected readonly _trackRepository: TrackRepository;
   protected _tracksWithRequestedTimedItems = new Map<string, Observable<void>>();
+  protected _tracksWithRequestedObservationsGeneration = new Map<string, Observable<Track[]>>();
 
   constructor(trackRepository: TrackRepository) {
     this._trackRepository = trackRepository;
@@ -203,10 +239,14 @@ export class TrackUtils implements TrackUtilsApi {
             if (isNullOrUndefined(conversionOptions) || isEmptyObject(conversionOptions)) {
               return of(track);
             }
-            return this.convertTextTrackFile(track as TextTrackFile, conversionOptions).pipe(
+            return this._convertTextTrack(track.state as TextTrackState, conversionOptions).pipe(
               map((newTrack) => {
                 newTrack.addRelation(Relation.of(RelationType.DERIVED_FROM, track.id, track.mediaType));
-                return this._trackRepository.add(newTrack);
+                this._trackRepository.add(newTrack);
+                newTrack.loadStart();
+                newTrack.loadSuccess();
+
+                return newTrack;
               })
             );
           })
@@ -386,12 +426,86 @@ export class TrackUtils implements TrackUtilsApi {
     });
   }
 
-  protected convertTextTrackFile(textTrackFile: TextTrackFile, conversionOptions: TextTrackConversionOptions): Observable<Track> {
+  generateAudioObservationTracks(id: Track['id'], options?: AudioObservationTrackGenerationOptions): Observable<Track[]> {
+    const key = `${id}-${options?.observationType ?? AudioObservationType.WAVEFORM}`;
+
+    if (this._tracksWithRequestedObservationsGeneration.has(key)) {
+      const o$ = this._tracksWithRequestedObservationsGeneration.get(key)!;
+      return passiveObservable<Track[]>((observer) => {
+        o$.subscribe({
+          next: (tracks) => {
+            nextCompleteObserver(observer, tracks);
+          },
+          error: (err) => {
+            errorCompleteObserver(observer, err);
+          },
+        });
+      });
+    } else {
+      let track = this._trackRepository.getOrFail(id);
+      if (track.trackType !== TrackType.AUDIO) {
+        throw new Error(`Track.trackType is not AUDIO`);
+      }
+
+      const o$ = new ReplaySubject<Track[]>(1);
+      this._tracksWithRequestedObservationsGeneration.set(key, o$);
+      return passiveObservable<Track[]>((observer) => {
+        this._generateAudioObservationTracks(track, options).subscribe({
+          next: (tracks) => {
+            nextCompleteObserver(observer, tracks);
+            this._tracksWithRequestedObservationsGeneration.delete(key);
+            o$.next(tracks);
+            o$.complete();
+          },
+          error: (err) => {
+            errorCompleteObserver(observer, err);
+            this._tracksWithRequestedObservationsGeneration.delete(key);
+            o$.error(err);
+          },
+        });
+      });
+    }
+  }
+
+  private _generateAudioObservationTracks(track: Track, options?: AudioObservationTrackGenerationOptions): Observable<Track[]> {
+    return new Observable<Track[]>((observer) => {
+      const trackGenerator = TimedItemsGeneratorFactory.createTimedItemsGenerator(track, options);
+      trackGenerator.generateTimedItems().subscribe({
+        next: (trackTimedItems) => {
+          let tracks = trackTimedItems.map((t) => {
+            const {trackLabel, timedItems} = t;
+
+            let observationTrack = this._trackRepository.add(
+              new ObservationTrackFile({
+                source: track.source,
+                label: trackLabel,
+                relations: [Relation.of(RelationType.DERIVED_FROM, track.id, track.mediaType)],
+              })
+            ) as ObservationTrackFile;
+
+            observationTrack.loadStart();
+            observationTrack.addTimedItems(timedItems as DefaultObservation[]);
+            observationTrack.areTimedItemsFetched = true;
+            observationTrack.loadSuccess();
+
+            return observationTrack;
+          });
+
+          nextCompleteObserver(observer, tracks);
+        },
+        error: (err) => {
+          errorCompleteObserver(observer, err);
+        },
+      });
+    });
+  }
+
+  private _convertTextTrack(textTrackState: TextTrackState, conversionOptions: TextTrackConversionOptions): Observable<Track> {
     return new Observable<Track>((observer) => {
-      let textTrackFileSource = textTrackFile.source;
-      if (!textTrackFileSource) {
-        throw new Error('TextTrackFile.source not defined');
-      } else if (textTrackFileSource.type === SourceType.TRACK) {
+      let textTrackSource = textTrackState.source;
+      if (!textTrackSource) {
+        throw new Error('TextTrack.source not defined');
+      } else if (textTrackSource.type === SourceType.TRACK) {
         throw new Error('Conversion not supported for SourceType.TRACK');
       }
 
@@ -402,10 +516,10 @@ export class TrackUtils implements TrackUtilsApi {
           source: source,
           sourceFileFormatType: fileFormatType,
           relations: [],
-          label: label ?? `Converted${textTrackFileState.label ? ` ${textTrackFileState.label}` : ``}`,
-          kind: textTrackFileState.kind,
+          label: label ?? `Converted${textTrackState.label ? ` ${textTrackState.label}` : ``}`,
+          kind: textTrackState.kind,
           default: false,
-          srclang: textTrackFileState.srclang,
+          srclang: textTrackState.srclang,
         };
 
         MediaFactory.createSidecarTrack(source, {trackType: TrackType.TEXT_TRACK, fileFormatType, args}).subscribe({
@@ -419,9 +533,8 @@ export class TrackUtils implements TrackUtilsApi {
       };
 
       const {label, outputFormat, slewOptions} = conversionOptions;
-      const sourceUrl = SourceUtil.resolveUrlFromSource(textTrackFileSource);
-      const textTrackFileState = textTrackFile.state;
-      const sourceFileFormatType = textTrackFileState?.sourceFileFormatType;
+      const sourceUrl = SourceUtil.resolveUrlFromSourceStateOrFail(textTrackSource);
+      const sourceFileFormatType = textTrackState?.sourceFileFormatType;
       if (!sourceFileFormatType || !FileFormat.TEXT.some((format) => format.type === sourceFileFormatType)) {
         throw Error(`Unknown text fileFormatType: ${sourceFileFormatType}`);
       }
@@ -436,7 +549,7 @@ export class TrackUtils implements TrackUtilsApi {
       from(p).subscribe({
         next: (data) => {
           if (outputFormat) {
-            this.resolveConverter(data, sourceFileFormatType, outputFormat, slewOptions).subscribe({
+            this._convertSubtitles(data, sourceFileFormatType, outputFormat, slewOptions).subscribe({
               next: (convertedData) => {
                 createTrack(convertedData, outputFormat);
               },
@@ -445,7 +558,7 @@ export class TrackUtils implements TrackUtilsApi {
               },
             });
           } else if (slewOptions?.timeSlew) {
-            createTrack(this.slewSubtitles(data as string, sourceFileFormatType, slewOptions), sourceFileFormatType);
+            createTrack(this._slewSubtitles(data as string, sourceFileFormatType, slewOptions), sourceFileFormatType);
           } else {
             createTrack(data, sourceFileFormatType);
           }
@@ -457,44 +570,13 @@ export class TrackUtils implements TrackUtilsApi {
     });
   }
 
-  private resolveConverter(subtitlesData: ArrayBuffer | string, inputFileFormatType: FileFormatType, outputFileFormatType: OutputTextFileFormatType, slewOptions?: SlewOptions): Observable<string> {
-    switch (inputFileFormatType) {
-      case FileFormatType.SCC:
-      case FileFormatType.VTT:
-      case FileFormatType.SRT:
-      case FileFormatType.TTML:
-      case FileFormatType.STL:
-        return this.convertWithTtconv(subtitlesData, inputFileFormatType, outputFileFormatType, slewOptions);
-      case FileFormatType.SSA:
-      case FileFormatType.ASS:
-        return this.convertWithSubtitleConverter(subtitlesData as string, outputFileFormatType, slewOptions);
-      default:
-        return throwError(() => new Error(`Unknown text fileFormatType: ${inputFileFormatType}`));
-    }
-  }
-
-  private slewSubtitles(subtitlesData: string, format: FileFormatType, slewOptions: SlewOptions): string {
-    switch (format) {
-      case FileFormatType.TTML:
-      case FileFormatType.VTT:
-      case FileFormatType.SRT:
-      case FileFormatType.SSA:
-      case FileFormatType.ASS:
-        return slew(subtitlesData, format.toLowerCase() as SlewFormat, slewOptions);
-      case FileFormatType.SCC:
-      case FileFormatType.STL:
-        throw new Error(`Can not slew ${format} fileFormatType. Convert to VTT | SRT | TTML to enable time slewing`);
-      default:
-        throw new Error(`Unknown text fileFormatType: ${format}`);
-    }
-  }
-
-  private convertWithTtconv(subtitlesData: ArrayBuffer | string, inputFormat: FileFormatType, outputFormat: OutputTextFileFormatType, slewOptions?: SlewOptions): Observable<string> {
+  private _convertSubtitles(subtitlesData: ArrayBuffer | string, inputFileFormatType: FileFormatType, outputFileFormatType: OutputTextFileFormatType, slewOptions?: SlewOptions): Observable<string> {
     return new Observable<string>((observer) => {
-      const convertSubtitles = () => {
+      const convertWithTtconv = () => {
         const input = subtitlesData instanceof ArrayBuffer ? new Uint8Array(subtitlesData) : subtitlesData;
         let o$ = of(
-          ttconvConvert(input, inputFormat.toLowerCase() as InputFormat, outputFormat.toLowerCase() as OutputFormat, {
+          convert(input, inputFileFormatType.toLowerCase() as InputFormat, outputFileFormatType.toLowerCase() as OutputFormat, {
+            reader: {strict: true},
             writer: {styleRegion: true, textFormatting: true},
             slewOptions,
           })
@@ -510,54 +592,45 @@ export class TrackUtils implements TrackUtilsApi {
         });
       };
 
-      switch (outputFormat) {
+      switch (inputFileFormatType) {
+        case FileFormatType.SCC:
         case FileFormatType.VTT:
         case FileFormatType.SRT:
         case FileFormatType.TTML:
-          convertSubtitles();
+        case FileFormatType.STL:
+        case FileFormatType.SSA:
+        case FileFormatType.ASS:
+          switch (outputFileFormatType) {
+            case FileFormatType.VTT:
+            case FileFormatType.SRT:
+            case FileFormatType.TTML:
+              convertWithTtconv();
+              break;
+            default:
+              errorCompleteObserver(observer, `Unknown text output fileFormatType ${outputFileFormatType}`);
+              break;
+          }
           break;
         default:
-          errorCompleteObserver(observer, `Unknown outputFormat ${outputFormat}`);
-          break;
+          return errorCompleteObserver(observer, `Unknown text input fileFormatType: ${inputFileFormatType}`);
       }
     });
   }
 
-  private convertWithSubtitleConverter(subtitlesData: string, outputFormat: OutputTextFileFormatType, slewOptions?: SlewOptions): Observable<string> {
-    return new Observable<string>((observer) => {
-      const convertSubtitles = () => {
-        try {
-          const {subtitle, status} = convert(subtitlesData, `.${outputFormat.toLowerCase()}`, {
-            removeTextFormatting: false,
-          });
-
-          if (status.success) {
-            if (slewOptions?.timeSlew) {
-              nextCompleteObserver(observer, this.slewSubtitles(subtitle, outputFormat, slewOptions));
-            } else {
-              nextCompleteObserver(observer, subtitle);
-            }
-          } else {
-            errorCompleteObserver(observer, 'Could not convert text track');
-          }
-        } catch (e) {
-          errorCompleteObserver(observer, e);
-        }
-      };
-
-      switch (outputFormat) {
-        case FileFormatType.VTT:
-        case FileFormatType.SRT:
-          convertSubtitles();
-          break;
-        case FileFormatType.TTML:
-          errorCompleteObserver(observer, `Cannot convert SSA/ASS format to ${outputFormat} format`);
-          break;
-        default:
-          errorCompleteObserver(observer, `Unknown outputFormat ${outputFormat}`);
-          break;
-      }
-    });
+  private _slewSubtitles(subtitlesData: string, format: FileFormatType, slewOptions: SlewOptions): string {
+    switch (format) {
+      case FileFormatType.TTML:
+      case FileFormatType.VTT:
+      case FileFormatType.SRT:
+      case FileFormatType.SSA:
+      case FileFormatType.ASS:
+        return slew(subtitlesData, format.toLowerCase() as SlewFormat, slewOptions);
+      case FileFormatType.SCC:
+      case FileFormatType.STL:
+        throw new Error(`Can not slew ${format} fileFormatType. Convert to VTT | SRT | TTML to enable time slewing`);
+      default:
+        throw new Error(`Unknown text fileFormatType: ${format}`);
+    }
   }
 
   destroy(): void {}

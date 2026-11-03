@@ -41,6 +41,8 @@ export interface PlayheadStyle {
   visible: boolean;
 
   fill: string;
+  /** Opacity of the playhead line and symbol. */
+  fillOpacity: number;
   draggingFill: string;
 
   lineWidth: number;
@@ -76,6 +78,7 @@ const configDefault: PlayheadConfig = {
     visible: true,
 
     fill: '#f43530',
+    fillOpacity: 1,
     draggingFill: '#f43530',
 
     lineWidth: 2,
@@ -153,6 +156,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
       points: [0, 0, 0, 0],
       stroke: this.style.fill,
       strokeWidth: this.style.lineWidth,
+      opacity: this.style.fillOpacity,
       listening: true,
     });
 
@@ -160,6 +164,7 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
       height: this.style.symbolHeight,
       offsetY: this.style.symbolYOffset,
       fill: this.style.fill,
+      opacity: this.style.fillOpacity,
     });
 
     this._timecodeLabel = new Konva.Label({
@@ -281,10 +286,12 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
           points: Playhead.symbolPoints(this.style.symbolHeight),
           offsetY: this.style.symbolYOffset,
           fill: this._state.dragging ? this.style.draggingFill : this.style.fill,
+          opacity: this.style.fillOpacity,
         });
         this._playheadLine.setAttrs({
           strokeWidth: this.style.lineWidth,
           stroke: this._state.dragging ? this.style.draggingFill : this.style.fill,
+          opacity: this.style.fillOpacity,
         });
         this._timecodeLabel.setAttrs({
           y: this.style.textYOffset,
@@ -575,10 +582,11 @@ export class Playhead extends BaseKonvaComponent<PlayheadConfig, PlayheadStyle, 
     return [bottom.x, bottom.y, right.x, left.y, left.x, left.y];
   }
 
-  private createSymbol(config: {height: number; fill: string; offsetY: number}): Konva.Line {
+  private createSymbol(config: {height: number; fill: string; opacity: number; offsetY: number}): Konva.Line {
     return new Konva.Line({
       points: Playhead.symbolPoints(config.height),
       fill: config.fill,
+      opacity: config.opacity,
       closed: true,
       listening: true,
       offsetY: config.offsetY,

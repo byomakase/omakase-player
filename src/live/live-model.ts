@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {BehaviorSubject, type Observable, takeUntil} from 'rxjs';
+import {BehaviorSubject, filter, type Observable, takeUntil} from 'rxjs';
 import {ObserverBreaker} from '../common/observer-breaker';
 import type {Destroyable} from '../common/capabilities';
 import type {PlayerCommonApi, PlayerLiveState, PlayerPlayback} from '../player';
@@ -44,6 +44,27 @@ export class LivePlaybackTrackerUtil {
    */
   static resolvePinnedToLive(isLive: boolean, playing: boolean, currentTime: number, edgeTime: number): boolean {
     return isLive && playing && edgeTime - currentTime <= PLAYER_CONTROLLER_DEFAULTS.liveEdgeThreshold / 1000;
+  }
+}
+
+/**
+ * Event types {@link LivePlaybackTracker._handle} actually reacts to — filtered upstream so every other
+ * event skips dispatch entirely. A function rather than a module-scope Set: `player` and `live-model`
+ * import each other (Player owns a LivePlaybackTracker; this file reads PlayerEventType off `player`),
+ * so a Set built from `PlayerEventType.*` at module-evaluation time can run before that circular
+ * import has finished initializing the enum. A function body only touches it once actually called,
+ * well after module loading completes.
+ */
+function isTrackedEventType(type: PlayerEventType): boolean {
+  switch (type) {
+    case PlayerEventType.PLAYER_SEEKING:
+    case PlayerEventType.PLAYER_MAIN_MEDIA_LOADING:
+    case PlayerEventType.PLAYER_LIVE_STATE_UPDATE:
+    case PlayerEventType.PLAYER_PLAYBACK_PROGRESS:
+    case PlayerEventType.PLAYER_PLAYBACK_CHANGE:
+      return true;
+    default:
+      return false;
   }
 }
 
@@ -95,10 +116,25 @@ export class LivePlaybackTracker implements LivePlaybackTrackerApi, Destroyable 
     this._lastCurrentTime = 0;
 
     player.onEvent$
+      .pipe(filter((event) => isTrackedEventType(event.type)))
       .pipe(takeUntil(this._playerBreaker.observer))
       .pipe(takeUntil(this._destroyBreaker.observer))
       .subscribe((event) => this._handle(event));
 
+    this._seedFromPlayer(player);
+  }
+
+  /**
+   * Seeds live/playback state synchronously from the player's current session, via the same
+   * {@link _applyLiveStateUpdate}/{@link _applyPlaybackChange} logic PLAYER_LIVE_STATE_UPDATE/
+   * PLAYER_PLAYBACK_CHANGE events drive - rather than waiting for the next tick of either, so `model`
+   * is already accurate right after wiring, before this instance has observed a single event of its
+   * own, for any consumer (e.g. Timeline) that reads it immediately.
+   */
+  private _seedFromPlayer(player: PlayerCommonApi): void {
+    this._lastCurrentTime = this._currentTime();
+    this._applyLiveStateUpdate(player.playerSession.liveState);
+    this._applyPlaybackChange(player.playerSession.playback);
     this._emitIfChanged();
   }
 
@@ -133,20 +169,7 @@ export class LivePlaybackTracker implements LivePlaybackTrackerApi, Destroyable 
         break;
       }
       case PlayerEventType.PLAYER_LIVE_STATE_UPDATE: {
-        const liveState: PlayerLiveState | undefined = event.data.liveState;
-        this._latestLiveState = liveState;
-        this._live = !!liveState?.isLive;
-        // Commit a fresh snapshot only on a manifest reload (edge moved) — ignore liveSyncPosition drift.
-        if (liveState && liveState.liveEdgeDuration !== this._committedEdge) {
-          this._windowStart = liveState.liveStartTime;
-          this._committedEdge = liveState.liveEdgeDuration;
-          this._windowEnd = this._resolveWindowEnd(this._lastCurrentTime);
-        }
-        if (this._live) {
-          // paused playback reports no progress, so the pin has to be re-derived here or a window
-          // resumed behind live keeps the edge pin it inherited until something seeks
-          this._pinnedToLive = this.resolvePinnedToLiveValue(this._currentTime());
-        }
+        this._applyLiveStateUpdate(event.data.liveState);
         break;
       }
       case PlayerEventType.PLAYER_PLAYBACK_PROGRESS: {
@@ -155,14 +178,34 @@ export class LivePlaybackTracker implements LivePlaybackTrackerApi, Destroyable 
         break;
       }
       case PlayerEventType.PLAYER_PLAYBACK_CHANGE: {
-        this._playerPlayback = event.data.playerPlayback;
-        this._pinnedToLive = this.resolvePinnedToLiveValue(this._currentTime());
+        this._applyPlaybackChange(event.data.playerPlayback);
         break;
       }
       default:
         return;
     }
     this._emitIfChanged();
+  }
+
+  private _applyLiveStateUpdate(liveState: PlayerLiveState | undefined): void {
+    this._latestLiveState = liveState;
+    this._live = !!liveState?.isLive;
+    // Commit a fresh snapshot only on a manifest reload (edge moved) — ignore liveSyncPosition drift.
+    if (liveState && liveState.liveEdgeDuration !== this._committedEdge) {
+      this._windowStart = liveState.liveStartTime;
+      this._committedEdge = liveState.liveEdgeDuration;
+      this._windowEnd = this._resolveWindowEnd(this._lastCurrentTime);
+    }
+    if (this._live) {
+      // paused playback reports no progress, so the pin has to be re-derived here or a window
+      // resumed behind live keeps the edge pin it inherited until something seeks
+      this._pinnedToLive = this.resolvePinnedToLiveValue(this._currentTime());
+    }
+  }
+
+  private _applyPlaybackChange(playerPlayback: PlayerPlayback): void {
+    this._playerPlayback = playerPlayback;
+    this._pinnedToLive = this.resolvePinnedToLiveValue(this._currentTime());
   }
 
   /** Freshest playhead this instance can report; progress ticks are silent while paused. */
@@ -195,7 +238,18 @@ export class LivePlaybackTracker implements LivePlaybackTrackerApi, Destroyable 
   }
 
   private _emitIfChanged(): void {
-    this._onChange$.next(this._buildModel());
+    const model = this._buildModel();
+    const previous = this._onChange$.value;
+    if (
+      previous.isLive === model.isLive &&
+      previous.pinnedToLive === model.pinnedToLive &&
+      previous.windowStart === model.windowStart &&
+      previous.windowEnd === model.windowEnd &&
+      previous.syncPosition === model.syncPosition
+    ) {
+      return;
+    }
+    this._onChange$.next(model);
   }
 
   private reset() {

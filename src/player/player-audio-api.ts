@@ -109,6 +109,10 @@ export type PlayerAudioEventTypeDataMap = {
   [PlayerAudioEventType.PLAYER_AUDIO_TRACK_UNLOADED]: PlayerAudioTrackEventData;
 
   [PlayerAudioEventType.PLAYER_AUDIO_TRACKS_REQUESTING_BUFFERING_CHANGE]: {
+    /** Track whose buffering request changed */
+    playerAudioTrack: PlayerAudioTrackState;
+    bufferingRequired: boolean;
+    /** All tracks currently requesting buffering */
     playerAudioTracks: PlayerAudioTrackState[];
   };
 };

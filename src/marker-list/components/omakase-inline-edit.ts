@@ -209,6 +209,10 @@ export class OmakaseInlineEdit extends HTMLElement {
     });
   }
 
+  cancelEditMode() {
+    this.undoChanges();
+  }
+
   private undoChanges() {
     this._input.value = this._text;
     this.disableEditMode();

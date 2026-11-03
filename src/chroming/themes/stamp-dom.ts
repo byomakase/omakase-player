@@ -237,7 +237,7 @@ export class StampDomController extends ChromingDomController<ChromingTheme.STAM
         takeUntil(this._destroyBreaker.observer)
       )
       .subscribe(() => {
-        playerInternal.audioInternal.mute();
+        this._playerAudio!.mute();
       });
 
     if (this._muteButton) {

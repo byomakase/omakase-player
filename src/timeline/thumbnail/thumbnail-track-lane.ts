@@ -485,7 +485,6 @@ export class ThumbnailTrackLane extends BaseTrackLane<ThumbnailTrackLaneConfig, 
 
     this.hideThumbnailHover();
 
-    let timelineTimecodedDimension = this._timeline!.getTimecodedFloatingDimensionForLane(this.id);
     let timecodedRect = this.getTimecodedRect();
 
     this._timecodedGroup!.setAttrs({
@@ -500,13 +499,20 @@ export class ThumbnailTrackLane extends BaseTrackLane<ThumbnailTrackLaneConfig, 
     // clipY/clipHeight used to be computed via a (timecodedRect.height / this.style.height) ratio,
     // which canceled out to exactly 1 pre-border/padding (timecodedRect.height always equaled the
     // raw lane height then) — i.e. clipY was always 0 and clipHeight always simplified to
-    // timelineTimecodedDimension.height. Now that border/padding insets make timecodedRect.height
-    // smaller than the raw height, that ratio is no longer 1 and would clip away the top of the
-    // content by the inset amount. Use the values the formula always actually produced.
+    // timelineTimecodedDimension.height (the whole slot's content height, since that was always
+    // equal to the raw lane height pre-insets too). Now that border/padding insets make
+    // timecodedRect.height smaller than the raw height, that ratio is no longer 1 and would clip
+    // away the top of the content by the inset amount — so insets must stay out of this calc. But
+    // the slot's height is still the *wrong* stand-in for "this lane's raw height" whenever this
+    // lane is minimized independently of its slot siblings (style.height goes to 0, the slot's
+    // total content height doesn't) — with an explicit thumbnailHeight override (which, unlike the
+    // no-override case, doesn't itself shrink to 0 with the lane), that let thumbnails render past
+    // a minimized lane's bounds. Read this lane's own raw flex-computed height instead — 0 when
+    // minimized, {@link TimelineLaneStyle.height} otherwise, insets not subtracted either way.
     let clipX = -this._timeline!.style.rightPaneClipPadding;
     let clipY = 0;
     let clipWidth = timecodedRect.width + this._timeline!.style.rightPaneClipPadding * 2;
-    let clipHeight = timelineTimecodedDimension.height;
+    let clipHeight = this.mainRightFlexGroup.getLayout().height;
 
     this._timecodedGroup!.clipFunc((ctx) => {
       ctx.rect(clipX, clipY, clipWidth, clipHeight);
@@ -524,15 +530,25 @@ export class ThumbnailTrackLane extends BaseTrackLane<ThumbnailTrackLaneConfig, 
   override prepareForTimeline(timeline: TimelineImpl, player: PlayerApi, ompProvider: OmpProvider) {
     super.prepareForTimeline(timeline, player, ompProvider);
 
-    // Fires on every rendered-left-edge advance (see TimelineEventType.TIMELINE_LIVE_ORIGIN_ADVANCED),
-    // including the default per-tick case, not just a TimelineConfig.liveHistoryRetention-capped
-    // advance — thumbnails are never pruned upstream (unlike captions), so something has to reclaim
-    // wrappers that fall permanently before the new edge regardless of what moved it.
     timeline.onEvent$
-      .pipe(filter((p) => p.type === TimelineEventType.TIMELINE_LIVE_ORIGIN_ADVANCED))
+      .pipe(filter((p) => p.type === TimelineEventType.TIMELINE_LIVE_ORIGIN_ADVANCED || p.type === TimelineEventType.TIMELINE_SLOT_SCROLL))
       .pipe(takeUntil(this._destroyBreaker.observer))
       .subscribe((event) => {
-        this.pruneThumbnailsBefore(event.data.origin);
+        switch (event.type) {
+          case TimelineEventType.TIMELINE_LIVE_ORIGIN_ADVANCED:
+            // Fires on every rendered-left-edge advance, including the default per-tick case,
+            // not just a TimelineConfig.liveHistoryRetention-capped advance — thumbnails are
+            // never pruned upstream (unlike captions), so something has to reclaim wrappers
+            // that fall permanently before the new edge regardless of what moved it.
+            this.pruneThumbnailsBefore(event.data.origin);
+            break;
+          case TimelineEventType.TIMELINE_SLOT_SCROLL:
+            // MAIN is the only slot with real vertical scroll, and lanes default into it — a
+            // scroll moves this lane's thumbnails out from under a hover popup anchored to
+            // their old position.
+            this.hideThumbnailHover();
+            break;
+        }
       });
 
     this._placeholderImageUrl = this.resolvePlaceholderImageUrl();

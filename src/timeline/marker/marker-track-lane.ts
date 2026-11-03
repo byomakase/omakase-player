@@ -15,14 +15,8 @@
  */
 
 import {TIMELINE_LANE_CONFIG_DEFAULT} from '../timeline-lane';
-import {
-  MarkerTrack,
-  MarkerType,
-  TimedItemsTrackEventType,
-  TimedItemTemporalUtil,
-  TrackEventType,
-} from '../../media';
 import type {Marker, MarkerState, TimedItem, TimedItemState} from '../../media';
+import {MarkerTrack, MarkerType, TimedItemsTrackEventType, TimedItemTemporalUtil, TrackEventType} from '../../media';
 import {debounceTime, filter, Observable, Subject, takeUntil} from 'rxjs';
 import {freeObserver} from '../../util/rxjs-util';
 import type {TimelineImpl} from '../timeline';
@@ -30,16 +24,17 @@ import type {PlayerApi} from '../../player';
 import {KonvaFactory} from '../konva/konva-factory';
 import Konva from 'konva';
 import {MarkerViewComponent, MarkerViewComponentEventType} from './marker-view';
-import type {Cursor, MarkerTrackStyle, Size, StyledElement, StyledElementWithId} from '../../ui';
-import {TimelineEventType} from '../timeline-api';
+import {type Cursor, type MarkerTrackStyle, type Size, type StyledElementWithId, type UiElementProps, UiEventType} from '../../ui';
 import type {ConfigAndStyle} from '../timeline-api';
+import {TimelineEventType} from '../timeline-api';
 import {TimelineSlotType} from '../timeline-slot-type';
 import {omitKeys} from '../../util/object-util';
 import type {OmpProvider} from '../../omp-provider';
 import {MeasurementUtil} from '../measurement-util';
 import type {Position} from '../model';
-import {BaseMultiTrackLane} from '../track-lane';
 import type {MultiTrackLaneConfig, MultiTrackLaneStyle, MultiTrackLaneTrackConfig} from '../track-lane';
+import {BaseMultiTrackLane} from '../track-lane';
+import {isNullOrUndefined} from '../../util/util-functions';
 
 export interface MarkerTrackLaneStyle extends MultiTrackLaneStyle, MarkerOnMarkerTrackLaneStyle {}
 
@@ -54,6 +49,10 @@ export interface MarkerOnMarkerTrackLaneStyle extends MarkerTrackStyle {
   markerHandleMouseOverScale: Size;
   markerHandleMouseOverCursor: Cursor | undefined;
   markerHandleMouseLeaveCursor: Cursor | undefined;
+}
+
+export interface MarkerTrackLaneElementProps extends UiElementProps {
+  inForeground?: boolean | undefined;
 }
 
 export enum MarkerTrackLaneEventType {
@@ -74,7 +73,7 @@ export interface MarkerTrackLaneEventData {
 
 export interface MarkerTrackLaneMarkerEventData {
   item: MarkerState;
-  itemInForeground: MarkerState | undefined;
+  itemsInForeground: MarkerState[];
 }
 
 export type MarkerTrackLaneEventTypeDataMap = {
@@ -87,7 +86,7 @@ export type MarkerTrackLaneEventTypeDataMap = {
   [MarkerTrackLaneEventType.TIMELINE_MARKER_TRACK_LANE_ITEM_HANDLE_MOUSE_LEAVE]: MarkerTrackLaneEventData;
 
   [MarkerTrackLaneEventType.TIMELINE_MARKER_TRACK_LANE_ITEM_IN_FOREGROUND_CHANGE]: {
-    itemInForeground: MarkerState | undefined;
+    itemsInForeground: MarkerState[];
   };
 };
 
@@ -98,9 +97,7 @@ export type MarkerTrackLaneEvent = {
   };
 }[keyof MarkerTrackLaneEventTypeDataMap];
 
-export interface MarkerTrackLaneConfig extends MultiTrackLaneConfig {
-
-}
+export interface MarkerTrackLaneConfig extends MultiTrackLaneConfig {}
 
 export interface MarkerTrackLaneTrackConfig extends MultiTrackLaneTrackConfig {
   style?: Partial<MarkerOnMarkerTrackLaneStyle> | undefined;
@@ -116,8 +113,6 @@ export class MarkerTrackLane extends BaseMultiTrackLane<MarkerTrackLaneConfig, M
   protected readonly _visibleTimedItems: Set<Marker['id']> = new Set<Marker['id']>();
   protected readonly _markerViewComponents: Map<Marker['id'], MarkerViewComponent> = new Map<Marker['id'], MarkerViewComponent>();
   protected readonly _markerToTrack: Map<Marker['id'], MarkerTrack> = new Map<Marker['id'], MarkerTrack>();
-
-  private _itemInForeground: Marker | undefined;
 
   protected _timecodedSpanningGroup?: Konva.Group;
   protected _markerViewComponentsGroup?: Konva.Group;
@@ -154,17 +149,13 @@ export class MarkerTrackLane extends BaseMultiTrackLane<MarkerTrackLaneConfig, M
         this.createMarkerViewComponents();
       });
 
-    this._timecodedMouseMove$
-      .pipe(takeUntil(this._destroyBreaker.observer))
-      .subscribe((position) => {
-        this.handleTimecodeMouseMove(position);
-      });
+    this._timecodedMouseMove$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe((position) => {
+      this.handleTimecodeMouseMove(position);
+    });
 
-    this._timecodedClick$
-      .pipe(takeUntil(this._destroyBreaker.observer))
-      .subscribe((position) => {
-        this.handleTimecodeClick(position);
-      });
+    this._timecodedClick$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe((position) => {
+      this.handleTimecodeClick(position);
+    });
   }
 
   get onEvent$(): Observable<MarkerTrackLaneEvent> {
@@ -261,25 +252,25 @@ export class MarkerTrackLane extends BaseMultiTrackLane<MarkerTrackLaneConfig, M
   moveToForeground(id?: Marker['id']) {
     const track = id ? this._markerToTrack.get(id) : undefined;
     const timedItem = id && track ? track.getTimedItem(id) : undefined;
+    const itemsInForeground = track ? this.getItemsInForeground(track) : [];
 
-    if (timedItem && this._itemInForeground === timedItem) {
+    if (!timedItem || itemsInForeground.find((p) => p.id === timedItem.id)) {
       return;
     }
 
-    this._itemInForeground = timedItem;
-
-    if (this._itemInForeground) {
-      let markerViewComponent = this._markerViewComponents.get(this._itemInForeground.id);
-      this._timecodedSpanningGroup?.moveToTop();
-      markerViewComponent?.konvaNode.moveToTop();
-    }
-
-    this._onEvent$.next({
-      type: MarkerTrackLaneEventType.TIMELINE_MARKER_TRACK_LANE_ITEM_IN_FOREGROUND_CHANGE,
-      data: {
-        itemInForeground: timedItem?.state,
+    this._ui!.updateElement<MarkerTrackLaneElementProps>({
+      id: timedItem.id,
+      props: {
+        inForeground: true,
       },
     });
+  }
+
+  private getItemsInForeground(track: MarkerTrack): Marker[] {
+    if (!this._ui) {
+      return [];
+    }
+    return track.timedItems.filter((timedItem) => !!this._ui?.getElement<MarkerTrackLaneElementProps>(timedItem.id)?.props?.inForeground);
   }
 
   private createMarkerViewComponents() {
@@ -291,7 +282,6 @@ export class MarkerTrackLane extends BaseMultiTrackLane<MarkerTrackLaneConfig, M
     this.updateVisibleTimedItems();
 
     let createMarkerView = (marker: Marker, track: MarkerTrack) => {
-
       const trackConfig = this._trackConfigs.get(track.id);
 
       let markerViewComponent = new MarkerViewComponent({
@@ -323,14 +313,17 @@ export class MarkerTrackLane extends BaseMultiTrackLane<MarkerTrackLaneConfig, M
               },
             });
 
-            this._timecodedClick$.next(this._timeline!.getTimecodedFloatingRelativePointerPosition()!);
+            let handleClickPosition = this._timeline!.getTimecodedFloatingRelativePointerPosition();
+            if (handleClickPosition) {
+              this._timecodedClick$.next(handleClickPosition);
+            }
 
             if (event.data.item.markerType === MarkerType.MOMENT_MARKER) {
               this._onEvent$.next({
                 type: MarkerTrackLaneEventType.TIMELINE_MARKER_TRACK_LANE_ITEM_CLICK,
                 data: {
                   item: event.data.item,
-                  itemInForeground: this._itemInForeground,
+                  itemsInForeground: this.getItemsInForeground(track).map((p) => p.state),
                 },
               });
             }
@@ -374,6 +367,10 @@ export class MarkerTrackLane extends BaseMultiTrackLane<MarkerTrackLaneConfig, M
             break;
         }
       });
+
+      if (!this.getItemsInForeground(track).find((p) => p.id === marker.id)) {
+        markerViewComponent.konvaNode.moveToBottom();
+      }
     };
 
     let deleteMarkerView = (timedItem: Marker) => {
@@ -478,8 +475,18 @@ export class MarkerTrackLane extends BaseMultiTrackLane<MarkerTrackLaneConfig, M
       this._timeline!.addToSurfaceLayerSpreadContent(this._timecodedSpanningGroup);
     }
 
-    this._timeline!.onEvent$
-      .pipe(filter((p) => p.type === TimelineEventType.TIMELINE_TIMECODE_MOUSE_MOVE))
+    this._ui!.onEvent$.pipe(filter((event) => event.type === UiEventType.UI_ELEMENT_UPDATED))
+      .pipe(filter((event) => this._markerViewComponents.has(event.data.element.id)))
+      .pipe(takeUntil(this._uiBreaker.observer))
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe((event) => {
+        const element = this._ui!.getElement<MarkerTrackLaneElementProps>(event.data.element.id);
+        if (element) {
+          this.handleForegroundUpdate(element.id, !!element.props?.inForeground);
+        }
+      });
+
+    this._timeline!.onEvent$.pipe(filter((p) => p.type === TimelineEventType.TIMELINE_TIMECODE_MOUSE_MOVE))
       .pipe(filter(() => this._hoveredTimedItems.size > 0))
       .pipe(takeUntil(this._destroyBreaker.observer))
       .subscribe((event) => {
@@ -506,7 +513,10 @@ export class MarkerTrackLane extends BaseMultiTrackLane<MarkerTrackLaneConfig, M
     });
 
     this._eventCatcher.on('click touchend', () => {
-      this._timecodedClick$.next(this._timeline!.getTimecodedFloatingRelativePointerPosition()!);
+      let position = this._timeline!.getTimecodedFloatingRelativePointerPosition();
+      if (position) {
+        this._timecodedClick$.next(position);
+      }
     });
 
     this._prepared.next(true);
@@ -538,11 +548,13 @@ export class MarkerTrackLane extends BaseMultiTrackLane<MarkerTrackLaneConfig, M
     this._hoveredTimedItems.forEach((timedItem) => {
       if (!hoveredItems.includes(timedItem)) {
         this._hoveredTimedItems.delete(timedItem);
+        let track = this._markerToTrack.get(timedItem.id);
+
         this._onEvent$.next({
           type: MarkerTrackLaneEventType.TIMELINE_MARKER_TRACK_LANE_ITEM_MOUSE_LEAVE,
           data: {
             item: timedItem.state,
-            itemInForeground: this._itemInForeground?.state,
+            itemsInForeground: this.getItemsInForeground(track!).map((p) => p.state),
           },
         });
       }
@@ -553,11 +565,13 @@ export class MarkerTrackLane extends BaseMultiTrackLane<MarkerTrackLaneConfig, M
     hoveredItems.forEach((timedItem) => {
       if (!this._hoveredTimedItems.has(timedItem)) {
         this._hoveredTimedItems.add(timedItem);
+
+        let track = this._markerToTrack.get(timedItem.id);
         this._onEvent$.next({
           type: MarkerTrackLaneEventType.TIMELINE_MARKER_TRACK_LANE_ITEM_MOUSE_ENTER,
           data: {
             item: timedItem.state,
-            itemInForeground: this._itemInForeground?.state,
+            itemsInForeground: this.getItemsInForeground(track!).map((p) => p.state),
           },
         });
       }
@@ -577,11 +591,12 @@ export class MarkerTrackLane extends BaseMultiTrackLane<MarkerTrackLaneConfig, M
     }
 
     timedItems.forEach((timedItem) => {
+      let track = this._markerToTrack.get(timedItem.id);
       this._onEvent$.next({
         type: MarkerTrackLaneEventType.TIMELINE_MARKER_TRACK_LANE_ITEM_CLICK,
         data: {
           item: timedItem.state,
-          itemInForeground: this._itemInForeground,
+          itemsInForeground: this.getItemsInForeground(track!).map((p) => p.state),
         },
       });
     });
@@ -657,6 +672,70 @@ export class MarkerTrackLane extends BaseMultiTrackLane<MarkerTrackLaneConfig, M
     this._timecodedSpanningGroup!.opacity(progress);
 
     this.refreshMarkerViewComponentsPosition();
+  }
+
+  protected handleForegroundUpdate(id: Marker['id'], inForeground: boolean): void {
+    this.checkIsPrepared();
+
+    const track = id ? this._markerToTrack.get(id) : undefined;
+    const timedItem = id && track ? track.getTimedItem(id) : undefined;
+
+    if (!timedItem || !track) {
+      return;
+    }
+
+    const removeItemForeground = (itemId: string) => {
+      this._ui!.updateElement<MarkerTrackLaneElementProps>({
+        id: itemId,
+        props: {
+          inForeground: void 0,
+        },
+      });
+    };
+
+    let markerViewComponent = this._markerViewComponents.get(id);
+    if (!inForeground) {
+      markerViewComponent!.konvaNode.moveToBottom();
+
+      this._onEvent$.next({
+        type: MarkerTrackLaneEventType.TIMELINE_MARKER_TRACK_LANE_ITEM_IN_FOREGROUND_CHANGE,
+        data: {
+          itemsInForeground: this.getItemsInForeground(track).map((p) => p.state),
+        },
+      });
+    } else {
+      const itemsInForeground = this.getItemsInForeground(track);
+
+      this._timecodedSpanningGroup?.moveToTop();
+      markerViewComponent!.konvaNode.moveToTop();
+
+      this._onEvent$.next({
+        type: MarkerTrackLaneEventType.TIMELINE_MARKER_TRACK_LANE_ITEM_IN_FOREGROUND_CHANGE,
+        data: {
+          itemsInForeground: itemsInForeground.map((p) => p.state),
+        },
+      });
+
+      let foregroundItemStartTime = TimedItemTemporalUtil.extractStartTime(timedItem.temporal);
+      let foregroundItemEndTime = TimedItemTemporalUtil.extractEndTime(timedItem.temporal);
+
+      itemsInForeground
+        .filter((p) => p.id !== timedItem.id)
+        .forEach((p) => {
+          if (!isNullOrUndefined(foregroundItemStartTime) && !isNullOrUndefined(foregroundItemEndTime)) {
+            if (TimedItemTemporalUtil.touchesTimeRange(p.temporal, foregroundItemStartTime, foregroundItemEndTime)) {
+              removeItemForeground(p.id);
+            }
+          } else {
+            let startTime = TimedItemTemporalUtil.extractStartTime(p.temporal);
+            let endTime = TimedItemTemporalUtil.extractEndTime(p.temporal);
+
+            if (isNullOrUndefined(startTime) && !isNullOrUndefined(endTime) && TimedItemTemporalUtil.touchesTimeRange(timedItem.temporal, startTime!, endTime!)) {
+              removeItemForeground(p.id);
+            }
+          }
+        });
+    }
   }
 
   destroy() {

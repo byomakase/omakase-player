@@ -50,7 +50,7 @@ const configDefault: ScrubberLaneConfig = {
 
 export interface ScrubberLaneApi extends TimelineLaneApi<ScrubberLaneStyle> {
   /**
-   * Fires on click
+   * Fires on click or touchend
    * @readonly
    */
   onClick$: Observable<ClickEvent>;
@@ -173,7 +173,7 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
       });
     });
 
-    this._timecodedGroup.on('click', (event) => {
+    this._timecodedGroup.on('click touchend', (event) => {
       this.onClick$.next({
         mouseEvent: event.evt,
         cancelableEvent: event,
@@ -216,6 +216,8 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
       y: timecodedRect.y,
       height: timecodedRect.height,
     });
+    // groups don't clip hit detection, so the event catcher must track the group's height or hover would still fire over a minimized/shrunk lane
+    this._timecodedEventCatcher!.height(timecodedRect.height);
 
     [this._timecodedGroup, this._timecodedEventCatcher, this._ticksGroup].forEach((node) => {
       node!.width(timecodedRect.width);
@@ -229,7 +231,9 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
   protected handleStyleUpdate() {
     super.handleStyleUpdate();
 
-    this._timecodedGroup?.height(this.getTimecodedRect().height);
+    let height = this.getTimecodedRect().height;
+    this._timecodedGroup?.height(height);
+    this._timecodedEventCatcher?.height(height);
     this.updateTicksGroupBounds();
     this.refreshTimeDivisions(true);
   }
@@ -266,6 +270,11 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
     this._ticksGroup?.destroyChildren();
   }
 
+  protected handleTimelineScroll() {
+    super.handleTimelineScroll();
+    this.refreshTimeDivisions(true);
+  }
+
   refreshTimeDivisions(forceCreate = false) {
     if (!this._timeline) {
       return;
@@ -274,10 +283,17 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
     let tickDivisor = this._style!.tickDivisor;
     let tickMinDivisionWidth = this._style!.tickDivisionMinWidth;
     let timelineWidth = this._timeline.getTimecodedFloatingRect().width;
+    let visibleRange = this._timeline.getVisiblePositionRange();
 
     let newDivisionWidth = this.resolveTimeDivisionWidth(timelineWidth, tickMinDivisionWidth, tickDivisor, tickDivisor);
     let newTotalDivisions = new Decimal(timelineWidth).div(newDivisionWidth).round().toNumber();
     let newDuration = this._player!.getDuration();
+    let ticksGroupWidthBuffer = Math.round(newDivisionWidth * tickDivisor);
+
+    let newVisibleRange = {
+      start: visibleRange.start - ticksGroupWidthBuffer >= 0 ? visibleRange.start - ticksGroupWidthBuffer : 0,
+      end: visibleRange.end + ticksGroupWidthBuffer <= timelineWidth ? visibleRange.end + ticksGroupWidthBuffer : timelineWidth,
+    };
 
     // A tick's displayed timecode is only stable across a pure zoom (constant duration) — the
     // pixel position moves but represents the same time as long as the division bucket (count)
@@ -301,11 +317,14 @@ export class ScrubberLane extends BaseTimelineLane<ScrubberLaneConfig, ScrubberL
     let lastTextRightPadding = 2;
     let textBottomPadding = 5;
 
-    for (let i = 0; i < this._tickTotalDivisions + 1; i++) {
+    let startIndex = Math.max(0, Math.floor(newVisibleRange.start / newDivisionWidth));
+    let endIndex = Math.min(this._tickTotalDivisions, Math.ceil(newVisibleRange.end / newDivisionWidth));
+
+    for (let i = startIndex; i < endIndex + 1; i++) {
       let isFirstTick = i === 0;
-      let isLastTick = i === this._tickTotalDivisions;
+      let isLastTick = i === endIndex;
       let isDivisionTick = i % tickDivisor === 0;
-      let tickGroupX = i * this._tickDivisionWidth;
+      let tickGroupX = Number((i * this._tickDivisionWidth).toFixed(4));
       let lineHeight = isDivisionTick ? this._style!.divisionTickHeight : this._style!.tickHeight;
       let lineY = this._ticksGroup!.height() - lineHeight;
       let textBottomY = this._ticksGroup!.height() - this._style!.divisionTickHeight - textBottomPadding;

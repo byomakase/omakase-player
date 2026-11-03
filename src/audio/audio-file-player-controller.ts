@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {first, forkJoin, fromEvent, Observable, of, Subject, take, takeUntil} from 'rxjs';
+import {first, forkJoin, fromEvent, Observable, of, Subject, take, takeUntil, throwError} from 'rxjs';
 
 import {MediaMetadataResolver} from '../tools';
 import type {MediaMetadata} from '../tools/media-metadata-resolver';
@@ -40,6 +40,9 @@ export class AudioFilePlayerController extends BasePlayerController<AudioFilePla
 
   loadMainMedia(args: LoadMainMediaArgsType): Observable<boolean> {
     let url = args.url;
+    if (!url) {
+      return throwError(() => new Error(`Main media url not provided`));
+    }
     let loadOptions = args.loadOptions;
     let frameRateModel = FrameRateResolver.FR_100;
 
@@ -66,7 +69,7 @@ export class AudioFilePlayerController extends BasePlayerController<AudioFilePla
 
       let metadataFromResolver$: Observable<Pick<MediaMetadata, 'firstAudioTrackChannelsNumber' | 'firstAudioTrackAudioCodec'>> = loadOptions?.forceSkipMetadataResolution
         ? of({firstAudioTrackChannelsNumber: AUDIO_DEFAULTS.channels, firstAudioTrackAudioCodec: undefined})
-        : MediaMetadataResolver.getMediaMetadata(args.url, ['firstAudioTrackChannelsNumber', 'firstAudioTrackAudioCodec']);
+        : MediaMetadataResolver.getMediaMetadata(url, ['firstAudioTrackChannelsNumber', 'firstAudioTrackAudioCodec']);
 
       // once both hooks are completed finish loading
       forkJoin([mainMediaEssentialArgsHookCompleted$, tracksCreatedHookCompleted$]).subscribe(() => {
@@ -125,7 +128,7 @@ export class AudioFilePlayerController extends BasePlayerController<AudioFilePla
         });
 
       // load new audio media
-      videoElement.src = args.url;
+      videoElement.src = url;
       videoElement.load();
     })
   }

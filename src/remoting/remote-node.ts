@@ -31,6 +31,7 @@ import {SessionStoreProxy} from './impl/session-store-proxy';
 import {OmakaseTrackApiProxy} from './impl/omakase-track-api-proxy';
 import {PlayerDetachedProxy} from './impl/player-detached-proxy';
 import {ChromingDetachedProxy} from './impl/chroming-detached-proxy';
+import {LocalizationDetachedProxy} from './impl/localization-detached-proxy';
 import {AudioHandlerProxy} from './impl/audio-handler-proxy';
 import {type AudioHandlerMessageChannel, AudioHandlerMessageChannelUtil} from './impl/audio-handler-message-channel';
 import {TextTrackHandlerProxy} from './impl/text-track-handler-proxy';
@@ -41,6 +42,7 @@ import type {AudioEffectsMessageChannel} from './impl/audio-effects-message-chan
 import type {AudioRouterMessageChannel} from './impl/audio-router-message-channel';
 import {PlayerAudioInternalProxy} from './impl/player-audio-internal-proxy';
 import {PlayerTextInternalProxy} from './impl/player-text-internal-proxy';
+import {PlayerVideoInternalProxy} from './impl/player-video-internal-proxy';
 import type {Audio, MainMedia, MarkerTrack, ThumbnailTrack, Track} from '../media';
 import {type TrackMessageChannel, TrackMessageChannelUtil} from './impl/track-message-channel';
 import {type MainMediaMessageChannel, MainMediMessageChannelUtil} from './impl/main-media-message-channel';
@@ -345,12 +347,20 @@ export abstract class BaseRemoteNode implements RemoteNode, Destroyable {
         this._proxyByName['PlayerTextInternal'] = new PlayerTextInternalProxy(this, this._ompProvider);
       }
 
+      if (this._remoteMessageChannelsByName.has('PlayerVideoInternal')) {
+        this._proxyByName['PlayerVideoInternal'] = new PlayerVideoInternalProxy(this, this._ompProvider);
+      }
+
       if (this._remoteMessageChannelsByName.has('PlayerDetached')) {
         this._proxyByName['PlayerDetached'] = new PlayerDetachedProxy(this, this._ompProvider);
       }
 
       if (this._remoteMessageChannelsByName.has('ChromingDetached')) {
         this._proxyByName['ChromingDetached'] = new ChromingDetachedProxy(this, this._ompProvider);
+      }
+
+      if (this._remoteMessageChannelsByName.has('LocalizationDetached')) {
+        this._proxyByName['LocalizationDetached'] = new LocalizationDetachedProxy(this, this._ompProvider);
       }
 
       if (this._remoteMessageChannelsByName.has('AlertsManager')) {

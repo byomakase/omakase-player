@@ -17,18 +17,18 @@
 import {takeUntil} from 'rxjs';
 import {DomUtil} from '../../dom/dom-util';
 import type {ThumbnailTrackState} from '../../media/thumbnail-track';
+import type {PlayerApi, PlayerDetachedApi} from '../../player';
 import {ChromingTheme, type ChromingThemeConfigTypes, type CustomThemeConfig, type CustomThemeConfigUpdateableAttrs} from '../chroming-api';
 import {ChromingDomController, type ChromingDomConfig} from '../chroming-dom';
-import type {OmakaseFullscreenButton, OmakaseMarkerBar, OmakaseMuteButton, OmakasePlayButton, OmakasePreviewThumbnail, OmakaseTimeDisplay, OmakaseTimeRange, OmakaseVolumeRange} from '../components';
+import type {OmakaseMarkerBar, OmakasePreviewThumbnail, OmakaseTimeRange} from '../components';
+
+interface PlayerAwareElement extends HTMLElement {
+  player?: PlayerApi | PlayerDetachedApi;
+}
 
 export class CustomDomController extends ChromingDomController<ChromingTheme.CUSTOM> {
   protected _themeConfig: CustomThemeConfig;
 
-  protected _playButtons: OmakasePlayButton[] | undefined;
-  protected _muteButtons?: OmakaseMuteButton[] | undefined;
-  protected _fullscreenButtons?: OmakaseFullscreenButton[] | undefined;
-  protected _volumeRanges?: OmakaseVolumeRange[] | undefined;
-  protected _timeDisplays?: OmakaseTimeDisplay[] | undefined;
   protected _previewThumbnails?: OmakasePreviewThumbnail[] | undefined;
 
   constructor(config: ChromingDomConfig<ChromingTheme.CUSTOM>) {
@@ -45,11 +45,6 @@ export class CustomDomController extends ChromingDomController<ChromingTheme.CUS
 
     this._mediaControllerElement.insertAdjacentHTML('beforeend', this.createCustomDom());
 
-    this._playButtons = this.getShadowElements<OmakasePlayButton>('omakase-play-button');
-    this._muteButtons = this.getShadowElements<OmakaseMuteButton>('omakase-mute-button');
-    this._fullscreenButtons = this.getShadowElements<OmakaseFullscreenButton>('omakase-fullscreen-button');
-    this._volumeRanges = this.getShadowElements<OmakaseVolumeRange>('omakase-volume-range');
-    this._timeDisplays = this.getShadowElements<OmakaseTimeDisplay>('omakase-time-display');
     this._previewThumbnails = this.getShadowElements<OmakasePreviewThumbnail>('omakase-preview-thumbnail');
     this._timeRange = this.getShadowElement<OmakaseTimeRange>('omakase-time-range');
     this._markerBar = this.getShadowElement<OmakaseMarkerBar>('omakase-marker-bars');
@@ -85,39 +80,27 @@ export class CustomDomController extends ChromingDomController<ChromingTheme.CUS
     this.checkPlayerInternal();
     let playerInternal = this._playerInternal!;
 
-    if (this._playButtons) {
-      this._playButtons.forEach((playButton) => {
-        playButton.player = playerInternal;
-      });
-    }
-    if (this._muteButtons) {
-      this._muteButtons.forEach((muteButton) => {
-        muteButton.player = playerInternal;
-      });
-    }
-    if (this._fullscreenButtons) {
-      this._fullscreenButtons.forEach((fullscreenButton) => {
-        fullscreenButton.player = playerInternal;
-      });
-    }
-    if (this._volumeRanges) {
-      this._volumeRanges.forEach((volumeRange) => {
-        volumeRange.player = playerInternal;
-      });
-    }
-    if (this._timeDisplays) {
-      this._timeDisplays.forEach((timeDisplay) => {
-        timeDisplay.player = playerInternal;
-      });
-    }
+    this.wireAllElements(playerInternal);
+
     if (this._timeRange) {
-      this._timeRange.player = playerInternal;
       this._timeRange.onSeek$.pipe(takeUntil(this._playerBreaker.observer), takeUntil(this._destroyBreaker.observer)).subscribe({
         next: (time) => {
           playerInternal.seekTo(time);
         },
       });
     }
+  }
+
+  /**
+   * Sets `player` on every recognized chroming component found in the custom template
+   */
+  private wireAllElements(playerInternal: PlayerApi | PlayerDetachedApi) {
+    const elements = this._mediaControllerElement.querySelectorAll<PlayerAwareElement>('*');
+    elements.forEach((element) => {
+      if ('player' in element) {
+        element.player = playerInternal;
+      }
+    });
   }
 
   get theme(): ChromingTheme.CUSTOM {

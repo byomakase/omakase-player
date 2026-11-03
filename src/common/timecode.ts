@@ -56,6 +56,7 @@ export class TimecodeConverter {
   protected _initSegmentTimeOffset?: number | undefined;
   protected _hasVideo?: boolean | undefined;
   protected _hasAudio?: boolean | undefined;
+  protected readonly _framesSeparator: string;
 
   private constructor(args: TimecodeConverterArgs) {
     this._frameRateModel = args.frameRateModel;
@@ -63,6 +64,17 @@ export class TimecodeConverter {
     this._initSegmentTimeOffset = args.initSegmentTimeOffset;
     this._hasVideo = args.hasVideo ?? true;
     this._hasAudio = args.hasAudio;
+    this._framesSeparator = TimecodeConverter.resolveFramesSeparator(this._frameRateModel, this._hasVideo, this._hasAudio);
+  }
+
+  public static resolveFramesSeparator(frameRateModel: FrameRateModel, hasVideo: boolean | undefined, hasAudio: boolean | undefined): string {
+    if (hasVideo || (!hasVideo && !hasAudio)) {
+      return !!frameRateModel.dropFrames ? separatorFramesDF : separatorFramesNDF;
+    } else if (hasAudio) {
+      return separatorFramesAudio;
+    } else {
+      throw new Error(`Cannot resolve frames separator`);
+    }
   }
 
   static create(args: TimecodeConverterArgs): TimecodeConverter {
@@ -195,15 +207,7 @@ export class TimecodeConverter {
   }
 
   private formatTimecodeValueText(hmsf: Pick<TimecodeModel, 'hours' | 'minutes' | 'seconds' | 'frames'>): string {
-    let framesSeparator: string;
-    if (this._hasVideo) {
-      framesSeparator = !!this._frameRateModel.dropFrames ? separatorFramesDF : separatorFramesNDF;
-    } else if (this._hasAudio && !this._hasVideo) {
-      framesSeparator = separatorFramesAudio
-    } else {
-      throw new Error(`Cannot resolve frames separator`)
-    }
-    return this.createTimecodeValueText(padZero(hmsf.hours), padZero(hmsf.minutes), padZero(hmsf.seconds), padZero(hmsf.frames), framesSeparator);
+    return this.createTimecodeValueText(padZero(hmsf.hours), padZero(hmsf.minutes), padZero(hmsf.seconds), padZero(hmsf.frames), this._framesSeparator);
   }
 
   createTimecodeValueText(hh: string, mm: string, ss: string, ff: string, framesSeparator: string): string {

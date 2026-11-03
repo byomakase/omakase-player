@@ -22,6 +22,9 @@ import {type PlayerController} from './player-controller-api';
 import {Observable, takeUntil} from 'rxjs';
 import {errorCompleteObserver, nextCompleteObserver} from '../util/rxjs-util';
 import type {Destroyable} from '../common/capabilities';
+import {PlayerTextHandlerType} from './player-text-handler-type';
+
+export {PlayerTextHandlerType};
 
 /** Load options for text tracks. */
 export interface PlayerTextTrackLoadOptions extends PlayerTrackLoadOptions {
@@ -38,13 +41,6 @@ export interface PlayerTextTrackLoadOptions extends PlayerTrackLoadOptions {
    * Not supported with NATIVE or EMBEDDED handlerType
    */
   adaptiveRendering?: boolean;
-}
-
-export enum PlayerTextHandlerType {
-  EMBEDDED = 'EMBEDDED',
-  NATIVE = 'NATIVE',
-  MEDIA_CAPTIONS = 'MEDIA_CAPTIONS',
-  IMSC = 'IMSC',
 }
 
 export enum PlayerTextRenderingRegion {

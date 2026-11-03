@@ -15,17 +15,35 @@
  */
 
 import {MediaPlayButton} from 'media-chrome';
-import type {PlayerInternalApi} from '../../player';
+import {filter, takeUntil} from 'rxjs';
+import {PlayerEventType, type PlayerApi, type PlayerDetachedApi} from '../../player';
+import {ObserverBreaker} from '../../common/observer-breaker';
+import {ControlBarComponent} from '../../control-bar/control-bar-component';
 
-export class OmakasePlayButton extends MediaPlayButton {
-  private _player: PlayerInternalApi | undefined;
+export class OmakasePlayButton extends ControlBarComponent(MediaPlayButton) {
+  private _player: PlayerApi | PlayerDetachedApi | undefined;
+  protected _playerBreaker = new ObserverBreaker();
+  protected _destroyBreaker = new ObserverBreaker();
 
   get player() {
     return this._player;
   }
 
-  set player(player: PlayerInternalApi | undefined) {
+  set player(player: PlayerApi | PlayerDetachedApi | undefined) {
     this._player = player;
+    this._playerBreaker.break();
+    if (this._player) {
+      this.mediaPaused = !this._player.playerSession.playback.playing;
+      this._player.onEvent$
+        .pipe(
+          filter((event) => event.type === PlayerEventType.PLAYER_PLAY || event.type === PlayerEventType.PLAYER_PAUSE),
+          takeUntil(this._playerBreaker.observer),
+          takeUntil(this._destroyBreaker.observer)
+        )
+        .subscribe((event) => {
+          this.mediaPaused = event.type === PlayerEventType.PLAYER_PAUSE;
+        });
+    }
   }
 
   override handleClick(): void {
@@ -39,5 +57,10 @@ export class OmakasePlayButton extends MediaPlayButton {
       super.handleClick();
     }
     this.blur();
+  }
+
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    this._destroyBreaker.destroy();
   }
 }

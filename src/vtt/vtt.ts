@@ -15,19 +15,7 @@
  */
 
 import {StringUtil} from '../util/string-util';
-// @ts-ignore
-import webvtt from 'node-webvtt';
-
-const webvttParseOptions = {strict: false, meta: true};
-
-export interface ParsedVttFile {
-  valid: any;
-  note: string | undefined;
-  cues: ParsedVttCue[];
-  errors: any[];
-
-  omakaseVttVersion: OmakaseVttVersion | undefined;
-}
+import type {TimedItemsParseResult} from '../track';
 
 export enum OmakaseVttVersion {
   OMAKASE_VTT_VERSION_1_0 = 'OMAKASE_VTT_VERSION_1_0',
@@ -49,16 +37,6 @@ export type OmakaseVttCueData = {
   [V in OmakaseVttVersion as (typeof OMAKASE_VTT_CUE_DATA_KEY_MAPPING)[V]]?: OmakaseVttCueDataTypeMap[V];
 };
 
-export interface ParsedVttCue {
-  identifier: string;
-  start: number;
-  end: number;
-  text: string;
-  styles: string;
-
-  data?: OmakaseVttCueData | undefined;
-}
-
 /**
  * `X-TIMESTAMP-MAP` as written in a segmented WebVTT file, in seconds.
  *
@@ -78,26 +56,7 @@ const VTT_TIMESTAMP_MAP_MPEGTS_PATTERN = /MPEGTS:(\d+)/;
 const MPEGTS_CLOCK_HZ = 90000;
 
 export class VttUtil {
-  static parseVtt(vttText: string): ParsedVttFile {
-    let parsedVttFile: ParsedVttFile = webvtt.parse(vttText, webvttParseOptions);
-
-    if (parsedVttFile.errors.length) {
-      throw new Error(`Errors found while parsing vtt file: ${parsedVttFile.errors}`);
-    }
-
-    const noteMatch = vttText.match(/WEBVTT\s*([\s\S]*?)NOTE\s*([\s\S]*?)(?=\n\s*\n)/);
-    parsedVttFile.note = noteMatch ? noteMatch[2] : void 0;
-
-    parsedVttFile.omakaseVttVersion = VttUtil.resolveOmakaseVttVersion(parsedVttFile);
-
-    if (parsedVttFile.omakaseVttVersion) {
-      OmakaseVttCueProcessorFactory.create(parsedVttFile.omakaseVttVersion).process(parsedVttFile);
-    }
-
-    return parsedVttFile;
-  }
-
-  static resolveOmakaseVttVersion(parsed: ParsedVttFile): OmakaseVttVersion | undefined {
+  static resolveOmakaseVttVersion(parsed: TimedItemsParseResult): OmakaseVttVersion | undefined {
     if (StringUtil.isNonEmpty(parsed.note)) {
       let noteRowsMatch = parsed.note!.match(/^(.*?)(?:\r?\n|\r)(.*)/);
       if (noteRowsMatch) {
@@ -147,17 +106,17 @@ export class VttUtil {
 }
 
 abstract class BaseOmakaseVttCueProcessor {
-  abstract process(parsedVttFile: ParsedVttFile): void;
+  abstract process(parsedVttFile: TimedItemsParseResult): void;
 }
 
 class OmakaseVttV1CueProcessor extends BaseOmakaseVttCueProcessor {
-  process(parsedVttFile: ParsedVttFile) {
-    for (let cue of parsedVttFile.cues) {
-      if (StringUtil.isNonEmpty(cue.text)) {
-        let textRows = cue.text.split(/\r?\n|\r|\n/g);
+  process(parsedVttFile: TimedItemsParseResult) {
+    for (let timeItem of parsedVttFile.timedItems) {
+      if (StringUtil.isNonEmpty(timeItem.text)) {
+        let textRows = timeItem.text.split(/\r?\n|\r|\n/g);
 
-        cue.data = {
-          ...cue.data,
+        timeItem.data = {
+          ...timeItem.data,
           [OMAKASE_VTT_CUE_DATA_KEY_MAPPING[OmakaseVttVersion.OMAKASE_VTT_VERSION_1_0]]: textRows.map((row) => {
             let valueRegexArray = row.match(/^([^:=]+)/);
             let measurementRegexArray = row.match(/(?<=:MEASUREMENT=)[^:]+/);
@@ -174,7 +133,7 @@ class OmakaseVttV1CueProcessor extends BaseOmakaseVttCueProcessor {
   }
 }
 
-class OmakaseVttCueProcessorFactory {
+export class OmakaseVttCueProcessorFactory {
   static create(version: OmakaseVttVersion) {
     switch (version) {
       case OmakaseVttVersion.OMAKASE_VTT_VERSION_1_0:

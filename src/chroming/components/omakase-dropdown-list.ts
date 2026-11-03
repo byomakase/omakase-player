@@ -134,6 +134,10 @@ export class OmakaseDropdownList extends HTMLElement implements OmakaseDropdownL
           optionElement.setLabel(option.label);
           optionItem.label = option.label;
         }
+        if (option.hasOwnProperty('disabled')) {
+          optionElement.disabled = !!option.disabled;
+          optionItem.disabled = option.disabled;
+        }
       }
     }
   }
@@ -146,6 +150,9 @@ export class OmakaseDropdownList extends HTMLElement implements OmakaseDropdownL
     optionElement.setAttribute(OmakaseDropdownOptionAttributes.TITLE, option.label);
     if (option.active) {
       optionElement.classList.add(OmakaseDropdownOptionDomClasses.ACTIVE);
+    }
+    if (option.disabled) {
+      optionElement.setAttribute(OmakaseDropdownOptionAttributes.DISABLED, '');
     }
     const optionItem = {
       value: optionElement.getAttribute(OmakaseDropdownOptionAttributes.VALUE),
@@ -234,7 +241,9 @@ export class OmakaseDropdownList extends HTMLElement implements OmakaseDropdownL
       const clone = optionElement.cloneNode(true) as OmakaseDropdownOption;
       clone.classList.add(`${OmakaseDropdownListDomClasses.OPTION_PREFIX}-${this.type}`);
       clone.addEventListener('click', () => {
-        this._selectOption(option);
+        if (!clone.hasAttribute(OmakaseDropdownOptionAttributes.DISABLED)) {
+          this._selectOption(option);
+        }
       });
       this.removeChild(optionElement);
       this._list!.appendChild(clone);

@@ -16,16 +16,11 @@
 
 import {type BaseTrackArgs, type BaseTrackLoadOptions, type Track, TrackType, type TrackUpdateableAttrs} from './track';
 import {UrlSource} from '../source';
-import {
-  BaseTimedItem,
-  BaseTimedItemsTrack,
-  type TimedItem,
-  type TimedItemArgs,
-  type TimedItemState,
-  type TimedItemsTrackState,
-  type TimedItemUpdateableAttrs,
-} from './timed-items-track';
+import {BaseTimedItem, BaseTimedItemsTrack, type TimedItem, type TimedItemArgs, type TimedItemState, type TimedItemsTrackState, type TimedItemUpdateableAttrs} from './timed-items-track';
 import {type OmpEventGroup} from '../common';
+import {BlobUtil} from '../util/blob-util';
+import {isNonNullable} from '../util/util-functions';
+import type {Destroyable} from '../common/capabilities';
 
 /**
  * Event types specific to thumbnail operations within a {@link ThumbnailTrack}.
@@ -57,9 +52,7 @@ export type ThumbnailTrackEvent = OmpEventGroup<ThumbnailTrackEventType, Thumbna
 /**
  * Serializable snapshot of a thumbnail {@link Track}.
  */
-export interface ThumbnailTrackState extends TimedItemsTrackState<ThumbnailState> {
-
-}
+export interface ThumbnailTrackState extends TimedItemsTrackState<ThumbnailState> {}
 
 /**
  * Construction arguments for thumbnail track instances.
@@ -97,6 +90,17 @@ export class ThumbnailTrack extends BaseTimedItemsTrack<Thumbnail, BaseThumbnail
     const items = Array.isArray(timedItems) ? timedItems : [timedItems];
     const thumbnails = items.map((item) => (item instanceof BaseThumbnail ? item : new DefaultThumbnail(item as ThumbnailArgs)));
     super.addTimedItems(thumbnails);
+  }
+
+  override deleteTimedItems(ids: Thumbnail['id'] | Thumbnail['id'][]) {
+    const thumbnails = (Array.isArray(ids) ? ids : [ids]).map((id) => this._timedItemsById.get(id)).filter(isNonNullable);
+    super.deleteTimedItems(ids);
+    thumbnails.forEach((thumbnail) => thumbnail.destroy());
+  }
+
+  override destroy() {
+    this._timedItems.forEach((thumbnail) => thumbnail.destroy());
+    super.destroy();
   }
 }
 
@@ -148,7 +152,7 @@ export interface ThumbnailArgs extends TimedItemArgs {
   url: string;
 }
 
-export abstract class BaseThumbnail extends BaseTimedItem<ThumbnailState, ThumbnailUpdateableAttrs> implements Thumbnail {
+export abstract class BaseThumbnail extends BaseTimedItem<ThumbnailState, ThumbnailUpdateableAttrs> implements Thumbnail, Destroyable {
   protected _label: string | undefined;
   protected _url: string;
 
@@ -185,10 +189,22 @@ export abstract class BaseThumbnail extends BaseTimedItem<ThumbnailState, Thumbn
   get url(): string {
     return this._url;
   }
+
+  destroy() {}
 }
 
 export class DefaultThumbnail extends BaseThumbnail implements Thumbnail {
   constructor(args: ThumbnailArgs) {
     super(args);
+  }
+}
+
+export class SpriteThumbnail extends BaseThumbnail implements Thumbnail {
+  constructor(args: ThumbnailArgs) {
+    super(args);
+  }
+
+  override destroy() {
+    BlobUtil.revokeObjectURL(this._url);
   }
 }

@@ -22,5 +22,7 @@ export type {TimedItemsTrackItemEvent, TimedItemsTrackItemExitEventData, TimedIt
 export * from './timed-items-downsampler';
 export * from './timed-items-fetcher';
 export * from './timed-items-interpolator';
+export * from './timed-items-parser';
 export * from './live-text-cue-reader';
 export * from './text-track-cue-readers';
+export * from './timed-items-generator';

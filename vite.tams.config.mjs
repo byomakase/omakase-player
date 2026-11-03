@@ -27,9 +27,9 @@ export default defineConfig({
   envDir: __dirname,
   plugins: [
     // the playback page imports the full OmakasePlayer from ../../src, which pulls in
-    // imsc/subtitle-converter (node built-ins)
+    // imsc (node built-ins)
     nodePolyfills({
-      include: ['stream', 'util', 'timers'],
+      include: ['stream', 'util'],
     }),
   ],
   server: {

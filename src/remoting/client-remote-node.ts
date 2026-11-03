@@ -21,9 +21,12 @@ import {REMOTING} from '../constants';
 import {type PlayerDetachedMessageChannel, PlayerDetachedMessageChannelBinding} from './impl/player-detached-message-channel';
 import type {PlayerAudioInternalMessageChannel} from './impl/player-audio-internal-message-channel';
 import type {PlayerTextInternalMessageChannel} from './impl/player-text-internal-message-channel';
+import type {PlayerVideoInternalMessageChannel} from './impl/player-video-internal-message-channel';
 import {type ChromingDetachedMessageChannel, ChromingDetachedMessageChannelBinding} from './impl/chroming-detached-message-channel';
+import {type LocalizationDetachedMessageChannel, LocalizationDetachedMessageChannelBinding} from './impl/localization-detached-message-channel';
 import type {PlayerDetachedApi} from '../player';
 import type {ChromingDetachedApi} from '../chroming';
+import type {LocalizationDetachedApi} from '../localization';
 import type {OmpProvider} from '../omp-provider';
 import {AlertLevel, type AlertState} from '../session/alerts-api';
 import {CryptoUtil} from '../util/crypto-util';
@@ -31,21 +34,25 @@ import {CryptoUtil} from '../util/crypto-util';
 export class ClientRemoteNode extends BaseRemoteNode {
   protected _playerDetached: PlayerDetachedApi;
   protected _chromingDetached: ChromingDetachedApi;
+  protected _localizationDetached: LocalizationDetachedApi;
 
   private _heartbeatTimeoutNumber = 0;
 
-  constructor(broadcastChannelId: string, playerDetached: PlayerDetachedApi, chromingDetached: ChromingDetachedApi, ompProvider: OmpProvider) {
+  constructor(broadcastChannelId: string, playerDetached: PlayerDetachedApi, chromingDetached: ChromingDetachedApi, localizationDetached: LocalizationDetachedApi, ompProvider: OmpProvider) {
     super(broadcastChannelId, ompProvider);
 
     this._playerDetached = playerDetached;
     this._chromingDetached = chromingDetached;
+    this._localizationDetached = localizationDetached;
 
     this.setRemoteChannels([
       // offered message channels
       {messageChannelName: 'PlayerDetached', messageChannel: new MessageChannel<PlayerDetachedMessageChannel>(this._managedBroadcastChannel)},
       {messageChannelName: 'PlayerAudioInternal', messageChannel: new MessageChannel<PlayerAudioInternalMessageChannel>(this._managedBroadcastChannel)},
       {messageChannelName: 'PlayerTextInternal', messageChannel: new MessageChannel<PlayerTextInternalMessageChannel>(this._managedBroadcastChannel)},
+      {messageChannelName: 'PlayerVideoInternal', messageChannel: new MessageChannel<PlayerVideoInternalMessageChannel>(this._managedBroadcastChannel)},
       {messageChannelName: 'ChromingDetached', messageChannel: new MessageChannel<ChromingDetachedMessageChannel>(this._managedBroadcastChannel)},
+      {messageChannelName: 'LocalizationDetached', messageChannel: new MessageChannel<LocalizationDetachedMessageChannel>(this._managedBroadcastChannel)},
     ]);
 
     this._messageChannelBindings = [
@@ -53,10 +60,12 @@ export class ClientRemoteNode extends BaseRemoteNode {
         this.getChannelOrFail('PlayerDetached'),
         this.getChannelOrFail('PlayerAudioInternal'),
         this.getChannelOrFail('PlayerTextInternal'),
+        this.getChannelOrFail('PlayerVideoInternal'),
         this._playerDetached,
         ompProvider
       ),
       new ChromingDetachedMessageChannelBinding(this.getChannelOrFail('ChromingDetached'), this._chromingDetached, ompProvider),
+      new LocalizationDetachedMessageChannelBinding(this.getChannelOrFail('LocalizationDetached'), this._localizationDetached, ompProvider),
     ];
     this._messageChannelBindings.forEach((binding) => binding.bind());
   }

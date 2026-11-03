@@ -17,7 +17,7 @@
 import {Subject, takeUntil, sampleTime, interval, filter} from 'rxjs';
 import {DEFAULT_AUDIO_PLAYER_CHROMING_CONFIG} from '../chroming-api';
 import {ObserverBreaker} from '../../common/observer-breaker';
-import {PlayerAudioType, PlayerEventType, type PlayerInternalApi} from '../../player';
+import {getPlayerAudioApi, PlayerAudioType, PlayerEventType, type PlayerApi, type PlayerDetachedApi} from '../../player';
 import {AudioPeakProcessorEventType} from '../../audio/audio-peak-processor';
 
 export const OmakaseAudioVisualizationAttributes = {
@@ -30,6 +30,8 @@ export class OmakaseAudioVisualization extends HTMLElement {
   private _historyArray: number[][] = [];
   private _barElements: SVGRectElement[] = [];
   protected _destroyBreaker = new ObserverBreaker();
+  protected _playerBreaker = new ObserverBreaker();
+  private _player: PlayerApi | PlayerDetachedApi | undefined;
   private _silenceBreaker$ = new Subject<void>();
 
   protected _viewboxWidth = 400;
@@ -79,19 +81,30 @@ export class OmakaseAudioVisualization extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this._playerBreaker.destroy();
     this._destroyBreaker.destroy();
   }
 
-  wirePlayer(player: PlayerInternalApi) {
-    const mainAudioHandler = player.audioInternal.getHandler(PlayerAudioType.MAIN);
+  get player(): PlayerApi | PlayerDetachedApi | undefined {
+    return this._player;
+  }
+
+  set player(player: PlayerApi | PlayerDetachedApi | undefined) {
+    this._player = player;
+    this._playerBreaker.break();
+    if (!player) {
+      return;
+    }
+    const mainAudioHandler = getPlayerAudioApi(player).getHandler(PlayerAudioType.MAIN);
     if (mainAudioHandler) {
       mainAudioHandler
         .createPeakProcessor()
-        .pipe(takeUntil(this._destroyBreaker.observer))
+        .pipe(takeUntil(this._playerBreaker.observer), takeUntil(this._destroyBreaker.observer))
         .subscribe(() => {
           mainAudioHandler.onPeakProcessorEvent$
             .pipe(
               filter((e) => e.type === AudioPeakProcessorEventType.AUDIO_PEAK_PROCESSOR_MESSAGE),
+              takeUntil(this._playerBreaker.observer),
               takeUntil(this._destroyBreaker.observer)
             )
             .subscribe((event) => {
@@ -103,6 +116,7 @@ export class OmakaseAudioVisualization extends HTMLElement {
             .pipe(
               filter((e) => e.type === PlayerEventType.PLAYER_PLAYBACK_PROGRESS),
               sampleTime(this._sampleTime),
+              takeUntil(this._playerBreaker.observer),
               takeUntil(this._destroyBreaker.observer)
             )
             .subscribe(() => {
@@ -111,12 +125,13 @@ export class OmakaseAudioVisualization extends HTMLElement {
           player.onEvent$
             .pipe(
               filter((e) => e.type === PlayerEventType.PLAYER_PAUSE || e.type === PlayerEventType.PLAYER_ENDED),
+              takeUntil(this._playerBreaker.observer),
               takeUntil(this._destroyBreaker.observer)
             )
             .subscribe(() => {
               this._silenceBreaker$.next();
               interval(this._sampleTime)
-                .pipe(takeUntil(this._destroyBreaker.observer), takeUntil(this._silenceBreaker$))
+                .pipe(takeUntil(this._playerBreaker.observer), takeUntil(this._destroyBreaker.observer), takeUntil(this._silenceBreaker$))
                 .subscribe(() => {
                   this.addPeakValue(0);
                   this.draw();
@@ -125,6 +140,7 @@ export class OmakaseAudioVisualization extends HTMLElement {
           player.onEvent$
             .pipe(
               filter((e) => e.type === PlayerEventType.PLAYER_PLAY),
+              takeUntil(this._playerBreaker.observer),
               takeUntil(this._destroyBreaker.observer)
             )
             .subscribe(() => {

@@ -21,7 +21,7 @@ omakase-dropdown {
   bottom: 25px;
   background-color: var(--omakase-panel-body-background-color, rgba(#333, 0.9));
   border-radius: 3px;
-  z-index: 2;
+  z-index: 20;
   display: flex;
   overflow: hidden;
 
@@ -52,7 +52,7 @@ omakase-dropdown {
         color: var(--omakase-dropdown-active-text-color, black);
       }
 
-      &:hover:not(.active) {
+      &:hover:not(.active):not([disabled]) {
         background-color: var(--omakase-dropdown-hover-background-color, rgba(0, 0, 0, 0.7));
       }
 
@@ -62,22 +62,31 @@ omakase-dropdown {
     }
 
     &[type='radio'] omakase-dropdown-option {
-      .omakase-dropdown-option-icon {
-        background-image: url(/images/media-chrome-radio-off.svg);
+      .omakase-dropdown-option-icon,
+      .omakase-dropdown-option-icon-inner {
+        border-radius: 50%;
       }
 
-      &.active .omakase-dropdown-option-icon {
-        background-image: url(/images/media-chrome-radio-on.svg);
+      .omakase-dropdown-option-icon {
+        border-width: 2.25px;
       }
     }
 
     &[type='checkbox'] omakase-dropdown-option {
       .omakase-dropdown-option-icon {
-        background-image: url(/images/media-chrome-checkbox-off.svg);
+        border-width: 2.57px;
+        border-radius: 2px;
       }
 
-      &.active .omakase-dropdown-option-icon {
-        background-image: url(/images/media-chrome-checkbox-on.svg);
+      .omakase-dropdown-option-icon-inner {
+        border-radius: 1px;
+      }
+    }
+
+    &[type='radio'] omakase-dropdown-option,
+    &[type='checkbox'] omakase-dropdown-option {
+      &.active .omakase-dropdown-option-icon-inner {
+        display: block;
       }
     }
 
@@ -111,7 +120,7 @@ omakase-dropdown {
     flex-shrink: 0;
     line-height: 20px;
     background-color: var(--omakase-panel-header-background-color, #434242e5);
-    color: var(--omakase-panel-header-color, #bbbbbb);
+    color: var(--omakase-panel-header-text-color, #bbbbbb);
     padding: 5px;
     font-size: 11px;
     white-space: nowrap;
@@ -131,13 +140,26 @@ omakase-dropdown {
       line-height: 25px;
       cursor: pointer;
 
+      &[disabled] {
+        cursor: default;
+        opacity: var(--omakase-dropdown-disabled-option-opacity, 0.4);
+      }
+
       .omakase-dropdown-option-icon {
         min-width: 12px;
         height: 12px;
         display: inline-block;
-        background-repeat: no-repeat;
-        background-size: cover;
+        box-sizing: border-box;
+        border: 1px solid var(--omakase-dropdown-toggle-color, white);
         margin: auto 0;
+        position: relative;
+      }
+
+      .omakase-dropdown-option-icon-inner {
+        display: none;
+        position: absolute;
+        inset: 0;
+        background-color: var(--omakase-primary-color, #009ceb);
       }
 
       .omakase-dropdown-option-text {
@@ -152,11 +174,70 @@ omakase-dropdown {
 omakase-dropdown-toggle {
   line-height: var(--icon-size-default);
   font-size: calc(var(--icon-size-default) * 0.75);
+  box-sizing: border-box;
+  max-width: var(--omakase-dropdown-toggle-max-width, 120px);
+
+  > .omakase-dropdown-toggle {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  &:not(.disabled) {
+    cursor: pointer;
+  }
 
   &.disabled {
     .media-chrome-button {
       cursor: auto;
     }
+  }
+}
+
+// Options of the playback rate, audio, text and track selectors, for their default label toggle
+.omakase-dropdown-selector {
+  &[caret] > omakase-dropdown-toggle:has(> .omakase-dropdown-toggle) {
+    display: inline-flex;
+    align-items: center;
+
+    &::after {
+      content: '';
+      flex-shrink: 0;
+      margin-left: var(--omakase-dropdown-selector-caret-gap, 0.4em);
+      border-left: calc(var(--omakase-dropdown-selector-caret-size, 0.6em) / 2) solid transparent;
+      border-right: calc(var(--omakase-dropdown-selector-caret-size, 0.6em) / 2) solid transparent;
+      border-top: calc(var(--omakase-dropdown-selector-caret-size, 0.6em) / 2) solid var(--omakase-dropdown-selector-caret-color, currentColor);
+    }
+  }
+
+  &[expand-direction='left']:not([hidden]),
+  &[expand-direction='right']:not([hidden]) {
+    display: inline-flex !important;
+    align-items: center;
+    flex: 0 1 auto;
+    box-sizing: border-box;
+    width: var(--omakase-dropdown-toggle-max-width, 120px);
+    min-width: 0;
+
+    > omakase-dropdown-toggle {
+      flex: 0 0 auto;
+    }
+  }
+
+  &[expand-direction='left'] {
+    justify-content: flex-end;
+  }
+
+  &[expand-direction='right'] {
+    justify-content: flex-start;
+  }
+
+  &[toggle-background] > omakase-dropdown-toggle {
+    padding: var(--omakase-dropdown-selector-toggle-padding, 0 6px);
+    background-color: var(--omakase-dropdown-selector-toggle-background-color, rgba(255, 255, 255, 0.1));
+    border: var(--omakase-dropdown-selector-toggle-border-width, 1px) solid var(--omakase-dropdown-selector-toggle-border-color, transparent);
+    border-radius: var(--omakase-dropdown-selector-toggle-border-radius, 2px);
   }
 }
 

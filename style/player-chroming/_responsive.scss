@@ -36,9 +36,8 @@
           width: calc(var(--omakase-action-icon-base-size-omakase-theme, 32px) * 0.75);
           height: calc(var(--omakase-action-icon-base-size-omakase-theme, 32px) * 0.75);
         }
-        .volume-container {
+        omakase-mute-button {
           omakase-volume-range {
-            right: calc(var(--omakase-action-icon-base-size-omakase-theme, 32px) * 0.75);
             height: calc(var(--omakase-action-icon-base-size-omakase-theme, 32px) * 0.75);
             width: 150px;
             border-width: 1px;
@@ -218,6 +217,8 @@
 
 @container (inline-size < 600px) {
   media-controller {
+    --omakase-dropdown-selector-offset-default: 20px;
+
     * {
       --padding-size: calc(var(--padding-size-default) * 0.5);
       --icon-size: calc(var(--icon-size-default) * 0.85);
@@ -284,6 +285,7 @@
     }
 
     &.media-controller-audio {
+      --omakase-dropdown-selector-offset-default: 23px;
       omakase-dropdown {
         --omakase-dropdown-vertical-offset: 55px;
       }
@@ -334,10 +336,16 @@
   }
 }
 
-@container (inline-size < 510px) {
+@container (inline-size < 525px) {
   media-controller.media-controller-omakase {
     .omakase-player-bitc {
       display: none !important;
+    }
+
+    &:has(.omakase-live-button) {
+      .omakase-player-playback-rate-toggle {
+        display: none !important;
+      }
     }
   }
 }
@@ -428,13 +436,24 @@
 @container (inline-size < 400px) {
   media-controller {
     .start-container {
-      width: 50px !important;
+      width: calc(
+        50% - 2 * var(--controls-left-padding, var(--controls-left-padding-default)) - 0.5 * (var(--icon-size, var(--icon-size-default)) + 2 * var(--padding-size, var(--padding-size-default)))
+      ) !important;
 
       omakase-volume-range,
       omakase-dropdown-toggle,
       .omakase-player-text-toggle,
       .omakase-vu-meter-control-bar {
         display: none;
+      }
+    }
+
+    .lower-control-bar .start-container omakase-mute-button[volume-flyout]:hover,
+    &.media-controller-omakase .omakase-control-bar .omakase-control-bar-upper .start-container omakase-mute-button[volume-flyout]:hover {
+      ~ .media-chrome-button,
+      ~ omakase-dropdown-toggle,
+      ~ omakase-playback-rate-selector omakase-dropdown-toggle {
+        opacity: 1 !important;
       }
     }
 
@@ -450,6 +469,16 @@
     }
     .end-container .omakase-timecode-wrapper {
       display: none !important;
+    }
+
+    &.media-controller-omakase .omakase-control-bar .omakase-control-bar-upper {
+      .start-container {
+        padding-left: 5px;
+      }
+
+      .end-container {
+        padding-right: 5px;
+      }
     }
   }
 }
@@ -499,6 +528,14 @@
   media-controller {
     .omakase-player-bitc {
       display: none;
+    }
+  }
+}
+
+@container (inline-size <= 220px) {
+  media-controller.media-controller-default {
+    .omakase-live-button {
+      --omakase-live-button-text-display: none;
     }
   }
 }
@@ -605,6 +642,8 @@
 
 @container (inline-size >= 1200px) {
   media-controller {
+    --omakase-dropdown-selector-offset-default: 31px;
+
     * {
       --padding-size: calc(var(--padding-size-default) * 1.125);
       --icon-size: calc(var(--icon-size-default) * 1.125);
@@ -667,6 +706,7 @@
     }
 
     &.media-controller-audio {
+      --omakase-dropdown-selector-offset-default: 33px;
       omakase-dropdown {
         --omakase-dropdown-vertical-offset: 75px;
       }
@@ -689,6 +729,7 @@
     }
 
     &.media-controller-omakase {
+      --omakase-dropdown-selector-offset-default: 15px;
       .omakase-overlay-buttons .omakase-video-overlay-button {
         width: calc(1.5 * var(--center-control-size-default));
         height: calc(1.5 * var(--center-control-size-default));
@@ -707,9 +748,8 @@
           width: 36px;
           height: 36px;
         }
-        .volume-container {
+        omakase-mute-button {
           omakase-volume-range {
-            right: 36px;
             height: 36px;
             width: 197px;
             border-width: 1px;
@@ -916,6 +956,7 @@
 @container (inline-size >= 1440px) {
   media-controller {
     &.media-controller-omakase {
+      --omakase-dropdown-selector-offset-default: 18px;
       .omakase-overlay-buttons .omakase-video-overlay-button {
         width: calc(2 * var(--center-control-size-default));
         height: calc(2 * var(--center-control-size-default));
@@ -931,9 +972,8 @@
           width: calc(var(--omakase-action-icon-base-size-omakase-theme, 32px) * 1.375);
           height: calc(var(--omakase-action-icon-base-size-omakase-theme, 32px) * 1.375);
         }
-        .volume-container {
+        omakase-mute-button {
           omakase-volume-range {
-            right: calc(var(--omakase-action-icon-base-size-omakase-theme, 32px) * 1.375);
             height: calc(var(--omakase-action-icon-base-size-omakase-theme, 32px) * 1.375);
             width: 300px;
             border-width: 1.75px;
@@ -1027,7 +1067,7 @@
               font-size: 20px;
               height: 30px;
             }
-            .volume-container {
+            omakase-mute-button[volume-flyout] {
               omakase-volume-range {
                 --media-range-track-height: 6px;
                 height: 30px;
@@ -1296,9 +1336,8 @@
           width: 49px;
           height: 49px;
         }
-        .volume-container {
+        omakase-mute-button {
           omakase-volume-range {
-            right: 49px;
             height: 49px;
             width: 332px;
             border-width: 2px;
@@ -1510,9 +1549,8 @@
           width: 55px;
           height: 55px;
         }
-        .volume-container {
+        omakase-mute-button {
           omakase-volume-range {
-            right: 55px;
             height: 55px;
             width: 368px;
           }
@@ -1786,9 +1824,8 @@
           width: calc(var(--omakase-action-icon-base-size-omakase-theme, 32px) * 1.875);
           height: calc(var(--omakase-action-icon-base-size-omakase-theme, 32px) * 1.875);
         }
-        .volume-container {
+        omakase-mute-button {
           omakase-volume-range {
-            right: calc(var(--omakase-action-icon-base-size-omakase-theme, 32px) * 1.875);
             height: calc(var(--omakase-action-icon-base-size-omakase-theme, 32px) * 1.875);
             width: 400px;
             border-width: 2.5px;

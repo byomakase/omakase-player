@@ -22,6 +22,7 @@ import type {OmakasePlayerApi} from '../omakase-player-api';
 import {concat, filter, map, of, switchMap, throttleTime, timer, takeUntil, Subject, tap} from 'rxjs';
 import {PlayerEventType} from '../player';
 import {TimedItemsTrackEventEmitter, TimedItemsTrackItemEventType} from '../track';
+import {AudioUtil} from '../audio/audio-util';
 
 export class ObservationTrackAudioLevelSource extends AudioLevelSource {
   protected _track?: ObservationTrack | undefined;
@@ -218,9 +219,9 @@ export class ObservationTrackAudioLevelSource extends AudioLevelSource {
   private extractDbValues(observation: Observation): number[] {
     const values = observation.items.filter((item) => item.value !== undefined).map((item) => parseFloat(item.value!));
     if (this._channelTracks.length) {
-      return [this.dbFromFloat(Math.max(...values.map((value) => Math.abs(value))))];
+      return [AudioUtil.dbFromFloat(Math.max(...values.map((value) => Math.abs(value))))];
     } else {
-      return values.map((value) => this.dbFromFloat(Math.abs(value)));
+      return values.map((value) => AudioUtil.dbFromFloat(Math.abs(value)));
     }
   }
 

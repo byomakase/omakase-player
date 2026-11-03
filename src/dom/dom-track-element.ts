@@ -144,7 +144,7 @@ export class DomTextTrackElement extends BaseDomTrackElement<HTMLTrackElement, D
     }
 
     if (track.source) {
-      element.src = SourceUtil.resolveUrlFromSourceState(track.source);
+      element.src = SourceUtil.resolveUrlFromSourceStateOrFail(track.source);
     }
 
     element.default = track.default;

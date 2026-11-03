@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {type AudioState, type MainMediaState, type MainMediaUpdateableAttrs, type MediaRotationValue, type TextTrackState, type Track} from '../media';
+import {type AudioState, type MainMediaState, type MainMediaUpdateableAttrs, type MediaRotationValue, type TextTrackState, type Track, type VideoKeyframe, type VideoKeyframeOptions} from '../media';
 import {BehaviorSubject, concat, delay, filter, forkJoin, fromEvent, interval, map, Observable, of, Subject, switchMap, take, takeUntil, tap, timeout} from 'rxjs';
 import {ObserverBreaker} from '../common/observer-breaker';
 import {isNullOrUndefined} from '../util/util-functions';
@@ -34,16 +34,29 @@ import {
   type PlayerLiveState,
   type RestoreMainMediaSessionArgsType,
 } from './player-controller-api';
-import {PLAYER_CONTROLLER_DEFAULTS} from '../constants';
+import {PLAYER_CONTROLLER_DEFAULTS, SEEK_STEP_PLAYBACK_DEFAULTS} from '../constants';
 import {SourceUtil} from '../source';
 import {CryptoUtil} from '../util/crypto-util';
 import type {HlsAudioState, HlsTextTrackState} from '../hls';
 import {HTMLMediaElementEvent, HtmlMediaElementUtil, HTMLVideoElementEvent} from '../dom/dom-media-element';
 import {StringUtil} from '../util/string-util';
 import {OmakaseAudioContextProvider} from '../omakase-audio-context-provider';
-import type {VideoKeyframe, VideoKeyframeOptions} from '../tools/keyframe-extractor';
+import {SeekStepPlaybackUtil} from '../common/seek-step-playback';
 
-export interface PlayerControllerConfig {}
+export interface PlayerControllerConfig {
+  /**
+   * Seconds of main media time at 1x between seeks of video element while it can't play at playback rate, multiplied by absolute playback rate.
+   * Used by {@link CompositePlayerController} HLS and MP4 main media are played with, see {@link SeekStepper}.
+   * Defaults to {@link SEEK_STEP_PLAYBACK_DEFAULTS.seekStep}.
+   */
+  seekStep?: number | undefined;
+
+  /**
+   * Minimum milliseconds between seeks of video element while it can't play at playback rate. Used by {@link CompositePlayerController}.
+   * Defaults to {@link SEEK_STEP_PLAYBACK_DEFAULTS.minSeekInterval}.
+   */
+  minSeekInterval?: number | undefined;
+}
 
 interface VideoFrameCallbackData {
   now: DOMHighResTimeStamp;
@@ -66,6 +79,8 @@ export type TextTrackIdentifier = any;
 
 export abstract class BasePlayerController<C extends PlayerControllerConfig> implements PlayerController {
   protected readonly _onEvent$: Subject<PlayerControllerEvent> = new Subject<PlayerControllerEvent>();
+  /** Time latest seek started at (performance.now()), until seeked */
+  protected _latestSeekStartTime: number | undefined;
 
   protected readonly _playerControllerId: string;
 
@@ -203,16 +218,29 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
   }
 
   initEventHandlers() {
-    let latestSeekStartTime: number | undefined;
+    this._latestSeekStartTime = void 0;
 
     fromEvent(this._playerDomController.mainMediaVideoElement, HTMLMediaElementEvent.PLAYING)
       .pipe(takeUntil(this._mediaEventBreaker.observer))
       .subscribe({
         next: () => {
+          this.setPlaying();
           this._onEvent$.next({
             type: PlayerControllerEventType.PLAYER_CONTROLLER_PLAY,
             data: this.createMediaControllerPlayEvent(),
           });
+        },
+      });
+
+    fromEvent(this._playerDomController.mainMediaVideoElement, HTMLMediaElementEvent.PLAY)
+      .pipe(takeUntil(this._mediaEventBreaker.observer))
+      .subscribe({
+        next: () => {
+          // media element is unpaused but there is not enough data to start playback, PLAYING event will follow once data arrives
+          let mediaElement = this._playerDomController.mainMediaVideoElement;
+          if (mediaElement.readyState <= mediaElement.HAVE_CURRENT_DATA) {
+            this._mediaElementPlayback!.setPlayingWaiting();
+          }
         },
       });
 
@@ -222,12 +250,14 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
         next: () => {
           let finalizePause = () => {
             this.emitPlaybackProgress();
+            this.setPaused();
             this._onEvent$.next({
               type: PlayerControllerEventType.PLAYER_CONTROLLER_PAUSE,
               data: this.createMediaControllerPlayEvent(),
             });
 
             if (this._getCurrentVideoTime() >= this.getDuration() && !this.isLive()) {
+              this.setEnded();
               this._onEvent$.next({
                 type: PlayerControllerEventType.PLAYER_CONTROLLER_ENDED,
                 data: this.createMediaControllerPlayEvent(),
@@ -235,16 +265,27 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
             }
           };
 
-          if (this._getCurrentVideoTime() >= this.getDuration() || !this._mainMediaState?.frameRateModel) {
+          let mediaElement = this._playerDomController.mainMediaVideoElement;
+          // frame sync seek can't complete without data at current position, skipping it to avoid waiting for pausing timeout
+          if (this._getCurrentVideoTime() >= this.getDuration() || !this._mainMediaState?.frameRateModel || mediaElement.readyState < mediaElement.HAVE_CURRENT_DATA) {
             finalizePause();
           } else {
             // console.debug(`%cpause control sync start`, 'color: purple');
+            let pauseFinalized = false;
+            // not breaking on seek breaker, frame sync seek itself breaks seek in progress
             this._seekFromCurrentFrame(1)
-              .pipe(takeUntil(this._pausingBreaker.observer), takeUntil(this._seekBreaker.observer), take(1))
+              .pipe(takeUntil(this._pausingBreaker.observer), take(1))
               .subscribe({
                 next: () => {
                   // console.debug(`%cpause control sync end`, 'color: purple');
+                  pauseFinalized = true;
                   finalizePause();
+                },
+                complete: () => {
+                  // pausing cancelled before frame sync seek completed, video is paused nevertheless
+                  if (!pauseFinalized) {
+                    finalizePause();
+                  }
                 },
               });
           }
@@ -271,6 +312,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
     fromEvent(this._playerDomController.mainMediaVideoElement, HTMLMediaElementEvent.ENDED)
       .pipe(takeUntil(this._mediaEventBreaker.observer))
       .subscribe((event) => {
+        this.setEnded();
         this._onEvent$.next({
           type: PlayerControllerEventType.PLAYER_CONTROLLER_ENDED,
           data: this.createMediaControllerPlayEvent(),
@@ -310,52 +352,13 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
     });
 
     this.onEvent$
-      .pipe(filter((p) => p.type === PlayerControllerEventType.PLAYER_CONTROLLER_PLAY))
-      .pipe(takeUntil(this._mediaEventBreaker.observer))
-      .subscribe((event) => {
-        this.setPlaying();
-      });
-
-    this.onEvent$
-      .pipe(filter((p) => p.type === PlayerControllerEventType.PLAYER_CONTROLLER_PAUSE))
-      .pipe(takeUntil(this._mediaEventBreaker.observer))
-      .subscribe((event) => {
-        this.setPaused();
-      });
-
-    this.onEvent$
-      .pipe(filter((p) => p.type === PlayerControllerEventType.PLAYER_CONTROLLER_SEEKING))
-      .pipe(takeUntil(this._mediaEventBreaker.observer))
-      .subscribe((event) => {
-        this._mediaElementPlayback!.seeking = true;
-        latestSeekStartTime = performance.now();
-      });
-
-    this.onEvent$
-      .pipe(filter((p) => p.type === PlayerControllerEventType.PLAYER_CONTROLLER_SEEKED))
-      .pipe(takeUntil(this._mediaEventBreaker.observer))
-      .subscribe((event) => {
-        this._mediaElementPlayback!.seeking = false;
-        this._mediaElementPlayback!.waiting = false;
-        latestSeekStartTime = void 0;
-      });
-
-    this.onEvent$
-      .pipe(filter((p) => p.type === PlayerControllerEventType.PLAYER_CONTROLLER_ENDED))
-      .pipe(takeUntil(this._mediaEventBreaker.observer))
-      .subscribe((event) => {
-        this._mediaElementPlayback!.setEnded();
-        this._videoStalledCheckLastCurrentTime = void 0;
-      });
-
-    this.onEvent$
       .pipe(filter((p) => p.type === PlayerControllerEventType.PLAYER_CONTROLLER_PLAYBACK_PROGRESS))
       .pipe(takeUntil(this._mediaEventBreaker.observer))
       .subscribe({
         next: () => {
           // pauses video if waitingSyncedMedia is set and video is playing
           if (this._mediaElementPlayback && this._mediaElementPlayback.waitingSyncedMedia && this.isPlaying()) {
-            this._pause();
+            this._pause().subscribe();
           }
         },
       });
@@ -380,8 +383,8 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
           this._videoStalledCheckLastCurrentTime = currentTime;
         }
 
-        if (this._mediaElementPlayback && !this._mediaElementPlayback.state.playing && !isNullOrUndefined(latestSeekStartTime)) {
-          let isWaiting = !!latestSeekStartTime && performance.now() - latestSeekStartTime > this._videoPausedSeekBufferingThresholdMs;
+        if (this._mediaElementPlayback && !this._mediaElementPlayback.state.playing && !isNullOrUndefined(this._latestSeekStartTime)) {
+          let isWaiting = !!this._latestSeekStartTime && performance.now() - this._latestSeekStartTime > this._videoPausedSeekBufferingThresholdMs;
           if (isWaiting) {
             // set waiting only if seek operation is taking too long, onSeeked event will eventually reset waiting state
             this._mediaElementPlayback.waiting = true;
@@ -411,6 +414,22 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
   protected setPaused() {
     this._videoStalledCheckLastCurrentTime = void 0;
     this._mediaElementPlayback!.setPaused();
+  }
+
+  protected setEnded() {
+    this._mediaElementPlayback!.setEnded();
+    this._videoStalledCheckLastCurrentTime = void 0;
+  }
+
+  protected setSeeking() {
+    this._mediaElementPlayback!.seeking = true;
+    this._latestSeekStartTime = performance.now();
+  }
+
+  protected setSeeked() {
+    this._mediaElementPlayback!.seeking = false;
+    this._mediaElementPlayback!.waiting = false;
+    this._latestSeekStartTime = void 0;
   }
 
   restoreMainMediaSession(args: RestoreMainMediaSessionArgsType): Observable<void> {
@@ -864,16 +883,20 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
    *  2. Seeks to a time just before last frame ends
    *  3. Seeks to video duration which aligns video.currentTime with video.duration
    *
+   * Seeking is emitted when first seek starts and seeked when last seek finishes, so that the whole sequence is reported as one seek.
+   *
+   * @param emitSeeking false when seek to end continues a seek that already emitted seeking
    * @private
    */
-  private _seekToEnd(): Observable<boolean> {
+  private _seekToEnd(emitSeeking: boolean = true): Observable<boolean> {
     if (this.isLive()) {
       //@matko: this causes an stack overflow error, recursion
       return this.seekTimeWithoutSync(this.getDuration());
     } else {
       let duration = this.getDuration();
+      let timeBeforeSeek = this.getCurrentTime();
       console.debug(`%c seekToEnd: ${duration}`, 'color: salmon');
-      return this.seekTimeWithoutSync(duration, false, false).pipe(
+      return this.seekTimeWithoutSync(duration, emitSeeking, false).pipe(
         switchMap(() => {
           duration = this.getDuration(); // we want fresh value
           let timeInLastFrame = duration - this._syncFrameNudgeTime;
@@ -881,8 +904,9 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
           return this.seekTimeWithoutSync(timeInLastFrame, false, false).pipe(
             switchMap(() => {
               console.debug(`Seek to align video.currentTime and video.duration`);
-              return this.seekTimeWithoutSync(duration, true, true).pipe(
+              return this.seekTimeWithoutSync(duration, false, true, timeBeforeSeek).pipe(
                 tap(() => {
+                  this.setEnded();
                   this._onEvent$.next({
                     type: PlayerControllerEventType.PLAYER_CONTROLLER_ENDED,
                     data: this.createMediaControllerPlayEvent(),
@@ -910,7 +934,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
       if (seekToFrame <= 0) {
         return this._seekToFrame(0);
       } else if (seekToFrame >= this.getTotalFrames()) {
-        return this.seekToEnd();
+        return this._seekToEnd();
       } else {
         let timeOffset = this._mediaTemporalConverter!.convert(Math.abs(framesCount), MediaTemporalFormat.FRAME_COUNT, MediaTemporalFormat.SECONDS) * Math.sign(framesCount);
         let currentTime = Decimal.div(currentFrame, this._mainMediaState!.frameRateModel!.value).plus(PLAYER_CONTROLLER_DEFAULTS.frameDurationSpillOverCorrection).toNumber();
@@ -1132,12 +1156,15 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
 
   private _checkAndCancelPausing() {
     if (this._mediaElementPlayback!.pausing) {
+      // tear down frame sync seek first, while pausing is still set so that it doesn't emit seek events
+      this._seekBreaker.break();
       this._pausingBreaker.break();
       this._mediaElementPlayback!.setPausing(false);
     }
   }
 
   seekToEnd(): Observable<boolean> {
+    this._checkAndCancelPausing();
     return new Observable<boolean>((observer) => {
       this._seekToEnd().subscribe({
         next: (value) => nextCompleteObserver(observer, value),
@@ -1187,6 +1214,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
               if (this._mediaElementPlayback!.pausing) {
                 // nop
               } else {
+                this.setSeeking();
                 this._onEvent$.next({
                   type: PlayerControllerEventType.PLAYER_CONTROLLER_SEEKING,
                   data: {
@@ -1205,6 +1233,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
                   // nop
                 } else {
                   let currentTime = this.getCurrentTime();
+                  this.setSeeked();
                   this._onEvent$.next({
                     type: PlayerControllerEventType.PLAYER_CONTROLLER_SEEKED,
                     data: {
@@ -1212,7 +1241,6 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
                       previousTime: timeBeforeSeek,
                     },
                   });
-                  this._mediaElementPlayback!.seeking = false;
                 }
               };
 
@@ -1224,7 +1252,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
               if (this._getCurrentVideoTime() >= this.getDuration()) {
                 if (this.isPaused()) {
                   finalizeSeek();
-                  this._seekToEnd().subscribe((event) => {
+                  this._seekToEnd(false).subscribe((event) => {
                     finishSeek();
                   });
                 } else {
@@ -1249,11 +1277,16 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
     });
   }
 
-  private seekTimeWithoutSync(newTime: number, emitSeeking: boolean = true, emitSeeked: boolean = true): Observable<boolean> {
-    let timeBeforeSeek = this.getCurrentTime();
+  /**
+   * @param emitSeeking false for a step of multi-step seek which already started, it then doesn't break seek in progress
+   * @param emitSeeked false for a step of multi-step seek which isn't last, seeking state is then kept until last step finishes
+   * @param previousTime time multi-step seek started from, reported in seeked event
+   */
+  private seekTimeWithoutSync(newTime: number, emitSeeking: boolean = true, emitSeeked: boolean = true, previousTime?: number): Observable<boolean> {
+    let timeBeforeSeek = previousTime ?? this.getCurrentTime();
     return new Observable<boolean>((o$) => {
       // do we have seek already in progress
-      if (this._mediaElementPlayback!.seeking) {
+      if (emitSeeking && this._mediaElementPlayback!.seeking) {
         this._seekBreaker.break();
         this._mediaElementPlayback!.seeking = false;
       }
@@ -1265,6 +1298,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
           .pipe(takeUntil(this._seekBreaker.observer), take(1))
           .subscribe((event) => {
             if (emitSeeking) {
+              this.setSeeking();
               this._onEvent$.next({
                 type: PlayerControllerEventType.PLAYER_CONTROLLER_SEEKING,
                 data: {
@@ -1280,6 +1314,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
           .subscribe((event) => {
             if (emitSeeked) {
               let currentTime = this.getCurrentTime();
+              this.setSeeked();
               this._onEvent$.next({
                 type: PlayerControllerEventType.PLAYER_CONTROLLER_SEEKED,
                 data: {
@@ -1288,8 +1323,6 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
                 },
               });
             }
-
-            this._mediaElementPlayback!.seeking = false;
 
             nextCompleteObserver(o$, true);
 
@@ -1307,12 +1340,22 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
     return this._playerDomController.mainMediaVideoElement.playbackRate;
   }
 
+  /** Video element controller plays only at playback rates video element can play at, other playback rates are played by {@link CompositePlayerController}. */
+  get seekStepPlayback(): boolean {
+    return false;
+  }
+
+  /** Seek step playback is enabled on {@link CompositePlayerController}, video element controller plays only at playback rates video element can play at. */
+  setSeekStepPlaybackEnabled(_enabled: boolean): void {}
+
+  /**
+   * Playback rates video element can't play at - backwards, or faster than {@link SEEK_STEP_PLAYBACK_DEFAULTS.maxNativePlaybackRate} - and invalid playback rates
+   * fall back to default playback rate. Such playback rates are played by {@link CompositePlayerController}.
+   */
   setPlaybackRate(playbackRate: number): Observable<void> {
     return new Observable<void>((observer) => {
-      let newPlaybackRate: number;
-      try {
-        newPlaybackRate = z.coerce.number().min(0.1).max(16).default(PLAYER_CONTROLLER_DEFAULTS.playbackRate).parse(playbackRate);
-      } catch (e) {
+      let newPlaybackRate = Number(playbackRate);
+      if (!Number.isFinite(newPlaybackRate) || Math.abs(newPlaybackRate) < SEEK_STEP_PLAYBACK_DEFAULTS.minNativePlaybackRate || SeekStepPlaybackUtil.isSeekStepPlaybackRate(newPlaybackRate)) {
         newPlaybackRate = PLAYER_CONTROLLER_DEFAULTS.playbackRate;
       }
 
@@ -1326,7 +1369,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
             nextCompleteObserver(observer);
           });
 
-        this._playerDomController.mainMediaVideoElement.playbackRate = playbackRate;
+        this._playerDomController.mainMediaVideoElement.playbackRate = newPlaybackRate;
       } else {
         nextCompleteObserver(observer);
       }
@@ -1395,7 +1438,8 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
 
   protected _pause(): Observable<void> {
     return new Observable<void>((observer) => {
-      if (this.isPlaying()) {
+      // checking media element directly, playback can be stalled waiting for data, in which case video is not considered playing but it will resume once data arrives
+      if (!this._playerDomController.mainMediaVideoElement.paused) {
         // let pauseApproximateTime = this.getCurrentTime();
         this._pausingBreaker.break();
         this._pausingBreaker.observer.pipe(take(1)).subscribe({
@@ -1420,6 +1464,9 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
             },
             error: (e) => {
               console.error(e);
+              // pause event never arrived, don't leave pausing set
+              this._mediaElementPlayback!.setPausing(false);
+              nextCompleteObserver(observer);
             },
           })
           .add(() => {
@@ -1513,7 +1560,7 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
     return this._mediaTemporalConverter;
   }
 
-  get videoElement(): HTMLVideoElement {
+  get videoElement(): HTMLVideoElement | undefined {
     return this._playerDomController.mainMediaVideoElement;
   }
 
@@ -1523,6 +1570,10 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
 
   get textImscElement(): HTMLElement {
     return this._textImscElement;
+  }
+
+  get sidecarVideosElement(): HTMLElement {
+    return this._playerDomController.sidecarVideosElement;
   }
 
   get createMediaElementSourceEnabled(): boolean {

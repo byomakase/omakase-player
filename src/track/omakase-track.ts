@@ -29,6 +29,7 @@ import {
   type ThumbnailTrack,
   type ThumbnailTrackLoadOptions,
   type Track,
+  type TrackEvent,
   TrackType,
 } from '../media';
 import {type Source, SourceType, TrackSource, UrlSource} from '../source';
@@ -37,7 +38,7 @@ import {MarkerTrackLoader, ObservationTrackLoader, TextTrackLoader, ThumbnailTra
 import {MediaFactory} from '../media/media-factory';
 import {isString} from '../util/util-functions';
 import {OpStageStatus} from '../common/op-stage';
-import {TrackRepository} from '../repository';
+import {TrackRepository, type TrackRepositoryEvent} from '../repository';
 import type {OmakaseTrackApi} from './omakase-track-api';
 import type {TrackLoadOptions} from './track-load-options';
 import type {Destroyable} from '../common/capabilities';
@@ -68,6 +69,14 @@ export class OmakaseTrackApiImpl implements OmakaseTrackApi, Destroyable {
 
   get utils() {
     return this._trackUtils;
+  }
+
+  get onEvent$(): Observable<TrackRepositoryEvent> {
+    return this._trackRepository.onEvent$;
+  }
+
+  get onTrackEvent$(): Observable<TrackEvent> {
+    return this._trackRepository.onTrackEvent$;
   }
 
   get(id: Track['id']): Track | undefined {
