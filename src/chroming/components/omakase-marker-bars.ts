@@ -22,21 +22,23 @@ import type {ChromingMarkerBarElementEvent} from '../chroming-marker-bar';
 import type {UiLiveModel} from '../../live/live-model';
 import {OmakaseMarkerTrackAttributes, type OmakaseMarkerBar} from './omakase-marker-bar';
 import {ControlBarComponent} from '../../control-bar/control-bar-component';
+import type {MarkerSymbolResourceResolver} from '../marker-symbol-resource-resolver';
 
 export class OmakaseMarkerBars extends ControlBarComponent(HTMLElement) {
   protected readonly _onEvent$ = new Subject<ChromingMarkerBarElementEvent>();
 
   private _markerBars: OmakaseMarkerBar[] = [];
-  private _mediaDuration?: number;
+  private _duration?: number;
   private _containerSize?: number;
   private _uiOrUiProxy?: Ui | UiProxy | undefined;
+  private _symbolResourceResolver?: MarkerSymbolResourceResolver | undefined;
 
   private _liveModel?: UiLiveModel | undefined;
 
-  set mediaDuration(mediaDuration: number) {
-    this._mediaDuration = mediaDuration;
+  set duration(duration: number) {
+    this._duration = duration;
     for (const markerTrack of this._markerBars) {
-      markerTrack.mediaDuration = this._mediaDuration;
+      markerTrack.duration = this._duration;
     }
   }
 
@@ -65,6 +67,13 @@ export class OmakaseMarkerBars extends ControlBarComponent(HTMLElement) {
     }
   }
 
+  setMarkerSymbolResourceResolver(resolver: MarkerSymbolResourceResolver) {
+    this._symbolResourceResolver = resolver;
+    for (const markerTrack of this._markerBars) {
+      markerTrack.setMarkerSymbolResourceResolver(resolver);
+    }
+  }
+
   get markerBars(): OmakaseMarkerBar[] {
     return this._markerBars;
   }
@@ -90,6 +99,21 @@ export class OmakaseMarkerBars extends ControlBarComponent(HTMLElement) {
 
   addMarkerBar() {
     const markerBar = document.createElement('omakase-marker-bar') as OmakaseMarkerBar;
+    this.appendChild(markerBar);
+    return this.registerMarkerBar(markerBar);
+  }
+
+  /**
+   * Registers the `<omakase-marker-bar>` children that weren't added with {@link addMarkerBar}, e.g. the ones declared in HTML
+   * @returns The registered marker bars
+   */
+  adoptMarkerBars(): OmakaseMarkerBar[] {
+    return Array.from(this.querySelectorAll<OmakaseMarkerBar>(':scope > omakase-marker-bar'))
+      .filter((markerBar) => !this._markerBars.includes(markerBar))
+      .map((markerBar) => this.registerMarkerBar(markerBar));
+  }
+
+  private registerMarkerBar(markerBar: OmakaseMarkerBar): OmakaseMarkerBar {
     if (this.isOmakase) {
       markerBar.isOmakase = true;
     }
@@ -99,9 +123,11 @@ export class OmakaseMarkerBars extends ControlBarComponent(HTMLElement) {
     if (this._uiOrUiProxy) {
       markerBar.setUiOrUiProxy(this._uiOrUiProxy);
     }
-    this.appendChild(markerBar);
+    if (this._symbolResourceResolver) {
+      markerBar.setMarkerSymbolResourceResolver(this._symbolResourceResolver);
+    }
     markerBar.onEvent$.pipe(takeUntil(markerBar.destroy$)).subscribe((event) => this._onEvent$.next(event));
-    markerBar.mediaDuration = this._mediaDuration ?? 0;
+    markerBar.duration = this._duration ?? 0;
     markerBar.containerSize = this._containerSize;
     this.markerBars.push(markerBar);
     return markerBar;

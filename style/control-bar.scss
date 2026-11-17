@@ -15,6 +15,7 @@
  */
 
 $control-disabled-opacity: var(--omakase-control-disabled-opacity, 0.5);
+$icon-button: ".media-chrome-button:not(omakase-live-button):not([representation='icon-time']):not([representation='label-time'])";
 
 media-control-bar {
   --icon-size-default: var(--omakase-control-bar-icon-size, 22px);
@@ -53,10 +54,11 @@ media-control-bar {
     z-index: var(--omakase-control-bar-popup-z-index, 1000);
   }
 
-  omakase-play-button,
-  omakase-mute-button,
-  omakase-fullscreen-button {
+  #{$icon-button} {
     padding: 0;
+    width: var(--icon-size, var(--icon-size-default));
+    height: var(--icon-size, var(--icon-size-default));
+    box-sizing: border-box;
   }
 
   omakase-play-button > span,
@@ -154,8 +156,16 @@ media-control-bar {
     background-image: var(--omakase-rewind-and-play-icon, url(/images/media-chrome-rewind-and-play.svg));
   }
 
+  omakase-rewind-and-play-button[custom-duration] .media-chrome-rewind-and-play {
+    background-image: var(--omakase-rewind-and-play-blank-icon, url(/images/media-chrome-rewind-and-play-blank.svg));
+  }
+
   .media-chrome-play-and-rewind {
     background-image: var(--omakase-play-and-rewind-icon, url(/images/media-chrome-play-and-rewind.svg));
+  }
+
+  omakase-play-and-rewind-button[custom-duration] .media-chrome-play-and-rewind {
+    background-image: var(--omakase-play-and-rewind-blank-icon, url(/images/media-chrome-play-and-rewind-blank.svg));
   }
 
   .media-chrome-home {
@@ -238,8 +248,25 @@ media-control-bar {
     background-image: var(--omakase-settings-icon, url(/images/media-chrome-settings.svg));
   }
 
+  .media-chrome-audio-selector {
+    background-image: var(--omakase-audio-selector-icon, url(/images/media-chrome-audio-selector.svg));
+  }
+
+  .media-chrome-audio-router {
+    background-image: var(--omakase-router-default-icon, url(/images/media-chrome-audio-router.svg));
+  }
+
+  omakase-audio-router-selector[changed] .media-chrome-audio-router {
+    background-image: var(--omakase-router-changed-icon, var(--omakase-router-default-icon, url(/images/media-chrome-audio-router.svg)));
+  }
+
+  .media-chrome-text-selector {
+    background-image: var(--omakase-text-selector-icon, url(/images/media-chrome-text-selector.svg));
+  }
+
+  .media-chrome-track-selector,
   .media-chrome-trackselector {
-    background-image: var(--omakase-track-selector-icon, url(/images/omakase-trackselector.svg));
+    background-image: var(--omakase-track-selector-icon, url(/images/media-chrome-track-selector.svg));
   }
 
   .media-chrome-menu {
@@ -262,7 +289,7 @@ media-control-bar {
     background-image: var(--omakase-audio-track-selector-active-icon, url(/images/media-chrome-audio-on.svg));
   }
 
-  omakase-dropdown-toggle.disabled .media-chrome-audio {
+  omakase-dropdown-toggle:is(.disabled, [disabled]) .media-chrome-audio {
     background-image: var(--omakase-audio-track-selector-disabled-icon, url(/images/media-chrome-audio-disabled.svg));
   }
 }
@@ -332,14 +359,8 @@ media-control-bar.omakase-control-bar-theme-omakase {
 
   background: var(--omakase-control-bar-background-color, var(--omakase-panel-body-background-color, #002335f0));
   border: var(--omakase-control-bar-border-width, 1px) solid var(--omakase-control-bar-border-color, var(--omakase-panel-border-color, #00476a));
-  omakase-mute-button,
-  omakase-fullscreen-button,
-  omakase-play-button,
-  omakase-time-skip-button,
-  .media-chrome-button:not(omakase-captions-toggle):not([representation='icon-time']):not([representation='label-time']) {
-    width: var(--icon-size, var(--icon-size-default));
-    height: var(--icon-size, var(--icon-size-default));
-    box-sizing: border-box;
+  #{$icon-button} {
+    padding: 2px;
 
     > span {
       width: 100%;
@@ -347,15 +368,8 @@ media-control-bar.omakase-control-bar-theme-omakase {
     }
   }
 
-  omakase-play-button,
-  omakase-time-skip-button {
+  #{$icon-button}:is(omakase-play-button, omakase-time-skip-button) {
     padding: 3px;
-  }
-
-  omakase-mute-button,
-  omakase-fullscreen-button,
-  .media-chrome-button:not(omakase-captions-toggle):not(omakase-play-button):not(omakase-time-skip-button):not([representation='icon-time']):not([representation='label-time']) {
-    padding: 2px;
   }
 
   omakase-mark-in-button,
@@ -459,8 +473,16 @@ media-control-bar.omakase-control-bar-theme-omakase {
     background-image: var(--omakase-rewind-and-play-icon, url(/images/omakase-rewind-and-play.svg));
   }
 
+  omakase-rewind-and-play-button[custom-duration] .media-chrome-rewind-and-play {
+    background-image: var(--omakase-rewind-and-play-blank-icon, url(/images/omakase-rewind-and-play-blank.svg));
+  }
+
   .media-chrome-play-and-rewind {
     background-image: var(--omakase-play-and-rewind-icon, url(/images/omakase-play-and-rewind.svg));
+  }
+
+  omakase-play-and-rewind-button[custom-duration] .media-chrome-play-and-rewind {
+    background-image: var(--omakase-play-and-rewind-blank-icon, url(/images/omakase-play-and-rewind-blank.svg));
   }
 
   .media-chrome-home {
@@ -535,6 +557,35 @@ media-control-bar.omakase-control-bar-theme-omakase {
     background-image: var(--omakase-menu-icon, url(/images/omakase-menu.svg));
   }
 
+  .media-chrome-audio-selector {
+    background-image: var(--omakase-audio-selector-icon, url(/images/omakase-audio-selector.svg));
+  }
+
+  .media-chrome-audio-router {
+    background-image: var(--omakase-router-default-icon, url(/images/omakase-audio-router.svg));
+  }
+
+  omakase-audio-router-selector[changed] .media-chrome-audio-router {
+    background-image: var(--omakase-router-changed-icon, var(--omakase-router-default-icon, url(/images/omakase-audio-router.svg)));
+  }
+
+  .media-chrome-text-selector {
+    background-image: var(--omakase-text-selector-icon, url(/images/omakase-text-selector.svg));
+  }
+
+  .media-chrome-track-selector,
+  .media-chrome-trackselector {
+    background-image: var(--omakase-track-selector-icon, url(/images/omakase-track-selector.svg));
+  }
+
+  .media-chrome-text-on {
+    background-image: var(--omakase-captions-on-icon, url(/images/omakase-text-on.svg));
+  }
+
+  .media-chrome-text-off {
+    background-image: var(--omakase-captions-off-icon, url(/images/omakase-text-off.svg));
+  }
+
   omakase-color-selector-button .omakase-color-selector-flyout {
     background: var(--omakase-color-selector-flyout-background-color, var(--omakase-panel-body-background-color, #002335bf));
     border-width: var(--omakase-color-selector-flyout-border-width, 1px);
@@ -553,6 +604,16 @@ media-control-bar.omakase-control-bar-theme-omakase {
 
     &.omakase-audio-router-dropdown {
       border-radius: var(--omakase-panel-border-radius-default-theme, 3px) var(--omakase-panel-border-radius-default-theme, 3px) 0 0;
+    }
+  }
+
+  .omakase-audio-router-selector-dropdown omakase-router-visualization .omakase-router-container .omakase-router-table {
+    thead {
+      background-color: var(--omakase-router-header-background-color, transparent);
+    }
+
+    tbody {
+      border-top-color: var(--omakase-router-divider-color, var(--omakase-panel-border-color, #00476a));
     }
   }
 }
@@ -581,6 +642,7 @@ omakase-preview-thumbnail,
 omakase-marker-bars,
 omakase-playback-rate-selector,
 omakase-audio-selector,
+omakase-audio-router-selector,
 omakase-text-selector,
 omakase-track-selector,
 omakase-menu,
@@ -670,6 +732,107 @@ omakase-color-selector-button {
   opacity: $control-disabled-opacity;
 }
 
+omakase-audio-router-selector[changed] > omakase-dropdown-toggle > * {
+  filter: drop-shadow(0 0 var(--omakase-router-changed-glow-size, 3px) var(--omakase-router-changed-glow-color, var(--omakase-primary-color, #009ceb)));
+}
+
+.omakase-audio-router-selector-dropdown {
+  min-width: var(--omakase-router-flyout-min-width, 0);
+
+  omakase-router-visualization {
+    width: 100%;
+
+    .omakase-router-container {
+      border: none;
+      background: transparent;
+      font-family: var(--omakase-router-font-family, 'Lato');
+      font-weight: 400;
+      width: 100%;
+
+      &.size-medium {
+        .omakase-router-toggle {
+          border: 3px solid var(--omakase-router-toggle-color, #fff);
+          width: 10px;
+          height: 10px;
+
+          &.active {
+            border-color: var(--omakase-primary-accent-color, #76d1ff);
+          }
+
+          .omakase-router-toggle-inner {
+            left: 0;
+            top: 0;
+            width: 10px;
+            height: 10px;
+            background-color: var(--omakase-primary-color, #009ceb);
+          }
+        }
+
+        .omakase-router-table td {
+          padding: 7px 10px;
+        }
+      }
+
+      .omakase-router-table {
+        thead {
+          background-color: var(--omakase-router-header-background-color, #434242e5);
+          color: var(--omakase-router-header-text-color, #bbbbbb);
+          height: 44px;
+          font-size: 13px;
+
+          th {
+            line-height: 33px;
+          }
+
+          th:first-child {
+            padding-left: 20px;
+            max-width: 100px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          th:last-child {
+            width: unset;
+          }
+        }
+
+        tbody {
+          border-top: 1px solid var(--omakase-router-divider-color, #d5e0e7);
+          font-size: 12px;
+
+          tr:first-child td:first-child {
+            padding-left: 20px;
+          }
+        }
+
+        td .omakase-router-icon {
+          display: inline-block;
+        }
+
+        .omakase-router-icon {
+          &.icon-deselect {
+            background-image: var(--omakase-router-deselect-all-icon, url(/images/media-chrome-audio-deselect.svg));
+            margin-right: 5px;
+          }
+
+          &.icon-reset {
+            background-image: var(--omakase-router-reset-icon, url(/images/media-chrome-audio-reset.svg));
+          }
+
+          &.icon-outputs-few {
+            background-image: var(--omakase-router-few-outputs-icon, url(/images/media-chrome-audio-outputs-few.svg));
+          }
+
+          &.icon-outputs-many {
+            background-image: var(--omakase-router-many-outputs-icon, url(/images/media-chrome-audio-outputs-many.svg));
+          }
+        }
+      }
+    }
+  }
+}
+
 media-control-bar omakase-marker-bars {
   position: relative;
   isolation: isolate;
@@ -696,6 +859,8 @@ omakase-marker-bars {
 }
 
 omakase-time-range {
+  --media-range-padding-left: 0;
+  --media-range-padding-right: 0;
   flex: 1 1 auto;
   width: 100%;
   min-width: 0;

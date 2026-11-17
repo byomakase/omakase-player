@@ -43,6 +43,9 @@ export enum FileFormatType {
   TTML = 'TTML',
   SCC = 'SCC',
   STL = 'STL',
+
+  // Resource
+  SVG = 'SVG',
 }
 
 export class FileFormat {
@@ -85,6 +88,9 @@ export class FileFormat {
   static readonly SCC = new FileFormat(FileFormatType.SCC, [], ['.scc']);
   static readonly STL = new FileFormat(FileFormatType.STL, [], ['.stl']);
 
+  // Resource
+  static readonly SVG = new FileFormat(FileFormatType.SVG, ['image/svg+xml'], ['.svg']);
+
   /** All supported streaming formats (HLS, DASH). */
   static readonly STREAMING: readonly FileFormat[] = [FileFormat.HLS, FileFormat.DASH];
   /** All supported video file formats (MP4, MKV, WEBM, AVI, MOV). */
@@ -93,9 +99,11 @@ export class FileFormat {
   static readonly AUDIO: readonly FileFormat[] = [FileFormat.MP4_AUDIO, FileFormat.MP3, FileFormat.AAC, FileFormat.OGG, FileFormat.OPUS, FileFormat.WAV, FileFormat.FLAC];
   /** All supported text/subtitle formats (VTT, SRT, SSA, ASS, TTML, SCC, STL). */
   static readonly TEXT: readonly FileFormat[] = [FileFormat.VTT, FileFormat.SRT, FileFormat.SSA, FileFormat.ASS, FileFormat.TTML, FileFormat.SCC, FileFormat.STL];
+  /** All supported resource formats (SVG). */
+  static readonly RESOURCE: readonly FileFormat[] = [FileFormat.SVG];
 
   /** All supported input formats across all categories. */
-  static readonly ALL: readonly FileFormat[] = [...FileFormat.STREAMING, ...FileFormat.VIDEO, ...FileFormat.AUDIO, ...FileFormat.TEXT];
+  static readonly ALL: readonly FileFormat[] = [...FileFormat.STREAMING, ...FileFormat.VIDEO, ...FileFormat.AUDIO, ...FileFormat.TEXT, ...FileFormat.RESOURCE];
 
   private static _typeIndex: Map<FileFormatType, FileFormat> | undefined;
   private static _extensionIndex: Map<string, FileFormat> | undefined;

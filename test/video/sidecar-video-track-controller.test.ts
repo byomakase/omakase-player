@@ -93,6 +93,8 @@ interface CreateLoadedOptions {
   awakeBudget?: SidecarVideoAwakeBudget;
   /** Minimum milliseconds between seek steps, 0 by default so that seek steps follow main media time only */
   minSeekInterval?: number;
+  /** Video element time of sidecar time 0, 0 by default */
+  timeOffset?: number;
 }
 
 /** First load is synchronous, element is at start time once loaded */
@@ -103,8 +105,10 @@ const createLoaded = async (timeWindow: {cutStartTime: number; cutEndTime?: numb
   // loads after first load wake sidecar up
   let restoreSpy = vi.fn((startTime: number) => (options.restore ? options.restore(startTime) : of(void 0)));
   let firstLoad = true;
+  let timeOffset = options.timeOffset ?? 0;
+  video.duration = 60 + timeOffset;
   let loadSource = vi.fn((url: string, startTime?: number) => {
-    video.currentTime = startTime ?? 0;
+    video.currentTime = (startTime ?? 0) + timeOffset;
     if (firstLoad) {
       firstLoad = false;
       return of(void 0);
@@ -114,6 +118,10 @@ const createLoaded = async (timeWindow: {cutStartTime: number; cutEndTime?: numb
   let domController = {
     videoElement: video,
     bufferedTimeRanges: [],
+    timeOffset: timeOffset,
+    get duration() {
+      return video.duration - timeOffset;
+    },
     loadSource: loadSource,
     loadDuration: loadDuration,
     release: release,
@@ -278,6 +286,48 @@ describe('SidecarVideoTrackController', () => {
     controller.setActive(true);
     expect(controller.shown).toBe(true);
     expect(video.currentTime).toBe(8);
+  });
+
+  describe('time offset', () => {
+    // sidecar time 0 is at video element time 0.5, time window 20 - 27 maps to sidecar 3 - 10
+    it('loads from sidecar time and resolves duration in sidecar time', async () => {
+      let {controller, video, loadSource} = await createLoaded({cutStartTime: 3, cutEndTime: 10, playerStartTime: 20}, {timeOffset: 0.5});
+      expect(loadSource).toHaveBeenCalledWith(expect.any(String), 1);
+      expect(video.currentTime).toBe(1.5);
+      expect(controller.duration).toBe(60);
+    });
+
+    it('seeks video element to sidecar time shifted by time offset', async () => {
+      let {controller, video} = await createLoaded({cutStartTime: 3, cutEndTime: 10, playerStartTime: 20}, {timeOffset: 0.5});
+      mainTime = 25;
+      controller.setActive(true);
+      expect(controller.shown).toBe(true);
+      expect(video.currentTime).toBe(8.5);
+    });
+
+    it('does not seek when video element is at sidecar time shifted by time offset', async () => {
+      let {controller, video} = await createLoaded({cutStartTime: 3, cutEndTime: 10, playerStartTime: 20}, {timeOffset: 0.5});
+      let seeks: number[] = [];
+      let currentTime = video.currentTime;
+      Object.defineProperty(video, 'currentTime', {
+        get: () => currentTime,
+        set: (value: number) => {
+          seeks.push(value);
+          currentTime = value;
+        },
+      });
+      controller.setActive(true);
+      play();
+      progress(18);
+      expect(video.paused).toBe(false);
+      expect(currentTime).toBe(1.5);
+      // sidecar plays from warm-up start, at main media time 21 it is at sidecar time 4
+      seeks = [];
+      currentTime = 4.5;
+      progress(21);
+      expect(controller.shown).toBe(true);
+      expect(seeks).toEqual([]);
+    });
   });
 
   describe('dormancy', () => {

@@ -31,11 +31,11 @@
  */
 
 import {AudioObservationType, type Track, TrackType} from '../../media';
-import type {TrackGenerationOptions} from '../track-load-options';
 import type {TimedItemsGenerator} from './timed-items-generator';
 import {OmpError} from '../../types';
 import {AudioLevelItemsGenerator, AudioWaveformItemsGenerator} from './default-timed-items-generator';
 import {SourceUtil} from '../../source';
+import type {TrackGenerationOptions} from '../track-generation-options';
 
 export class TimedItemsGeneratorFactory {
   public static createTimedItemsGenerator(track: Track, generationOptions?: TrackGenerationOptions | undefined): TimedItemsGenerator {

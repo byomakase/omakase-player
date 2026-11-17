@@ -17,7 +17,7 @@
 import type {Destroyable, Serializable} from '../common/capabilities';
 import {Observable, Subject, takeUntil} from 'rxjs';
 import {errorCompleteObserver, freeObserver, nextCompleteObserver} from '../util/rxjs-util';
-import {BlobUtil} from '../util/blob-util';
+import {BlobUtil} from '../util/blob/blob-util';
 import {ObserverBreaker} from '../common/observer-breaker';
 
 // import workers for audio processing
@@ -101,6 +101,8 @@ export class AudioPeakProcessor implements AudioPeakProcessorApi {
   protected _audioWorkletNode?: AudioWorkletNode;
   protected _audioNode?: AudioNode;
 
+  protected _truePeakProcessorUrl?: string | undefined;
+
   protected _destroyBreaker = new ObserverBreaker();
 
   constructor(meterStandard?: AudioPeakProcessorMeterStandard) {
@@ -150,9 +152,10 @@ export class AudioPeakProcessor implements AudioPeakProcessorApi {
                 throw new Error('Unknown meterStandard');
             }
 
-            let objectURL = BlobUtil.createObjectURL(BlobUtil.createBlob([workletCode], {type: 'application/javascript'}));
+            this.revokeProcessorUrl();
+            this._truePeakProcessorUrl = BlobUtil.createObjectURL(BlobUtil.createBlob([workletCode], {type: 'application/javascript'}));
 
-            OmakaseAudioContextProvider.audioContext.audioWorklet.addModule(objectURL).then(() => {
+            OmakaseAudioContextProvider.audioContext.audioWorklet.addModule(this._truePeakProcessorUrl).then(() => {
               let audioWorkletNode = new AudioWorkletNode(OmakaseAudioContextProvider.audioContext, audioWorkletNodeName, {
                 parameterData: {},
               });
@@ -203,6 +206,13 @@ export class AudioPeakProcessor implements AudioPeakProcessorApi {
     });
   };
 
+  private revokeProcessorUrl(): void {
+    if (this._truePeakProcessorUrl) {
+      BlobUtil.revokeObjectURL(this._truePeakProcessorUrl);
+      this._truePeakProcessorUrl = void 0;
+    }
+  }
+
   get onEvent$(): Observable<AudioPeakProcessorEvent> {
     return this._onEvent$.asObservable();
   }
@@ -225,6 +235,8 @@ export class AudioPeakProcessor implements AudioPeakProcessorApi {
       }
       WorkerUtil.dispose(this._audioWorkletNode);
     }
+
+    this.revokeProcessorUrl();
 
     freeObserver(this._onEvent$);
   }

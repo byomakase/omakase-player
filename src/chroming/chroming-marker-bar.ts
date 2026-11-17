@@ -308,6 +308,10 @@ export class ChromingMarkerBarHandler implements ChromingMarkerBarHandlerApi, De
     return this._onEvent$.asObservable();
   }
 
+  get elementUnwired$(): Observable<void> {
+    return this._elementBreaker.observer;
+  }
+
   get state(): ChromingMarkerBarState {
     return {
       id: this._id,

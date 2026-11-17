@@ -18,7 +18,7 @@ import Konva from 'konva';
 import {map, Observable, of, switchMap} from 'rxjs';
 import {AuthConfig, type AuthenticationData} from '../../common';
 import type {ThumbnailVttCueXYWH} from '../model';
-import {BlobUtil} from '../../util/blob-util';
+import {BlobUtil} from '../../util/blob/blob-util';
 import {errorCompleteObserver, nextCompleteObserver} from '../../util/rxjs-util';
 
 export class ImageUtil {
@@ -46,6 +46,9 @@ export class ImageUtil {
               nextCompleteObserver(o$, image);
             },
             (error: any) => {
+              if (authentication) {
+                BlobUtil.revokeObjectURL(url);
+              }
               errorCompleteObserver(o$, error);
             }
           );
@@ -67,6 +70,9 @@ export class ImageUtil {
               nextCompleteObserver(o$, cropImage);
             },
             (error: any) => {
+              if (authentication) {
+                BlobUtil.revokeObjectURL(url);
+              }
               errorCompleteObserver(o$, error);
             }
           );

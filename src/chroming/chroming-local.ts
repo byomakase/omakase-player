@@ -49,6 +49,7 @@ import {Ui} from '../ui';
 import {ChromingUtil} from './chroming-util';
 import {PlayerAudioType} from '../player';
 import type {LivePlaybackTrackerApi} from '../live/live-model';
+import {LocalMarkerSymbolResourceResolver} from './marker-symbol-resource-resolver';
 
 export class ChromingLocal extends BaseChroming implements ChromingLocalApi {
   private _sessionStore: SessionStore;
@@ -73,6 +74,7 @@ export class ChromingLocal extends BaseChroming implements ChromingLocalApi {
     this._trackRepository = ompProvider.trackRepository;
     this._alertsManager = ompProvider.alertsManager;
     this._ui = ompProvider.ui;
+    this._markerSymbolResourceResolver = new LocalMarkerSymbolResourceResolver(ompProvider.resourceRepository);
 
     this.wireEvents();
   }
@@ -297,14 +299,7 @@ export class ChromingLocal extends BaseChroming implements ChromingLocalApi {
 
   setMarkerBars(chromingMarkerBars: ChromingMarkerBarState[], progressBarMarkerBar?: ChromingMarkerBarState): Observable<void> {
     return passiveObservable((observer) => {
-      for (const handler of this._markerTrackHandlers[ChromingTrackDestination.MARKER_BARS]) {
-        handler.destroy();
-      }
-      if (this._markerTrackHandlers[ChromingTrackDestination.PROGRESS_BAR]) {
-        this._markerTrackHandlers[ChromingTrackDestination.PROGRESS_BAR].destroy();
-      }
-      this._markerTrackHandlers[ChromingTrackDestination.MARKER_BARS] = [];
-      this._markerTrackHandlers[ChromingTrackDestination.PROGRESS_BAR] = void 0;
+      const previousHandlers = this.takeMarkerBarHandlers();
       if (progressBarMarkerBar) {
         const markerBars = progressBarMarkerBar.tracks
           .map((trackId) => this._trackApi.get(trackId))
@@ -312,7 +307,14 @@ export class ChromingLocal extends BaseChroming implements ChromingLocalApi {
           .map((track) => track!.state) as MarkerTrackState[];
 
         if (markerBars.length) {
-          this.createMarkerElementAndHandler(markerBars, ChromingTrackDestination.PROGRESS_BAR, {id: progressBarMarkerBar.id}, progressBarMarkerBar, this._ui);
+          this.createMarkerElementAndHandler(
+            markerBars,
+            ChromingTrackDestination.PROGRESS_BAR,
+            {id: progressBarMarkerBar.id},
+            progressBarMarkerBar,
+            this._ui,
+            this.reuseProgressBarHandler(previousHandlers, progressBarMarkerBar.id)
+          );
         }
       }
       for (const trackState of chromingMarkerBars) {
@@ -321,9 +323,17 @@ export class ChromingLocal extends BaseChroming implements ChromingLocalApi {
           .filter((track) => track?.trackType === TrackType.MARKER_TRACK)
           .map((track) => track!.state) as MarkerTrackState[];
         if (markerTracks.length) {
-          this.createMarkerElementAndHandler(markerTracks, ChromingTrackDestination.MARKER_BARS, {id: trackState.id}, trackState, this._ui);
+          this.createMarkerElementAndHandler(
+            markerTracks,
+            ChromingTrackDestination.MARKER_BARS,
+            {id: trackState.id},
+            trackState,
+            this._ui,
+            this.reuseMarkerBarHandler(previousHandlers, trackState.id)
+          );
         }
       }
+      this.destroyUnusedMarkerBarHandlers(previousHandlers);
       this.emitMarkerTrackChange();
       nextCompleteObserver(observer);
     });

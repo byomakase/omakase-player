@@ -41,6 +41,10 @@ export class UrlUtil {
     return url.startsWith('data:');
   }
 
+  static isBlobUrl(url: string): boolean {
+    return url.startsWith('blob:');
+  }
+
   static getDataBase64UrlContentLength(url: string): number {
     if (!this.isDataBase64Url(url)) {
       throw new Error('Not a valid data URL');
@@ -57,5 +61,17 @@ export class UrlUtil {
     const padding = base64Data.endsWith('==') ? 2 : base64Data.endsWith('=') ? 1 : 0;
 
     return Math.floor((len * 3) / 4) - padding;
+  }
+
+  static decodeBase64toString(url: string): string {
+    const binary = atob(url);
+
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+
+    const decoder = new TextDecoder();
+    return decoder.decode(bytes);
   }
 }

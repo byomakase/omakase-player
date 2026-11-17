@@ -14,12 +14,15 @@
  * limitations under the License.
  */
 
+import {MainMediaType} from '../media';
 import {BasePlayerPlaybackEngine, type PlayerPlaybackEngine} from '../player/player-playback-engine';
 import type {PlayerController} from '../player/player-controller-api';
 
-export interface SlatePlayerPlaybackEngine extends PlayerPlaybackEngine {}
+export interface SlatePlayerPlaybackEngine extends PlayerPlaybackEngine<MainMediaType.SLATE> {}
 
-export class SlatePlayerPlaybackEngineImpl extends BasePlayerPlaybackEngine implements SlatePlayerPlaybackEngine {
+export class SlatePlayerPlaybackEngineImpl extends BasePlayerPlaybackEngine<MainMediaType.SLATE> implements SlatePlayerPlaybackEngine {
+  readonly mainMediaType = MainMediaType.SLATE;
+
   constructor(playerController: PlayerController) {
     super(playerController);
   }

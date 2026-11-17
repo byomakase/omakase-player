@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {TrackType, type ObservationTrack, type Track} from '../media';
+import {AudioObservationType, TrackType, type ObservationTrack, type Track} from '../media';
 import {PlayerAudioType} from '../player';
 import type {AudioLevelSourceApi} from './audio-level-source';
 import {ObservationTrackAudioLevelSource} from './observation-track-audio-level-source';
@@ -24,6 +24,7 @@ import type {VuMeterArgs} from './vu-meter';
 export class VuMeterFactory {
   static createAudioLevelSource(args: VuMeterArgs): AudioLevelSourceApi {
     const {player, source, audioType} = args;
+    const observationTrackOptions = {observationType: args.observationType ?? AudioObservationType.WAVEFORM};
     if (source) {
       return source;
     } else if (player && (audioType === PlayerAudioType.MAIN || audioType === PlayerAudioType.OUTPUT)) {
@@ -33,13 +34,13 @@ export class VuMeterFactory {
       if (tracks.find((t) => t.trackType !== TrackType.OBSERVATION_TRACK)) {
         throw new Error('Unsupported track type for audio level source');
       }
-      return new ObservationTrackAudioLevelSource(player, tracks as ObservationTrack[]);
+      return new ObservationTrackAudioLevelSource(player, tracks as ObservationTrack[], observationTrackOptions);
     } else if (player && args.tracks) {
       const track: Track | undefined = typeof args.tracks === 'string' ? player.track.get(args.tracks) : (args.tracks as Track);
       if (track?.trackType === TrackType.AUDIO) {
         return new PeakProcessorAudioLevelSource(player, PlayerAudioType.SIDECAR, track.id);
       } else if (track?.trackType === TrackType.OBSERVATION_TRACK) {
-        return new ObservationTrackAudioLevelSource(player, track as ObservationTrack);
+        return new ObservationTrackAudioLevelSource(player, track as ObservationTrack, observationTrackOptions);
       } else {
         throw new Error('Unsupported track type for audio level source');
       }

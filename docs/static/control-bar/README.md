@@ -70,6 +70,25 @@ Button components get the `media-chrome-button` class on their own when they con
 
 When the control bar contains `<omakase-control-bar-row>` elements, its root is laid out as a column, so its children stack vertically. In the example above, the time range sits on top of the row of buttons. A control bar without rows lays out its controls side by side.
 
+### Using the Control Bar in Angular
+
+Angular reports an error for any HTML tag it doesn't recognize, so the custom tags in a control bar template (`<omakase-play-button>`, `<omakase-control-bar-row>` and so on) must be made known to it. The Angular component whose template contains the control bar template has two options:
+
+- Add `CUSTOM_ELEMENTS_SCHEMA` to its `schemas`, which lets Angular accept any custom element tag
+- Import the individual components the template uses
+
+```typescript
+import {Component, CUSTOM_ELEMENTS_SCHEMA} from '@angular/core';
+
+@Component({
+  selector: 'app-player',
+  standalone: true,
+  schemas: [CUSTOM_ELEMENTS_SCHEMA],
+  templateUrl: './player.component.html',
+})
+export class PlayerComponent {}
+```
+
 ### Using an Element Instead of a `<template>`
 
 Frameworks that compile `<template>` tags away, such as Vue and Nuxt, can provide the control bar's content in a regular element (e.g. a `<div>`) instead. Hiding the reference element to prevent duplication is left up to the user.
@@ -94,6 +113,76 @@ Gets an element from the control bar's DOM.
 const playButton = controlBar.getControlBarElement('omakase-play-button');
 ```
 
+The following methods change a component of the control bar, found by its `id` attribute. They throw an error if the control bar has no element with that `id`. They work the same as the component's own methods and attributes (see [Enabling, Disabling, Showing and Hiding Components](#enabling-disabling-showing-and-hiding-components)). The examples use this template:
+
+```html
+<template id="omakase-control-bar-template">
+  <omakase-control-bar-row id="segmentation-row" hidden>
+    <omakase-create-marker-button id="create-marker" slot="left" marker-track-id="chapters" disabled></omakase-create-marker-button>
+    <omakase-mark-in-button id="mark-in" slot="left" marker-track-id="chapters"></omakase-mark-in-button>
+  </omakase-control-bar-row>
+  <omakase-control-bar-row>
+    <omakase-play-button id="play" slot="center"></omakase-play-button>
+    <omakase-fullscreen-button id="fullscreen" slot="right"></omakase-fullscreen-button>
+  </omakase-control-bar-row>
+</template>
+```
+
+#### `setVisible(componentId: string, visible: boolean): void`
+
+Shows or hides a component. A hidden component takes no space in the control bar, but its keyboard shortcut still works. Unlike the other methods, it also works on the [layout components](#layout-components), hiding or showing all controls inside them.
+
+```javascript
+controlBar.setVisible('fullscreen', false);
+// shows the whole row
+controlBar.setVisible('segmentation-row', true);
+```
+
+#### `setEnabled(componentId: string, enabled: boolean): void`
+
+Enables or disables a component. A disabled component ignores clicks and keyboard activation, and its keyboard shortcut does nothing. Throws an error if the element isn't a control bar component, such as a layout component.
+
+```javascript
+// the user is now allowed to edit markers
+controlBar.setEnabled('create-marker', true);
+```
+
+#### `setShortcut(componentId: string, shortcut: string | undefined): void`
+
+Sets the key of a component's keyboard shortcut, overriding the key of its action, or restores the action's key when `undefined` (see [Component Shortcuts](#component-shortcuts)). Throws an error if the element isn't a control bar component.
+
+```javascript
+// mark in on Shift + 1 instead of I
+controlBar.setShortcut('mark-in', 'Shift+1');
+// back to I
+controlBar.setShortcut('mark-in', undefined);
+```
+
+#### `setShortcutEnabled(componentId: string, enabled: boolean): void`
+
+Enables or disables a component's keyboard shortcut. The component itself keeps working. Throws an error if the element isn't a control bar component.
+
+```javascript
+// the play button can still be clicked, but Space doesn't play or pause
+controlBar.setShortcutEnabled('play', false);
+```
+
+#### `setAttribute(componentId: string, attribute: string, value: string | undefined): void`
+
+Sets an attribute of any element of the control bar, or removes it when `value` is `undefined`. Use it for attributes that have no dedicated method, such as a segmentation component's `marker-track-id`. Boolean attributes are set with an empty string.
+
+Each component's attribute names are exported as an `Omakase<Component>Attributes` constant, for example `OmakaseSegmentationButtonAttributes` for the attributes shared by the segmentation components, `OmakaseTimeSkipButtonAttributes` for `<omakase-time-skip-button>`, and `ControlBarComponentAttributes` for the attributes every component has.
+
+```javascript
+import {ControlBarComponentAttributes, OmakaseSegmentationButtonAttributes} from '@byomakase/omakase-player';
+
+// switches mark in and create marker to another marker track
+controlBar.setAttribute('mark-in', OmakaseSegmentationButtonAttributes.MARKER_TRACK_ID, 'shots');
+controlBar.setAttribute('create-marker', OmakaseSegmentationButtonAttributes.MARKER_TRACK_ID, 'shots');
+// same as controlBar.setVisible('fullscreen', false)
+controlBar.setAttribute('fullscreen', ControlBarComponentAttributes.HIDDEN, '');
+```
+
 #### `destroy(): void`
 
 Removes the control bar from the page and disconnects it from the player.
@@ -116,11 +205,11 @@ Adds a marker bar to an `<omakase-marker-bars>` of the control bar.
 
 #### `getMarkerBars(): ControlBarMarkerBarHandlerApi[]` / `getMarkerBar(id: string): ControlBarMarkerBarHandlerApi | undefined`
 
-Gets the handlers of the marker bars added with `addMarkerBar`.
+Gets the handlers of the marker bars added with `addMarkerBar` or declared in the template.
 
 #### `deleteMarkerBar(id: string): void`
 
-Removes a marker bar added with `addMarkerBar`.
+Removes a marker bar added with `addMarkerBar` or declared in the template.
 
 ---
 
@@ -202,6 +291,30 @@ The following components can be used in a control bar. Each is wired to the play
 | [`<omakase-audio-selector>`](../chroming/README.md#omakase-audio-selector)         | Selects the audio track                                           |
 | [`<omakase-text-selector>`](../chroming/README.md#omakase-text-selector)           | Selects the text track                                            |
 | [`<omakase-track-selector>`](../chroming/README.md#omakase-track-selector)         | Selects audio and text tracks in a single dropdown                |
+| [`<omakase-audio-router-selector>`](#audio-router)                                    | Shows or hides a fly-out with the audio router of the active audio track |
+
+The audio, text and track selectors show their default icon, which follows the control bar's theme, so they need no CSS of their own. Set `representation="label"` to show the selected option's label instead, and `option-alignment` (`left` by default, `center` or `right`) to align the options in the dropdown. The icons can be changed with the `--omakase-audio-selector-icon`, `--omakase-text-selector-icon` and `--omakase-track-selector-icon` CSS variables (see [STYLING.md](../STYLING.md#control-bar)). See [Omakase Selector Components](../chroming/README.md#omakase-selector-components) for all the selector attributes.
+
+```html
+<omakase-audio-selector></omakase-audio-selector>
+<omakase-text-selector representation="label" caret off-option></omakase-text-selector>
+<omakase-track-selector option-alignment="center"></omakase-track-selector>
+```
+
+#### Audio Router
+
+`<omakase-audio-router-selector>` shows or hides a fly-out with a simple audio router: a matrix of the active audio track's input channels against the output channels, with buttons to deselect all connections or reset them to the default routing.
+
+- **Routed track:** the active main audio track, else the first active sidecar audio track. The fly-out follows track switches while it's open.
+- **Deactivation:** the toggle is disabled while no active audio track can be routed, for example before an audio track is loaded. On Safari it's also disabled while main media audio is active, as its routing isn't supported there; an active sidecar track alone can still be routed.
+- **Changed routing:** while the routing differs from its default, the element has the `changed` attribute and its icon gets a subtle glow. Both the icon and the glow can be changed with CSS variables.
+- **Placement:** it takes the shared selector attributes `position`, `alignment`, `container-right`, `floating`, `dropdown-class` and `toggle-class` (see [Omakase Selector Components](../chroming/README.md#omakase-selector-components)), and a `toggle` slot for custom toggle content.
+
+```html
+<omakase-audio-router-selector alignment="right"></omakase-audio-router-selector>
+```
+
+The icon follows the control bar's theme. See [STYLING.md](../STYLING.md#control-bar) for its `--omakase-router-*` variables, which it shares with the chromed player.
 
 ### Display
 
@@ -222,16 +335,16 @@ The following components can be used in a control bar. Each is wired to the play
 
 | Component                                                                                                                  | Description                                                     |
 | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| [`<omakase-next-marker-button>`](#omakase-next-marker-button--omakase-previous-marker-button)                              | Selects the next marker                                         |
-| [`<omakase-previous-marker-button>`](#omakase-next-marker-button--omakase-previous-marker-button)                          | Selects the previous marker                                     |
+| [`<omakase-next-marker-button>`](#omakase-next-marker-button-and-omakase-previous-marker-button)                              | Selects the next marker                                         |
+| [`<omakase-previous-marker-button>`](#omakase-next-marker-button-and-omakase-previous-marker-button)                          | Selects the previous marker                                     |
 | [`<omakase-playhead-to-marker-start-button>`](#omakase-playhead-to-marker-start-button)                                    | Moves the playhead to the selected marker's start               |
 | [`<omakase-playhead-to-marker-end-button>`](#omakase-playhead-to-marker-end-button)                                        | Moves the playhead to the selected marker's end                 |
 | [`<omakase-create-marker-button>`](#omakase-create-marker-button)                                                          | Creates a marker at the playhead                                |
 | [`<omakase-delete-marker-button>`](#omakase-delete-marker-button)                                                          | Deletes the selected marker(s)                                  |
 | [`<omakase-loop-on-marker-button>`](#omakase-loop-on-marker-button)                                                        | Plays the selected marker in a loop region                      |
 | [`<omakase-split-marker-button>`](#omakase-split-marker-button)                                                            | Splits the selected marker at the playhead                      |
-| [`<omakase-mark-in-button>`](#omakase-mark-in-button--omakase-mark-out-button)                                             | Sets the selected marker's start (or starts a new marker)       |
-| [`<omakase-mark-out-button>`](#omakase-mark-in-button--omakase-mark-out-button)                                            | Sets the selected marker's end (or starts a new marker)         |
+| [`<omakase-mark-in-button>`](#omakase-mark-in-button-and-omakase-mark-out-button)                                             | Sets the selected marker's start (or starts a new marker)       |
+| [`<omakase-mark-out-button>`](#omakase-mark-in-button-and-omakase-mark-out-button)                                            | Sets the selected marker's end (or starts a new marker)         |
 | [`<omakase-color-selector-button>`](#omakase-color-selector-button)                                                        | Picks the color of a marker track or of the selected marker(s)  |
 
 ### Menu
@@ -307,12 +420,25 @@ fullscreenButton.setVisible(false);
 console.log(fullscreenButton.visible); // false
 ```
 
+The control bar has the same methods, which take the component's `id` attribute as their first argument (see [Control Bar Api Methods](#control-bar-api-methods)):
+
+```html
+<omakase-create-marker-button id="create-marker" marker-track-id="chapters"></omakase-create-marker-button>
+```
+
+```javascript
+controlBar.setEnabled('create-marker', true);
+controlBar.setShortcutEnabled('create-marker', false);
+controlBar.setShortcut('create-marker', 'Shift+M');
+controlBar.setVisible('create-marker', false);
+```
+
 In TypeScript, the API is described by the `ControlBarComponentApi` interface, and the attribute names are available as `ControlBarComponentAttributes`.
 
 ### How Each Component Behaves
 
 - **Buttons and toggles** render disabled like any media-chrome button that is disabled, and can't be clicked or activated with `Enter` / `Space`. Disabling an `<omakase-mute-button>` disables its volume flyout as well, which then doesn't open on hover.
-- **Selectors and the menu** can't be opened, and close if they're open. Selectors that are already disabled because there's nothing to select (for example an `<omakase-audio-selector>` with a single audio track) stay disabled until there is, even when enabled.
+- **Selectors (including the audio router selector) and the menu** can't be opened, and close if they're open. Selectors that are already disabled because there's nothing to select (for example an `<omakase-audio-selector>` with a single audio track) stay disabled until there is, even when enabled.
 - **`<omakase-time-range>` and `<omakase-volume-range>`** can't be dragged or clicked. Clicking a [progress bar marker](#progress-bar-markers) neither seeks nor emits `onMarkerClick`.
 - **`<omakase-time-display>`** can't be put into edit mode. Disabling it while it's being edited cancels the edit.
 - **`<omakase-preview-thumbnail>` and `<omakase-marker-bars>`** are only dimmed. Markers in disabled marker bars can't be clicked.
@@ -343,6 +469,13 @@ The layout components (`<omakase-control-bar-row>`, `<omakase-control-bar-group>
 ```javascript
 // shows the row; I and O work whether it's shown or not
 controlBar.getControlBarElement('.segmentation-row').toggleAttribute('hidden', false);
+```
+
+If the row or group has an `id`, the control bar's `setVisible` method does the same:
+
+```javascript
+// <omakase-control-bar-row id="segmentation-row" hidden>
+controlBar.setVisible('segmentation-row', true);
 ```
 
 ---
@@ -450,6 +583,17 @@ omakasePlayer.player.onEvent$.pipe(filter((event) => event.type === PlayerEventT
 - It returns a `ControlBarMarkerBarHandlerApi`, with `addTrack(track)` / `removeTrack(trackId)` / `getTrackIds()` to change the shown tracks, `setVisibility(visible)` to show or hide the marker bar, and its `state`.
 - The handler's `onEvent$` emits `CONTROL_BAR_MARKER_BAR_ITEM_CLICK`, `CONTROL_BAR_MARKER_BAR_ITEM_MOUSE_ENTER` and `CONTROL_BAR_MARKER_BAR_ITEM_MOUSE_LEAVE` for the markers, and `CONTROL_BAR_MARKER_BAR_CHANGE` when its state changes. Clicks can be used to select the marker for the [segmentation components](#omakase-segmentation-components).
 - `controlBar.markerBar.getMarkerBars()` and `getMarkerBar(id)` return the handlers of the added marker bars, and `deleteMarkerBar(id)` removes one.
+
+Marker bars can also be declared in the template, without any code, as `<omakase-marker-bar>` children of `<omakase-marker-bars>`, each showing the marker track given by its `marker-track-id` attribute:
+
+```html
+<omakase-marker-bars slot="left" class="chapters-bar">
+  <omakase-marker-bar marker-track-id="chapters"></omakase-marker-bar>
+</omakase-marker-bars>
+```
+
+- The marker track is shown once it's added to the player, and stops being shown when it's deleted from the player, so the marker bar can be declared before the track exists.
+- Declared marker bars are included in `getMarkerBars()`, so their handlers can be used like those of the marker bars added with `addMarkerBar`, e.g. to listen to marker clicks or to show more tracks.
 - The control bar keeps the marker bars in sync with the player: they're sized to the loaded media, markers added to, updated on or deleted from a shown track are reflected automatically, and markers of unlocked tracks dragged on a marker bar are moved on their track.
 
 ---
@@ -505,6 +649,7 @@ Disabling the menu closes it if it's open. A menu without options is disabled as
 | ------------ | ---------------------------------------------------------------------------------------------------------------- |
 | `menu-title` | Title shown above the options. No title when not set                                                             |
 | `alignment`  | Horizontal alignment of the list relative to the icon: `left`, `center` (default) or `right`                     |
+| `option-alignment` | Horizontal alignment of the options and the title inside the list: `left` (default), `center` or `right`   |
 
 The icon follows the control bar's theme and can be changed with the `--omakase-menu-icon` CSS variable (see [STYLING.md](../STYLING.md#control-bar)). To use something else as the toggle, give it in the `toggle` slot, as with the other dropdown selectors:
 
@@ -553,6 +698,7 @@ keyframeButton.deactivate();
 
 - While inactive (no callback function configured, or after `deactivate()`), the button has the `inactive` attribute and is dimmed, and neither the button nor its shortcut does anything. The `active` property tells whether the capability is active.
 - The `callbackFn` and `audioSrc` properties can also be set individually. Setting `callbackFn` to `undefined` deactivates the capability.
+- The callback function can also be declared with the `callback` attribute, the same way as a native `onclick` handler. The attribute value is the body of a function that receives `keyframe` and runs with the button as `this`, e.g. `<omakase-keyframe-button callback="showKeyframe(keyframe)"></omakase-keyframe-button>`. Whichever is set last, the `callback` attribute or the `callbackFn` property, is used. Removing the attribute deactivates the capability. Like inline event handlers, the attribute is evaluated as code, so a Content Security Policy must allow `unsafe-eval`.
 - Nothing is extracted while no main media is loaded.
 
 ## Safe Zones
@@ -583,6 +729,7 @@ safeZoneToggle.deactivate();
 - The toggle only adds and removes its own safe zones; safe zones added through the chroming API are left alone. Safe zones without an `id` are given one by the toggle.
 - The `safeZonesVisible` property, and the `safe-zones-visible` attribute, tell whether the toggle's safe zones are shown. They follow the chroming, so they're updated when the safe zones are removed through the chroming API, e.g. `removeAllSafeZones()`.
 - Reconfiguring while the safe zones are shown replaces them with the new ones.
+- A single safe zone can also be given with the `safe-zone` attribute, as its space or comma separated `top right bottom left` percentages, e.g. `<omakase-safe-zone-toggle safe-zone="10 10 10 10"></omakase-safe-zone-toggle>`. The toggle is configured with it when it's connected, replacing any previous configuration. Unlike `safeZones`, the attribute supports only one safe zone.
 
 ## Omakase Segmentation Components
 
@@ -635,7 +782,7 @@ document.querySelector('omakase-delete-marker-button').onDeleteMarker = (track, 
 };
 ```
 
-### `<omakase-next-marker-button>` / `<omakase-previous-marker-button>`
+### `<omakase-next-marker-button>` and `<omakase-previous-marker-button>`
 
 Active whenever the linked track has at least one marker (regardless of lock state or selection).
 
@@ -670,7 +817,7 @@ Splits the active marker in two at the playhead position: the left marker keeps 
 document.querySelector('omakase-split-marker-button').splitColor = '#00AACC';
 ```
 
-### `<omakase-mark-in-button>` / `<omakase-mark-out-button>`
+### `<omakase-mark-in-button>` and `<omakase-mark-out-button>`
 
 Supports three visual representations, set via the `representation` attribute (or property):
 
@@ -718,9 +865,9 @@ selector.palette = ['#ff0000', '#00ff00', '#0000ff'];
 The `scope` attribute (or property) controls what the selected color applies to:
 
 - `track` (the default) - the color assigned to the linked track, used by any of its markers that don't have their own explicit color.
-- `marker` - the color assigned to the currently active/selected marker(s) on the linked track.
+- `marker` - the color assigned to the currently active/selected marker(s) on the linked track. When no marker is selected, the picked color is remembered (and readable/settable via the `newMarkerColor` property) and applied to every marker subsequently created on the linked track. A capability that assigns its own color to a marker it creates (e.g. the split marker button's `split-color`) still overrides it.
 
-The `initial-color` attribute (or property) sets the color selected before the linked track/marker has an explicit color of its own; it defaults to the palette's first (upper-left) color when unset. The active/selected color can also be read or set directly via the `selectedColor` property, which applies the same scope rules as clicking a swatch.
+The selected color shown on the button is the color markers are actually rendered with: the selected marker's (or, with nothing selected, the linked track's) color, falling back to the default `MarkerTrack`/`Marker` style rules. The `initial-color` attribute (or property) is only shown while that color can't be resolved (e.g. no track or UI is linked yet); it defaults to the palette's first (upper-left) color when unset. The active/selected color can also be read or set directly via the `selectedColor` property, which applies the same scope rules as clicking a swatch.
 
 ---
 

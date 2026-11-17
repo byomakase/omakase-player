@@ -27,8 +27,6 @@ import {
   type MainMediaLoadOptions,
   MainMediaType,
   type MediaContainerTrackLoadOptions,
-  Relation,
-  RelationType,
   type ThumbnailTrack,
   type MediaRotationValue,
   type SlateMainMediaLoadOptions,
@@ -47,7 +45,7 @@ import {type PlayerAudioApi} from './player-audio-api';
 import {PlayerAudio} from './player-audio';
 import type {ChromingInternalApi} from '../chroming';
 import {UnsupportedMethodInDetachedError} from '../types';
-import type {PlayerPlaybackEngineMapping} from './player-playback-engine';
+import type {AnyPlayerPlaybackEngine, PlayerPlaybackEngineMapping} from './player-playback-engine';
 import {InternalSource, type Source, SourceType, TrackSource, UrlSource} from '../source';
 import {MediaFactory} from '../media/media-factory';
 import type {MainMediaSessionManager} from '../media/main-media-session-manager';
@@ -67,7 +65,10 @@ import type {OmpProvider} from '../omp-provider';
 import {extractErrorMessage} from '../util/error-util';
 import {Validators} from '../common/validators';
 import {LivePlaybackTracker, type LivePlaybackTrackerApi} from '../live/live-model';
+import type {BlobManager} from '../util/blob/blob-manager';
+import {BlobUtil} from '../util/blob/blob-util';
 import {CryptoUtil} from '../util/crypto-util';
+import {Relation, RelationType} from '../relation';
 
 export const PLAYER_CONFIG_DEFAULT: PlayerConfig = {
   ...COMMON_PLAYER_CONFIG_DEFAULT,
@@ -103,6 +104,7 @@ export class Player implements PlayerApi, Destroyable {
   protected _mainMediaSessionManager: MainMediaSessionManager;
   protected _trackRepository: TrackRepository;
   protected _trackUtils: TrackUtils;
+  protected _blobManager: BlobManager;
 
   private _playerLocal: PlayerLocalApi;
   private _playerDetached?: PlayerDetachedApi | undefined;
@@ -124,6 +126,7 @@ export class Player implements PlayerApi, Destroyable {
     this._mainMediaSessionManager = ompProvider.mainMediaSessionManager;
     this._trackRepository = ompProvider.trackRepository;
     this._trackUtils = ompProvider.trackUtils;
+    this._blobManager = ompProvider.blobManager;
 
     this._config = {
       ...PLAYER_CONFIG_DEFAULT,
@@ -591,6 +594,7 @@ export class Player implements PlayerApi, Destroyable {
           next: () => {
             this._mainMediaRepository.clear();
             this._trackRepository.clear();
+            this._blobManager.clear();
             nextCompleteObserver(observer);
           },
           error: (err) => {
@@ -601,16 +605,15 @@ export class Player implements PlayerApi, Destroyable {
     });
   }
 
-  getPlaybackEngine(mainMediaType: MainMediaType.HLS): PlayerPlaybackEngineMapping[MainMediaType.HLS];
-  getPlaybackEngine(mainMediaType: MainMediaType.MP4): PlayerPlaybackEngineMapping[MainMediaType.MP4];
-  getPlaybackEngine(mainMediaType: MainMediaType.AUDIO_FILE): PlayerPlaybackEngineMapping[MainMediaType.AUDIO_FILE];
-  getPlaybackEngine(mainMediaType: MainMediaType.SLATE): PlayerPlaybackEngineMapping[MainMediaType.SLATE];
-  getPlaybackEngine(mainMediaType: MainMediaType): PlayerPlaybackEngineMapping[MainMediaType] | undefined {
+  getPlaybackEngine(): AnyPlayerPlaybackEngine | undefined;
+  getPlaybackEngine<T extends MainMediaType>(mainMediaType: T): PlayerPlaybackEngineMapping[T] | undefined;
+  getPlaybackEngine(mainMediaType?: MainMediaType): AnyPlayerPlaybackEngine | undefined {
     if (this.isAttached()) {
-      return this._playerLocal.getPlaybackEngine(mainMediaType);
+      return mainMediaType ? this._playerLocal.getPlaybackEngine(mainMediaType) : this._playerLocal.getPlaybackEngine();
     } else if (this.isDetached()) {
       throw new UnsupportedMethodInDetachedError();
     }
+    return void 0;
   }
 
   toggleFullScreen(): Observable<void> {
@@ -632,6 +635,7 @@ export class Player implements PlayerApi, Destroyable {
         .extractVideoKeyframe(options)
         .subscribe({
           next: (videoKeyframe) => {
+            this._blobManager.registerBlobUrl(videoKeyframe.src);
             nextCompleteObserver(observer, videoKeyframe);
           },
           error: (err) => {

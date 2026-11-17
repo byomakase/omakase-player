@@ -16,42 +16,17 @@
 
 import {Observable, takeUntil, throwError} from 'rxjs';
 import {ObserverBreaker} from '../common/observer-breaker';
-import {type PlayerController, type PlayerControllerEvent, PlayerControllerEventType, type PlayerDomController} from '../player/player-controller-api';
+import type {PlayerController, PlayerControllerEvent, PlayerDomController} from '../player/player-controller-api';
 import type {MediaRotationValue} from '../media';
 import type {Alert} from '../session/alerts-api';
 import type {VideoKeyframe, VideoKeyframeOptions} from '../media';
 import type {Destroyable} from '../common/capabilities';
 
 /**
- * HTMLMediaElement events dispatched on virtual playback element for each controller event
- */
-const MEDIA_ELEMENT_EVENTS: Partial<Record<PlayerControllerEventType, string[]>> = {
-  [PlayerControllerEventType.PLAYER_CONTROLLER_PLAYBACK_PROGRESS]: ['timeupdate'],
-  [PlayerControllerEventType.PLAYER_CONTROLLER_PLAY]: ['play', 'playing'],
-  [PlayerControllerEventType.PLAYER_CONTROLLER_PAUSE]: ['pause', 'timeupdate'],
-  [PlayerControllerEventType.PLAYER_CONTROLLER_ENDED]: ['timeupdate', 'pause', 'ended'],
-  [PlayerControllerEventType.PLAYER_CONTROLLER_SEEKING]: ['seeking', 'waiting'],
-  [PlayerControllerEventType.PLAYER_CONTROLLER_SEEKED]: ['timeupdate', 'seeked', 'playing'],
-  [PlayerControllerEventType.PLAYER_CONTROLLER_PLAYBACK_RATE_UPDATE]: ['ratechange'],
-};
-
-/**
- * Minimal TimeRanges covering [0, end]
- */
-const createTimeRanges = (end: number): TimeRanges => {
-  let length = Number.isFinite(end) && end > 0 ? 1 : 0;
-  return {
-    length,
-    start: () => 0,
-    end: () => end,
-  };
-};
-
-/**
  * {@link PlayerDomController} for virtual playback (playback without media element), backed by a single element.
  *
- * Element exposes subset of HTMLMediaElement API backed by attached {@link PlayerController}, so media-chrome controls
- * (ie. time range) observe and control virtual playback as any other media element.
+ * Element takes video element's place in media slot and renders virtual playback of attached {@link PlayerController}, see subclasses.
+ * Chroming controls follow the player, not the element.
  *
  * Optional delegate {@link PlayerDomController} (ie. chroming) receives alerts, attach / detach and text rendering.
  */
@@ -73,8 +48,7 @@ export class VirtualPlaybackDomController implements PlayerDomController, Destro
   /**
    * Mounts virtual playback element in place of delegate's video element. Video element is hidden until destroyed.
    *
-   * Element is inserted before video element and takes its slot, so media-chrome's media-controller
-   * (which uses first element in media slot) observes it as media.
+   * Element is inserted before video element and takes its slot, ie. media slot in chroming media-theme.
    */
   static mountOver<T extends VirtualPlaybackDomController>(this: new (parentElement: HTMLElement, delegate?: PlayerDomController) => T, playerDomController: PlayerDomController): T {
     let videoElement = playerDomController.mainMediaVideoElement;
@@ -103,84 +77,26 @@ export class VirtualPlaybackDomController implements PlayerDomController, Destro
       backgroundPosition: 'center',
       backgroundRepeat: 'no-repeat',
     });
-    this.defineMediaElementApi();
     parentElement.appendChild(this._element);
   }
 
   /**
-   * Exposes subset of HTMLMediaElement API on element, backed by attached controller
-   */
-  protected defineMediaElementApi() {
-    let controllerValue = <T>(fn: (controller: PlayerController) => T, defaultValue: T): T => {
-      try {
-        return this._controller ? fn(this._controller) : defaultValue;
-      } catch (e) {
-        // controller not wired yet
-        return defaultValue;
-      }
-    };
-    let duration = () => controllerValue((p) => p.getDuration(), Number.NaN);
-
-    Object.defineProperties(this._element, {
-      duration: {get: duration},
-      currentTime: {
-        get: () => controllerValue((p) => p.getCurrentTime(), 0),
-        set: (value: number) => this._controller?.seekTo(value).subscribe(),
-      },
-      paused: {get: () => controllerValue((p) => !p.mediaElementPlayback!.playing, true)},
-      ended: {get: () => controllerValue((p) => p.mediaElementPlayback!.ended, false)},
-      seeking: {get: () => controllerValue((p) => p.mediaElementPlayback!.seeking, false)},
-      playbackRate: {
-        get: () => controllerValue((p) => p.playbackRate, 1),
-        set: (value: number) => this._controller?.setPlaybackRate(value).subscribe(),
-      },
-      // seeking drops below HAVE_FUTURE_DATA, so media-chrome stops interpolating time range until seeked
-      readyState: {
-        get: () =>
-          controllerValue(
-            (p) => (p.mediaElementPlayback ? (p.mediaElementPlayback.seeking ? HTMLMediaElement.HAVE_METADATA : HTMLMediaElement.HAVE_ENOUGH_DATA) : HTMLMediaElement.HAVE_NOTHING),
-            HTMLMediaElement.HAVE_NOTHING
-          ),
-      },
-      seekable: {get: () => createTimeRanges(duration())},
-      buffered: {get: () => this.resolveBuffered(duration())},
-      play: {
-        value: () =>
-          new Promise<void>((resolve, reject) => {
-            this._controller ? this._controller.play().subscribe({next: () => resolve(), error: reject}) : reject(new Error(`Controller not attached`));
-          }),
-      },
-      pause: {value: () => this._controller?.pause().subscribe()},
-    });
-  }
-
-  /**
-   * Buffered time ranges exposed on element, virtual media is buffered whole by default
-   * @protected
-   */
-  protected resolveBuffered(duration: number): TimeRanges {
-    return createTimeRanges(duration);
-  }
-
-  /**
-   * Dispatches media element events for state that is resolved on wiring, ie. duration
+   * Refreshes rendering for state that is resolved on wiring, ie. duration
    */
   refreshMediaState() {
-    ['loadedmetadata', 'durationchange', 'progress', 'ratechange', 'timeupdate', 'playing'].forEach((type) => this._element.dispatchEvent(new Event(type)));
     if (this._controller) {
       this.onMediaStateRefreshed(this._controller);
     }
   }
 
   /**
-   * Binds element to controller, controller events are dispatched as media element events
+   * Binds element to controller, see {@link onControllerEvent}
    */
   attachController(controller: PlayerController) {
     this._controllerBreaker.break();
     this._controller = controller;
     controller.onEvent$.pipe(takeUntil(this._controllerBreaker.observer)).subscribe((event) => {
       this.onControllerEvent(controller, event);
-      MEDIA_ELEMENT_EVENTS[event.type]?.forEach((type) => this._element.dispatchEvent(new Event(type)));
     });
   }
 

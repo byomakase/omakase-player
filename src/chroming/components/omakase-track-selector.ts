@@ -44,6 +44,7 @@ export const OmakaseTrackSelectorDomClasses = {
   ROUTER_DEFAULT: 'media-chrome-router-default',
   ROUTER_CHANGED: 'media-chrome-router-changed',
   BACK: 'media-chrome-back',
+  ICON: 'media-chrome-track-selector',
 };
 
 /**
@@ -70,6 +71,7 @@ export function isAudioRouterUpdated(handler: AudioHandlerApi | undefined): bool
 export class OmakaseTrackSelector extends OmakaseDropdownSelector {
   protected readonly dropdownIdPrefix = 'omakase-track-dropdown';
   protected readonly dropdownClass = OmakaseTrackSelectorDomClasses.DROPDOWN;
+  protected override readonly toggleIconClass = OmakaseTrackSelectorDomClasses.ICON;
 
   // last successfully read main media type; a loaded media's type can't change, so this stays correct through the
   // moments where it can't be safely read (see updateMainMediaType)
@@ -157,9 +159,9 @@ export class OmakaseTrackSelector extends OmakaseDropdownSelector {
   }
 
   protected renderDropdownLists(dropdownId: string): string {
-    return `<omakase-dropdown-list class="${OmakaseTrackSelectorDomClasses.AUDIO_LIST} align-left" id="${dropdownId}-audio-list" title="AUDIO" width="125" type="radio"></omakase-dropdown-list>
-      <omakase-dropdown-list class="${OmakaseTrackSelectorDomClasses.SIDECAR_LIST} align-left d-none" id="${dropdownId}-sidecar-list" multiselect="true" title="SIDECAR AUDIO" width="125" type="checkbox"></omakase-dropdown-list>
-      <omakase-dropdown-list class="${OmakaseTrackSelectorDomClasses.TEXT_LIST} align-left d-none" id="${dropdownId}-text-list" title="TEXT" width="125" type="radio"></omakase-dropdown-list>`;
+    return `<omakase-dropdown-list class="${OmakaseTrackSelectorDomClasses.AUDIO_LIST}" id="${dropdownId}-audio-list" title="AUDIO" width="125" type="radio"></omakase-dropdown-list>
+      <omakase-dropdown-list class="${OmakaseTrackSelectorDomClasses.SIDECAR_LIST} d-none" id="${dropdownId}-sidecar-list" multiselect="true" title="SIDECAR AUDIO" width="125" type="checkbox"></omakase-dropdown-list>
+      <omakase-dropdown-list class="${OmakaseTrackSelectorDomClasses.TEXT_LIST} d-none" id="${dropdownId}-text-list" title="TEXT" width="125" type="radio"></omakase-dropdown-list>`;
   }
 
   protected subscribeToPlayer(player: PlayerApi | PlayerDetachedApi) {

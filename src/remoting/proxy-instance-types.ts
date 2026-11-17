@@ -39,14 +39,20 @@ import {TamsMainMediaSessionProxy} from './impl/tams-main-media-session-proxy';
 import {ThumbnailTrackProxy} from './impl/thumbnail-track-proxy';
 import {UiProxy} from './impl/ui-proxy';
 import {LivePlaybackTrackerProxy} from './impl/live-playback-tracker-proxy';
+import {ResourceEntityProxy} from './impl/resource-entity-proxy';
+import {ResourceRepositoryProxy} from './impl/resource-repository-proxy';
+import {SvgResourceProxy} from './impl/svg-resource-proxy';
+import {OmakaseResourceApiProxy} from './impl/omakase-resource-api-proxy';
 
 export const getMessageChannelProxyMap = () => ({
   Ui: UiProxy,
 
   MainMediaRepository: MainMediaRepositoryProxy,
   TrackRepository: TrackRepositoryProxy,
+  ResourceRepository: ResourceRepositoryProxy,
   SessionStore: SessionStoreProxy,
   OmakaseTrackApi: OmakaseTrackApiProxy,
+  OmakaseResourceApi: OmakaseResourceApiProxy,
   TrackUtils: TrackUtilsProxy,
   TamsMainMediaSession: TamsMainMediaSessionProxy,
 
@@ -54,6 +60,9 @@ export const getMessageChannelProxyMap = () => ({
   Track: TrackProxy,
   MarkerTrack: MarkerTrackProxy,
   ThumbnailTrack: ThumbnailTrackProxy,
+
+  ResourceEntity: ResourceEntityProxy,
+  SvgResource: SvgResourceProxy,
 
   PlayerDetached: PlayerDetachedProxy,
   PlayerAudioInternal: PlayerAudioInternalProxy,

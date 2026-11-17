@@ -18,3 +18,4 @@ export * from './marker-list-api';
 export * from './marker-list-event';
 export * from './marker-list-item';
 export * from './marker-list';
+export {MarkerListMode} from './components/marker-list-component';

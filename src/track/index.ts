@@ -17,6 +17,7 @@
 export type {OmakaseTrackApi} from './omakase-track-api';
 export type {TrackUtilsApi} from './track-utils';
 export type {TrackLoadOptions, TrackLoadOptionsMap} from './track-load-options';
+export type {TrackGenerationOptions, TrackGenerationOptionsMap} from './track-generation-options';
 export {TimedItemsTrackEventEmitter, TimedItemsTrackItemEventType} from './timed-items-track-event-emitter';
 export type {TimedItemsTrackItemEvent, TimedItemsTrackItemExitEventData, TimedItemsTrackItemEntryEventData} from './timed-items-track-event-emitter';
 export * from './timed-items-downsampler';

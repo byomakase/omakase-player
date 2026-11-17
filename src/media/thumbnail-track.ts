@@ -18,7 +18,7 @@ import {type BaseTrackArgs, type BaseTrackLoadOptions, type Track, TrackType, ty
 import {UrlSource} from '../source';
 import {BaseTimedItem, BaseTimedItemsTrack, type TimedItem, type TimedItemArgs, type TimedItemState, type TimedItemsTrackState, type TimedItemUpdateableAttrs} from './timed-items-track';
 import {type OmpEventGroup} from '../common';
-import {BlobUtil} from '../util/blob-util';
+import {BlobUtil} from '../util/blob/blob-util';
 import {isNonNullable} from '../util/util-functions';
 import type {Destroyable} from '../common/capabilities';
 
@@ -204,7 +204,18 @@ export class SpriteThumbnail extends BaseThumbnail implements Thumbnail {
     super(args);
   }
 
-  override destroy() {
+  update(attrs: ThumbnailUpdateableAttrs) {
+    if (attrs.url) {
+      this.revokeUrl();
+    }
+    super.update(attrs);
+  }
+
+  protected revokeUrl(): void {
     BlobUtil.revokeObjectURL(this._url);
+  }
+
+  override destroy() {
+    this.revokeUrl();
   }
 }

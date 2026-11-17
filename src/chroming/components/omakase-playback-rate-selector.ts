@@ -70,6 +70,7 @@ const playbackRateOption = (rate: number): OmakaseDropdownListItem => ({value: `
 export class OmakasePlaybackRateSelector extends OmakaseDropdownSelector {
   protected readonly dropdownIdPrefix = 'omakase-playback-rate-dropdown';
   protected readonly dropdownClass = OmakasePlaybackRateSelectorDomClasses.DROPDOWN;
+  protected override readonly defaultOptionAlignment = 'center';
 
   private _rates = [...DEFAULT_PLAYBACK_RATES];
 

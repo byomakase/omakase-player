@@ -39,6 +39,10 @@ import type {TamsMainMediaSessionMessageChannel} from './impl/tams-main-media-se
 import type {ThumbnailTrackMessageChannel} from './impl/thumbnail-track-message-channel';
 import type {UiMessageChannel} from './impl/ui-message-channel';
 import type {LivePlaybackTrackerMessageChannel} from './impl/live-playback-tracker-message-channel';
+import type {ResourceEntityMessageChannel} from './impl/resource-entity-message-channel';
+import type {ResourceRepositoryMessageChannel} from './impl/resource-repository-message-channel';
+import type {SvgResourceMessageChannel} from './impl/svg-resource-message-channel';
+import type {OmakaseResourceApiMessageChannel} from './impl/omakase-resource-api-message-channel';
 
 /**
  * Name - Type mappings for supported message channels
@@ -48,8 +52,10 @@ export type MessageChannelTypeMap = {
 
   MainMediaRepository: MainMediaRepositoryMessageChannel;
   TrackRepository: TrackRepositoryMessageChannel;
+  ResourceRepository: ResourceRepositoryMessageChannel;
   SessionStore: SessionStoreMessageChannel;
   OmakaseTrackApi: OmakaseTrackApiMessageChannel;
+  OmakaseResourceApi: OmakaseResourceApiMessageChannel;
   TrackUtils: TrackUtilsMessageChannel;
   TamsMainMediaSession: TamsMainMediaSessionMessageChannel;
 
@@ -57,6 +63,9 @@ export type MessageChannelTypeMap = {
   Track: TrackMessageChannel;
   MarkerTrack: MarkerTrackMessageChannel;
   ThumbnailTrack: ThumbnailTrackMessageChannel;
+
+  ResourceEntity: ResourceEntityMessageChannel;
+  SvgResource: SvgResourceMessageChannel;
 
   PlayerDetached: PlayerDetachedMessageChannel;
   PlayerAudioInternal: PlayerAudioInternalMessageChannel;

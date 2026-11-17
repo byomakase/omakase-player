@@ -24,7 +24,6 @@ import type {PlayerControllerConfigMap} from './player-api';
 import {SlatePlayerController, type SlatePlayerControllerConfig} from '../slate/slate-player-controller';
 import {FrameImagePlayerController, type FrameImagePlayerControllerConfig} from '../frame-image/frame-image-player-controller';
 import {CompositePlayerController} from './composite-player-controller';
-import {CompositePlaybackDomController} from './composite-playback-dom-controller';
 import {ClockPlayerController} from '../virtual/clock-player-controller';
 import type {PlayerControllerConfig} from './player-controller';
 
@@ -53,12 +52,9 @@ export class PlayerControllerFactory {
    * together with headless clock controller at such playback rates, see {@link CompositePlayerController}.
    */
   protected static createComposite(forward: PlayerController, playerDomController: PlayerDomController, config?: Partial<PlayerControllerConfig>): CompositePlayerController {
-    let composite = new CompositePlayerController(forward, new ClockPlayerController(playerDomController), {
+    return new CompositePlayerController(forward, new ClockPlayerController(playerDomController), {
       seekStep: config?.seekStep,
       minSeekInterval: config?.minSeekInterval,
     });
-    // media-chrome follows composite at every playback rate, wired once
-    composite.attachPlaybackDomController(CompositePlaybackDomController.mountAlongside(playerDomController));
-    return composite;
   }
 }

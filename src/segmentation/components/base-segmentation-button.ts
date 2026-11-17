@@ -52,9 +52,11 @@ export abstract class OmakaseSegmentationButton extends ControlBarComponent(Medi
 
   /**
    * Whether the capability is currently active for the given, already-resolved marker track.
-   * Only called when a marker track resolves and {@link enabled} is `true`.
+   * Only called when a marker track resolves and {@link enabled} is `true`. Defaults to `true`,
    */
-  protected abstract isCapabilityActive(track: MarkerTrack): boolean;
+  protected isCapabilityActive(track: MarkerTrack): boolean {
+    return true;
+  }
 
   /**
    * Invoked on click (or keyboard activation) while the capability is active, with its resolved

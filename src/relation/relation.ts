@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type {MediaEntity, MediaEntityState} from './media-entity';
+import type {EntityState, MediaEntity, MediaEntityState} from '../entity';
 import type {Serializable} from '../common/capabilities';
 
 /**
@@ -33,7 +33,7 @@ export enum RelationType {
  */
 export interface RelationState extends Serializable {
   relationType: RelationType;
-  entityId: MediaEntityState['id'];
+  entityId: EntityState['id'];
   entityType: MediaEntityState['mediaType'];
 }
 

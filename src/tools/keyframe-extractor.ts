@@ -17,7 +17,7 @@
 import {Observable} from 'rxjs';
 import {DomUtil} from '../dom/dom-util';
 import {OmpError} from '../types';
-import {BlobUtil} from '../util/blob-util';
+import {BlobUtil} from '../util/blob/blob-util';
 import {nextCompleteObserver} from '../util/rxjs-util';
 import {Validators} from '../common/validators';
 import {type VideoKeyframe, type VideoKeyframeOptions, VideoKeyframeType} from '../media';

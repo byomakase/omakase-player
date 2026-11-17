@@ -27,3 +27,4 @@ export * from './player-text-track';
 export * from './player-video';
 export * from './player-video-api';
 export * from './player-video-track';
+export type {AnyPlayerPlaybackEngine, PlayerPlaybackEngine, PlayerPlaybackEngineMapping} from './player-playback-engine';

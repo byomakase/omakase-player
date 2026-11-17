@@ -17,12 +17,23 @@
 import {ObserverBreaker} from '../common/observer-breaker';
 import {AudioLevelEventType, AudioLevelSource} from './audio-level-source';
 import type {Observation, ObservationTrack, TimedItem} from '../media';
-import {TimedItemTemporalUtil} from '../media';
+import {AudioObservationType, TimedItemTemporalUtil} from '../media';
 import type {OmakasePlayerApi} from '../omakase-player-api';
 import {concat, filter, map, of, switchMap, throttleTime, timer, takeUntil, Subject, tap} from 'rxjs';
 import {PlayerEventType} from '../player';
 import {TimedItemsTrackEventEmitter, TimedItemsTrackItemEventType} from '../track';
 import {AudioUtil} from '../audio/audio-util';
+
+export interface ObservationTrackAudioLevelSourceOptions {
+  /**
+   * Type of the values held by the observation track(s), see {@link AudioObservationType}:
+   * - `WAVEFORM` - linear sample values in the -1 to 1 range, converted to dBFS
+   * - `LEVELS` - values already in dBFS (e.g. tracks generated with `observationType: AudioObservationType.LEVELS`), used as they are
+   *
+   * Defaults to `WAVEFORM`.
+   */
+  observationType?: AudioObservationType | undefined;
+}
 
 export class ObservationTrackAudioLevelSource extends AudioLevelSource {
   protected _track?: ObservationTrack | undefined;
@@ -43,15 +54,25 @@ export class ObservationTrackAudioLevelSource extends AudioLevelSource {
   private _sampleTime = 50;
   private _eventEmitterTreshold = 25;
 
-  constructor(player: OmakasePlayerApi, track: ObservationTrack | ObservationTrack[]) {
+  private readonly _observationType: AudioObservationType;
+  private _levelsChannelCount: number | undefined;
+
+  constructor(player: OmakasePlayerApi, track: ObservationTrack | ObservationTrack[], options?: ObservationTrackAudioLevelSourceOptions) {
     super();
+    this._observationType = options?.observationType ?? AudioObservationType.WAVEFORM;
     this.setTrack(track);
     this.wirePlayer(player);
+  }
+
+  get observationType(): AudioObservationType {
+    return this._observationType;
   }
 
   get channelCount() {
     if (this._channelTracks.length) {
       return this._channelTracks.length;
+    } else if (this._observationType === AudioObservationType.LEVELS) {
+      return this._levelsChannelCount ?? 1;
     } else {
       return 6;
     }
@@ -76,6 +97,7 @@ export class ObservationTrackAudioLevelSource extends AudioLevelSource {
         takeUntil(this._destroyBreaker.observer)
       )
       .subscribe((dbValues) => {
+        this.updateLevelsChannelCount(dbValues);
         this._onEvent$.next({
           type: AudioLevelEventType.AUDIO_LEVEL_CHANGE,
           data: {dbValues},
@@ -92,6 +114,8 @@ export class ObservationTrackAudioLevelSource extends AudioLevelSource {
     this._channelEventEmitters = [];
     this._channelExactObservations = [];
     this._channelNearObservations = [];
+
+    this._levelsChannelCount = Array.isArray(track) ? undefined : this.resolveLevelsChannelCount(track.timedItems[0]);
 
     if (Array.isArray(track)) {
       this._track = undefined;
@@ -218,11 +242,38 @@ export class ObservationTrackAudioLevelSource extends AudioLevelSource {
 
   private extractDbValues(observation: Observation): number[] {
     const values = observation.items.filter((item) => item.value !== undefined).map((item) => parseFloat(item.value!));
+    if (this._observationType === AudioObservationType.LEVELS) {
+      // values are already in dBFS
+      const dbValues = values.filter((value) => !isNaN(value));
+      if (this._channelTracks.length) {
+        return dbValues.length > 0 ? [Math.max(...dbValues)] : [];
+      }
+      return dbValues;
+    }
     if (this._channelTracks.length) {
       return [AudioUtil.dbFromFloat(Math.max(...values.map((value) => Math.abs(value))))];
     } else {
       return values.map((value) => AudioUtil.dbFromFloat(Math.abs(value)));
     }
+  }
+
+  private resolveLevelsChannelCount(observation: Observation | undefined): number | undefined {
+    if (this._observationType !== AudioObservationType.LEVELS || !observation) {
+      return undefined;
+    }
+    const count = observation.items.filter((item) => item.value !== undefined).length;
+    return count > 0 ? count : undefined;
+  }
+
+  private updateLevelsChannelCount(dbValues: number[]): void {
+    if (this._observationType !== AudioObservationType.LEVELS || this._channelTracks.length || dbValues.length === 0 || dbValues.length === this._levelsChannelCount) {
+      return;
+    }
+    this._levelsChannelCount = dbValues.length;
+    this._onEvent$.next({
+      type: AudioLevelEventType.CHANNEL_COUNT_CHANGE,
+      data: {channelCount: dbValues.length},
+    });
   }
 
   private isObservationValid(observation: Observation, time: number): boolean {

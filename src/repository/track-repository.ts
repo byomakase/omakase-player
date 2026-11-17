@@ -15,11 +15,11 @@
  */
 
 import {BaseTrack, type Track, type TrackEvent, type TrackState} from '../media';
-import {BaseRepository} from './repository';
+import {BaseMediaRepository} from './repository';
 import {filter, map, type Observable, Subject, takeUntil} from 'rxjs';
-
-import type {Destroyable, Serializable} from '../common/capabilities';
+import {type Serializable} from '../common/capabilities';
 import {freeObserver} from '../util/rxjs-util';
+import type {BlobManager} from '../util/blob/blob-manager';
 
 export enum TrackRepositoryEventType {
   TRACK_ADDED = 'TRACK_ADDED',
@@ -40,12 +40,16 @@ export interface TrackRepositoryEvent<T extends TrackRepositoryEventType = Track
   data: TrackRepositoryEventTypeDataMap[T];
 }
 
-export class TrackRepository extends BaseRepository<Track> implements Destroyable {
+export class TrackRepository extends BaseMediaRepository<Track> {
   protected readonly _onEvent$: Subject<TrackRepositoryEvent> = new Subject<TrackRepositoryEvent>();
   protected readonly _onTrackEvent$: Subject<TrackEvent> = new Subject<TrackEvent>();
 
-  constructor() {
+  protected readonly _blobManager: BlobManager;
+
+  constructor(blobManager: BlobManager) {
     super();
+
+    this._blobManager = blobManager;
   }
 
   get onEvent$(): Observable<TrackRepositoryEvent> {
@@ -97,39 +101,50 @@ export class TrackRepository extends BaseRepository<Track> implements Destroyabl
 
   delete(id: Track['id']): boolean {
     let track = this.get(id);
-
+    let result = false;
     if (track) {
-      let result = super.delete(track.id);
-      if (result && track) {
+      let state = track.state;
+      result = super.delete(id);
+      if (result) {
         this._onEvent$.next({
           type: TrackRepositoryEventType.TRACK_DELETED,
           data: {
-            trackState: track.state,
+            trackState: state,
           },
         });
-        this.destroyTrack(track);
       }
-      return result;
-    } else {
-      return false;
     }
+
+    return result;
+  }
+
+  _delete(id: Track['id']): boolean {
+    let track = this.get(id);
+    if (track) {
+      this.destroyTrack(track);
+    }
+
+    return super._delete(id);
   }
 
   deleteAll(ids: Track['id'][]): boolean {
     let tracks = ids.map((id) => this.get(id)).filter((p) => !!p);
     let result = false;
     if (tracks.length > 0) {
+      let states = tracks.map((track) => track.state);
       result = super.deleteAll(tracks.map((p) => p.id));
-      tracks.forEach((track) => {
-        this._onEvent$.next({
-          type: TrackRepositoryEventType.TRACK_DELETED,
-          data: {
-            trackState: track.state,
-          },
+      if (result) {
+        states.forEach((state) => {
+          this._onEvent$.next({
+            type: TrackRepositoryEventType.TRACK_DELETED,
+            data: {
+              trackState: state,
+            },
+          });
         });
-        this.destroyTrack(track);
-      });
+      }
     }
+
     return result;
   }
 
@@ -139,14 +154,15 @@ export class TrackRepository extends BaseRepository<Track> implements Destroyabl
       .pipe(map((p) => p as TrackRepositoryEvent<TrackRepositoryEventType.TRACK_DELETED>));
   }
 
-  protected destroyTrack(track: Track) {
+  protected destroyTrack(track: Track): void {
+    this._blobManager.deleteOwnerBlobUrl(track.id);
     if (track instanceof BaseTrack) {
       track.destroy();
     }
   }
 
   destroy() {
-    this.clear();
+    super.destroy();
     freeObserver(this._onEvent$);
     freeObserver(this._onTrackEvent$);
   }

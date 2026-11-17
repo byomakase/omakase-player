@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-import {CryptoUtil} from '../util/crypto-util';
-import type {Serializable} from '../common/capabilities';
-import {FileFormat} from '../common';
+import {BaseEntity, type Entity, type EntityArgs, type EntityState, EntityType} from './index';
 
 /**
  * Discriminator for the two kinds of media entities managed by the player.
@@ -27,66 +25,46 @@ export enum MediaEntityType {
 }
 
 /**
- * Serializable snapshot of a {@link MediaEntity}, suitable for transfer across
- * worker boundaries or persistence in session storage.
+ * Serializable snapshot of a {@link MediaEntity} instance.
+ *
+ * Extends {@link EntityState} with media specific fields, such as media type.
  */
-export interface MediaEntityState extends Serializable {
-  id: MediaEntity['id'];
+export interface MediaEntityState extends EntityState {
   mediaType: MediaEntity['mediaType'];
 }
 
 /**
  * Base contract shared by all media entities ({@link MainMedia}, {@link Track}).
  *
- * Every entity carries a unique identifier, a discriminated {@link MediaEntityType},
- * and can produce a serializable {@link MediaEntityState} snapshot via {@link state}.
+ * Every media entity carries a discriminated {@link MediaEntityType},
  */
-export interface MediaEntity {
-  /** Unique identifier (UUID). */
-  id: string;
-
-  /** Discriminator indicating whether this entity is a main media or a track. */
+export interface MediaEntity extends Entity {
+  /** Discriminator indicating whether this media entity is a main media or a track. */
   mediaType: MediaEntityType;
-
-  /** Serializable state snapshot of this entity. */
-  state: MediaEntityState;
 }
 
 /**
  * Construction arguments shared by all {@link BaseMediaEntity} subclasses.
  */
-export interface BaseMediaEntityArgs extends Serializable {
-  /** Optional pre-assigned UUID. When omitted a new UUID is generated automatically. */
-  id?: MediaEntity['id'] | undefined;
-}
+export interface BaseMediaEntityArgs extends EntityArgs {}
 
-export abstract class BaseMediaEntity<S extends MediaEntityState> implements MediaEntity {
-  protected _id: string;
+export abstract class BaseMediaEntity<S extends MediaEntityState> extends BaseEntity<S> implements MediaEntity {
+  protected readonly _entityType = EntityType.MEDIA;
 
   protected abstract _mediaType: MediaEntityType;
 
   protected constructor(args?: BaseMediaEntityArgs) {
-    this._id = args?.id ? args.id : CryptoUtil.uuid();
+    super(args);
   }
-
-  protected abstract getState(): S;
 
   protected _getState(): MediaEntityState {
     return {
-      id: this._id,
+      ...super._getState(),
       mediaType: this._mediaType,
     };
   }
 
-  get id(): string {
-    return this._id;
-  }
-
   get mediaType(): MediaEntityType {
     return this._mediaType;
-  }
-
-  get state(): S {
-    return this.getState();
   }
 }

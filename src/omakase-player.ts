@@ -46,6 +46,8 @@ import {YogaProvider} from './timeline/layout/yoga-provider';
 import {type UiApi} from './ui';
 import {OmpProvider} from './omp-provider';
 import type {OmakaseTrackApiImpl} from './track/omakase-track';
+import {type OmakaseResourceApi} from './resource';
+import type {OmakaseResourceApiImpl} from './resource/omakase-resource';
 
 export type OmakasePlayerConfig = {
   authentication?: AuthenticationData | undefined;
@@ -86,6 +88,8 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
   private _localizationDetached?: LocalizationDetachedApi | undefined;
 
   private _omakaseTrack: OmakaseTrackApiImpl;
+
+  private _omakaseResource: OmakaseResourceApiImpl;
 
   private _remoteNode: HostRemoteNode | undefined;
   private _playerDetachedWindow: WindowProxy | undefined;
@@ -154,6 +158,7 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
     this._ompProvider.omakaseTrack.setPlayerInternal(this._player.playerLocal);
 
     this._omakaseTrack = this._ompProvider.omakaseTrack;
+    this._omakaseResource = this._ompProvider.omakaseResource;
 
     this._session.onEvent$
       .pipe(takeUntil(this._destroyBreaker.observer))
@@ -468,6 +473,10 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
     return this._omakaseTrack;
   }
 
+  get resource(): OmakaseResourceApi {
+    return this._omakaseResource;
+  }
+
   get tools(): OmakaseToolsApi {
     return OmakaseTools.instance;
   }
@@ -543,5 +552,7 @@ export class OmakasePlayer extends BaseOmakasePlayer implements OmakasePlayerApi
     this._timelines.clear();
 
     this._ompProvider.destroy();
+
+    this.releaseAudioContextProvider();
   }
 }

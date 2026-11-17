@@ -32,7 +32,6 @@ import {
   type RestoreMainMediaSessionArgsType,
 } from './player-controller-api';
 import type {AudioTrackIdentifier, TextTrackIdentifier} from './player-controller';
-import type {CompositePlaybackDomController} from './composite-playback-dom-controller';
 
 export interface CompositePlayerControllerConfig extends SeekStepConfigOptions {}
 
@@ -52,8 +51,6 @@ export interface CompositePlayerControllerConfig extends SeekStepConfigOptions {
  * Once playback rate is supported by media element again, forward controller continues from main media time.
  *
  * Live main media is played by forward controller only.
- *
- * media-chrome follows composite through {@link CompositePlaybackDomController}, attached once, see {@link attachPlaybackDomController}.
  */
 export class CompositePlayerController implements PlayerController {
   protected readonly _onEvent$: Subject<PlayerControllerEvent> = new Subject<PlayerControllerEvent>();
@@ -79,9 +76,6 @@ export class CompositePlayerController implements PlayerController {
   protected _forwardSeekId = 0;
   protected _mainMediaState: MainMediaState | undefined;
 
-  /** Media slot element media-chrome observes as media, owned by composite */
-  protected _playbackDomController: CompositePlaybackDomController | undefined;
-
   protected readonly _destroyBreaker = new ObserverBreaker();
 
   constructor(forward: PlayerController, reverse: ClockPlayerController, config?: CompositePlayerControllerConfig) {
@@ -90,7 +84,15 @@ export class CompositePlayerController implements PlayerController {
     this._active = forward;
     this._seekStepper = new SeekStepper(config);
 
-    merge(forward.onEvent$.pipe(filter(() => this._active === forward && !this._switching)), reverse.onEvent$.pipe(filter(() => this._active === reverse && !this._switching)))
+    merge(
+      forward.onEvent$.pipe(filter((event) => this._active === forward && !this._switching && event.type !== PlayerControllerEventType.PLAYER_CONTROLLER_BUFFERING)),
+      reverse.onEvent$.pipe(filter((event) => this._active === reverse && !this._switching && event.type !== PlayerControllerEventType.PLAYER_CONTROLLER_BUFFERING))
+    )
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe((event) => this._onEvent$.next(event));
+
+    forward.onEvent$
+      .pipe(filter((event) => event.type === PlayerControllerEventType.PLAYER_CONTROLLER_BUFFERING))
       .pipe(takeUntil(this._destroyBreaker.observer))
       .subscribe((event) => this._onEvent$.next(event));
 
@@ -122,15 +124,6 @@ export class CompositePlayerController implements PlayerController {
 
   get reverse(): ClockPlayerController {
     return this._reverse;
-  }
-
-  /**
-   * Attaches media slot element media-chrome observes as media, it follows composite at every playback rate. Destroyed together with composite.
-   */
-  attachPlaybackDomController(playbackDomController: CompositePlaybackDomController) {
-    this._playbackDomController = playbackDomController;
-    playbackDomController.setVideoTimeOffset(() => this._mainMediaState?.initSegmentTimeOffset ?? 0);
-    playbackDomController.attachController(this);
   }
 
   /** Controller main media time, playback and events come from. */
@@ -419,8 +412,6 @@ export class CompositePlayerController implements PlayerController {
     this._mainMediaState = mainMediaState;
     this._forward.wireEvents(mainMediaState);
     this._reverse.wireEvents(mainMediaState);
-    // ie. duration is resolved on wiring
-    this._playbackDomController?.refreshMediaState();
   }
 
   /** Forward controller is active again once unwired, main media plays forward after it is wired again. */
@@ -593,8 +584,6 @@ export class CompositePlayerController implements PlayerController {
 
   destroy(): void {
     this._destroyBreaker.destroy();
-    this._playbackDomController?.destroy();
-    this._playbackDomController = void 0;
     this._forward.destroy();
     this._reverse.destroy();
     freeObserver(this._onEvent$);

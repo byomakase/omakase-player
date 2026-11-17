@@ -531,8 +531,8 @@ media-controller {
       margin: 0 auto;
       width: 100%;
       position: relative;
-      overflow-x: hidden;
-      overflow-y: hidden;
+      overflow-x: clip;
+      overflow-y: visible;
     }
 
     .omakase-moment-marker {
@@ -972,8 +972,21 @@ media-controller {
     background-image: var(--omakase-audio-track-selector-active-icon, url(/images/media-chrome-audio-on.svg));
   }
 
-  omakase-dropdown-toggle.disabled .media-chrome-audio {
+  omakase-dropdown-toggle:is(.disabled, [disabled]) .media-chrome-audio {
     background-image: var(--omakase-audio-track-selector-disabled-icon, url(/images/media-chrome-audio-disabled.svg));
+  }
+
+  .media-chrome-audio-selector {
+    background-image: var(--omakase-audio-selector-icon, url(/images/media-chrome-audio-selector.svg));
+  }
+
+  .media-chrome-text-selector {
+    background-image: var(--omakase-text-selector-icon, url(/images/media-chrome-text-selector.svg));
+  }
+
+  .media-chrome-track-selector,
+  .media-chrome-trackselector {
+    background-image: var(--omakase-track-selector-icon, url(/images/media-chrome-track-selector.svg));
   }
 
   media-control-bar {
@@ -2143,8 +2156,34 @@ media-controller {
       background-image: var(--omakase-ten-frames-forward-icon, url(/images/omakase-fast-forward.svg));
     }
 
+    .media-chrome-audio-selector {
+      background-image: var(--omakase-audio-selector-icon, url(/images/omakase-audio-selector.svg));
+    }
+
+    .media-chrome-text-selector {
+      background-image: var(--omakase-text-selector-icon, url(/images/omakase-text-selector.svg));
+    }
+
+    // the disabled variants are repeated, as these rules would otherwise override the shared disabled ones
+    .media-chrome-text-on {
+      background-image: var(--omakase-captions-on-icon, url(/images/omakase-text-on.svg));
+
+      &.disabled {
+        background-image: var(--omakase-captions-on-disabled-icon, url(/images/media-chrome-text-disabled.svg));
+      }
+    }
+
+    .media-chrome-text-off {
+      background-image: var(--omakase-captions-off-icon, url(/images/omakase-text-off.svg));
+
+      &.disabled {
+        background-image: var(--omakase-captions-off-disabled-icon, url(/images/media-chrome-text-disabled.svg));
+      }
+    }
+
+    .media-chrome-track-selector,
     .media-chrome-trackselector {
-      background-image: var(--omakase-track-selector-icon, url(/images/omakase-trackselector.svg));
+      background-image: var(--omakase-track-selector-icon, url(/images/omakase-track-selector.svg));
     }
 
     .media-chrome-close {

@@ -60,6 +60,7 @@ The player's dimensions can be controlled with three CSS custom properties set o
 | `--omakase-dropdown-toggle-color`           | `white`                        | Border color of the radio/checkbox toggle shown next to a dropdown option |
 | `--omakase-dropdown-selector-offset`        | depends on the theme: `26px` default, `28px` audio, `13px` omakase; `10px` outside the themes | Gap between a selector's toggle and its dropdown when it opens above the toggle (playback rate, audio, text and track selectors). The theme defaults change at some player sizes |
 | `--omakase-dropdown-toggle-max-width`       | `120px`                        | Max width of a dropdown's toggle, including its caret, padding and border. A longer label is truncated with an ellipsis, keeping the caret shown after it. Full text is shown on mouseover. |
+| `--omakase-dropdown-toggle-empty-width`     | `1.5em`                        | Min width of a dropdown toggle's label while it has no text to show |
 | `--omakase-dropdown-selector-caret-size`     | `0.6em`                        | Width of the caret shown after a selector's label with the `caret` attribute |
 | `--omakase-dropdown-selector-caret-gap`      | `0.4em`                        | Gap between a selector's label and its caret |
 | `--omakase-dropdown-selector-caret-color`    | `currentColor`                 | Color of a selector's caret |
@@ -191,6 +192,8 @@ Used by the standalone control bar's `<omakase-rewind-and-play-button>`, `<omaka
 | -------------------------------------- | --------------------------------------- |
 | `--omakase-rewind-and-play-icon`  | Rewind-and-play button icon        |
 | `--omakase-play-and-rewind-icon`  | Play-and-rewind button icon        |
+| `--omakase-rewind-and-play-blank-icon` | Rewind-and-play button icon without the duration, used when the duration isn't the default 10 seconds |
+| `--omakase-play-and-rewind-blank-icon` | Play-and-rewind button icon without the duration, used when the duration isn't the default 10 seconds |
 | `--omakase-home-icon`             | Home (go to start) button icon     |
 | `--omakase-end-icon`              | End (go to end) button icon        |
 | `--omakase-keyframe-icon`         | Keyframe button icon               |
@@ -243,7 +246,9 @@ Used by the standalone control bar's `<omakase-playhead-to-marker-start-button>`
 | `--omakase-audio-track-selector-disabled-icon` | Audio track selector icon, disabled |
 | `--omakase-audio-text-track-selector-icon` | Text/audio track selector icon      |
 | `--omakase-audio-text-track-selector-active-icon` | Text/audio track selector icon, active |
-| `--omakase-track-selector-icon`         | Track selector icon                    |
+| `--omakase-audio-selector-icon`         | Default icon of `<omakase-audio-selector>` |
+| `--omakase-text-selector-icon`          | Default icon of `<omakase-text-selector>` |
+| `--omakase-track-selector-icon`         | Default icon of `<omakase-track-selector>`, also used by the omakase theme's track selector |
 | `--omakase-dropdown-back-icon`          | Dropdown "back" icon                   |
 
 **Captions**
@@ -305,7 +310,7 @@ The dropdowns of the playback rate, audio, text and track selectors and of the m
 | `--omakase-control-bar-border-radius`     | `0`                    | Border radius of the control bar                                                                |
 | `--omakase-control-bar-padding`           | `0 10px`               | Padding inside the control bar                                                                  |
 | `--omakase-control-bar-gap`               | `5px`                  | Gap between controls in the control bar, in rows and in row sections (left, center, right)      |
-| `--omakase-control-bar-icon-size`         | `22px`                 | Size of the play, mute and fullscreen buttons; also the minimum height of time displays         |
+| `--omakase-control-bar-icon-size`         | `22px`                 | Size of the icon buttons, including the selectors' default icons; also the minimum height of time displays |
 | `--omakase-control-bar-text-color`        | `white`                | Text color of time displays                                                                     |
 | `--omakase-control-bar-popup-z-index`     | `1000`                 | z-index of the control bar's popups (time range preview, volume flyout, dropdowns and color selector flyout) |
 | `--omakase-control-disabled-opacity`      | `0.5`                  | Opacity of every disabled or inactive control: a component disabled through the [component API](./control-bar/README.md#enabling-disabling-showing-and-hiding-components), an inactive segmentation component or capability toggle, a captions toggle without an active text track, a live button while no live media is loaded, a disabled selector and the icon of a disabled menu |
@@ -344,6 +349,34 @@ Used by `<omakase-menu>` (see the [control bar docs](./control-bar/README.md#men
 | CSS Variable                        | Default                                                      | Description                                  |
 | ----------------------------------- | ------------------------------------------------------------ | -------------------------------------------- |
 | `--omakase-menu-icon`               | `media-chrome-menu.svg` / `omakase-menu.svg`                 | Icon that opens the menu                     |
+
+**Audio, text and track selectors**
+
+Used by the default icons of `<omakase-audio-selector>`, `<omakase-text-selector>` and `<omakase-track-selector>` (see the [control bar docs](./control-bar/README.md#audio-and-text)). Their options use the [dropdown](#dropdowns) variables.
+
+| CSS Variable                        | Default                                                                  | Description                                  |
+| ----------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------- |
+| `--omakase-audio-selector-icon`     | `media-chrome-audio-selector.svg` / `omakase-audio-selector.svg`         | Icon that opens the audio selector           |
+| `--omakase-text-selector-icon`      | `media-chrome-text-selector.svg` / `omakase-text-selector.svg`           | Icon that opens the text selector            |
+| `--omakase-track-selector-icon`     | `media-chrome-track-selector.svg` / `omakase-track-selector.svg`         | Icon that opens the track selector           |
+
+**Audio router selector**
+
+Used by `<omakase-audio-router-selector>` (see the [control bar docs](./control-bar/README.md#audio-router)). It shows the router of the active audio track in a fly-out styled like the [dropdowns](#dropdowns) of the control bar's theme. It uses the `--omakase-router-*` variables shared with the [chromed router](#chromed-router), so a value set once styles both; where a default differs, the control bar's is given below.
+
+| CSS Variable                                | Default                                                      | Description                                                                                                     |
+| ------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `--omakase-router-default-icon`             | `media-chrome-audio-router.svg` / `omakase-audio-router.svg` | Icon that opens the router fly-out                                                                              |
+| `--omakase-router-changed-icon`             | defaults to `--omakase-router-default-icon`                  | Icon shown while the routing differs from its default                                                           |
+| `--omakase-router-changed-glow-color`       | defaults to `--omakase-primary-color` (`#009ceb`)            | Color of the glow around the icon while the routing differs from its default                                    |
+| `--omakase-router-changed-glow-size`        | `3px`                                                        | Blur radius of that glow. Set it to `0` to turn the glow off                                                    |
+| `--omakase-router-flyout-min-width`         | `0`                                                          | Minimum width of the fly-out                                                                                    |
+| `--omakase-router-divider-color`            | `#d5e0e7` / `--omakase-panel-border-color` (`#00476a`)       | Line between the router's header and its inputs                                                                 |
+| `--omakase-router-header-background-color`  | `#434242e5` / `transparent`                                  | Background of the router's header                                                                               |
+| `--omakase-router-header-text-color`        | `#bbbbbb`                                                    | Text color of the router's header                                                                               |
+| `--omakase-router-toggle-color`             | `white`                                                      | Border of a routing toggle; an active one uses `--omakase-primary-accent-color` and `--omakase-primary-color`   |
+| `--omakase-router-font-family`              | `'Lato'`                                                     | Font of the router                                                                                              |
+| `--omakase-router-deselect-all-icon`, `--omakase-router-reset-icon`, `--omakase-router-few-outputs-icon`, `--omakase-router-many-outputs-icon` | *(icons)* | Router action and output icons |
 
 **Marker bars**
 

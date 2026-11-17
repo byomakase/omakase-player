@@ -24,11 +24,13 @@ import {OmakaseDropdownSelector} from './omakase-dropdown-selector';
 export const OmakaseAudioSelectorDomClasses = {
   DROPDOWN: 'omakase-audio-selector-dropdown',
   DROPDOWN_LIST: 'omakase-audio-selector-dropdown-list',
+  ICON: 'media-chrome-audio-selector',
 };
 
 export class OmakaseAudioSelector extends OmakaseDropdownSelector {
   protected readonly dropdownIdPrefix = 'omakase-audio-dropdown';
   protected readonly dropdownClass = OmakaseAudioSelectorDomClasses.DROPDOWN;
+  protected override readonly toggleIconClass = OmakaseAudioSelectorDomClasses.ICON;
 
   private get refreshEventTypes(): PlayerAudioEventType[] {
     return [
@@ -51,7 +53,7 @@ export class OmakaseAudioSelector extends OmakaseDropdownSelector {
   }
 
   protected renderDropdownLists(dropdownId: string): string {
-    return `<omakase-dropdown-list id="${dropdownId}-list" class="${OmakaseAudioSelectorDomClasses.DROPDOWN_LIST}" title="AUDIO" width="125" type="radio"></omakase-dropdown-list>`;
+    return `<omakase-dropdown-list id="${dropdownId}-list" class="${OmakaseAudioSelectorDomClasses.DROPDOWN_LIST} align-left" title="AUDIO" width="125" type="radio"></omakase-dropdown-list>`;
   }
 
   protected subscribeToPlayer(player: PlayerApi | PlayerDetachedApi) {

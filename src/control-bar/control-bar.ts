@@ -43,10 +43,12 @@ import {ChromingUtil} from '../chroming/chroming-util';
 import {ChromingDomClasses} from '../chroming/chroming-dom';
 import type {OmakasePlayerApi} from '../omakase-player-api';
 import type {PlayerApi, PlayerDetachedApi} from '../player';
+import type {PlayerPlayback} from '../player/player';
 import {DomUtil} from '../dom/dom-util';
 import type {Destroyable} from '../common/capabilities';
 import {ObserverBreaker} from '../common/observer-breaker';
-import {ControlBarComponentAttributes, isControlBarComponent} from './control-bar-component';
+import {ControlBarComponentAttributes, type ControlBarComponentApi, isControlBarComponent} from './control-bar-component';
+import {LocalMarkerSymbolResourceResolver, type MarkerSymbolResourceResolver} from '../chroming/marker-symbol-resource-resolver';
 import {type ControlBarKeyboardShortcuts, type ControlBarShortcutBindingEntry, ControlBarShortcutRegistry, type ControlBarShortcutTarget, createShortcutBindings} from './control-bar-shortcuts';
 
 /**
@@ -59,6 +61,42 @@ export interface ControlBarApi {
    * @param querySelector HTML query selector
    */
   getControlBarElement<T>(querySelector: string): T;
+
+  /**
+   * Shows or hides a component of the control bar
+   * @param componentId `id` attribute of the component
+   * @param visible
+   */
+  setVisible(componentId: string, visible: boolean): void;
+
+  /**
+   * Enables or disables a component of the control bar
+   * @param componentId `id` attribute of the component
+   * @param enabled
+   */
+  setEnabled(componentId: string, enabled: boolean): void;
+
+  /**
+   * Sets the key of a component's keyboard shortcut, overriding the key of its action, or restores the action's key when `undefined`
+   * @param componentId `id` attribute of the component
+   * @param shortcut Key string, e.g. `Shift+J`
+   */
+  setShortcut(componentId: string, shortcut: string | undefined): void;
+
+  /**
+   * Enables or disables a component's keyboard shortcut
+   * @param componentId `id` attribute of the component
+   * @param enabled
+   */
+  setShortcutEnabled(componentId: string, enabled: boolean): void;
+
+  /**
+   * Sets an attribute of a component of the control bar, or removes it when `value` is `undefined`
+   * @param componentId `id` attribute of the component
+   * @param attribute Attribute name
+   * @param value Attribute value
+   */
+  setAttribute(componentId: string, attribute: string, value: string | undefined): void;
 
   /**
    * Marker bars API
@@ -111,7 +149,7 @@ const themeIconSlots: Record<string, [slot: string, className: string][]> = {
   ],
 };
 
-const markerItemsEventTypes = new Set<TimedItemsTrackEventType>([
+const timedItemsEventTypes = new Set<TimedItemsTrackEventType>([
   TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_ADDED,
   TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_UPDATED,
   TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_DELETED,
@@ -148,7 +186,9 @@ export class ControlBar implements ControlBarApi, Destroyable {
   private _disabledWithoutMedia = new Set<Element>();
   private _disabledObserver?: MutationObserver;
   private _liveModel?: UiLiveModel;
-  private _updateMarkerBarsPlayhead?: () => void;
+  /** Re-reads the playhead time, e.g. when the live window moves */
+  private _syncMarkerBarsPlayhead?: () => void;
+  private _markerBarsPlayheadFrame = 0;
   private _destroyed = false;
 
   constructor(config: ControlBarConfig, player: OmakasePlayerApi) {
@@ -171,6 +211,7 @@ export class ControlBar implements ControlBarApi, Destroyable {
     this._mediaController.associateElement(this._controlBarElement);
 
     this.wireElements(player);
+    this._markerBar._addDeclaredMarkerBars();
     this.wireMainMediaLoaded(player.player);
 
     if (this._config.keyboardShortcutsEnabled) {
@@ -290,7 +331,7 @@ export class ControlBar implements ControlBarApi, Destroyable {
     }
 
     if (markerBars.length > 0) {
-      this.wireMarkerBars(player, ui as Ui, markerBars);
+      this.wireMarkerBars(player, ui as Ui, new LocalMarkerSymbolResourceResolver(omakasePlayer.resource), markerBars);
       this.wireMarkerBarsPlayhead(player, markerBars);
       this._markerBarsResizeObserver = new ResizeObserver((entries) => {
         for (const entry of entries) {
@@ -345,20 +386,24 @@ export class ControlBar implements ControlBarApi, Destroyable {
     records.forEach((record) => this._disabledWithoutMedia.delete(record.target as Element));
   }
 
-  private wireMarkerBars(player: OmakasePlayerApi['player'], ui: Ui, markerBars: OmakaseMarkerBars[]) {
-    const setMediaDuration = () => markerBars.forEach((bars) => (bars.mediaDuration = player.getDuration()));
+  private wireMarkerBars(player: OmakasePlayerApi['player'], ui: Ui, symbolResourceResolver: MarkerSymbolResourceResolver, markerBars: OmakaseMarkerBars[]) {
+    const setMediaDuration = () => markerBars.forEach((bars) => (bars.duration = player.getDuration()));
     if (player.isMainMediaLoaded) {
       setMediaDuration();
     }
     player.onEvent$
       .pipe(
-        filter((event) => event.type === PlayerEventType.PLAYER_MAIN_MEDIA_LOADED),
+        filter(
+          (event) => event.type === PlayerEventType.PLAYER_MAIN_MEDIA_LOADED || event.type === PlayerEventType.PLAYER_MAIN_MEDIA_UPDATED || event.type === PlayerEventType.PLAYER_SESSION_RESTORED
+        ),
+        filter(() => player.isMainMediaLoaded),
         takeUntil(this._destroyBreaker.observer)
       )
       .subscribe(() => setMediaDuration());
 
     for (const bars of markerBars) {
       bars.setUiOrUiProxy(ui);
+      bars.setMarkerSymbolResourceResolver(symbolResourceResolver);
       // markers dragged on a marker bar are moved on their track
       bars.onEvent$
         .pipe(
@@ -373,12 +418,15 @@ export class ControlBar implements ControlBarApi, Destroyable {
    * Shows the playhead position on the marker bars, as a fraction of the media duration, or of the live window
    */
   private wireMarkerBarsPlayhead(player: OmakasePlayerApi['player'], markerBars: OmakaseMarkerBars[]) {
-    this._updateMarkerBarsPlayhead = () => {
-      const loaded = player.isMainMediaLoaded;
+    let syncedTime = 0;
+    let syncedAt = 0;
+    let playback: PlayerPlayback | undefined = player.isMainMediaLoaded ? player.playerSession.playback : undefined;
+
+    const render = (time: number | undefined) => {
       const live = this._liveModel?.isLive;
       const start = live ? this._liveModel!.windowStart : 0;
-      const end = live ? this._liveModel!.windowEnd : loaded ? player.getDuration() : 0;
-      const position = loaded && end > start ? Math.min(1, Math.max(0, (player.getCurrentTime() - start) / (end - start))) : undefined;
+      const end = live ? this._liveModel!.windowEnd : time !== undefined ? player.getDuration() : 0;
+      const position = time !== undefined && end > start ? Math.min(1, Math.max(0, (time - start) / (end - start))) : undefined;
       for (const bars of markerBars) {
         bars.classList.toggle(MARKER_BARS_PLAYHEAD_CLASS, position !== undefined);
         if (position !== undefined) {
@@ -388,13 +436,58 @@ export class ControlBar implements ControlBarApi, Destroyable {
         }
       }
     };
-    this._updateMarkerBarsPlayhead();
-    player.onEvent$
-      .pipe(
-        filter((event) => markerBarsPlayheadEventTypes.has(event.type)),
-        takeUntil(this._destroyBreaker.observer)
-      )
-      .subscribe(() => this._updateMarkerBarsPlayhead?.());
+
+    const isAdvancing = () =>
+      player.isMainMediaLoaded && !!playback && playback.playing && !playback.waiting && !playback.seeking && !playback.waitingSyncedMedia && !playback.ended && playback.playbackRate > 0;
+
+    const animate = () => {
+      this._markerBarsPlayheadFrame = requestAnimationFrame(animate);
+      render(syncedTime + ((performance.now() - syncedAt) / 1000) * playback!.playbackRate);
+    };
+
+    const stopAnimation = () => {
+      if (this._markerBarsPlayheadFrame) {
+        cancelAnimationFrame(this._markerBarsPlayheadFrame);
+        this._markerBarsPlayheadFrame = 0;
+      }
+    };
+
+    const sync = (time?: number) => {
+      const loaded = player.isMainMediaLoaded;
+      syncedTime = time ?? (loaded ? player.getCurrentTime() : 0);
+      syncedAt = performance.now();
+      render(loaded ? syncedTime : undefined);
+      if (isAdvancing()) {
+        if (!this._markerBarsPlayheadFrame) {
+          this._markerBarsPlayheadFrame = requestAnimationFrame(animate);
+        }
+      } else {
+        stopAnimation();
+      }
+    };
+
+    this._syncMarkerBarsPlayhead = () => sync();
+    sync();
+    player.onEvent$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe((event) => {
+      if (event.type === PlayerEventType.PLAYER_PLAYBACK_CHANGE) {
+        playback = event.data.playerPlayback;
+        sync();
+      } else if (event.type === PlayerEventType.PLAYER_MAIN_MEDIA_LOADED || event.type === PlayerEventType.PLAYER_SESSION_RESTORED) {
+        playback = player.isMainMediaLoaded ? player.playerSession.playback : undefined;
+        sync();
+      } else if (event.type === PlayerEventType.PLAYER_PLAYBACK_RATE_UPDATE) {
+        playback = playback ? {...playback, playbackRate: event.data.playbackRate} : playback;
+        sync();
+      } else if (event.type === PlayerEventType.PLAYER_MAIN_MEDIA_UNLOADED) {
+        playback = undefined;
+        sync();
+      } else if (event.type === PlayerEventType.PLAYER_SEEKING) {
+        playback = playback ? {...playback, seeking: true} : playback;
+        sync(event.data.toTime);
+      } else if (markerBarsPlayheadEventTypes.has(event.type)) {
+        sync();
+      }
+    });
   }
 
   private updateMarker(markerBars: OmakaseMarkerBars, {track, item, attrs}: ChromingMarkerUpdateData) {
@@ -419,14 +512,14 @@ export class ControlBar implements ControlBarApi, Destroyable {
       timeRanges.forEach((timeRange) => timeRange.setLiveModel(model));
       markerBars.forEach((bars) => bars.setLiveModel(model));
       this._liveModel = model;
-      this._updateMarkerBarsPlayhead?.();
+      this._syncMarkerBarsPlayhead?.();
     });
   }
 
   private wireMarkers(track: OmakasePlayerApi['track'], timeRanges: OmakaseTimeRange[], markerBars: OmakaseMarkerBars[]) {
     track.onTrackEvent$
       .pipe(
-        filter((event: any) => markerItemsEventTypes.has(event.type)),
+        filter((event: any) => timedItemsEventTypes.has(event.type)),
         takeUntil(this._destroyBreaker.observer)
       )
       .subscribe((event: TimedItemsTrackEvent) => {
@@ -480,18 +573,13 @@ export class ControlBar implements ControlBarApi, Destroyable {
         setThumbnailTrack(event.data.thumbnailTrackId);
       });
 
-    // as in the chroming: updated thumbnails are picked up, and deleting them clears the preview
     track.onTrackEvent$
       .pipe(
-        filter((event: any) => thumbnailTrackId !== undefined && event.data?.trackId === thumbnailTrackId),
+        filter((event: any) => thumbnailTrackId !== undefined && timedItemsEventTypes.has(event.type) && event.data?.trackId === thumbnailTrackId),
         takeUntil(this._destroyBreaker.observer)
       )
-      .subscribe((event: TimedItemsTrackEvent) => {
-        if (event.type === TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_UPDATED) {
-          setThumbnailTrack(thumbnailTrackId);
-        } else if (event.type === TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_DELETED) {
-          setThumbnailTrack(undefined);
-        }
+      .subscribe(() => {
+        setThumbnailTrack(thumbnailTrackId);
       });
   }
 
@@ -503,12 +591,57 @@ export class ControlBar implements ControlBarApi, Destroyable {
     return (this._controlBarElement.querySelector(querySelector) ?? this._controlBarElement.shadowRoot?.querySelector(querySelector)) as T;
   }
 
+  setVisible(componentId: string, visible: boolean): void {
+    const component = this.getComponentOrFail(componentId);
+    if (isControlBarComponent(component)) {
+      component.setVisible(visible);
+    } else {
+      component.hidden = !visible;
+    }
+  }
+
+  setEnabled(componentId: string, enabled: boolean): void {
+    this.getControlBarComponentOrFail(componentId).setEnabled(enabled);
+  }
+
+  setShortcut(componentId: string, shortcut: string | undefined): void {
+    this.getControlBarComponentOrFail(componentId).setShortcut(shortcut);
+  }
+
+  setShortcutEnabled(componentId: string, enabled: boolean): void {
+    this.getControlBarComponentOrFail(componentId).setShortcutEnabled(enabled);
+  }
+
+  setAttribute(componentId: string, attribute: string, value: string | undefined): void {
+    DomUtil.setAttribute(this.getComponentOrFail(componentId), attribute, value);
+  }
+
+  private getComponentOrFail(componentId: string): HTMLElement {
+    const component = this._controlBarElement.querySelector<HTMLElement>(`#${CSS.escape(componentId)}`);
+    if (!component) {
+      throw new Error(`Component with id "${componentId}" not found in the control bar`);
+    }
+    return component;
+  }
+
+  private getControlBarComponentOrFail(componentId: string): HTMLElement & ControlBarComponentApi {
+    const component = this.getComponentOrFail(componentId);
+    if (!isControlBarComponent(component)) {
+      throw new Error(`Element with id "${componentId}" is not a control bar component`);
+    }
+    return component;
+  }
+
   destroy(): void {
     if (this._destroyed) {
       return;
     }
     this._destroyed = true;
     this._destroyBreaker.destroy();
+    if (this._markerBarsPlayheadFrame) {
+      cancelAnimationFrame(this._markerBarsPlayheadFrame);
+      this._markerBarsPlayheadFrame = 0;
+    }
     this._livePlaybackTracker?.destroy();
     if (this._shortcutTarget) {
       ControlBarShortcutRegistry.unregister(this._shortcutTarget);

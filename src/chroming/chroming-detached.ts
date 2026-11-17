@@ -50,6 +50,7 @@ import type {AlertsManagerProxy} from '../remoting/impl/alerts-manager-proxy';
 import {AlertEventType} from '../session';
 import type {MainMediaRepositoryProxy} from '../remoting/impl/main-media-repository-proxy';
 import type {UiProxy} from '../remoting/impl/ui-proxy';
+import {DetachedMarkerSymbolResourceResolver} from './marker-symbol-resource-resolver';
 import type {PlayerAudioType} from '../player';
 
 export class ChromingDetached extends BaseChroming implements ChromingDetachedApi {
@@ -80,6 +81,7 @@ export class ChromingDetached extends BaseChroming implements ChromingDetachedAp
     this._alertsManagerProxy = remoteNode.getProxyByName('AlertsManager');
     this._mainMediaRepositoryProxy = remoteNode.getProxyByName('MainMediaRepository');
     this._uiProxy = remoteNode.getProxyByName('Ui');
+    this._markerSymbolResourceResolver = new DetachedMarkerSymbolResourceResolver(remoteNode, remoteNode.getProxyByName('ResourceRepository'));
     this.setLivePlaybackTracker(remoteNode.getProxyByName('LivePlaybackTracker'));
 
     this._trackRepository.onEvent$
@@ -274,20 +276,20 @@ export class ChromingDetached extends BaseChroming implements ChromingDetachedAp
       if (!this._omakaseTrackApiProxy) {
         errorCompleteObserver(observer, new Error('Track proxy is not initialized'));
       } else {
-        for (const handler of this._markerTrackHandlers[ChromingTrackDestination.MARKER_BARS]) {
-          handler.destroy();
-        }
-        if (this._markerTrackHandlers[ChromingTrackDestination.PROGRESS_BAR]) {
-          this._markerTrackHandlers[ChromingTrackDestination.PROGRESS_BAR].destroy();
-        }
-        this._markerTrackHandlers[ChromingTrackDestination.MARKER_BARS] = [];
-        this._markerTrackHandlers[ChromingTrackDestination.PROGRESS_BAR] = void 0;
+        const previousHandlers = this.takeMarkerBarHandlers();
         const progressBarMarkerBar$ = progressBarMarkerBar?.tracks.length ? forkJoin(progressBarMarkerBar.tracks.map((trackId) => this._omakaseTrackApiProxy!.get(trackId))) : of([] as TrackState[]);
         progressBarMarkerBar$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe({
           next: (tracks) => {
             const progressBarMarkerBars = tracks.filter((track) => track?.trackType === TrackType.MARKER_TRACK).map((track) => track!) as MarkerTrackState[];
             if (progressBarMarkerBars.length) {
-              this.createMarkerElementAndHandler(progressBarMarkerBars, ChromingTrackDestination.PROGRESS_BAR, {id: progressBarMarkerBar!.id}, progressBarMarkerBar, this._uiProxy);
+              this.createMarkerElementAndHandler(
+                progressBarMarkerBars,
+                ChromingTrackDestination.PROGRESS_BAR,
+                {id: progressBarMarkerBar!.id},
+                progressBarMarkerBar,
+                this._uiProxy,
+                this.reuseProgressBarHandler(previousHandlers, progressBarMarkerBar!.id)
+              );
             }
             concat(
               ...chromingMarkerBars.flatMap((chromingTrackState) =>
@@ -302,20 +304,30 @@ export class ChromingDetached extends BaseChroming implements ChromingDetachedAp
                     if (existingHandler) {
                       existingHandler.addTrack(markerTrack.id).pipe(takeUntil(this._destroyBreaker.observer)).subscribe();
                     } else {
-                      this.createMarkerElementAndHandler([markerTrack as MarkerTrackState], ChromingTrackDestination.MARKER_BARS, {id: chromingTrackState.id}, chromingTrackState, this._uiProxy);
+                      this.createMarkerElementAndHandler(
+                        [markerTrack as MarkerTrackState],
+                        ChromingTrackDestination.MARKER_BARS,
+                        {id: chromingTrackState.id},
+                        chromingTrackState,
+                        this._uiProxy,
+                        this.reuseMarkerBarHandler(previousHandlers, chromingTrackState.id)
+                      );
                     }
                   }
                 },
                 error: (error) => {
+                  this.destroyUnusedMarkerBarHandlers(previousHandlers);
                   errorCompleteObserver(observer, error);
                 },
                 complete: () => {
+                  this.destroyUnusedMarkerBarHandlers(previousHandlers);
                   this.emitMarkerTrackChange();
                   nextCompleteObserver(observer);
                 },
               });
           },
           error: (error) => {
+            this.destroyUnusedMarkerBarHandlers(previousHandlers);
             errorCompleteObserver(observer, error);
           },
         });

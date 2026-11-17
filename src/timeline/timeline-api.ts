@@ -195,6 +195,18 @@ export interface TimelineConfig {
   timecodeClickEdit: boolean;
 
   /**
+   * When `true`, the timeline always keeps the playhead in view: whenever the playhead moves (playback or seek) and ends
+   * up outside the visible range, the timeline scrolls so the playhead is at its left edge. Manually scrolling away is
+   * honored only until the playhead next moves.
+   *
+   * When `false` (default), the timeline follows the playhead during playback only while the playhead was visible when
+   * the user last scrolled, zoomed or seeked; scrolling it out of view stops following.
+   *
+   * Can be changed later with {@link TimelineApi.setAlwaysFollowPlayhead}.
+   */
+  alwaysFollowPlayhead: boolean;
+
+  /**
    * Initial visibility of the description (left) pane. Can be changed later with {@link TimelineApi.setDescriptionPaneVisible}.
    */
   descriptionPaneVisible: boolean;
@@ -474,6 +486,12 @@ export interface TimelineApi extends Destroyable {
    * Scrolls timeline to playhead position
    */
   scrollToPlayheadEased(): Observable<number>;
+
+  /**
+   * Enables or disables always keeping the playhead in view, see {@link TimelineConfig.alwaysFollowPlayhead}.
+   * When enabled while the playhead is out of view, the timeline scrolls to it immediately.
+   */
+  setAlwaysFollowPlayhead(enabled: boolean): void;
 
   /**
    * Adds {@link TimelineLaneApi} instance to a slot.

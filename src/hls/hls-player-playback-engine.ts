@@ -16,16 +16,20 @@
 
 import Hls from 'hls.js';
 import {type HlsPlayerController} from './hls-player-controller';
+import {MainMediaType} from '../media';
 import {BasePlayerPlaybackEngine, type PlayerPlaybackEngine} from '../player/player-playback-engine';
 import type {PlayerController} from '../player';
 
-export interface HlsPlayerPlaybackEngine extends PlayerPlaybackEngine {
+export interface HlsPlayerPlaybackEngine extends PlayerPlaybackEngine<MainMediaType.HLS | MainMediaType.TAMS> {
   get hls(): Hls | undefined;
 }
 
-export class HlsPlayerPlaybackEngineImpl extends BasePlayerPlaybackEngine implements HlsPlayerPlaybackEngine {
-  constructor(playerController: PlayerController) {
+export class HlsPlayerPlaybackEngineImpl extends BasePlayerPlaybackEngine<MainMediaType.HLS | MainMediaType.TAMS> implements HlsPlayerPlaybackEngine {
+  readonly mainMediaType: MainMediaType.HLS | MainMediaType.TAMS;
+
+  constructor(playerController: PlayerController, mainMediaType: MainMediaType.HLS | MainMediaType.TAMS) {
     super(playerController);
+    this.mainMediaType = mainMediaType;
   }
 
   get hls(): Hls | undefined {

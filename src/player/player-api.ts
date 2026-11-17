@@ -33,7 +33,7 @@ import {MediaTemporalFormat, type MediaTemporalFormatValueMap} from '../common';
 import {type PlayerAudioApi, type PlayerAudioCommonApi, type PlayerAudioInternalApi, PlayerAudioMode} from './player-audio-api';
 import type {PlayerSession} from '../session';
 import type {Destroyable} from '../common/capabilities';
-import type {PlayerPlaybackEngineMapping} from './player-playback-engine';
+import type {AnyPlayerPlaybackEngine, PlayerPlaybackEngineMapping} from './player-playback-engine';
 import type {Source} from '../source';
 import {type PlayerTextApi, type PlayerTextCommonApi, type PlayerTextInternalApi, PlayerTextMode} from './player-text-api';
 import type {PlayerVideoApi, PlayerVideoCommonApi, PlayerVideoInternalApi} from './player-video-api';
@@ -132,19 +132,20 @@ export interface PlayerApi extends PlayerCommonApi {
    */
   restorePlayerSession(playerSession: PlayerSession): Observable<void>;
 
-  /** @ignore */
-  getPlaybackEngine(mainMediaType: MainMediaType.HLS): PlayerPlaybackEngineMapping[MainMediaType.HLS];
-  /** @ignore */
-  getPlaybackEngine(mainMediaType: MainMediaType.MP4): PlayerPlaybackEngineMapping[MainMediaType.MP4];
-  /** @ignore */
-  getPlaybackEngine(mainMediaType: MainMediaType.AUDIO_FILE): PlayerPlaybackEngineMapping[MainMediaType.AUDIO_FILE];
-  /** @ignore */
-  getPlaybackEngine(mainMediaType: MainMediaType.SLATE): PlayerPlaybackEngineMapping[MainMediaType.SLATE];
   /**
-   * Returns the playback engine instance for the given media type, providing
-   * access to engine-specific configuration (e.g. HLS.js internals).
+   * Returns the playback engine of the currently loaded main media, providing access to
+   * engine-specific internals (e.g. hls.js instance). Narrow the result on {@link PlayerPlaybackEngine.mainMediaType}.
+   *
+   * @returns Playback engine, or undefined if main media is not loaded.
    */
-  getPlaybackEngine<T extends MainMediaType>(mainMediaType: T): PlayerPlaybackEngineMapping[T];
+  getPlaybackEngine(): AnyPlayerPlaybackEngine | undefined;
+  /**
+   * Returns the playback engine of the currently loaded main media, only if it is of the given main media type.
+   *
+   * @param mainMediaType - Expected main media type.
+   * @returns Playback engine, or undefined if main media is not loaded or is of a different type.
+   */
+  getPlaybackEngine<T extends MainMediaType>(mainMediaType: T): PlayerPlaybackEngineMapping[T] | undefined;
 
   /** Whether the player is currently in fullscreen mode. */
   isFullScreen(): boolean;
@@ -167,11 +168,8 @@ export interface PlayerLocalApi extends PlayerInternalApi, Destroyable {
 
   clearPlayerSession(): void;
 
-  getPlaybackEngine(mainMediaType: MainMediaType.HLS): PlayerPlaybackEngineMapping[MainMediaType.HLS];
-  getPlaybackEngine(mainMediaType: MainMediaType.MP4): PlayerPlaybackEngineMapping[MainMediaType.MP4];
-  getPlaybackEngine(mainMediaType: MainMediaType.AUDIO_FILE): PlayerPlaybackEngineMapping[MainMediaType.AUDIO_FILE];
-  getPlaybackEngine(mainMediaType: MainMediaType.SLATE): PlayerPlaybackEngineMapping[MainMediaType.SLATE];
-  getPlaybackEngine<T extends MainMediaType>(mainMediaType: T): PlayerPlaybackEngineMapping[T];
+  getPlaybackEngine(): AnyPlayerPlaybackEngine | undefined;
+  getPlaybackEngine<T extends MainMediaType>(mainMediaType: T): PlayerPlaybackEngineMapping[T] | undefined;
 }
 
 export interface PlayerDetachedConfig extends PlayerInternalConfig {}

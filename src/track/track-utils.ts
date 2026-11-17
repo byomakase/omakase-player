@@ -23,8 +23,6 @@ import {
   DefaultObservation,
   ObservationTrackFile,
   type OutputTextFileFormatType,
-  Relation,
-  RelationType,
   type SlewOptions,
   type TextTrack,
   type TextTrackArgs,
@@ -47,7 +45,7 @@ import {isNullOrUndefined, isString} from '../util/util-functions';
 import {UrlUtil} from '../util/url-util';
 import {type Source, SourceType, SourceUtil, TrackSource, UrlSource} from '../source';
 import {httpGetArrayBuffer, httpGetText} from '../http';
-import {BlobUtil} from '../util/blob-util';
+import {BlobUtil} from '../util/blob/blob-util';
 import {StringUtil} from '../util/string-util';
 import {AudioUtil} from '../audio/audio-util';
 import {M3u8Util} from '../m3u8/m3u8-util';
@@ -62,6 +60,8 @@ import {OmakaseTools} from '../tools/omakase-tools-api';
 import {isEmptyObject} from '../util/object-util';
 import {type DownsampleOptions, TimedItemsDownsamplerFactory} from './timed-items-downsampler';
 import {TimedItemsGeneratorFactory} from './timed-items-generator';
+import {Relation, RelationType} from '../relation';
+import type {BlobManager} from '../util/blob/blob-manager';
 
 interface AudioFileCreateArgs {
   hlsAudio: HlsAudio;
@@ -150,11 +150,13 @@ export interface TrackUtilsApi extends Destroyable {
 export class TrackUtils implements TrackUtilsApi {
   protected readonly _tools: OmakaseToolsApi = OmakaseTools.instance;
   protected readonly _trackRepository: TrackRepository;
+  protected readonly _blobManager: BlobManager;
   protected _tracksWithRequestedTimedItems = new Map<string, Observable<void>>();
   protected _tracksWithRequestedObservationsGeneration = new Map<string, Observable<Track[]>>();
 
-  constructor(trackRepository: TrackRepository) {
+  constructor(trackRepository: TrackRepository, blobManager: BlobManager) {
     this._trackRepository = trackRepository;
+    this._blobManager = blobManager;
   }
 
   preloadTrack(id: Track['id'], options?: PreloadTrackOptions): Observable<Track> {
@@ -293,7 +295,7 @@ export class TrackUtils implements TrackUtilsApi {
             const isNonFragmented = audioPackage.m3u8File.manifest!.segments.every((segment) => UrlUtil.absolutizeUrl(hlsMediaPlaylistRootUrl, segment.uri) === firstSegmentAbsUrl);
 
             let createAndLoad = (source: UrlSource, sourceFileFormatType?: FileFormatType) => {
-              return new AudioFile({
+              const audioFile = new AudioFile({
                 source: source,
                 relations: [],
                 label: audioPackage.hlsAudio.label,
@@ -303,6 +305,9 @@ export class TrackUtils implements TrackUtilsApi {
                 audioCodec: audioPackage.hlsAudio.audioCodec,
                 channels: audioPackage.hlsAudio.channels,
               });
+              this._blobManager.registerBlobUrl(source.url, audioFile.id);
+
+              return audioFile;
             };
 
             if (isNonFragmented) {
@@ -370,6 +375,7 @@ export class TrackUtils implements TrackUtilsApi {
             default: hlsTextTrackState.default,
             srclang: hlsTextTrackState.srclang,
           });
+          this._blobManager.registerBlobUrl(source.url, textTrackFile.id);
 
           nextCompleteObserver(observer, textTrackFile);
         });
@@ -524,9 +530,11 @@ export class TrackUtils implements TrackUtilsApi {
 
         MediaFactory.createSidecarTrack(source, {trackType: TrackType.TEXT_TRACK, fileFormatType, args}).subscribe({
           next: (track) => {
+            this._blobManager.registerBlobUrl(source.url, track.id);
             nextCompleteObserver(observer, track);
           },
           error: (err) => {
+            BlobUtil.revokeObjectURL(source.url);
             errorCompleteObserver(observer, err);
           },
         });

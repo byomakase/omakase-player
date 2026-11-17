@@ -18,8 +18,8 @@ import {type BaseMainMediaArgs, type MainMedia, type MainMediaState, MainMediaTy
 import {HlsAudio, type HlsAudioState, HlsMainMedia, type HlsMainMediaState, HlsTextTrack, type HlsTextTrackState, HlsTrack, HlsVideo, type HlsVideoState} from '../hls';
 import {InternalSource, type InternalSourceState, type Source, SourceFactory, type SourceState, SourceType, TrackSource, type TrackSourceState, UrlSource, type UrlSourceState} from '../source';
 import {type BaseTrackArgs, type Track, type TrackState, TrackType} from './track';
-import {Relation} from './relation';
-import type {BaseMediaEntityArgs, MediaEntityState} from './media-entity';
+import {Relation} from '../relation';
+import type {BaseMediaEntityArgs, MediaEntityState} from '../entity/media-entity';
 import {isNullOrUndefined} from '../util/util-functions';
 import {Mp4Audio, Mp4MainMedia, Mp4Track, Mp4Video} from '../mp4';
 import {AudioMainMedia} from '../audio/audio-file-main-media';

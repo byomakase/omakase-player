@@ -42,6 +42,16 @@ export class M3u8Util {
     }
   }
 
+  /**
+   * ttconv `concatenate` merges into the first segment's document, and when that segment has no cues (ie. header only, as packagers write
+   * segments before the first cue) every later cue is lost. Leading segments without cues carry nothing but the header, so they're skipped,
+   * keeping one if none has cues.
+   */
+  private static dropLeadingCuelessSegments(segments: string[]): string[] {
+    let firstWithCues = segments.findIndex((p) => p.includes('-->'));
+    return firstWithCues > 0 ? segments.slice(firstWithCues) : firstWithCues === -1 ? segments.slice(0, 1) : segments;
+  }
+
   static fetchSegmentedConcat(urls: string[], authentication?: AuthenticationData, maxConcurrentRequests?: number): Observable<string | undefined> {
     const batchSize = maxConcurrentRequests ?? 50;
     return from(urls).pipe(
@@ -50,7 +60,7 @@ export class M3u8Util {
       toArray(),
       map((batches) =>
         concatSegmented(
-          batches.flat(),
+          this.dropLeadingCuelessSegments(batches.flat()),
           FileFormatType.VTT.toLowerCase() as OutputFormat,
           {
             preserveTags: true,

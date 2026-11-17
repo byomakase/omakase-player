@@ -14,12 +14,15 @@
  * limitations under the License.
  */
 
+import {MainMediaType} from '../media';
 import {BasePlayerPlaybackEngine, type PlayerPlaybackEngine} from '../player/player-playback-engine';
 import type {PlayerController} from '../player';
 
-export interface Mp4PlayerPlaybackEngine extends PlayerPlaybackEngine {}
+export interface Mp4PlayerPlaybackEngine extends PlayerPlaybackEngine<MainMediaType.MP4> {}
 
-export class Mp4PlayerPlaybackEngineImpl extends BasePlayerPlaybackEngine implements Mp4PlayerPlaybackEngine {
+export class Mp4PlayerPlaybackEngineImpl extends BasePlayerPlaybackEngine<MainMediaType.MP4> implements Mp4PlayerPlaybackEngine {
+  readonly mainMediaType = MainMediaType.MP4;
+
   constructor(playerController: PlayerController) {
     super(playerController);
   }

@@ -16,13 +16,17 @@
 
 import type {PlayerDetachedApi} from '../../player';
 import {BaseMessageChannelBinding, MessageChannel, type MessageChannelBinding} from '../message-channel';
-import {takeUntil} from 'rxjs';
+import {finalize, from, type Observable, switchMap, takeUntil} from 'rxjs';
+import type {VideoKeyframeOptions} from '../../media';
+import {BlobUtil} from '../../util/blob/blob-util';
 import {type PlayerAudioInternalMessageChannel, PlayerAudioInternalMessageChannelBinding} from './player-audio-internal-message-channel';
 import {type PlayerTextInternalMessageChannel, PlayerTextInternalMessageChannelBinding} from './player-text-internal-message-channel';
 import {type PlayerVideoInternalMessageChannel, PlayerVideoInternalMessageChannelBinding} from './player-video-internal-message-channel';
 import type {OmpProvider} from '../../omp-provider';
 
-export interface PlayerDetachedMessageChannel extends PlayerDetachedApi {}
+export interface PlayerDetachedMessageChannel extends PlayerDetachedApi {
+  extractVideoKeyframeBlob(options?: VideoKeyframeOptions): Observable<Blob>;
+}
 
 export class PlayerDetachedMessageChannelBinding extends BaseMessageChannelBinding {
   private _playerDetachedMessageChannel: MessageChannel<PlayerDetachedMessageChannel>;
@@ -165,11 +169,15 @@ export class PlayerDetachedMessageChannelBinding extends BaseMessageChannelBindi
       });
 
     this._playerDetachedMessageChannel
-      .receiveAndSendResponse('extractVideoKeyframe')
+      .receiveAndSendResponse('extractVideoKeyframeBlob')
       .pipe(takeUntil(this._destroyBreaker.observer))
       .subscribe({
         next: ([[options], sendResponseHook]) => {
-          sendResponseHook(this._playerDetached.extractVideoKeyframe(options));
+          sendResponseHook(
+            this._playerDetached
+              .extractVideoKeyframe(options)
+              .pipe(switchMap((keyframe) => from(fetch(keyframe.src).then((response) => response.blob())).pipe(finalize(() => BlobUtil.revokeObjectURL(keyframe.src)))))
+          );
         },
       });
 

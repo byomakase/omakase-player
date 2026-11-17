@@ -91,6 +91,8 @@ omakase-dropdown {
     }
 
     &.align-left {
+      text-align: left;
+
       .omakase-dropdown-title,
       omakase-dropdown-option {
         justify-content: left;
@@ -103,6 +105,17 @@ omakase-dropdown {
       text-align: center;
       omakase-dropdown-option {
         justify-content: center;
+      }
+    }
+
+    &.align-right {
+      text-align: right;
+
+      .omakase-dropdown-title,
+      omakase-dropdown-option {
+        justify-content: flex-end;
+        padding-left: 10px;
+        padding-right: 20px;
       }
     }
 
@@ -182,13 +195,21 @@ omakase-dropdown-toggle {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+
+    &:empty {
+      min-width: var(--omakase-dropdown-toggle-empty-width, 1.5em);
+
+      &::before {
+        content: '\200b';
+      }
+    }
   }
 
-  &:not(.disabled) {
+  &:not(.disabled):not([disabled]) {
     cursor: pointer;
   }
 
-  &.disabled {
+  &:is(.disabled, [disabled]) {
     .media-chrome-button {
       cursor: auto;
     }

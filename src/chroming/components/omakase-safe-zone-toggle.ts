@@ -24,6 +24,7 @@ import {ControlBarComponent, ControlBarComponentAttributes} from '../../control-
 
 export const OmakaseSafeZoneToggleAttributes = {
   SAFE_ZONES_VISIBLE: 'safe-zones-visible',
+  SAFE_ZONE: 'safe-zone',
   INACTIVE: 'inactive',
 };
 
@@ -114,6 +115,7 @@ export class OmakaseSafeZoneToggle extends ControlBarComponent(MediaChromeButton
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.configureFromSafeZoneAttribute();
     if (!this._iconSpan) {
       this._iconSpan = document.createElement('span');
       this.appendChild(this._iconSpan);
@@ -147,6 +149,19 @@ export class OmakaseSafeZoneToggle extends ControlBarComponent(MediaChromeButton
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this._destroyBreaker.destroy();
+  }
+
+  private configureFromSafeZoneAttribute(): void {
+    const value = this.getAttribute(OmakaseSafeZoneToggleAttributes.SAFE_ZONE)?.trim();
+    if (!value) {
+      return;
+    }
+    const topRightBottomLeftPercent = value.split(/[\s,]+/).map(Number);
+    if (topRightBottomLeftPercent.length !== 4 || topRightBottomLeftPercent.some((percent) => !Number.isFinite(percent))) {
+      console.warn(`Invalid ${OmakaseSafeZoneToggleAttributes.SAFE_ZONE} attribute value: '${value}', expected four top, right, bottom and left percentages`);
+      return;
+    }
+    this.configure({safeZones: [topRightBottomLeftPercent]});
   }
 
   private toSafeZoneCreate(safeZone: OmakaseSafeZoneToggleZone, index: number): VideoSafeZoneCreate {

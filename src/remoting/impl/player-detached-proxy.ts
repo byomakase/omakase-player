@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {combineLatest, filter, Observable, take, takeUntil, tap} from 'rxjs';
+import {combineLatest, filter, map, Observable, take, takeUntil, tap} from 'rxjs';
 import type {PlayerDetachedApi, PlayerLiveState, PlayerTextInternalApi, PlayerVideoInternalApi} from '../../player';
 import {PlayerEventType, type PlayerAudioInternalApi, type PlayerEvent} from '../../player';
 import {type MainMedia, MainMediaEventType, type MainMediaState, MainMediaType, type MediaRotationValue, type VideoKeyframe, type VideoKeyframeOptions} from '../../media';
@@ -32,6 +32,7 @@ import {PlayerTextInternalProxy} from './player-text-internal-proxy';
 import {PlayerVideoInternalProxy} from './player-video-internal-proxy';
 import type {RemoteNode} from '../remote-node';
 import type {OmpProvider} from '../../omp-provider';
+import {BlobUtil} from '../../util/blob/blob-util';
 
 const longTimeout = 10 * 60000;
 
@@ -237,7 +238,7 @@ export class PlayerDetachedProxy extends BaseMessageChannelProxy<PlayerDetachedM
   }
 
   extractVideoKeyframe(options?: VideoKeyframeOptions): Observable<VideoKeyframe> {
-    return this.messageChannel.sendAndWaitForResponse('extractVideoKeyframe', [options]);
+    return this.messageChannel.sendAndWaitForResponse('extractVideoKeyframeBlob', [options]).pipe(map((blob) => ({src: BlobUtil.createObjectURL(blob)})));
   }
 
   protected checkIsMediaLoaded(): void {

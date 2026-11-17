@@ -15,9 +15,14 @@
  */
 
 import type {Color} from './ui-style';
+import type {ResourceEntity} from '../entity';
+import {type TimedItemTemporal, TimedItemTemporalType, TimedItemTemporalUtil} from '../media/timed-items-track';
+import Decimal from 'decimal.js';
 
 export interface MarkerStyle {
   markerColor: Color;
+  /** Uses resource (e.g. svg markup {@link DefaultSvgResource}) for marker presentation instead of shapes {@link markerSymbol}. */
+  customMarkerSymbolResource?: ResourceEntity['id'] | undefined;
 }
 
 export interface MarkerTrackStyle extends MarkerStyle {
@@ -34,3 +39,14 @@ export const MARKER_STYLE_DEFAULT: MarkerStyle = {
 export const MARKER_TRACK_STYLE_DEFAULT: MarkerTrackStyle = {
   ...MARKER_STYLE_DEFAULT,
 };
+
+export function isPresentedAsMomentMarker(temporal: TimedItemTemporal, style: Partial<MarkerTrackStyle>): boolean {
+  if (temporal.type === TimedItemTemporalType.MOMENT) {
+    return true;
+  }
+  if (temporal.type !== TimedItemTemporalType.SPAN || !style.momentToSpanningThreshold) {
+    return false;
+  }
+  const duration = TimedItemTemporalUtil.extractDuration(temporal);
+  return duration !== undefined && new Decimal(style.momentToSpanningThreshold).greaterThan(duration);
+}

@@ -14,10 +14,22 @@
  * limitations under the License.
  */
 
-import Hls, {ErrorDetails, Events as HlsEvents, type FragLoadedData, type HlsConfig, type ManifestParsedData, type MediaKeySessionContext, type MediaPlaylist} from 'hls.js';
+import Hls, {
+  ErrorDetails,
+  Events as HlsEvents,
+  type Fragment,
+  type FragLoadedData,
+  type FragParsedData,
+  type HlsConfig,
+  type InitPTSFoundData,
+  type ManifestParsedData,
+  type MediaKeySessionContext,
+  type MediaPlaylist,
+  type SubtitleFragProcessedData,
+} from 'hls.js';
 import Decimal from 'decimal.js';
 import {type AudioState, LiveMode, type MainMediaLoadOptions, type MainMediaState, type MainMediaUpdateableAttrs, type TextTrackState} from '../media';
-import {combineLatest, filter, fromEvent, interval, map, Observable, of, Subject, type Subscription, switchMap, take, takeUntil, throwError, timeout} from 'rxjs';
+import {catchError, combineLatest, filter, forkJoin, fromEvent, interval, map, Observable, of, ReplaySubject, Subject, type Subscription, switchMap, take, takeUntil, throwError, timeout} from 'rxjs';
 import {errorCompleteObserver, nextCompleteObserver} from '../util/rxjs-util';
 import {HlsJsFactory} from './hls-js-factory';
 import {createHlsPlaylistAlignLoader, resolvePlaylistMediaSequence} from './hls-playlist-align-loader';
@@ -67,6 +79,8 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
   protected _liveStateTickSubscription: Subscription | undefined;
   protected _lastLiveSignature: string | undefined;
   protected _manifestUpdatedTime: number = 0;
+  /** Embedded cues already shifted by {@link resolveEmbeddedCueTimeOffset}, so they're never shifted twice. */
+  protected _shiftedEmbeddedCues = new WeakSet<TextTrackCue>();
 
   constructor(playerDomController: PlayerDomController, config?: Partial<HlsPlayerControllerConfig>) {
     super(playerDomController, {
@@ -83,6 +97,9 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
 
   wireEvents(mainMediaState: MainMediaState) {
     super.wireEvents(mainMediaState);
+
+    // cues hls.js appended before the offset was known
+    this.shiftEmbeddedCues();
 
     let liveState = this.resolveLiveState();
     if (liveState) {
@@ -186,8 +203,6 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
         this.anchorTimelineAtFirstFragment(hls);
       }
 
-      console.debug(`Created new HLS instance, sessionId=${this._hls.sessionId}`, hlsConfig);
-
       let that = this;
 
       let hasDrm = false;
@@ -202,6 +217,14 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
             activeAudioIdentifiers: [hls.audioTrack],
           },
         });
+      });
+
+      this._shiftedEmbeddedCues = new WeakSet<TextTrackCue>();
+      // hls.js appends parsed cues to native text track right before it triggers SUBTITLE_FRAG_PROCESSED
+      this._hls!.on(HlsEvents.SUBTITLE_FRAG_PROCESSED, function (event, data: SubtitleFragProcessedData) {
+        if (data.success) {
+          that.shiftEmbeddedCues(data.frag.level);
+        }
       });
 
       this._hls!.on(HlsEvents.SUBTITLE_TRACK_SWITCH, function (event, data) {
@@ -285,6 +308,36 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
         nextCompleteObserver(hlsFragParsingInitSegment$);
       });
 
+      // fMP4: hls.js shifts timeline by initPTS, so that the first media fragment it parses starts at its playlist time. initPTS can be found
+      // more than once, ie. placeholder for init segment without samples, then the one of the first media fragment, so the latest one is taken
+      // once the first media fragment is parsed
+      let latestInitPts: number | undefined;
+      let onInitPtsFound = (event: HlsEvents.INIT_PTS_FOUND, data: InitPTSFoundData) => {
+        if (data.id === 'main') {
+          latestInitPts = data.initPTS / data.timescale;
+        }
+      };
+      hls.on(HlsEvents.INIT_PTS_FOUND, onInitPtsFound);
+      let initPts$ = new ReplaySubject<number>(1);
+
+      // MPEG-TS: where hls.js placed the first video frame, measured on the first main fragment it parsed (hls.js anchors
+      // its timeline on that fragment). Emits undefined if media loaded data without it
+      let firstVideoFrameTime$ = new ReplaySubject<number | undefined>(1);
+      let onFragParsed = (event: HlsEvents.FRAG_PARSED, data: FragParsedData) => {
+        if (data.frag.type !== 'main' || data.frag.sn === 'initSegment') {
+          return;
+        }
+        let videoStreamInfo = data.frag.elementaryStreams.video ?? data.frag.elementaryStreams.audiovideo;
+        if (!videoStreamInfo) {
+          return;
+        }
+        hls.off(HlsEvents.FRAG_PARSED, onFragParsed);
+        hls.off(HlsEvents.INIT_PTS_FOUND, onInitPtsFound);
+        nextCompleteObserver(initPts$, latestInitPts ?? 0);
+        nextCompleteObserver(firstVideoFrameTime$, Math.max(0, videoStreamInfo.startPTS - data.frag.start));
+      };
+      hls.on(HlsEvents.FRAG_PARSED, onFragParsed);
+
       hls.subtitleDisplay = false;
 
       //IMPORTANT - we have to switch before the frag starts getting loaded as cues
@@ -352,6 +405,9 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
         .pipe(takeUntil(this._loadBreaker.observer))
         .subscribe({
           next: (event) => {
+            hls.off(HlsEvents.FRAG_PARSED, onFragParsed);
+            // no-op if first video frame time was already emitted
+            nextCompleteObserver(firstVideoFrameTime$, void 0);
             nextCompleteObserver(videoLoadedData$);
           },
         });
@@ -441,21 +497,22 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
               } else if (loadOptions?.forceSkipMetadataResolution) {
                 nextCompleteObserver(initSegmentResolution$, 0);
               } else {
-                MediaMetadataResolver.getMediaMetadata(preloadedLevel.details.fragments[0].url, ['firstVideoTrackInitSegmentTime']).subscribe({
-                  next: (mediaMetadata) => {
-                    let initSegmentTimeOffset = mediaMetadata.firstVideoTrackInitSegmentTime;
+                this.resolveFmp4InitSegmentTimeOffset(preloadedLevel.details.fragments[0], initPts$)
+                  .pipe(takeUntil(this._loadBreaker.observer))
+                  .subscribe((initSegmentTimeOffset) => {
                     nextCompleteObserver(initSegmentResolution$, initSegmentTimeOffset);
-                  },
-                  error: (err) => {
-                    console.debug(`Could not resolve init segment time offset, setting default`);
-                    nextCompleteObserver(initSegmentResolution$, 0);
-                  },
-                });
+                  });
               }
             } else {
               console.error('First fragment not detected. How to resolve init segment time offset?');
               nextCompleteObserver(initSegmentResolution$, void 0);
             }
+          } else if (hasVideo) {
+            this.resolveMpegTsInitSegmentTimeOffset(firstVideoFrameTime$, args.providedMainMedia?.initSegmentTimeOffset)
+              .pipe(takeUntil(this._loadBreaker.observer))
+              .subscribe((initSegmentTimeOffset) => {
+                nextCompleteObserver(initSegmentResolution$, initSegmentTimeOffset);
+              });
           } else {
             nextCompleteObserver(initSegmentResolution$, void 0);
           }
@@ -701,7 +758,7 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
    * never evict, so they're excluded too.
    */
   protected enforceLiveWindowFloor(): void {
-    if (!this._playerDomController.mainMediaVideoElement.paused) {
+    if (!this._mainMediaState || !this._playerDomController.mainMediaVideoElement.paused) {
       return;
     }
 
@@ -756,6 +813,42 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
     };
 
     return liveState;
+  }
+
+  /**
+   * Resolves where the first video frame of fMP4 stream lands on media element timeline: first fragment's lowest video presentation time
+   * as appended to SourceBuffer, without edit lists which browsers ignore in MSE, see {@link MediaMetadataResolver.getHlsFmp4MseFirstVideoFrameTime},
+   * shifted the same way hls.js shifts fMP4 timeline - hls.js sets SourceBuffer timestampOffset to -initPTS, where initPTS is decode time of
+   * the first media fragment it parses minus that fragment's playlist time.
+   *
+   * @param firstFragment First fragment of media playlist
+   * @param initPts$ hls.js initPTS in seconds, emitted once the first media fragment is parsed
+   */
+  protected resolveFmp4InitSegmentTimeOffset(firstFragment: Fragment, initPts$: Observable<number>): Observable<number | undefined> {
+    return forkJoin([MediaMetadataResolver.getHlsFmp4MseFirstVideoFrameTime(firstFragment), initPts$.pipe(take(1))]).pipe(
+      map(([firstVideoFrameTime, initPts]) => (firstVideoFrameTime ?? 0) - initPts)
+    );
+  }
+
+  /**
+   * Resolves where the first video frame of MPEG-TS stream lands on media element timeline. hls.js rewrites MPEG-TS
+   * timestamps relative to its initPTS, which changed in hls.js 1.6.18 from lowest video PTS to lowest video DTS
+   * (https://github.com/video-dev/hls.js/issues/8102), so instead of predicting it, it is taken from the position hls.js
+   * reports for the first fragment it parsed. Falls back to 0 if media loaded without it.
+   */
+  protected resolveMpegTsInitSegmentTimeOffset(firstVideoFrameTime$: Observable<number | undefined>, providedInitSegmentTimeOffset: number | undefined): Observable<number | undefined> {
+    if (!isNullOrUndefined(providedInitSegmentTimeOffset)) {
+      console.debug(`MPEG-TS init segment time offset already provided`);
+      return of(providedInitSegmentTimeOffset);
+    }
+
+    return firstVideoFrameTime$.pipe(
+      take(1),
+      map((measured) => {
+        console.debug(`MPEG-TS init segment time offset measured: ${measured}`);
+        return measured ?? 0;
+      })
+    );
   }
 
   /**
@@ -954,6 +1047,72 @@ export class HlsPlayerController extends BasePlayerController<HlsPlayerControlle
 
   get hls(): Hls | undefined {
     return this._hls;
+  }
+
+  /**
+   * Time added to cues hls.js renders natively (embedded text). hls.js places cues on media element timeline the same way it places
+   * video, relative to its initPTS, while player time starts at first video frame, {@link MainMediaState.initSegmentTimeOffset} later on
+   * that timeline (ie. composition offset of B-frames in fMP4, which edit list would remove, but browsers ignore it in MSE). Without it,
+   * embedded cues show that much before their time.
+   */
+  protected resolveEmbeddedCueTimeOffset(): number {
+    return this._mainMediaState?.initSegmentTimeOffset ?? 0;
+  }
+
+  /**
+   * Shifts cues of native text tracks hls.js renders subtitles into by {@link resolveEmbeddedCueTimeOffset}, so they line up with
+   * player time like sidecar text tracks do. Cues are shifted once, cues appended before the offset is known are shifted once it is.
+   *
+   * @param subtitleTrackIndex index in `hls.subtitleTracks` whose text track is shifted, all if not provided
+   */
+  protected shiftEmbeddedCues(subtitleTrackIndex?: number): void {
+    let hls = this._hls;
+    if (!hls || !this._mainMediaState) {
+      return;
+    }
+
+    let offset = this.resolveEmbeddedCueTimeOffset();
+    if (!offset) {
+      return;
+    }
+
+    let subtitleTracks = subtitleTrackIndex === void 0 ? hls.subtitleTracks : hls.subtitleTracks.filter((p, index) => index === subtitleTrackIndex);
+    if (subtitleTracks.length === 0) {
+      return;
+    }
+
+    let videoElement = this._playerDomController.mainMediaVideoElement;
+    let trackElementIds = new Set(
+      Array.from(videoElement.querySelectorAll('track'))
+        .map((p) => p.id)
+        .filter((p) => StringUtil.isNonEmpty(p))
+    );
+
+    Array.from(videoElement.textTracks)
+      .filter((textTrack) => {
+        // <track> elements belong to sidecar text tracks, CEA-608/708 tracks (textTrack1..4) are timed by video samples already
+        let isHlsSubtitleTextTrack = !trackElementIds.has(textTrack.id) && !Object.keys(textTrack).some((key) => /^textTrack\d$/.test(key));
+        return isHlsSubtitleTextTrack && !!textTrack.cues && subtitleTracks.some((subtitleTrack) => this.isSubtitleTextTrack(subtitleTrack, textTrack));
+      })
+      .forEach((textTrack) => {
+        Array.from(textTrack.cues!)
+          .filter((cue) => !this._shiftedEmbeddedCues.has(cue))
+          .forEach((cue) => {
+            this._shiftedEmbeddedCues.add(cue);
+            // end first, start can't be after end
+            cue.endTime = cue.endTime + offset;
+            cue.startTime = cue.startTime + offset;
+          });
+      });
+  }
+
+  /** Same matching hls.js uses to bind subtitle track to native text track */
+  private isSubtitleTextTrack(subtitleTrack: MediaPlaylist, textTrack: TextTrack): boolean {
+    return (
+      (textTrack.kind === 'subtitles' || textTrack.kind === 'captions') &&
+      textTrack.label.toLowerCase() === subtitleTrack.name.toLowerCase() &&
+      (!textTrack.language || textTrack.language.toLowerCase() === (subtitleTrack.lang || '').toLowerCase())
+    );
   }
 
   protected onHlsError(event: any, data: any) {

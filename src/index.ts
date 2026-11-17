@@ -14,7 +14,10 @@
  * limitations under the License.
  */
 
+export * from './entity';
+export * from './relation';
 export * from './media';
+export * from './resource';
 export * from './player';
 export * from './repository';
 export * from './session';
@@ -35,6 +38,7 @@ export * from './omakase-player-detached';
 export * from './timeline';
 export * from './marker-list';
 export * from './control-bar';
+export * from './segmentation';
 export * from './ui';
 export * from './omp-provider';
 export * from './vu-meter';

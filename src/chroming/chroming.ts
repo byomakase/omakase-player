@@ -36,10 +36,10 @@ import {
   VideoSafeZoneRenderingRegion,
 } from './chroming-api';
 import type {Destroyable} from '../common/capabilities';
-import {filter, Observable, Subject, takeUntil} from 'rxjs';
+import {filter, Observable, Subject, takeUntil, tap} from 'rxjs';
 import type {PlayerApi, PlayerDetachedApi} from '../player';
 import type {LocalizationApi} from '../localization';
-import type {ChromingEvent} from './chroming-event';
+import {type ChromingEvent, ChromingEventType} from './chroming-event';
 import {ChromingLocal} from './chroming-local';
 import {ObserverBreaker} from '../common/observer-breaker';
 import {WindowPlaybackMode} from '../common';
@@ -48,6 +48,7 @@ import {errorCompleteObserver, nextCompleteObserver, passiveObservable} from '..
 import type {ChromingState} from './chroming-state';
 import type {Source} from '../source';
 import type {ChromingMarkerBarConfig, ChromingMarkerBarHandlerApi} from './chroming-marker-bar';
+import {ChromingMarkerBarHandlerFacade} from './chroming-marker-bar-facade';
 import type {TrackLoadOptions} from '../track';
 import type {OmpProvider} from '../omp-provider';
 import type {LivePlaybackTrackerApi} from '../live/live-model';
@@ -65,6 +66,9 @@ export class Chroming implements ChromingApi, Destroyable {
   private _playerInternal?: PlayerApi | PlayerDetachedApi | undefined;
 
   protected _chromingInternalSwitchBreaker = new ObserverBreaker();
+
+  private _markerBarFacades = new Map<string, ChromingMarkerBarHandlerFacade>();
+  private _markerBarHandlerChange$ = new Subject<void>();
 
   protected _destroyBreaker = new ObserverBreaker();
 
@@ -109,6 +113,7 @@ export class Chroming implements ChromingApi, Destroyable {
       .pipe(filter((p) => p.type === SessionEventType.SESSION_WINDOW_PLAYBACK_UPDATED))
       .subscribe((event) => {
         let mode = event.data.windowPlayback.mode;
+        this._markerBarHandlerChange$.next();
         switch (mode) {
           case WindowPlaybackMode.ATTACHING:
             this.prepareDomForAttaching(!!this._sessionStore.state.player.mainMediaId);
@@ -138,6 +143,16 @@ export class Chroming implements ChromingApi, Destroyable {
       .subscribe((event: ChromingEvent) => {
         this._onEvent$.next(event);
       });
+
+    chromingInternal.onEvent$
+      .pipe(filter((p) => p.type === ChromingEventType.CHROMING_MARKER_BAR_CHANGE || p.type === ChromingEventType.CHROMING_CHANGE))
+      .pipe(takeUntil(this._chromingInternalSwitchBreaker.observer))
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe(() => {
+        this._markerBarHandlerChange$.next();
+      });
+
+    this._markerBarHandlerChange$.next();
   }
 
   protected isAttached(): boolean {
@@ -293,7 +308,7 @@ export class Chroming implements ChromingApi, Destroyable {
               .pipe(takeUntil(this._destroyBreaker.observer))
               .subscribe({
                 next: (id) => {
-                  const handler = this.getChromingInternalOrFail().getMarkerBar(id);
+                  const handler = this.getMarkerBar(id);
                   if (!handler) {
                     errorCompleteObserver(observer, new Error('Marker track could not be created'));
                     return;
@@ -353,15 +368,43 @@ export class Chroming implements ChromingApi, Destroyable {
   }
 
   getMarkerBars(): ChromingMarkerBarHandlers {
-    return this.getChromingInternalOrFail().getMarkerBars();
+    const handlers = this.getChromingInternalOrFail().getMarkerBars();
+    const progressBarHandler = handlers[ChromingTrackDestination.PROGRESS_BAR];
+    return {
+      [ChromingTrackDestination.PROGRESS_BAR]: progressBarHandler ? this.getOrCreateMarkerBarFacade(progressBarHandler.id) : undefined,
+      [ChromingTrackDestination.MARKER_BARS]: handlers[ChromingTrackDestination.MARKER_BARS].map((handler) => this.getOrCreateMarkerBarFacade(handler.id)),
+    };
   }
 
   getMarkerBar(id: string): ChromingMarkerBarHandlerApi | undefined {
-    return this.getChromingInternalOrFail().getMarkerBar(id);
+    return this.getChromingInternalOrFail().getMarkerBar(id) ? this.getOrCreateMarkerBarFacade(id) : undefined;
   }
 
   deleteMarkerBar(id: string): Observable<void> {
-    return this.getChromingInternalOrFail().deleteMarkerBar(id);
+    return this.getChromingInternalOrFail()
+      .deleteMarkerBar(id)
+      .pipe(
+        tap(() => {
+          this._markerBarFacades.get(id)?.destroy();
+          this._markerBarFacades.delete(id);
+        })
+      );
+  }
+
+  private getOrCreateMarkerBarFacade(id: string): ChromingMarkerBarHandlerFacade {
+    let facade = this._markerBarFacades.get(id);
+    if (!facade) {
+      facade = new ChromingMarkerBarHandlerFacade(id, () => this.resolveInternalMarkerBar(id), this._markerBarHandlerChange$);
+      this._markerBarFacades.set(id, facade);
+    }
+    return facade;
+  }
+
+  private resolveInternalMarkerBar(id: string): ChromingMarkerBarHandlerApi | undefined {
+    if (!this.isAttached() && !this.isDetached()) {
+      return void 0;
+    }
+    return this.getChromingInternalOrFail().getMarkerBar(id);
   }
 
   setVuMeterConfig(config: Partial<ChromingVuMeterConfig>, position?: ChromingVuMeterPosition): Observable<void> {
@@ -378,6 +421,9 @@ export class Chroming implements ChromingApi, Destroyable {
 
   destroy(): void {
     this._destroyBreaker.destroy();
+
+    this._markerBarFacades.forEach((facade) => facade.destroy());
+    this._markerBarFacades.clear();
 
     this._chromingLocal.destroy();
     this._chromingDetached?.destroy();

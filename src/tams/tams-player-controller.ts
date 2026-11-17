@@ -22,14 +22,14 @@ import {ThumbnailTrack} from '../media';
 import {FileFormatType} from '../common';
 import {UrlSource} from '../source';
 import {OmpError} from '../types';
-import {BlobUtil} from '../util/blob-util';
+import {BlobUtil} from '../util/blob/blob-util';
 import {TamsManifestLoader} from './tams-loader';
 import {createTamsSubtitleLoader, TamsSubtitleShiftRegistry} from './tams-subtitle-loader';
 import {TamsManifestRegistry} from './hls-bridge/tams-manifest-registry';
 import type {TamsMainMediaSession, TamsMainMediaSessionState} from './tams-main-media-session';
 import type {TamsMainMediaState, TamsMediaMetadata} from './tams-main-media';
 import {TamsPlaybackMode} from './tams-playback';
-import {TAMS_CONTAINER} from './constants';
+import {TAMS_CONTAINER, TAMS_THUMBNAIL_TRACK_LABEL} from './constants';
 
 /**
  * Plays TAMS media by bridging it to HLS.
@@ -49,6 +49,11 @@ export class TamsPlayerController extends HlsPlayerController {
         fLoader: createTamsSubtitleLoader(config?.hlsConfig?.fLoader),
       },
     });
+  }
+
+  /** TAMS subtitles are moved onto media timeline by {@link createTamsSubtitleLoader} */
+  protected override resolveEmbeddedCueTimeOffset(): number {
+    return 0;
   }
 
   override loadMainMedia(args: LoadMainMediaArgsType): Observable<boolean> {
@@ -168,7 +173,7 @@ export class TamsPlayerController extends HlsPlayerController {
       new ThumbnailTrack({
         source: UrlSource.of(this._thumbnailVttTrackUrl),
         sourceFileFormatType: FileFormatType.VTT,
-        label: 'TAMS thumbnails',
+        label: TAMS_THUMBNAIL_TRACK_LABEL,
       }),
     ]);
   }

@@ -65,6 +65,12 @@ import {StampDomController} from './themes/stamp-dom';
 import {OmakaseDomController} from './themes/omakase-dom';
 import type {Ui} from '../ui';
 import type {UiProxy} from '../remoting/impl/ui-proxy';
+import type {MarkerSymbolResourceResolver} from './marker-symbol-resource-resolver';
+
+export interface ReusableMarkerBarHandlers {
+  progressBar: ChromingMarkerBarHandler | undefined;
+  markerBars: Map<string, ChromingMarkerBarHandler>;
+}
 
 export abstract class BaseChroming implements ChromingInternalApi, Destroyable {
   protected readonly _onEvent$: Subject<ChromingEvent> = new Subject<ChromingEvent>();
@@ -91,6 +97,7 @@ export abstract class BaseChroming implements ChromingInternalApi, Destroyable {
   protected _domController: ChromingDomController<ChromingThemeTypes>;
   protected _livePlaybackTracker: LivePlaybackTrackerApi | undefined;
   protected _liveModelBreaker = new ObserverBreaker();
+  protected _markerSymbolResourceResolver?: MarkerSymbolResourceResolver | undefined;
 
   protected constructor(config: ChromingInternalConfig) {
     this._config = config;
@@ -176,11 +183,7 @@ export abstract class BaseChroming implements ChromingInternalApi, Destroyable {
 
   protected handleThumbnailTrackEvent(event: TimedItemsTrackEvent, trackState: ThumbnailTrackState) {
     if (event.data.trackId === this._thumbnailTrackId) {
-      if (event.type === TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_UPDATED) {
-        this._domController.setThumbnailTrack(trackState);
-      } else if (event.type === TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_DELETED) {
-        this._domController.setThumbnailTrack(undefined);
-      }
+      this._domController.setThumbnailTrack(trackState);
     }
   }
 
@@ -640,12 +643,44 @@ export abstract class BaseChroming implements ChromingInternalApi, Destroyable {
     });
   }
 
+  protected takeMarkerBarHandlers(): ReusableMarkerBarHandlers {
+    const handlers: ReusableMarkerBarHandlers = {
+      progressBar: this._markerTrackHandlers[ChromingTrackDestination.PROGRESS_BAR],
+      markerBars: new Map(this._markerTrackHandlers[ChromingTrackDestination.MARKER_BARS].map((handler) => [handler.id, handler])),
+    };
+    this._markerTrackHandlers[ChromingTrackDestination.MARKER_BARS] = [];
+    this._markerTrackHandlers[ChromingTrackDestination.PROGRESS_BAR] = void 0;
+    return handlers;
+  }
+
+  protected reuseProgressBarHandler(handlers: ReusableMarkerBarHandlers, id: string): ChromingMarkerBarHandler | undefined {
+    const handler = handlers.progressBar?.id === id ? handlers.progressBar : void 0;
+    if (handler) {
+      handlers.progressBar = void 0;
+    }
+    return handler;
+  }
+
+  protected reuseMarkerBarHandler(handlers: ReusableMarkerBarHandlers, id: string): ChromingMarkerBarHandler | undefined {
+    const handler = handlers.markerBars.get(id);
+    handlers.markerBars.delete(id);
+    return handler;
+  }
+
+  protected destroyUnusedMarkerBarHandlers(handlers: ReusableMarkerBarHandlers) {
+    handlers.progressBar?.destroy();
+    handlers.markerBars.forEach((handler) => handler.destroy());
+    handlers.progressBar = void 0;
+    handlers.markerBars.clear();
+  }
+
   protected createMarkerElementAndHandler(
     markerTracks: MarkerTrackState[],
     destination: ChromingTrackDestination,
     config?: Partial<ChromingMarkerBarConfig>,
     trackState?: ChromingMarkerBarState,
-    ui?: Ui | UiProxy
+    ui?: Ui | UiProxy,
+    existingHandler?: ChromingMarkerBarHandler
   ): ChromingMarkerBarHandlerApi {
     const markerBarElement = this._domController.addMarkerTrack(destination);
     if (config) {
@@ -654,27 +689,33 @@ export abstract class BaseChroming implements ChromingInternalApi, Destroyable {
     if (ui) {
       markerBarElement.setUiOrUiProxy(ui);
     }
+    if (this._markerSymbolResourceResolver && 'setMarkerSymbolResourceResolver' in markerBarElement) {
+      markerBarElement.setMarkerSymbolResourceResolver(this._markerSymbolResourceResolver);
+    }
     if (destination === ChromingTrackDestination.PROGRESS_BAR && this._markerTrackHandlers[ChromingTrackDestination.PROGRESS_BAR]) {
       this.deleteMarkerBar(ChromingTrackDestination.PROGRESS_BAR);
     }
+    if (!trackState) {
+      markerBarElement.markerTracks = markerTracks;
+    }
+    const markerBarHandler =
+      existingHandler ??
+      new ChromingMarkerBarHandler(
+        markerBarElement.config.id,
+        markerTracks.map((track) => track.id),
+        markerBarElement.config.visible
+      );
+    markerBarHandler.wireElement(markerBarElement);
     markerBarElement.onEvent$
       .pipe(
         takeUntil(this._destroyBreaker.observer),
         takeUntil(markerBarElement.destroy$),
+        takeUntil(markerBarHandler.elementUnwired$),
         filter((event) => event.type === ChromingMarkerBarElementEventType.CHROMING_MARKER_UPDATE)
       )
       .subscribe((event) => {
         this.updateMarker(event.data.track, event.data.item, event.data.attrs);
       });
-    if (!trackState) {
-      markerBarElement.markerTracks = markerTracks;
-    }
-    const markerBarHandler = new ChromingMarkerBarHandler(
-      markerBarElement.config.id,
-      markerTracks.map((track) => track.id),
-      markerBarElement.config.visible
-    );
-    markerBarHandler.wireElement(markerBarElement);
     markerBarHandler.onEvent$
       .pipe(
         filter(
@@ -683,6 +724,7 @@ export abstract class BaseChroming implements ChromingInternalApi, Destroyable {
             event.type === ChromingMarkerBarEventType.CHROMING_MARKER_BAR_TRACK_ADDED ||
             event.type === ChromingMarkerBarEventType.CHROMING_MARKER_BAR_TRACK_REMOVED
         ),
+        takeUntil(markerBarHandler.elementUnwired$),
         takeUntil(this._destroyBreaker.observer)
       )
       .subscribe((event) => {

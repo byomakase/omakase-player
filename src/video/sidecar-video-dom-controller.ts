@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import Hls, {ErrorDetails, ErrorTypes, Events as HlsEvents, type ErrorData, type HlsConfig} from 'hls.js';
-import {forkJoin, fromEvent, map, merge, Observable, of, switchMap, take, takeUntil, throwError, timeout} from 'rxjs';
+import Hls, {ErrorDetails, ErrorTypes, Events as HlsEvents, type ErrorData, type FragParsedData, type HlsConfig, type InitPTSFoundData, type LevelLoadedData} from 'hls.js';
+import {catchError, forkJoin, fromEvent, map, merge, Observable, of, ReplaySubject, switchMap, take, takeUntil, tap, throwError, timeout} from 'rxjs';
 import {type BufferedTimeRange, DomVideoElement, HTMLMediaElementEvent} from '../dom/dom-media-element';
 import {UrlSource} from '../source';
 import {M3u8File} from '../m3u8/m3u8-file';
@@ -23,6 +23,8 @@ import {AuthConfig} from '../common/authentication';
 import {ObserverBreaker} from '../common/observer-breaker';
 import {errorCompleteObserver, nextCompleteObserver} from '../util/rxjs-util';
 import type {SidecarDomController} from './sidecar-track-controller';
+import {MediaMetadataResolver} from '../tools/media-metadata-resolver';
+import {StringUtil} from '../util/string-util';
 
 export const SidecarVideoDomClasses = {
   video: 'omakase-sidecar-video',
@@ -34,7 +36,18 @@ export const SidecarVideoDomClasses = {
 export interface SidecarVideoDomController extends SidecarDomController {
   videoElement: HTMLVideoElement;
 
+  /** Buffered time ranges, in video element time. */
   bufferedTimeRanges: BufferedTimeRange[];
+
+  /**
+   * Video element time of sidecar time 0 - where the first video frame of attached source lands on video element timeline,
+   * same as main media init segment time offset. Sidecar time is video element time minus time offset.
+   * Resolved by {@link loadSource}, 0 until resolved.
+   */
+  timeOffset: number;
+
+  /** Duration of attached source, in sidecar time, see {@link timeOffset}. */
+  duration: number;
 
   /**
    * Sidecar video element visibility. Hidden element keeps its layout box, so it's not painted but keeps its size
@@ -43,7 +56,7 @@ export interface SidecarVideoDomController extends SidecarDomController {
   visible: boolean;
 
   /**
-   * Loads source into sidecar video element, completes when media data and metadata are loaded.
+   * Loads source into sidecar video element and resolves its {@link timeOffset}, completes when media data and metadata are loaded.
    *
    * @param url Source url
    * @param startTime Sidecar time loading should start from, so the first fetched data is the one that will be played. Defaults to 0.
@@ -51,8 +64,8 @@ export interface SidecarVideoDomController extends SidecarDomController {
   loadSource(url: string | undefined, startTime?: number): Observable<void>;
 
   /**
-   * Resolves source duration without loading media data, so no frame is decoded. Video element is left without source.
-   * - MP4 - only metadata is loaded
+   * Resolves source duration in sidecar time without loading media data, so no frame is decoded. Video element is left without source.
+   * - MP4 - only metadata is loaded, and the first video frame time is read to resolve time offset
    * - HLS - only playlists are fetched, duration is sum of media playlist segment durations
    *
    * @param url Source url
@@ -98,6 +111,8 @@ export abstract class BaseSidecarVideoDomController implements SidecarVideoDomCo
   protected readonly _hostElement: HTMLElement;
   protected readonly _domVideoElement: DomVideoElement;
 
+  protected _timeOffset = 0;
+
   protected constructor(config: SidecarVideoDomControllerConfig) {
     this._hostElement = config.hostElement;
 
@@ -142,6 +157,14 @@ export abstract class BaseSidecarVideoDomController implements SidecarVideoDomCo
     return this._domVideoElement.bufferedTimeRanges;
   }
 
+  get timeOffset(): number {
+    return this._timeOffset;
+  }
+
+  get duration(): number {
+    return Math.max(0, this.videoElement.duration - this._timeOffset);
+  }
+
   get visible(): boolean {
     return this.videoElement.style.visibility !== 'hidden';
   }
@@ -160,6 +183,9 @@ export abstract class BaseSidecarVideoDomController implements SidecarVideoDomCo
  * Sidecar video DOM controller for MP4 files, source is set directly on video element.
  */
 export class Mp4SidecarVideoDomController extends BaseSidecarVideoDomController {
+  /** Time offset is read from file once, and reused when source is attached again. */
+  protected _resolvedTimeOffset: {url: string; timeOffset: number} | undefined;
+
   constructor(config: SidecarVideoDomControllerConfig) {
     super(config);
   }
@@ -168,14 +194,51 @@ export class Mp4SidecarVideoDomController extends BaseSidecarVideoDomController 
     if (!url) {
       return this.urlNotSet();
     }
-    // media fragment makes browser fetch byte range at start time first, instead of from file start and again after seek
-    return this._domVideoElement.loadSource(UrlSource.of(Mp4SidecarVideoDomController.resolveFragmentUrl(url, startTime)));
+    return this.resolveTimeOffset(url).pipe(
+      switchMap((timeOffset) => {
+        this._timeOffset = timeOffset;
+        // media fragment makes browser fetch byte range at start time first, instead of from file start and again after seek
+        let fragmentStartTime = startTime && startTime > 0 ? startTime + timeOffset : void 0;
+        return this._domVideoElement.loadSource(UrlSource.of(Mp4SidecarVideoDomController.resolveFragmentUrl(url, fragmentStartTime)));
+      })
+    );
+  }
+
+  /**
+   * First video frame time, same as for main media MP4, see {@link MediaMetadataResolver.getMediaMetadata}. Only moov box and first samples are fetched.
+   * Falls back to 0 if it can't be read.
+   */
+  protected resolveTimeOffset(url: string): Observable<number> {
+    if (this._resolvedTimeOffset?.url === url) {
+      return of(this._resolvedTimeOffset.timeOffset);
+    }
+    return MediaMetadataResolver.getMediaMetadata(url, ['firstVideoTrackInitSegmentTime']).pipe(
+      timeout(LOAD_TIMEOUT_MS),
+      map((metadata) => metadata.firstVideoTrackInitSegmentTime ?? 0),
+      tap((timeOffset) => {
+        this._resolvedTimeOffset = {url, timeOffset};
+      }),
+      catchError((error) => {
+        console.debug(`Sidecar MP4 time offset could not be resolved, setting default`, error);
+        return of(0);
+      })
+    );
   }
 
   loadDuration(url: string | undefined): Observable<number> {
     if (!url) {
       return this.urlNotSet();
     }
+    return forkJoin([this.loadElementDuration(url), this.resolveTimeOffset(url)]).pipe(
+      map(([elementDuration, timeOffset]) => {
+        this._timeOffset = timeOffset;
+        return Math.max(0, elementDuration - timeOffset);
+      })
+    );
+  }
+
+  /** Video element duration, in video element time. */
+  protected loadElementDuration(url: string): Observable<number> {
     return new Observable<number>((observer) => {
       let videoElement = this.videoElement;
       let preload = videoElement.preload;
@@ -232,6 +295,9 @@ export class Mp4SidecarVideoDomController extends BaseSidecarVideoDomController 
 export class HlsSidecarVideoDomController extends BaseSidecarVideoDomController {
   protected _hls: Hls | undefined;
 
+  /** fMP4 first video frame time is read from playlist's first fragment once, and reused when source is attached again. */
+  protected _resolvedFirstVideoFrameTime: {url: string; time: number} | undefined;
+
   protected _loadBreaker = new ObserverBreaker();
   protected _destroyBreaker = new ObserverBreaker();
 
@@ -287,6 +353,8 @@ export class HlsSidecarVideoDomController extends BaseSidecarVideoDomController 
 
       let videoElement = this.videoElement;
 
+      let timeOffset$ = this.resolveTimeOffset(hls, url);
+
       forkJoin([
         new Observable<void>((manifestObserver) => {
           let onManifestParsed = () => nextCompleteObserver(manifestObserver);
@@ -295,11 +363,13 @@ export class HlsSidecarVideoDomController extends BaseSidecarVideoDomController 
         }),
         fromEvent(videoElement, HTMLMediaElementEvent.LOADEDMETEDATA).pipe(take(1)),
         fromEvent(videoElement, HTMLMediaElementEvent.LOADEDDATA).pipe(take(1)),
+        timeOffset$,
       ])
         .pipe(timeout(LOAD_TIMEOUT_MS))
         .pipe(takeUntil(this._loadBreaker.observer), takeUntil(this._destroyBreaker.observer))
         .subscribe({
-          next: () => {
+          next: ([, , , timeOffset]) => {
+            this._timeOffset = timeOffset;
             loaded = true;
             nextCompleteObserver(observer);
           },
@@ -311,6 +381,105 @@ export class HlsSidecarVideoDomController extends BaseSidecarVideoDomController 
       hls.loadSource(url);
       hls.attachMedia(videoElement);
     });
+  }
+
+  /**
+   * Resolves where the first video frame lands on video element timeline, the same way as for main media HLS:
+   * - fMP4 - first fragment's lowest video presentation time without edit lists, see {@link MediaMetadataResolver.getHlsFmp4MseFirstVideoFrameTime}, shifted the same way hls.js
+   *   shifts fMP4 timeline: hls.js sets SourceBuffer timestampOffset to -initPTS, where initPTS is decode time of the first fragment it parses
+   *   minus that fragment's playlist time. First video frame time is read once and reused when source is attached again, initPTS is taken on every load
+   * - MPEG-TS - hls.js rewrites timestamps relative to first fragment it parses, so it is measured on every load, from the position
+   *   hls.js reports for that fragment. Falls back to 0 if media loaded without it
+   *
+   * Start position given to hls.js stays in sidecar time, fragments are looked up on playlist timeline, which starts at 0.
+   */
+  protected resolveTimeOffset(hls: Hls, url: string): Observable<number> {
+    let timeOffset$ = new ReplaySubject<number>(1);
+    let resolved = false;
+    let resolve = (timeOffset: number) => {
+      if (!resolved) {
+        resolved = true;
+        nextCompleteObserver(timeOffset$, timeOffset);
+      }
+    };
+
+    let mpegTs = false;
+
+    // fMP4: hls.js shifts timeline by initPTS, so that first media fragment it parses starts at its playlist time.
+    // initPTS can be found more than once, ie. placeholder for init segment without samples, then the one of the first media fragment,
+    // so the latest one is taken once first media fragment is parsed
+    let latestInitPts: number | undefined;
+    let onInitPtsFound = (event: HlsEvents.INIT_PTS_FOUND, data: InitPTSFoundData) => {
+      if (data.id === 'main') {
+        latestInitPts = data.initPTS / data.timescale;
+      }
+    };
+    let initPts$ = new ReplaySubject<number>(1);
+
+    let onFragParsed = (event: HlsEvents.FRAG_PARSED, data: FragParsedData) => {
+      if (data.frag.type !== 'main' || data.frag.sn === 'initSegment') {
+        return;
+      }
+      let videoStreamInfo = data.frag.elementaryStreams.video ?? data.frag.elementaryStreams.audiovideo;
+      if (!videoStreamInfo) {
+        return;
+      }
+      hls.off(HlsEvents.FRAG_PARSED, onFragParsed);
+      hls.off(HlsEvents.INIT_PTS_FOUND, onInitPtsFound);
+      if (mpegTs) {
+        let timeOffset = Math.max(0, videoStreamInfo.startPTS - data.frag.start);
+        console.debug(`Sidecar HLS MPEG-TS time offset ${timeOffset}`);
+        resolve(timeOffset);
+      } else {
+        nextCompleteObserver(initPts$, latestInitPts ?? 0);
+      }
+    };
+
+    hls.once(HlsEvents.LEVEL_LOADED, (event, data: LevelLoadedData) => {
+      let firstFragment = data.details.fragments[0];
+      if (firstFragment?.initSegment && StringUtil.isNonEmpty(firstFragment.initSegment.url)) {
+        let firstVideoFrameTime$: Observable<number> =
+          this._resolvedFirstVideoFrameTime?.url === url
+            ? of(this._resolvedFirstVideoFrameTime.time)
+            : MediaMetadataResolver.getHlsFmp4MseFirstVideoFrameTime(firstFragment).pipe(
+                map((time) => time ?? 0),
+                tap((time) => (this._resolvedFirstVideoFrameTime = {url, time}))
+              );
+        forkJoin([firstVideoFrameTime$, initPts$])
+          .pipe(takeUntil(this._loadBreaker.observer), takeUntil(this._destroyBreaker.observer))
+          .subscribe({
+            next: ([firstVideoFrameTime, initPts]) => {
+              console.debug(`Sidecar HLS fMP4 time offset ${firstVideoFrameTime - initPts}, first video frame time ${firstVideoFrameTime}, hls.js initPTS ${initPts}`);
+              resolve(firstVideoFrameTime - initPts);
+            },
+            error: (error) => {
+              console.debug(`Sidecar HLS fMP4 time offset could not be resolved, setting default`, error);
+              resolve(0);
+            },
+          });
+      } else {
+        mpegTs = true;
+      }
+    });
+    hls.on(HlsEvents.FRAG_PARSED, onFragParsed);
+    hls.on(HlsEvents.INIT_PTS_FOUND, onInitPtsFound);
+
+    fromEvent(this.videoElement, HTMLMediaElementEvent.LOADEDDATA)
+      .pipe(take(1), takeUntil(this._loadBreaker.observer), takeUntil(this._destroyBreaker.observer))
+      .subscribe(() => {
+        if (mpegTs && !resolved) {
+          console.debug(`Sidecar HLS MPEG-TS time offset not measured, setting default`);
+          resolve(0);
+        }
+      });
+
+    return timeOffset$;
+  }
+
+  /** HLS duration is resolved from playlist, video element duration depends on how hls.js aligned it. */
+  override get duration(): number {
+    let details = this._hls?.levels.find((level) => level.details)?.details;
+    return details ? details.totalduration : super.duration;
   }
 
   loadDuration(url: string | undefined): Observable<number> {

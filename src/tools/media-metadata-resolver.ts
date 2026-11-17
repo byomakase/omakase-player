@@ -15,10 +15,12 @@
  */
 
 import {catchError, forkJoin, from, map, Observable, of, switchMap, tap} from 'rxjs';
-import {ALL_FORMATS, Input, UrlSource} from 'mediabunny';
+import {ALL_FORMATS, BufferSource, EncodedPacketSink, Input, UrlSource} from 'mediabunny';
+import {httpGetArrayBuffer, withByteRange} from '../http';
 import {errorCompleteObserver, nextCompleteObserver} from '../util/rxjs-util';
 import {AuthConfig} from '../common';
 import {StringUtil} from '../util/string-util';
+import {Fmp4SampleTimes} from './fmp4-sample-times';
 
 export interface MediaMetadata {
   mimeType?: string | undefined;
@@ -38,9 +40,111 @@ export interface MediaMetadata {
   firstAudioTrackAudioCodec?: string | undefined;
 }
 
+/** HLS segment location, byteRange is [start, end) as in EXT-X-BYTERANGE (hls.js Fragment.byteRange), empty for whole resource */
+export interface SegmentLocation {
+  url: string;
+  byteRange?: [number, number] | [] | undefined;
+}
+
 export class MediaMetadataResolver {
   static getMediaMetadata<K extends keyof MediaMetadata>(src: string, keys: K[]): Observable<Pick<MediaMetadata, K>> {
     return this.getMediaMetadataWithMediabunny(src, keys);
+  }
+
+  /**
+   * Presentation time of the first video frame of a fMP4 media segment, read together with its init segment (a bare media
+   * segment is not parsable on its own). Lowest video packet timestamp of the segment, in seconds.
+   *
+   * @returns first video frame time, undefined if there is no video track or packets
+   */
+  static getFmp4FirstVideoFrameTime(initSegment: SegmentLocation, segment: SegmentLocation): Observable<number | undefined> {
+    let fetchSegment = (location: SegmentLocation) => from(httpGetArrayBuffer(location.url, withByteRange(AuthConfig.createRequestInit(location.url, AuthConfig.authentication), location.byteRange)));
+
+    return forkJoin([fetchSegment(initSegment), fetchSegment(segment)]).pipe(
+      switchMap(([initSegmentBuffer, segmentBuffer]) => {
+        let bytes = new Uint8Array(initSegmentBuffer.byteLength + segmentBuffer.byteLength);
+        bytes.set(new Uint8Array(initSegmentBuffer), 0);
+        bytes.set(new Uint8Array(segmentBuffer), initSegmentBuffer.byteLength);
+        return from(MediaMetadataResolver.getFirstVideoFrameTime(bytes));
+      })
+    );
+  }
+
+  /**
+   * Resolves where the first video frame of fMP4 HLS stream lands on media element timeline. hls.js passes fMP4 through without
+   * rewriting timestamps (in every version), so it is the first fragment's lowest video presentation time, read from the init segment
+   * and first fragment together.
+   *
+   * Falls back to probing the fragment alone, which only works for self-contained fragments, and to 0 if that fails too.
+   *
+   * @param firstFragment First fragment of media playlist, with its init segment
+   */
+  static getHlsFmp4FirstVideoFrameTime(firstFragment: SegmentLocation & {initSegment?: SegmentLocation | null | undefined}): Observable<number | undefined> {
+    let probeFragment = () =>
+      MediaMetadataResolver.getMediaMetadata(firstFragment.url, ['firstVideoTrackInitSegmentTime']).pipe(
+        map((mediaMetadata) => mediaMetadata.firstVideoTrackInitSegmentTime),
+        catchError((err) => {
+          console.debug(`Could not resolve init segment time offset, setting default`, err);
+          return of(0);
+        })
+      );
+
+    let initSegment = firstFragment.initSegment;
+    if (!initSegment || !StringUtil.isNonEmpty(initSegment.url)) {
+      return probeFragment();
+    }
+
+    return MediaMetadataResolver.getFmp4FirstVideoFrameTime(initSegment, firstFragment).pipe(
+      switchMap((firstVideoFrameTime) => (firstVideoFrameTime !== void 0 ? of(firstVideoFrameTime) : probeFragment())),
+      catchError((err) => {
+        console.debug(`Could not read fMP4 init and first fragment, probing fragment`, err);
+        return probeFragment();
+      })
+    );
+  }
+
+  /**
+   * First video frame time of fMP4 HLS stream as appended to MSE SourceBuffer - first fragment's lowest video presentation time from its
+   * decode time and composition offsets, without edit lists, which browsers ignore for fragmented MP4 in MSE, see {@link Fmp4SampleTimes}.
+   * hls.js further shifts it by initPTS. Falls back to {@link getHlsFmp4FirstVideoFrameTime} if it can't be read.
+   *
+   * @param firstFragment First fragment of media playlist, with its init segment
+   */
+  static getHlsFmp4MseFirstVideoFrameTime(firstFragment: SegmentLocation & {initSegment?: SegmentLocation | null | undefined}): Observable<number | undefined> {
+    let initSegment = firstFragment.initSegment;
+    if (!initSegment || !StringUtil.isNonEmpty(initSegment.url)) {
+      return MediaMetadataResolver.getHlsFmp4FirstVideoFrameTime(firstFragment);
+    }
+    let fetchSegment = (location: SegmentLocation) => from(httpGetArrayBuffer(location.url, withByteRange(AuthConfig.createRequestInit(location.url, AuthConfig.authentication), location.byteRange)));
+    return forkJoin([fetchSegment(initSegment), fetchSegment(firstFragment)]).pipe(
+      map(([initSegmentBuffer, segmentBuffer]) => Fmp4SampleTimes.getFirstVideoFrameTime(new Uint8Array(initSegmentBuffer), new Uint8Array(segmentBuffer))),
+      switchMap((firstVideoFrameTime) => (firstVideoFrameTime !== void 0 ? of(firstVideoFrameTime) : MediaMetadataResolver.getHlsFmp4FirstVideoFrameTime(firstFragment))),
+      catchError((err) => {
+        console.debug(`Could not read fMP4 sample times, falling back to media metadata`, err);
+        return MediaMetadataResolver.getHlsFmp4FirstVideoFrameTime(firstFragment);
+      })
+    );
+  }
+
+  /**
+   * Lowest video packet timestamp of given media bytes, in seconds. Packets are scanned (metadata only) because first packet in
+   * decode order is not necessarily the first presented one.
+   */
+  static async getFirstVideoFrameTime(bytes: Uint8Array): Promise<number | undefined> {
+    let input = new Input({source: new BufferSource(bytes), formats: ALL_FORMATS});
+    try {
+      let videoTrack = await input.getPrimaryVideoTrack();
+      if (!videoTrack) {
+        return void 0;
+      }
+      let firstVideoFrameTime: number | undefined;
+      for await (let packet of new EncodedPacketSink(videoTrack).packets(void 0, void 0, {metadataOnly: true})) {
+        firstVideoFrameTime = firstVideoFrameTime === void 0 ? packet.timestamp : Math.min(firstVideoFrameTime, packet.timestamp);
+      }
+      return firstVideoFrameTime;
+    } finally {
+      input.dispose();
+    }
   }
 
   private static getMediaMetadataWithMediabunny<K extends keyof MediaMetadata>(src: string, keys: K[]): Observable<Pick<MediaMetadata, K>> {

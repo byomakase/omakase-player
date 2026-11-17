@@ -29,6 +29,7 @@ export const OmakaseTextSelectorAttributes = {
 export const OmakaseTextSelectorDomClasses = {
   DROPDOWN: 'omakase-text-selector-dropdown',
   DROPDOWN_LIST: 'omakase-text-selector-dropdown-list',
+  ICON: 'media-chrome-text-selector',
 };
 
 const offValue = '';
@@ -36,6 +37,7 @@ const offValue = '';
 export class OmakaseTextSelector extends OmakaseDropdownSelector {
   protected readonly dropdownIdPrefix = 'omakase-text-dropdown';
   protected readonly dropdownClass = OmakaseTextSelectorDomClasses.DROPDOWN;
+  protected override readonly toggleIconClass = OmakaseTextSelectorDomClasses.ICON;
 
   static get observedAttributes() {
     return [...super.observedAttributes, OmakaseTextSelectorAttributes.OFF_OPTION];
@@ -77,7 +79,7 @@ export class OmakaseTextSelector extends OmakaseDropdownSelector {
   }
 
   protected renderDropdownLists(dropdownId: string): string {
-    return `<omakase-dropdown-list id="${dropdownId}-list" class="${OmakaseTextSelectorDomClasses.DROPDOWN_LIST} align-left" title="TEXT" width="150" max-width="250" type="radio"></omakase-dropdown-list>`;
+    return `<omakase-dropdown-list id="${dropdownId}-list" class="${OmakaseTextSelectorDomClasses.DROPDOWN_LIST}" title="TEXT" width="150" max-width="250" type="radio"></omakase-dropdown-list>`;
   }
 
   protected subscribeToPlayer(player: PlayerApi | PlayerDetachedApi) {

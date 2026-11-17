@@ -29,6 +29,8 @@ import type {OmpProvider} from '../omp-provider';
 import {type UiMessageChannel, UiMessageChannelBinding} from './impl/ui-message-channel';
 import {type LivePlaybackTrackerMessageChannel, LivePlaybackTrackerMessageChannelBinding} from './impl/live-playback-tracker-message-channel';
 import type {LivePlaybackTrackerApi} from '../live/live-model';
+import {type ResourceRepositoryMessageChannel, ResourceRepositoryMessageChannelBinding} from './impl/resource-repository-message-channel';
+import {type OmakaseResourceApiMessageChannel, OmakaseResourceApiMessageChannelBinding} from './impl/omakase-resource-api-message-channel';
 
 export class HostRemoteNode extends BaseRemoteNode {
   protected _messageChannelBindings: MessageChannelBinding[] = [];
@@ -43,8 +45,10 @@ export class HostRemoteNode extends BaseRemoteNode {
       // offered message channels
       {messageChannelName: 'MainMediaRepository', messageChannel: new MessageChannel<MainMediaRepositoryMessageChannel>(this._managedBroadcastChannel)},
       {messageChannelName: 'TrackRepository', messageChannel: new MessageChannel<TrackRepositoryMessageChannel>(this._managedBroadcastChannel)},
+      {messageChannelName: 'ResourceRepository', messageChannel: new MessageChannel<ResourceRepositoryMessageChannel>(this._managedBroadcastChannel)},
       {messageChannelName: 'SessionStore', messageChannel: new MessageChannel<SessionStoreMessageChannel>(this._managedBroadcastChannel)},
       {messageChannelName: 'OmakaseTrackApi', messageChannel: new MessageChannel<OmakaseTrackApiMessageChannel>(this._managedBroadcastChannel)},
+      {messageChannelName: 'OmakaseResourceApi', messageChannel: new MessageChannel<OmakaseResourceApiMessageChannel>(this._managedBroadcastChannel)},
       {messageChannelName: 'AlertsManager', messageChannel: new MessageChannel<AlertsManagerMessageChannel>(this._managedBroadcastChannel)},
       {messageChannelName: 'TrackUtils', messageChannel: new MessageChannel<TrackUtilsMessageChannel>(this._managedBroadcastChannel)},
       {messageChannelName: 'TamsMainMediaSession', messageChannel: new MessageChannel<TamsMainMediaSessionMessageChannel>(this._managedBroadcastChannel)},
@@ -55,8 +59,10 @@ export class HostRemoteNode extends BaseRemoteNode {
     this._messageChannelBindings = [
       new MainMediaRepositoryMessageChannelBinding(this.getChannelOrFail('MainMediaRepository'), ompProvider),
       new TrackRepositoryMessageChannelBinding(this.getChannelOrFail('TrackRepository'), ompProvider),
+      new ResourceRepositoryMessageChannelBinding(this.getChannelOrFail('ResourceRepository'), ompProvider),
       new SessionStoreMessageChannelBinding(this.getChannelOrFail('SessionStore'), ompProvider),
       new OmakaseTrackApiMessageChannelBinding(this.getChannelOrFail('OmakaseTrackApi'), ompProvider),
+      new OmakaseResourceApiMessageChannelBinding(this.getChannelOrFail('OmakaseResourceApi'), ompProvider),
       new AlertsManagerMessageChannelBinding(this.getChannelOrFail('AlertsManager'), ompProvider),
       new TrackUtilsMessageChannelBinding(this.getChannelOrFail('TrackUtils'), ompProvider),
       new TamsMainMediaSessionMessageChannelBinding(this.getChannelOrFail('TamsMainMediaSession'), ompProvider),

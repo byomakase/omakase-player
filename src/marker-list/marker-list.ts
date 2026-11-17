@@ -39,6 +39,7 @@ import type {MarkerListApi} from './marker-list-api';
 import {TrackSource, UrlSource, type Source} from '../source';
 import {errorCompleteObserver, freeObserver, nextCompleteObserver} from '../util/rxjs-util';
 import {affectsStyledElement, type MarkerStyle} from '../ui';
+import {PlayerEventType} from '../player/player-event';
 
 export interface MarkerListSource {
   url?: string;
@@ -65,10 +66,12 @@ export interface MarkerListConfig {
   markerTrack?: MarkerListSource | MarkerListSource[] | undefined;
   thumbnailTrack?: MarkerListSource | undefined;
   mode?: MarkerListMode;
+  clipToMainMedia?: boolean;
 }
 
 const configDefault: MarkerListConfig = {
   markerListHTMLElementId: 'omakase-marker-list',
+  clipToMainMedia: false,
 };
 
 export class MarkerList implements Destroyable, MarkerListApi {
@@ -132,6 +135,17 @@ export class MarkerList implements Destroyable, MarkerListApi {
     if (this.config.mode) {
       this._markerListComponent.mode = this.config.mode;
     }
+
+    if (this._config.clipToMainMedia) {
+      this._player.player.onEvent$
+        .pipe(
+          filter((event) => event.type === PlayerEventType.PLAYER_MAIN_MEDIA_LOADED),
+          takeUntil(this._destroyBreaker.observer)
+        )
+        .subscribe(() => {
+          this.syncMarkersInMainMediaRange();
+        });
+    }
   }
 
   get onEvent$(): Observable<MarkerListEvent> {
@@ -175,7 +189,9 @@ export class MarkerList implements Destroyable, MarkerListApi {
     }
     this._markerTracks.set(track.id, track as MarkerTrack);
     for (const marker of track.timedItems) {
-      this.addMarkerToComponent(marker, track);
+      if (this.isInMainMediaRange(marker)) {
+        this.addMarkerToComponent(marker, track);
+      }
     }
     this.wireMarkerTrack(track);
   }
@@ -255,8 +271,10 @@ export class MarkerList implements Destroyable, MarkerListApi {
         const eventData = event.data as TimedItemsTrackEventData;
         switch (event.type) {
           case TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_ADDED:
-            for (const marker of eventData.updatedTimedItems) {
-              this.addMarkerToComponent(marker as MarkerState, this._markerTracks.get(eventData.trackId)!);
+            for (const marker of eventData.updatedTimedItems as MarkerState[]) {
+              if (this.isInMainMediaRange(marker)) {
+                this.addMarkerToComponent(marker, this._markerTracks.get(eventData.trackId)!);
+              }
             }
             break;
           case TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_DELETED:
@@ -266,6 +284,17 @@ export class MarkerList implements Destroyable, MarkerListApi {
             break;
           case TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_UPDATED:
             for (const marker of eventData.updatedTimedItems as MarkerState[]) {
+              const inRange = this.isInMainMediaRange(marker);
+              const isShown = !!this._markerListComponent.getMarkerItem(marker.id);
+              if (!inRange) {
+                if (isShown) {
+                  this.removeMarkerFromDom(marker.id);
+                }
+                continue;
+              } else if (!isShown) {
+                this.addMarkerToComponent(marker, this._markerTracks.get(eventData.trackId)!);
+                continue;
+              }
               const markerListItem = this._markerListComponent.markers.find((m) => m.markerId === marker.id);
               if (markerListItem) {
                 this.resolveThumbnail(markerListItem)
@@ -291,6 +320,36 @@ export class MarkerList implements Destroyable, MarkerListApi {
             break;
         }
       });
+  }
+
+  private isInMainMediaRange(marker: MarkerState): boolean {
+    if (!this._config.clipToMainMedia || !this._player.player.isMainMediaLoaded) {
+      return true;
+    }
+    const duration = this._player.player.getDuration();
+    const points =
+      marker.temporal.type === TimedItemTemporalType.MOMENT ? [marker.temporal.time] : [TimedItemTemporalUtil.extractStartTime(marker.temporal), TimedItemTemporalUtil.extractEndTime(marker.temporal)];
+    return points.some((point) => {
+      if (point === undefined) {
+        return false;
+      }
+      const time = Number(point);
+      return !isNaN(time) && time >= 0 && time <= duration;
+    });
+  }
+
+  private syncMarkersInMainMediaRange() {
+    for (const track of this._markerTracks.values()) {
+      for (const marker of track.timedItems) {
+        const isShown = !!this._markerListComponent.getMarkerItem(marker.id);
+        const inRange = this.isInMainMediaRange(marker);
+        if (inRange && !isShown) {
+          this.addMarkerToComponent(marker, track);
+        } else if (!inRange && isShown) {
+          this.removeMarkerFromDom(marker.id);
+        }
+      }
+    }
   }
 
   private addMarkerToComponent(marker: MarkerState, track: MarkerTrack) {

@@ -21,6 +21,8 @@ export const TAMS_FORMAT = {
   multi: 'urn:x-nmos:format:multi',
 } as const;
 
+export const TAMS_THUMBNAIL_TRACK_LABEL = 'TAMS thumbnails';
+
 export const TAMS_CONTAINER = {
   vtt: 'text/vtt',
 } as const;

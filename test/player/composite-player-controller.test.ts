@@ -25,7 +25,6 @@ vi.mock('../../src/omakase-audio-context-provider', async () => {
 
 import {CompositePlayerController} from '../../src/player/composite-player-controller';
 import {ClockPlayerController} from '../../src/virtual/clock-player-controller';
-import type {CompositePlaybackDomController} from '../../src/player/composite-playback-dom-controller';
 import {type PlayerController, type PlayerControllerEvent, PlayerControllerEventType, type PlayerDomController} from '../../src/player/player-controller-api';
 import {MediaElementPlayback} from '../../src/common/media-element-playback';
 import {FrameRateResolver} from '../../src/common/frame-rate';
@@ -514,22 +513,16 @@ describe('CompositePlayerController', () => {
     expect(convertTime).toHaveBeenCalledWith(50, MediaTemporalFormat.SECONDS, MediaTemporalFormat.FRAME_COUNT);
   });
 
-  it('wires media slot element once, refreshes it on wiring and destroys it together with composite', () => {
-    let {composite} = create();
-    let playbackDomController = {
-      setVideoTimeOffset: vi.fn(),
-      attachController: vi.fn(),
-      refreshMediaState: vi.fn(),
-      destroy: vi.fn(),
-    };
-    composite.attachPlaybackDomController(playbackDomController as unknown as CompositePlaybackDomController);
-    expect(playbackDomController.attachController).toHaveBeenCalledWith(composite);
+  it('emits forward controller buffered time ranges also while reverse controller is active, ignores reverse controller ones', async () => {
+    let {composite, forward, reverse, events} = create();
+    // reverse clock reports virtual media buffered whole once wired
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(eventTypes(events)).not.toContain(PlayerControllerEventType.PLAYER_CONTROLLER_BUFFERING);
 
-    composite.wireEvents({id: 'main', duration: 100, frameRateModel: FrameRateResolver.resolveFrameRateModel(25), initSegmentTimeOffset: 3} as unknown as MainMediaState);
-    expect(playbackDomController.refreshMediaState).toHaveBeenCalled();
-    expect(playbackDomController.setVideoTimeOffset.mock.calls[0]![0]()).toBe(3);
-
-    composite.destroy();
-    expect(playbackDomController.destroy).toHaveBeenCalled();
+    await firstValueFrom(composite.setPlaybackRate(-1));
+    expect(composite.active).toBe(reverse);
+    events.length = 0;
+    forward.emit(PlayerControllerEventType.PLAYER_CONTROLLER_BUFFERING, {bufferedTimeRanges: [{start: 0, end: 20}]});
+    expect(events).toEqual([{type: PlayerControllerEventType.PLAYER_CONTROLLER_BUFFERING, data: {bufferedTimeRanges: [{start: 0, end: 20}]}}]);
   });
 });

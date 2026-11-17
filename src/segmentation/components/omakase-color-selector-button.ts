@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-import {filter, takeUntil} from 'rxjs';
-import type {MarkerTrack} from '../../media';
+import {filter, type Observable, takeUntil} from 'rxjs';
+import {type MarkerTrack, type TimedItemsTrackEvent, TimedItemsTrackEventType, type TrackEvent} from '../../media';
+import type {OmakaseTrackApi} from '../../track';
 import type {UiApi} from '../../ui';
-import {type Color, type IdStyleRule, type MarkerStyle, type MarkerTrackStyle, UiEventType} from '../../ui';
+import {type Color, type MarkerStyle, type MarkerTrackStyle, type StyledElement, UiEventType} from '../../ui';
 import {ObserverBreaker} from '../../common/observer-breaker';
 import {ColorUtil} from '../../util/color-util';
 import {DomUtil} from '../../dom/dom-util';
@@ -63,6 +64,9 @@ export class OmakaseColorSelectorButton extends OmakaseSegmentationButton {
   private _isOpen = false;
   private _documentClickListener: ((event: MouseEvent) => void) | undefined;
   protected _uiEventBreaker = new ObserverBreaker();
+  protected _trackEventBreaker = new ObserverBreaker();
+
+  private _newMarkerColor: Color | undefined;
 
   protected get iconClass(): string {
     return SegmentationDomClasses.mediaChromeColorSelector;
@@ -122,6 +126,35 @@ export class OmakaseColorSelectorButton extends OmakaseSegmentationButton {
     this.applyColor(color);
   }
 
+  get newMarkerColor(): Color | undefined {
+    return this._newMarkerColor;
+  }
+
+  set newMarkerColor(color: Color | undefined) {
+    this._newMarkerColor = color;
+    this.refreshSelectedColor();
+  }
+
+  override get track(): OmakaseTrackApi | undefined {
+    return super.track;
+  }
+
+  override set track(track: OmakaseTrackApi | undefined) {
+    super.track = track;
+    this._trackEventBreaker.break();
+    if (track) {
+      (track.onTrackEvent$ as Observable<TrackEvent | TimedItemsTrackEvent>)
+        .pipe(
+          filter((event) => event.type === TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_ADDED),
+          takeUntil(this._trackEventBreaker.observer),
+          takeUntil(this._destroyBreaker.observer)
+        )
+        .subscribe({
+          next: (event) => this.applyNewMarkerColor(event as TimedItemsTrackEvent),
+        });
+    }
+  }
+
   override get ui(): UiApi | undefined {
     return super.ui;
   }
@@ -156,6 +189,7 @@ export class OmakaseColorSelectorButton extends OmakaseSegmentationButton {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this._uiEventBreaker.destroy();
+    this._trackEventBreaker.destroy();
     if (this._documentClickListener) {
       document.removeEventListener('click', this._documentClickListener);
       this._documentClickListener = undefined;
@@ -163,6 +197,9 @@ export class OmakaseColorSelectorButton extends OmakaseSegmentationButton {
   }
 
   override attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null): void {
+    if (name === OmakaseSegmentationButtonAttributes.MARKER_TRACK_ID && oldValue !== newValue) {
+      this._newMarkerColor = undefined;
+    }
     super.attributeChangedCallback(name, oldValue, newValue);
     if (name === OmakaseColorSelectorButtonAttributes.PALETTE && this.isConnected) {
       this.renderGrid();
@@ -191,13 +228,6 @@ export class OmakaseColorSelectorButton extends OmakaseSegmentationButton {
     this.appendChild(this._flyout);
 
     this.renderGrid();
-  }
-
-  protected isCapabilityActive(track: MarkerTrack): boolean {
-    if (this.scope === 'marker') {
-      return this.resolveActiveMarkers(track).length > 0;
-    }
-    return true;
   }
 
   protected activate(track: MarkerTrack): void {
@@ -256,18 +286,32 @@ export class OmakaseColorSelectorButton extends OmakaseSegmentationButton {
       if (this.scope === 'marker') {
         const marker = this.resolveActiveMarkers(track)[0];
         if (marker) {
-          return this.resolveMarkerOrTrackColor(marker.id) ?? this.resolveMarkerOrTrackColor(track.id) ?? this.initialColor;
+          return this.resolveEffectiveColor(track.id, marker.id) ?? this.initialColor;
         }
+        return this._newMarkerColor ?? this.resolveEffectiveColor(track.id) ?? this.initialColor;
       } else {
-        return this.resolveMarkerOrTrackColor(track.id) ?? this.initialColor;
+        return this.resolveEffectiveColor(track.id) ?? this.initialColor;
       }
     }
     return this.initialColor;
   }
 
-  private resolveMarkerOrTrackColor(id: string): Color | undefined {
-    const rule = this.ui?.styleRules.find((r): r is IdStyleRule<MarkerStyle> => 'id' in r && r.id === id);
-    return rule?.style.markerColor;
+  private resolveEffectiveColor(trackId: string, markerId?: string): Color | undefined {
+    const ui = this.ui;
+    if (!ui) {
+      return undefined;
+    }
+    const trackElement: StyledElement<MarkerStyle> = {
+      id: trackId,
+      parent: {
+        classes: [ui.resolveStyleClass('MarkerTrack')],
+        parent: {
+          classes: [ui.resolveStyleClass('Marker')],
+        },
+      },
+    };
+    const element: StyledElement<MarkerStyle> = markerId ? {id: markerId, parent: trackElement} : trackElement;
+    return ui.resolveStyle<MarkerStyle>(element).markerColor;
   }
 
   private applyColor(color: Color): void {
@@ -278,6 +322,9 @@ export class OmakaseColorSelectorButton extends OmakaseSegmentationButton {
     }
     if (this.scope === 'marker') {
       const markers = this.resolveActiveMarkers(track);
+      if (markers.length === 0) {
+        this._newMarkerColor = color;
+      }
       for (const marker of markers) {
         ui.updateStyleRule<MarkerStyle>({id: marker.id, style: {markerColor: color}});
       }
@@ -285,6 +332,17 @@ export class OmakaseColorSelectorButton extends OmakaseSegmentationButton {
       ui.updateStyleRule<MarkerTrackStyle>({id: track.id, style: {markerColor: color}});
     }
     this.refreshSelectedColor();
+  }
+
+  private applyNewMarkerColor(event: TimedItemsTrackEvent): void {
+    const color = this._newMarkerColor;
+    const ui = this.ui;
+    if (!color || !ui || this.scope !== 'marker' || !this.enabled || event.data.trackId !== this.markerTrackId) {
+      return;
+    }
+    for (const item of event.data.updatedTimedItems) {
+      ui.updateStyleRule<MarkerStyle>({id: item.id, style: {markerColor: color}});
+    }
   }
 
   private refreshSelectedColor(): void {

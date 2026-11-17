@@ -20,6 +20,7 @@ import {OmpError} from '../../types';
 import type {TimedItemsFetcher} from './timed-items-fetcher';
 import {FileFormatType} from '../../common';
 import type {TrackLoadOptions} from '../track-load-options';
+import type {BlobManager} from '../../util/blob/blob-manager';
 
 export class TimedItemsFetcherFactory {
   public static createTimedItemsFetcher(track: Track, loadOptions: TrackLoadOptions | undefined): TimedItemsFetcher {

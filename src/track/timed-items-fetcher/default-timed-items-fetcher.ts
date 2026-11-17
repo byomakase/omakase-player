@@ -38,10 +38,11 @@ import {OmpError} from '../../types';
 import {UrlUtil} from '../../util/url-util';
 import type {TrackLoadOptions} from '../track-load-options';
 import {StringUtil} from '../../util/string-util';
-import {BlobUtil} from '../../util/blob-util';
+import {BlobUtil} from '../../util/blob/blob-util';
 import {OMAKASE_VTT_CUE_DATA_KEY_MAPPING, OmakaseVttVersion} from '../../vtt';
 import {isNullOrUndefined} from '../../util/util-functions';
 import {type ParsedTimedItem, TimedItemsParser} from '../timed-items-parser';
+import type {BlobManager} from '../../util/blob/blob-manager';
 
 function parseXywh(url: string): {x: number; y: number; w: number; h: number} | null {
   const match = url.match(/#xywh=(\d+),(\d+),(\d+),(\d+)$/);

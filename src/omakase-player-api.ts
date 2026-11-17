@@ -25,6 +25,7 @@ import type {OmakaseTrackApi} from './track';
 import type {OmakaseToolsApi} from './tools';
 import type {ConfigAndStyle, TimelineApi, TimelineConfig, TimelineStyle} from './timeline';
 import type {UiApi} from './ui';
+import type {OmakaseResourceApi} from './resource';
 
 /**
  * Shared API surface for both attached and detached player modes.
@@ -93,6 +94,11 @@ export interface OmakasePlayerApi extends OmakasePlayerCommonApi {
    * UI API.
    */
   ui: UiApi;
+
+  /**
+   * Resource management API for adding, removing, creating, and querying svg resources.
+   */
+  resource: OmakaseResourceApi;
 
   /**
    * Loads the primary media source (HLS, MP4, or audio file).

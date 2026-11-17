@@ -14,12 +14,15 @@
  * limitations under the License.
  */
 
+import {MainMediaType} from '../media';
 import {BasePlayerPlaybackEngine, type PlayerPlaybackEngine} from '../player/player-playback-engine';
 import type {PlayerController} from '../player/player-controller-api';
 
-export interface FrameImagePlayerPlaybackEngine extends PlayerPlaybackEngine {}
+export interface FrameImagePlayerPlaybackEngine extends PlayerPlaybackEngine<MainMediaType.FRAME_IMAGE> {}
 
-export class FrameImagePlayerPlaybackEngineImpl extends BasePlayerPlaybackEngine implements FrameImagePlayerPlaybackEngine {
+export class FrameImagePlayerPlaybackEngineImpl extends BasePlayerPlaybackEngine<MainMediaType.FRAME_IMAGE> implements FrameImagePlayerPlaybackEngine {
+  readonly mainMediaType = MainMediaType.FRAME_IMAGE;
+
   constructor(playerController: PlayerController) {
     super(playerController);
   }

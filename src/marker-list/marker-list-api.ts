@@ -16,11 +16,27 @@
 
 import type {Observable} from 'rxjs';
 import type {Destroyable} from '../common/capabilities';
-import type {Marker, MarkerState, MarkerTrack, MarkerUpdateableAttrs} from '../media';
+import type {Marker, MarkerState, MarkerTrack, MarkerUpdateableAttrs, ThumbnailTrack} from '../media';
 import type {MarkerListEvent} from './marker-list-event';
+import type {MarkerListConfig} from './marker-list';
 
 export interface MarkerListApi extends Destroyable {
   onEvent$: Observable<MarkerListEvent>;
+
+  /**
+   * Markers currently displayed in the Marker List, in display order
+   */
+  readonly markers: MarkerState[];
+
+  /**
+   * Marker List configuration
+   */
+  readonly config: MarkerListConfig;
+
+  /**
+   * Thumbnail Track used to resolve marker thumbnails.
+   */
+  thumbnailTrack: ThumbnailTrack | undefined;
 
   /**
    * Links another Marker Track to the Marker List
@@ -38,4 +54,11 @@ export interface MarkerListApi extends Destroyable {
    * @returns all linked Marker Tracks
    */
   getTracks(): MarkerTrack[];
+
+  /**
+   * Moves a marker to a new position in the Marker List
+   * @param id Marker id
+   * @param index Target index
+   */
+  reorderMarker(id: string, index: number): void;
 }

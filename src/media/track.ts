@@ -15,8 +15,8 @@
  */
 
 import {Observable, Subject} from 'rxjs';
-import {type Relation, type RelationState} from './relation';
-import {BaseMediaEntity, type BaseMediaEntityArgs, type MediaEntity, type MediaEntityState, MediaEntityType} from './media-entity';
+import {type Relation, type RelationState} from '../relation';
+import {BaseMediaEntity, type BaseMediaEntityArgs, type MediaEntity, type MediaEntityState, MediaEntityType} from '../entity';
 import {OpStage, type OpStageState} from '../common/op-stage';
 
 import type {Destroyable} from '../common/capabilities';
@@ -25,6 +25,7 @@ import type {Source, SourceState} from '../source';
 import type {FileFormatType, OmpEventGroup} from '../common';
 import {objectHasOwnProperty} from '../util/util-functions';
 import type {TrackLoadOptions} from '../track';
+import {freeObserver} from '../util/rxjs-util';
 
 /**
  * Discriminator for the different kinds of tracks that can be associated with a {@link MainMedia}.
@@ -361,5 +362,6 @@ export abstract class BaseTrack<S extends TrackState, E extends OmpEventGroup<an
 
   destroy() {
     this._destroyBreaker.destroy();
+    freeObserver(this._onEvent$);
   }
 }

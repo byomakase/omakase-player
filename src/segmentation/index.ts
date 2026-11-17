@@ -16,3 +16,4 @@
 
 export * from './segmentation-dom';
 export * from './components/base-segmentation-button';
+export * from './components';

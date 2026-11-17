@@ -15,16 +15,31 @@
  */
 
 import type {Destroyable} from './common/capabilities';
-import {BlobUtil} from './util/blob-util';
 import {ObserverBreaker} from './common/observer-breaker';
+import {OmakaseAudioContextProvider} from './omakase-audio-context-provider';
 
 export abstract class BaseOmakasePlayer implements Destroyable {
   protected _destroyBreaker = new ObserverBreaker();
 
-  protected constructor() {}
+  private _audioContextProviderReleased = false;
+
+  protected constructor() {
+    OmakaseAudioContextProvider.acquire();
+  }
+
+  /**
+   * Releases this player's hold on the shared {@link OmakaseAudioContextProvider}. Idempotent.
+   * Subclasses call it as the last step of destroy(), after all audio nodes are torn down, so nothing touches the
+   * provider afterwards and lazily re-creates it.
+   */
+  protected releaseAudioContextProvider(): void {
+    if (!this._audioContextProviderReleased) {
+      this._audioContextProviderReleased = true;
+      OmakaseAudioContextProvider.release();
+    }
+  }
 
   destroy(): void {
     this._destroyBreaker.destroy();
-    BlobUtil.revokeAll();
   }
 }

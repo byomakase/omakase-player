@@ -63,6 +63,14 @@ import type {ThumbnailTrackMessageChannel} from './impl/thumbnail-track-message-
 import type {OmpProvider} from '../omp-provider';
 import {UiProxy} from './impl/ui-proxy';
 import {LivePlaybackTrackerProxy} from './impl/live-playback-tracker-proxy';
+import {ResourceRepositoryProxy} from './impl/resource-repository-proxy';
+import type {ResourceEntity} from '../entity';
+import {type ResourceEntityMessageChannel, ResourceEntityMessageChannelUtil} from './impl/resource-entity-message-channel';
+import {ResourceEntityProxy} from './impl/resource-entity-proxy';
+import type {SvgResource} from '../resource';
+import {SvgResourceProxy} from './impl/svg-resource-proxy';
+import type {SvgResourceMessageChannel} from './impl/svg-resource-message-channel';
+import {OmakaseResourceApiProxy} from './impl/omakase-resource-api-proxy';
 
 interface MessageChannelDto {
   messageChannelName: MessageChannelName;
@@ -118,6 +126,8 @@ export type MessageChannelProxyFactoryArgs = {
   MarkerTrack: [trackId: MarkerTrack['id']];
   ThumbnailTrack: [trackId: ThumbnailTrack['id']];
   ChromingMarkerBarHandler: [state: ChromingMarkerBarState];
+  ResourceEntity: [resourceId: ResourceEntity['id']];
+  SvgResource: [resourceId: SvgResource['id']];
 };
 
 export type MessageChannelFactoryMap = {
@@ -225,6 +235,22 @@ export abstract class BaseRemoteNode implements RemoteNode, Destroyable {
       }
       return this._proxyByTopic.get(topic);
     },
+
+    ResourceEntity: (resourceId) => {
+      let topic: string = ResourceEntityMessageChannelUtil.formatMessageChannelTopic(resourceId);
+      if (!this._proxyByTopic.has(topic)) {
+        this._proxyByTopic.set(topic, new ResourceEntityProxy(new MessageChannel<ResourceEntityMessageChannel>(this._managedBroadcastChannel, topic)));
+      }
+      return this._proxyByTopic.get(topic);
+    },
+
+    SvgResource: (resourceId) => {
+      let topic: string = ResourceEntityMessageChannelUtil.formatMessageChannelTopic(resourceId);
+      if (!this._proxyByTopic.has(topic)) {
+        this._proxyByTopic.set(topic, new SvgResourceProxy(new MessageChannel<SvgResourceMessageChannel>(this._managedBroadcastChannel, topic)));
+      }
+      return this._proxyByTopic.get(topic);
+    },
   };
 
   protected _ompProvider: OmpProvider;
@@ -323,12 +349,20 @@ export abstract class BaseRemoteNode implements RemoteNode, Destroyable {
         this._proxyByName['TrackRepository'] = new TrackRepositoryProxy(this);
       }
 
+      if (this._remoteMessageChannelsByName.has('ResourceRepository')) {
+        this._proxyByName['ResourceRepository'] = new ResourceRepositoryProxy(this);
+      }
+
       if (this._remoteMessageChannelsByName.has('SessionStore')) {
         this._proxyByName['SessionStore'] = new SessionStoreProxy(this);
       }
 
       if (this._remoteMessageChannelsByName.has('OmakaseTrackApi')) {
         this._proxyByName['OmakaseTrackApi'] = new OmakaseTrackApiProxy(this);
+      }
+
+      if (this._remoteMessageChannelsByName.has('OmakaseResourceApi')) {
+        this._proxyByName['OmakaseResourceApi'] = new OmakaseResourceApiProxy(this);
       }
 
       if (this._remoteMessageChannelsByName.has('TrackUtils')) {

@@ -33,8 +33,6 @@ import {
   type MainMediaState,
   MainMediaType,
   type MediaRotationValue,
-  Relation,
-  RelationType,
   type TextTrack,
   type TextTrackState,
   type TextTrackUpdateableAttrs,
@@ -58,7 +56,7 @@ import {OpStageStatus} from '../common/op-stage';
 import {type MainMediaEssentialArgsHookType, type PlayerController, PlayerControllerEventType, type PlayerLiveState, toMediaLiveState} from './player-controller-api';
 import {PlayerAudioInternal} from './player-audio';
 import {PlayerAudioEventType, type PlayerAudioInternalApi} from './player-audio-api';
-import type {PlayerPlaybackEngineMapping} from './player-playback-engine';
+import type {AnyPlayerPlaybackEngine, PlayerPlaybackEngineMapping} from './player-playback-engine';
 import {HlsPlayerPlaybackEngineImpl} from '../hls';
 import {Mp4PlayerPlaybackEngineImpl} from '../mp4';
 import {PlayerTextEventType, type PlayerTextInternalApi, type PlayerTextState} from './player-text-api';
@@ -71,6 +69,7 @@ import {ChromingEventType, type ChromingInternalApi} from '../chroming';
 import {TrackUtils} from '../track/track-utils';
 import {AudioFilePlayerPlaybackEngineImpl} from '../audio/audio-file-playback-engine';
 import {SlatePlayerPlaybackEngineImpl} from '../slate/slate-player-playback-engine';
+import {FrameImagePlayerPlaybackEngineImpl} from '../frame-image/frame-image-player-playback-engine';
 import {AlertsManager} from '../session/alert';
 import type {TrackLoadOptions} from '../track';
 import type {PlayerAudioLoadOptions} from './player-audio-track';
@@ -78,6 +77,7 @@ import {PlayerVideoEventType, PlayerVideoInternal, type PlayerVideoState} from '
 import type {PlayerVideoInternalApi} from './player-video-api';
 import type {PlayerVideoLoadOptions} from './player-video-track';
 import type {OmpProvider} from '../omp-provider';
+import {Relation, RelationType} from '../relation';
 
 export const PLAYER_LOCAL_CONFIG_DEFAULT: PlayerLocalConfig = {
   ...COMMON_PLAYER_CONFIG_DEFAULT,
@@ -101,6 +101,8 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
   private _playerPlayback: PlayerPlayback;
 
   private _playerController: PlayerController | undefined;
+  private _playbackEngine: AnyPlayerPlaybackEngine | undefined;
+  private _playbackEngineController: PlayerController | undefined;
   private _chromingInternal: ChromingInternalApi | undefined;
 
   private _playerAudioInternal: PlayerAudioInternal;
@@ -340,6 +342,8 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
     if (this._playerController) {
       this._playerController.destroy();
       this._playerController = void 0;
+      this._playbackEngine = void 0;
+      this._playbackEngineController = void 0;
       this._latestLiveState = void 0;
     }
 
@@ -875,6 +879,8 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
 
     this._playerController?.destroy();
     this._playerController = void 0;
+    this._playbackEngine = void 0;
+    this._playbackEngineController = void 0;
     this._latestLiveState = void 0;
   }
 
@@ -1226,23 +1232,36 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
     return this._playerController instanceof CompositePlayerController ? this._playerController.forward : this._playerController!;
   }
 
-  getPlaybackEngine(mainMediaType: MainMediaType.HLS): PlayerPlaybackEngineMapping[MainMediaType.HLS];
-  getPlaybackEngine(mainMediaType: MainMediaType.MP4): PlayerPlaybackEngineMapping[MainMediaType.MP4];
-  getPlaybackEngine(mainMediaType: MainMediaType.AUDIO_FILE): PlayerPlaybackEngineMapping[MainMediaType.AUDIO_FILE];
-  getPlaybackEngine(mainMediaType: MainMediaType.SLATE): PlayerPlaybackEngineMapping[MainMediaType.SLATE];
-  getPlaybackEngine(mainMediaType: MainMediaType): PlayerPlaybackEngineMapping[MainMediaType] {
-    this.checkIsMediaLoaded();
+  getPlaybackEngine(): AnyPlayerPlaybackEngine | undefined;
+  getPlaybackEngine<T extends MainMediaType>(mainMediaType: T): PlayerPlaybackEngineMapping[T] | undefined;
+  getPlaybackEngine(mainMediaType?: MainMediaType): AnyPlayerPlaybackEngine | undefined {
+    if (!this._mainMedia || !this._playerController) {
+      return void 0;
+    }
+    if (mainMediaType && mainMediaType !== this._mainMedia.mainMediaType) {
+      return void 0;
+    }
+    // engine wraps the controller, recreate it whenever main media load swaps the controller
+    if (!this._playbackEngine || this._playbackEngineController !== this._playerController) {
+      this._playbackEngine = this.createPlaybackEngine(this._mainMedia.mainMediaType);
+      this._playbackEngineController = this._playerController;
+    }
+    return this._playbackEngine;
+  }
+
+  protected createPlaybackEngine(mainMediaType: MainMediaType): AnyPlayerPlaybackEngine {
     switch (mainMediaType) {
       case MainMediaType.HLS:
-        return new HlsPlayerPlaybackEngineImpl(this.resolveMediaElementPlayerController());
+      case MainMediaType.TAMS:
+        return new HlsPlayerPlaybackEngineImpl(this.resolveMediaElementPlayerController(), mainMediaType);
       case MainMediaType.MP4:
         return new Mp4PlayerPlaybackEngineImpl(this.resolveMediaElementPlayerController());
       case MainMediaType.AUDIO_FILE:
         return new AudioFilePlayerPlaybackEngineImpl(this._playerController!);
       case MainMediaType.SLATE:
         return new SlatePlayerPlaybackEngineImpl(this._playerController!);
-      default:
-        throw new Error(`Engine for ${mainMediaType} not found`);
+      case MainMediaType.FRAME_IMAGE:
+        return new FrameImagePlayerPlaybackEngineImpl(this._playerController!);
     }
   }
 
@@ -1307,6 +1326,8 @@ export class PlayerLocal implements PlayerLocalApi, Destroyable {
 
     this._playerController?.destroy();
     this._playerController = void 0;
+    this._playbackEngine = void 0;
+    this._playbackEngineController = void 0;
     this._latestLiveState = void 0;
 
     this._playerAudioInternal.destroy();

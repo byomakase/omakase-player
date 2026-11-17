@@ -27,9 +27,14 @@ import {TimelineSlotType} from '../timeline-slot-type';
 import {type MarkerOnMarkerTrackLaneStyle, MarkerTrackLane} from './marker-track-lane';
 import type {KonvaEventObject} from 'konva/lib/Node';
 import {affectsStyledElement, type StyledElement, Ui} from '../../ui';
-import {filter, Observable, Subject, takeUntil} from 'rxjs';
-import {freeObserver} from '../../util/rxjs-util';
+import {catchError, filter, map, Observable, of, Subject, switchMap, takeUntil} from 'rxjs';
+import {errorCompleteObserver, freeObserver, nextCompleteObserver} from '../../util/rxjs-util';
 import {ObserverBreaker} from '../../common/observer-breaker';
+import {ResourceRepository} from '../../repository';
+import {type ResourceEntity, ResourceEntityType} from '../../entity';
+import type {SvgResource} from '../../resource';
+import {BlobUtil} from '../../util/blob/blob-util';
+import {isNullOrUndefined} from '../../util/util-functions';
 
 export enum MarkerViewComponentEventType {
   HANDLE_CLICK = 'HANDLE_CLICK',
@@ -85,6 +90,8 @@ export class MarkerViewComponent extends BaseKonvaComponent2<Konva.Group> {
   protected _group: Konva.Group;
   protected _innerGroup: Konva.Group;
 
+  protected _resourceRepository: ResourceRepository;
+
   protected _renderBreaker = new ObserverBreaker();
 
   constructor(args: {
@@ -93,6 +100,7 @@ export class MarkerViewComponent extends BaseKonvaComponent2<Konva.Group> {
     markerTrackId: MarkerTrack['id'];
     timeline: TimelineImpl;
     ui: Ui;
+    resourceRepository: ResourceRepository;
     markerTrackLane: MarkerTrackLane;
     updateHook: (attrs: MarkerUpdateableAttrs) => void;
   }) {
@@ -104,6 +112,7 @@ export class MarkerViewComponent extends BaseKonvaComponent2<Konva.Group> {
     this._markerTrackLane = args.markerTrackLane;
     this._updateHook = args.updateHook;
     this._ui = args.ui;
+    this._resourceRepository = args.resourceRepository;
 
     this._styledElement = {
       id: `${this._markerTrackLane.id}.${this._markerState.id}`,
@@ -259,7 +268,7 @@ export class MarkerViewComponent extends BaseKonvaComponent2<Konva.Group> {
 
     this._style = this._ui.resolveStyle(this._styledElement) as MarkerOnMarkerTrackLaneStyle;
 
-    this._innerGroup.destroyChildren();
+    this._innerComponent?.destroy();
 
     let args: BaseMarkerViewInnerComponentArgs = {
       editable: this._editable,
@@ -271,7 +280,7 @@ export class MarkerViewComponent extends BaseKonvaComponent2<Konva.Group> {
     };
 
     let createMomentMarker = () => {
-      return new MarkerViewMoment(args);
+      return new MarkerViewMoment(args, this._resourceRepository);
     };
 
     let createPeriodMarker = () => {
@@ -345,7 +354,10 @@ export class MarkerViewComponent extends BaseKonvaComponent2<Konva.Group> {
   }
 
   destroy() {
+    this._innerComponent?.destroy();
+
     super.destroy();
+
     this._renderBreaker.destroy();
     freeObserver(this._onEvent$);
   }
@@ -478,13 +490,27 @@ abstract class BaseMarkerViewInnerComponent extends BaseKonvaComponent2<Konva.Gr
   protected provideKonvaNode(): Konva.Group {
     return this._group;
   }
+
+  destroy() {
+    super.destroy();
+
+    this._renderBreaker.destroy();
+    freeObserver(this._onHandleClick$);
+    freeObserver(this._onHandleMouseMove$);
+    freeObserver(this._onHandleDragStart$);
+    freeObserver(this._onHandleDragEnd$);
+  }
 }
 
 class MarkerViewMoment extends BaseMarkerViewInnerComponent {
-  protected _handle?: MarkerViewHandleComponent | undefined;
+  protected _handle?: MomentMarkerViewHandleComponent | undefined;
 
-  constructor(args: BaseMarkerViewInnerComponentArgs) {
+  protected _resourceRepository: ResourceRepository;
+
+  constructor(args: BaseMarkerViewInnerComponentArgs, resourceRepository: ResourceRepository) {
     super(args);
+
+    this._resourceRepository = resourceRepository;
 
     this.update(args.markerState);
   }
@@ -499,8 +525,6 @@ class MarkerViewMoment extends BaseMarkerViewInnerComponent {
   protected render(): void {
     this._renderBreaker.break();
 
-    this._group.destroyChildren();
-
     this.renderHandle();
 
     this._handle?.konvaNode.moveToTop();
@@ -509,9 +533,17 @@ class MarkerViewMoment extends BaseMarkerViewInnerComponent {
   }
 
   protected renderHandle() {
+    this._handle?.destroy();
+    this._handle = void 0;
+
     let startX = this._timeline!.timeToTimelinePosition(TimedItemTemporalUtil.extractStartTime(this._markerState.temporal)!);
 
-    this._handle = new MarkerViewHandleComponent(
+    let resourceId = this._style.customMarkerSymbolResource;
+    let resource = resourceId ? this._resourceRepository.get(resourceId) : void 0;
+
+    this.trySetOnResourceDeleted(resource);
+
+    this._handle = new MomentMarkerViewHandleComponent(
       {
         x: startX,
         editable: this._editable,
@@ -522,6 +554,7 @@ class MarkerViewMoment extends BaseMarkerViewInnerComponent {
           return this.onDragMove(newPosition);
         },
         handleType: MarkerViewHandleType.CENTER,
+        resource,
       },
       this._style
     );
@@ -562,11 +595,29 @@ class MarkerViewMoment extends BaseMarkerViewInnerComponent {
 
     this._group.add(this._handle.konvaNode);
   }
+
+  protected trySetOnResourceDeleted(resource: ResourceEntity | undefined) {
+    if (resource) {
+      this._resourceRepository
+        .onResourceDeleted$(resource.id)
+        .pipe(takeUntil(this._renderBreaker.observer))
+        .pipe(takeUntil(this._destroyBreaker.observer))
+        .subscribe(() => {
+          this.render();
+        });
+    }
+  }
+
+  destroy() {
+    this._handle?.destroy();
+
+    super.destroy();
+  }
 }
 
 class MarkerViewPeriod extends BaseMarkerViewInnerComponent {
-  protected _startHandle?: MarkerViewHandleComponent | undefined;
-  protected _endHandle?: MarkerViewHandleComponent | undefined;
+  protected _startHandle?: PeriodMarkerViewHandleComponent | undefined;
+  protected _endHandle?: PeriodMarkerViewHandleComponent | undefined;
 
   protected _spanShift:
     | {
@@ -586,7 +637,7 @@ class MarkerViewPeriod extends BaseMarkerViewInnerComponent {
   }
 
   protected render() {
-    this._group.destroyChildren();
+    this._renderBreaker.break();
 
     this.renderStartHandle();
     this.renderEndHandle();
@@ -637,7 +688,7 @@ class MarkerViewPeriod extends BaseMarkerViewInnerComponent {
 
     if (startTime !== void 0) {
       let startX = this._timeline.timeToTimelinePosition(startTime);
-      this._startHandle = new MarkerViewHandleComponent(
+      this._startHandle = new PeriodMarkerViewHandleComponent(
         {
           x: startX,
           editable: this._editable,
@@ -708,15 +759,17 @@ class MarkerViewPeriod extends BaseMarkerViewInnerComponent {
               this._updateHook({
                 temporal: {
                   type: TimedItemTemporalType.SPAN,
-                  start: `${newStartTime}`,
+                  start: `${Math.min(newStartTime, newEndTime)}`,
                   end: `${newEndTime}`,
                 },
               });
             } else {
+              const endTime = TimedItemTemporalUtil.extractEndTime(this._markerState.temporal);
+              const start = !isNullOrUndefined(endTime) ? Math.min(newStartTime, endTime) : newStartTime;
               this._updateHook({
                 temporal: {
                   ...this._markerState.temporal,
-                  start: `${newStartTime}`,
+                  start: `${start}`,
                 },
               });
             }
@@ -735,7 +788,7 @@ class MarkerViewPeriod extends BaseMarkerViewInnerComponent {
     let endTime = TimedItemTemporalUtil.extractEndTime(this._markerState.temporal);
     if (endTime !== void 0) {
       let endX = this._timeline.timeToTimelinePosition(endTime);
-      this._endHandle = new MarkerViewHandleComponent(
+      this._endHandle = new PeriodMarkerViewHandleComponent(
         {
           x: endX,
           editable: this._editable,
@@ -807,14 +860,16 @@ class MarkerViewPeriod extends BaseMarkerViewInnerComponent {
                 temporal: {
                   type: TimedItemTemporalType.SPAN,
                   start: `${newStartTime}`,
-                  end: `${newEndTime}`,
+                  end: `${Math.max(newEndTime, newStartTime)}`,
                 },
               });
             } else {
+              const startTime = TimedItemTemporalUtil.extractStartTime(this._markerState.temporal);
+              const end = !isNullOrUndefined(startTime) ? Math.max(newEndTime, startTime) : newEndTime;
               this._updateHook({
                 temporal: {
                   ...this._markerState.temporal,
-                  end: `${newEndTime}`,
+                  end: `${end}`,
                 },
               });
             }
@@ -864,6 +919,13 @@ class MarkerViewPeriod extends BaseMarkerViewInnerComponent {
       });
     }
   }
+
+  destroy() {
+    this._startHandle?.destroy();
+    this._endHandle?.destroy();
+
+    super.destroy();
+  }
 }
 
 interface MarkerViewHandleVerticals {
@@ -878,7 +940,6 @@ enum MarkerViewHandleType {
 }
 
 export class MarkerViewHandleSymbolUtil {
-
   static resolveSymbolVerticals(style: MarkerOnMarkerTrackLaneStyle): Verticals {
     let symbol = style.markerSymbol;
     let symbolSize = style.markerSymbolSize;
@@ -908,15 +969,15 @@ interface MarkerViewHandleConfig {
   handleType: MarkerViewHandleType;
 }
 
-class MarkerViewHandleComponent extends BaseKonvaComponent2<Konva.Group> {
-  protected _config: MarkerViewHandleConfig;
+abstract class MarkerViewHandleComponent<C extends MarkerViewHandleConfig> extends BaseKonvaComponent2<Konva.Group> {
+  protected _config: C;
   protected _style: MarkerOnMarkerTrackLaneStyle;
 
   protected _onClick$: Subject<ClickEvent> = new Subject();
   protected _onMouseMove$: Subject<MouseMoveEvent> = new Subject();
 
   private _group: Konva.Group;
-  private _symbol: Konva.Shape;
+  private _symbol?: Konva.Shape;
   private _line: Konva.Line;
   private _handleSymbolGroup: Konva.Group;
 
@@ -928,7 +989,7 @@ class MarkerViewHandleComponent extends BaseKonvaComponent2<Konva.Group> {
   onDragMove: (handleGroup: Konva.Group, event: KonvaEventObject<any, Konva.Group>) => void = (handleGroup, event) => {};
   onDragEnd: (handleGroup: Konva.Group, event: KonvaEventObject<any, Konva.Group>) => void = (handleGroup, event) => {};
 
-  constructor(config: MarkerViewHandleConfig, style: MarkerOnMarkerTrackLaneStyle) {
+  protected constructor(config: C, style: MarkerOnMarkerTrackLaneStyle) {
     super();
 
     this._config = config;
@@ -955,8 +1016,17 @@ class MarkerViewHandleComponent extends BaseKonvaComponent2<Konva.Group> {
       x: 0,
     });
 
-    this._symbol = this.createSymbol();
-    this._handleSymbolGroup.add(this._symbol);
+    this.createSymbol()
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe({
+        next: (symbol) => {
+          this._symbol = symbol;
+          this._handleSymbolGroup.add(this._symbol);
+        },
+        error: (err) => {
+          throw new Error(err);
+        },
+      });
 
     this._handleSymbolGroup.on('mousemove', (event) => {
       this._onMouseMove$.next({
@@ -1027,99 +1097,14 @@ class MarkerViewHandleComponent extends BaseKonvaComponent2<Konva.Group> {
     });
   }
 
+  protected abstract createSymbol(): Observable<Konva.Shape>;
+
   get onClick$(): Observable<ClickEvent> {
     return this._onClick$.asObservable();
   }
 
   get onMouseMove$(): Observable<MouseMoveEvent> {
     return this._onMouseMove$.asObservable();
-  }
-
-  protected createSymbol(): Konva.Shape {
-    const halfSymbolSize = new Decimal(this._style.markerSymbolSize / 2).toDecimalPlaces(2).toNumber();
-    const style = this._style;
-    switch (style.markerSymbol) {
-      case 'none':
-        if (this._config.handleType === MarkerViewHandleType.CENTER) {
-          return new Konva.Line({
-            points: [0, 0, 0, style.markerSymbolSize],
-            stroke: style.markerColor,
-            strokeWidth: 1,
-            closed: false,
-            offsetY: halfSymbolSize,
-          });
-        } else {
-          const borderWidth = 1;
-          const colorDiffPercent = 30;
-          const borderColor = ColorUtil.lightenColor(style.markerColor, colorDiffPercent * (ColorUtil.isLightColor(style.markerColor) ? -1 : 1));
-
-          return new Konva.Rect({
-            width: borderWidth,
-            height: style.markerSymbolSize,
-            fill: borderColor,
-            opacity: 1,
-            offsetY: halfSymbolSize,
-            offsetX: this._config.handleType === MarkerViewHandleType.START ? 0 : borderWidth,
-          });
-        }
-      case 'triangle':
-        if (this._config.handleType === MarkerViewHandleType.CENTER) {
-          return new Konva.Line({
-            points: [-halfSymbolSize, 0, halfSymbolSize, 0, 0, style.markerSymbolSize],
-            fill: style.markerColor,
-            closed: true,
-            offsetY: halfSymbolSize,
-          });
-        } else {
-          return new Konva.Line({
-            points:
-              this._config.handleType === MarkerViewHandleType.START ? [-style.markerSymbolSize, 0, 0, 0, 0, style.markerSymbolSize] : [0, 0, style.markerSymbolSize, 0, 0, style.markerSymbolSize],
-            fill: style.markerColor,
-            closed: true,
-            offsetY: halfSymbolSize,
-          });
-        }
-      case 'circle':
-        if (this._config.handleType === MarkerViewHandleType.CENTER) {
-          return new Konva.Circle({
-            fill: style.markerColor,
-            radius: halfSymbolSize,
-          });
-        } else {
-          return new Konva.Arc({
-            fill: style.markerColor,
-            innerRadius: 0,
-            outerRadius: halfSymbolSize,
-            angle: 180,
-            rotation: this._config.handleType === MarkerViewHandleType.START ? 90 : -90,
-          });
-        }
-      case 'square': {
-        const side = new Decimal(style.markerSymbolSize).div(Decimal.sqrt(2)).toDecimalPlaces(2).toNumber();
-        const halfSide = new Decimal(side / 2).toDecimalPlaces(2).toNumber();
-        if (this._config.handleType === MarkerViewHandleType.CENTER) {
-          return KonvaFactory.createRect({
-            fill: style.markerColor,
-            width: side,
-            height: side,
-            rotation: 45,
-            offsetX: halfSide,
-            offsetY: halfSide,
-          });
-        } else {
-          return new Konva.Line({
-            points: [0, 0, side, 0, side, side],
-            fill: style.markerColor,
-            closed: true,
-            rotation: this._config.handleType === MarkerViewHandleType.START ? 225 : 45,
-            offsetX: halfSide,
-            offsetY: halfSide,
-          });
-        }
-      }
-      default:
-        throw new Error(`Unsupported symbol: ${style.markerSymbol}`);
-    }
   }
 
   protected provideKonvaNode(): Konva.Group {
@@ -1162,5 +1147,172 @@ class MarkerViewHandleComponent extends BaseKonvaComponent2<Konva.Group> {
 
     freeObserver(this._onClick$);
     freeObserver(this._onMouseMove$);
+  }
+}
+
+interface MomentMarkerViewHandleConfig extends MarkerViewHandleConfig {
+  resource?: ResourceEntity | undefined;
+}
+
+class MomentMarkerViewHandleComponent extends MarkerViewHandleComponent<MomentMarkerViewHandleConfig> {
+  constructor(config: MomentMarkerViewHandleConfig, style: MarkerOnMarkerTrackLaneStyle) {
+    super(config, style);
+  }
+
+  protected createSymbol(): Observable<Konva.Shape> {
+    const resource = this._config.resource;
+
+    if (resource) {
+      return this.createResourceShape(resource);
+    }
+    return of(this.createShape());
+  }
+
+  private createResourceShape(resource: ResourceEntity): Observable<Konva.Shape> {
+    switch (resource.resourceType) {
+      case ResourceEntityType.SVG_RESOURCE:
+        return (resource as SvgResource).resolveBlobUrl().pipe(
+          switchMap((blobUrl) => this.createImage(blobUrl)),
+          catchError((err) => {
+            console.debug(err);
+
+            return of(this.createShape());
+          })
+        );
+      default:
+        return of(this.createShape());
+    }
+  }
+
+  private createImage(src: string): Observable<Konva.Image> {
+    return new Observable<Konva.Image>((o) => {
+      const create = () => {
+        const size = this._style.markerSymbolSize;
+        const half = new Decimal(size / 2).toDecimalPlaces(2).toNumber();
+        nextCompleteObserver(o, new Konva.Image({image: img, width: size, height: size, offsetX: half, offsetY: half}));
+      };
+
+      const img = new Image();
+      img.onload = create;
+      img.onerror = () => errorCompleteObserver(o, new Error(`Failed to load svg image: ${src}`));
+      img.src = src;
+
+      if (img.complete) {
+        img.onload = img.onerror = null;
+        create();
+      }
+    });
+  }
+
+  private createShape(): Konva.Shape {
+    const halfSymbolSize = new Decimal(this._style.markerSymbolSize / 2).toDecimalPlaces(2).toNumber();
+    const style = this._style;
+
+    switch (style.markerSymbol) {
+      case 'none':
+        return new Konva.Line({
+          points: [0, 0, 0, style.markerSymbolSize],
+          stroke: style.markerColor,
+          strokeWidth: 1,
+          closed: false,
+          offsetY: halfSymbolSize,
+        });
+
+      case 'triangle':
+        return new Konva.Line({
+          points: [-halfSymbolSize, 0, halfSymbolSize, 0, 0, style.markerSymbolSize],
+          fill: style.markerColor,
+          closed: true,
+          offsetY: halfSymbolSize,
+        });
+
+      case 'circle':
+        return new Konva.Circle({
+          fill: style.markerColor,
+          radius: halfSymbolSize,
+        });
+
+      case 'square': {
+        const side = new Decimal(style.markerSymbolSize).div(Decimal.sqrt(2)).toDecimalPlaces(2).toNumber();
+        const halfSide = new Decimal(side / 2).toDecimalPlaces(2).toNumber();
+        return KonvaFactory.createRect({
+          fill: style.markerColor,
+          width: side,
+          height: side,
+          rotation: 45,
+          offsetX: halfSide,
+          offsetY: halfSide,
+        });
+      }
+      default:
+        throw new Error(`Unsupported symbol: ${style.markerSymbol}`);
+    }
+  }
+}
+
+interface PeriodMarkerViewHandleConfig extends MarkerViewHandleConfig {}
+
+class PeriodMarkerViewHandleComponent extends MarkerViewHandleComponent<PeriodMarkerViewHandleConfig> {
+  constructor(config: PeriodMarkerViewHandleConfig, style: MarkerOnMarkerTrackLaneStyle) {
+    super(config, style);
+  }
+
+  protected createSymbol(): Observable<Konva.Shape> {
+    return of(this.createShape());
+  }
+
+  private createShape(): Konva.Shape {
+    const halfSymbolSize = new Decimal(this._style.markerSymbolSize / 2).toDecimalPlaces(2).toNumber();
+    const style = this._style;
+
+    switch (style.markerSymbol) {
+      case 'none':
+        const borderWidth = 1;
+        const colorDiffPercent = 30;
+        const borderColor = ColorUtil.lightenColor(style.markerColor, colorDiffPercent * (ColorUtil.isLightColor(style.markerColor) ? -1 : 1));
+
+        return new Konva.Rect({
+          width: borderWidth,
+          height: style.markerSymbolSize,
+          fill: borderColor,
+          opacity: 1,
+          offsetY: halfSymbolSize,
+          offsetX: this._config.handleType === MarkerViewHandleType.START ? 0 : borderWidth,
+        });
+
+      case 'triangle':
+        return new Konva.Line({
+          points: this._config.handleType === MarkerViewHandleType.START ? [-style.markerSymbolSize, 0, 0, 0, 0, style.markerSymbolSize] : [0, 0, style.markerSymbolSize, 0, 0, style.markerSymbolSize],
+          fill: style.markerColor,
+          closed: true,
+          offsetY: halfSymbolSize,
+        });
+
+      case 'circle':
+        return new Konva.Arc({
+          fill: style.markerColor,
+          innerRadius: 0,
+          outerRadius: halfSymbolSize,
+          angle: 180,
+          rotation: this._config.handleType === MarkerViewHandleType.START ? 90 : -90,
+        });
+
+      case 'square': {
+        const side = new Decimal(style.markerSymbolSize).div(Decimal.sqrt(2)).toDecimalPlaces(2).toNumber();
+        const halfSide = new Decimal(side / 2).toDecimalPlaces(2).toNumber();
+
+        return new Konva.Line({
+          points: [0, 0, side, 0, side, side],
+          fill: style.markerColor,
+          closed: true,
+          rotation: this._config.handleType === MarkerViewHandleType.START ? 225 : 45,
+          offsetX: halfSide,
+          offsetY: halfSide,
+        });
+      }
+
+      default:
+        throw new Error(`Unsupported symbol: ${style.markerSymbol}`);
+    }
   }
 }

@@ -15,7 +15,8 @@
  */
 
 import {filter, takeUntil} from 'rxjs';
-import {type MarkerTrack, MarkerType, TimedItemTemporalUtil} from '../../media';
+import {type Marker, type MarkerTrack, MarkerType, TimedItemTemporalUtil} from '../../media';
+import {isPresentedAsMomentMarker, type MarkerTrackStyle, Ui} from '../../ui';
 import {PlayerEventType} from '../../player/player-event';
 import {ObserverBreaker} from '../../common/observer-breaker';
 import {SegmentationDomClasses} from '../segmentation-dom';
@@ -70,7 +71,7 @@ export class OmakaseLoopOnMarkerButton extends OmakaseSegmentationButton {
     let loopStart: number;
     let loopEnd: number;
     let returnTo: number;
-    if (marker.markerType === MarkerType.MOMENT_MARKER) {
+    if (this.isLoopedAsMoment(marker, track)) {
       const time = TimedItemTemporalUtil.extractStartTime(marker.temporal);
       if (time === undefined) {
         return;
@@ -111,6 +112,32 @@ export class OmakaseLoopOnMarkerButton extends OmakaseSegmentationButton {
         });
       });
     });
+  }
+
+  protected isLoopedAsMoment(marker: Marker, track: MarkerTrack): boolean {
+    if (marker.markerType === MarkerType.MOMENT_MARKER) {
+      return true;
+    }
+    const ui = this.ui;
+    if (!ui) {
+      return false;
+    }
+    const style = ui.resolveStyle<MarkerTrackStyle>({
+      id: marker.id,
+      parent: {
+        id: track.id,
+        parent: {
+          classes: [Ui.formatStyleClassName('MarkerOnChroming')],
+          parent: {
+            classes: [Ui.formatStyleClassName('MarkerTrack')],
+            parent: {
+              classes: [Ui.formatStyleClassName('Marker')],
+            },
+          },
+        },
+      },
+    });
+    return isPresentedAsMomentMarker(marker.temporal, style);
   }
 
   override disconnectedCallback(): void {

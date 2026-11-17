@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {bufferCount, catchError, concatMap, defer, forkJoin, from, map, Observable, of, switchMap, timeout, toArray} from 'rxjs';
+import {bufferCount, catchError, concatMap, defer, forkJoin, from, last, map, Observable, of, switchMap, tap, timeout} from 'rxjs';
 import {DefaultTextCue, TimedItemTemporalType} from '../media';
 import type {LiveTextCueFetcher, ReadableTextTrack, SegmentedVttReadResult, TrackLoadOptions} from '../track';
 import {BaseTimedItemsFetcher, TimedItemsParser} from '../track';
@@ -85,16 +85,16 @@ export class SegmentedVttTimedItemsFetcher extends BaseTimedItemsFetcher<Readabl
         }
 
         return this.fetchSegments(unread).pipe(
-          map((segmentTexts) => {
+          tap((batch) => {
             const cues: DefaultTextCue[] = [];
 
-            segmentTexts.forEach((segmentText, index) => {
+            batch.forEach(({segmentUrl, segmentText}) => {
               if (segmentText === void 0) {
                 return;
               }
               const segmentCues = this.mapCues(segmentText, playlistUrl);
               this._cueIdsBySegmentUrl.set(
-                unread[index]!,
+                segmentUrl,
                 segmentCues.map((cue) => cue.id)
               );
               cues.push(...segmentCues);
@@ -103,6 +103,9 @@ export class SegmentedVttTimedItemsFetcher extends BaseTimedItemsFetcher<Readabl
             if (cues.length > 0) {
               this._track.addTimedItems(cues);
             }
+          }),
+          last(),
+          map(() => {
             this._track.areTimedItemsFetched = true;
             return result;
           })
@@ -187,24 +190,22 @@ export class SegmentedVttTimedItemsFetcher extends BaseTimedItemsFetcher<Readabl
     return (manifest.segments ?? []).filter((segment) => !!segment.uri).map((segment) => UrlUtil.absolutizeUrl(playlistRootUrl, segment.uri));
   }
 
-  protected fetchSegments(segmentUrls: string[]): Observable<(string | undefined)[]> {
+  protected fetchSegments(segmentUrls: string[]): Observable<{segmentUrl: string; segmentText: string | undefined}[]> {
     return from(segmentUrls).pipe(
       bufferCount(this._maxConcurrentRequests),
       concatMap((batch) =>
         forkJoin(
           batch.map((segmentUrl) =>
             defer(() => from(httpGetText(segmentUrl, AuthConfig.createRequestInit(segmentUrl, AuthConfig.authentication)))).pipe(
-              map((segmentText) => segmentText as string | undefined),
+              map((segmentText) => ({segmentUrl, segmentText: segmentText as string | undefined})),
               catchError((err) => {
                 console.debug(`SegmentedVttTimedItemsFetcher: failed to fetch segment ${segmentUrl}`, err);
-                return of<string | undefined>(void 0);
+                return of({segmentUrl, segmentText: void 0 as string | undefined});
               })
             )
           )
         )
-      ),
-      toArray(),
-      map((batches) => batches.flat())
+      )
     );
   }
 

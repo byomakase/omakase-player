@@ -31,9 +31,17 @@ export type PlayerPlaybackEngineMapping = {
   [MainMediaType.FRAME_IMAGE]: FrameImagePlayerPlaybackEngine;
 };
 
-export interface PlayerPlaybackEngine {}
+/** Union of all playback engines, discriminated by {@link PlayerPlaybackEngine.mainMediaType}. */
+export type AnyPlayerPlaybackEngine = PlayerPlaybackEngineMapping[MainMediaType];
 
-export abstract class BasePlayerPlaybackEngine implements PlayerPlaybackEngine {
+export interface PlayerPlaybackEngine<T extends MainMediaType = MainMediaType> {
+  /** Main media type this engine plays, use it to narrow {@link AnyPlayerPlaybackEngine}. */
+  readonly mainMediaType: T;
+}
+
+export abstract class BasePlayerPlaybackEngine<T extends MainMediaType = MainMediaType> implements PlayerPlaybackEngine<T> {
+  abstract readonly mainMediaType: T;
+
   protected readonly _playerController: PlayerController;
 
   protected constructor(playerController: PlayerController) {

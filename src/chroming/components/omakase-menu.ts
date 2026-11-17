@@ -118,7 +118,7 @@ export class OmakaseMenu extends OmakaseDropdownSelector {
   protected renderDropdownLists(dropdownId: string): string {
     const title = this.getAttribute(OmakaseMenuAttributes.MENU_TITLE);
     // multiselect, so that options aren't marked as the selected one: a menu triggers actions, it doesn't hold a selection
-    return `<omakase-dropdown-list id="${dropdownId}-list" class="${OmakaseMenuDomClasses.DROPDOWN_LIST} align-left" ${title ? `title="${escapeAttribute(title)}" ` : ''}width="125" max-width="250" multiselect="true"></omakase-dropdown-list>`;
+    return `<omakase-dropdown-list id="${dropdownId}-list" class="${OmakaseMenuDomClasses.DROPDOWN_LIST}" ${title ? `title="${escapeAttribute(title)}" ` : ''}width="125" max-width="250" multiselect="true"></omakase-dropdown-list>`;
   }
 
   protected subscribeToPlayer() {}

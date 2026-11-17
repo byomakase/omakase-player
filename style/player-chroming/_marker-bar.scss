@@ -45,7 +45,8 @@ omakase-marker-bar {
     margin: 0 auto;
     width: 100%;
     position: relative;
-    overflow-x: hidden;
+    overflow-x: clip;
+    overflow-y: visible;
     background-color: var(--marker-track-background-color, var(--marker-track-background-color-default));
   }
 
@@ -72,6 +73,24 @@ omakase-marker-bar {
       transform: translateX(-2.5px);
       top: 0;
       opacity: 0;
+    }
+
+    .omakase-moment-marker-symbol {
+      position: absolute;
+      object-fit: contain;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    // the line isn't drawn across the symbol, which covers the middle half of the marker height, same as the circle
+    &.custom-symbol-marker .omakase-moment-marker-line {
+      $symbol-band-mask: linear-gradient(to bottom, #000 25%, transparent 25%, transparent 75%, #000 75%);
+      -webkit-mask-image: $symbol-band-mask;
+      mask-image: $symbol-band-mask;
+    }
+
+    &.custom-symbol-marker .omakase-moment-marker-circle {
+      display: none;
     }
 
     &.active-marker {

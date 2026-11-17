@@ -23,6 +23,7 @@ import {ControlBarComponent, ControlBarComponentAttributes} from '../../control-
 
 export const OmakaseKeyframeButtonAttributes = {
   AUDIO_SRC: 'audio-src',
+  CALLBACK: 'callback',
   INACTIVE: 'inactive',
 };
 
@@ -43,7 +44,7 @@ export interface OmakaseKeyframeConfig {
 
 export class OmakaseKeyframeButton extends ControlBarComponent(MediaChromeButton) {
   static get observedAttributes(): string[] {
-    return [...super.observedAttributes, OmakaseKeyframeButtonAttributes.AUDIO_SRC];
+    return [...super.observedAttributes, OmakaseKeyframeButtonAttributes.AUDIO_SRC, OmakaseKeyframeButtonAttributes.CALLBACK];
   }
 
   private _player: PlayerApi | PlayerDetachedApi | undefined;
@@ -120,6 +121,8 @@ export class OmakaseKeyframeButton extends ControlBarComponent(MediaChromeButton
     super.attributeChangedCallback(name, oldValue, newValue);
     if (name === OmakaseKeyframeButtonAttributes.AUDIO_SRC) {
       this.releaseAudio();
+    } else if (name === OmakaseKeyframeButtonAttributes.CALLBACK) {
+      this.callbackFn = this.compileCallbackAttribute(newValue);
     } else if (name === ControlBarComponentAttributes.DISABLED) {
       this.updateActiveState();
     }
@@ -147,9 +150,25 @@ export class OmakaseKeyframeButton extends ControlBarComponent(MediaChromeButton
     }
     this.playAudio();
     player.extractVideoKeyframe(this._keyframeOptions).subscribe({
-      next: (keyframe) => callbackFn(keyframe),
+      next: (keyframe) => callbackFn.call(this, keyframe),
       error: (error) => console.error(error),
     });
+  }
+
+  /**
+   * Compiles the callback attribute value the same way the browser compiles inline event handlers such as `onclick`:
+   * the value is the body of a function that receives `keyframe` and is invoked with the button as `this`
+   */
+  private compileCallbackAttribute(value: string | null): ((keyframe: VideoKeyframe) => void) | undefined {
+    if (value === null) {
+      return void 0;
+    }
+    try {
+      return new Function('keyframe', value) as (keyframe: VideoKeyframe) => void;
+    } catch (error) {
+      console.error(error);
+      return void 0;
+    }
   }
 
   private playAudio(): void {

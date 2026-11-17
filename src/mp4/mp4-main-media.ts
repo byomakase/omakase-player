@@ -42,6 +42,7 @@ export class Mp4MainMedia extends BaseMainMedia<Mp4MainMediaState> {
   protected _state(): Mp4MainMediaState {
     return {
       id: this._id,
+      entityType: this._entityType,
       mediaType: this._mediaType,
       mainMediaType: this._mainMediaType,
       loadOptions: this._loadOptions,

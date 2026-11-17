@@ -151,7 +151,6 @@ Individual dropdown option with `value` and `selected` attributes, similar to HT
 ### Omakase Selector Components
 
 Selectors combine an `<omakase-dropdown>` and its `<omakase-dropdown-toggle>` into a single element that is wired to the player: it fills the dropdown from the player's state, applies the selection to the player, and follows changes made elsewhere (for example through the player API).
-```
 
 The dropdown opens anchored to the toggle. The selector has no box of its own (`display: contents`), so the toggle is laid out as if it were placed directly.
 
@@ -163,27 +162,39 @@ Attributes shared by all selectors:
 - `container-right` - A CSS length. When set, the dropdown is kept this far from the right edge of its containing block instead of being aligned with the toggle
 - `floating` - Keeps the dropdown open when an option is selected or when clicking outside it, and shows a close button
 - `dropdown-class` / `toggle-class` - Additional classes for the rendered dropdown and toggle
+- `representation` - What the toggle shows (or the `representation` property): `icon` shows the selector's default icon, `label` the selected option's label. The audio, text and track selectors default to `icon`; the playback rate selector has no icon and always shows its label. Can be changed at runtime
+- `option-alignment` - Horizontal alignment of the options and the list titles inside the dropdown (or the `optionAlignment` property): `left`, `center` or `right`. Defaults to `left`, except for the playback rate selector, which defaults to `center`. Can be changed at runtime
 
-By default the toggle shows the selected option's label. Children with `slot="toggle"` are shown in the toggle instead, for example an icon:
+The default icons follow the theme, both in a [control bar](../control-bar/README.md) and in a custom chroming template, so the selectors need no CSS of their own:
+
+```html
+<omakase-audio-selector></omakase-audio-selector>
+<omakase-text-selector></omakase-text-selector>
+<omakase-track-selector></omakase-track-selector>
+```
+
+They are set with the `--omakase-audio-selector-icon`, `--omakase-text-selector-icon` and `--omakase-track-selector-icon` CSS variables (see [STYLING.md](../STYLING.md#icons)). The default icon is a `<media-chrome-button>` with a `media-chrome-audio-selector`, `media-chrome-text-selector` or `media-chrome-track-selector` span.
+
+Children with `slot="toggle"` are shown in the toggle instead of the icon or the label, whatever the `representation`, for example a different icon:
 
 ```html
 <omakase-audio-selector>
   <media-chrome-button slot="toggle">
-    <span class="media-chrome-trackselector"></span>
+    <span class="media-chrome-track-selector"></span>
   </media-chrome-button>
 </omakase-audio-selector>
 ```
 
-The rendered elements are available as the `dropdown`, `dropdownList` (`dropdownLists` for several), `toggle` and `toggleContent` properties.
+The rendered elements are available as the `dropdown`, `dropdownList` (`dropdownLists` for several), `toggle` and `toggleContent` properties. `toggleContent` holds the elements shown in the toggle: the `toggle` slot's content, or the default icon button.
 
-Without content in the `toggle` slot, the toggle shows the selected option's label, which can be styled with two attributes (or the matching `caret` and `toggleBackground` properties):
+In the `label` representation, the toggle shows the selected option's label, which can be styled with these attributes (or the matching `caret`, `toggleBackground` and `expandDirection` properties):
 
 - `caret` - shows a down caret after the label
 - `toggle-background` - gives the toggle a background, border and border radius, set with the `--omakase-dropdown-selector-toggle-*` CSS variables (see [STYLING.md](../STYLING.md#dropdowns))
 - `expand-direction` - `left` or `right` (or the `expandDirection` property). The selector takes the toggle's max width, `--omakase-dropdown-toggle-max-width`, whatever label is shown, with the toggle on the opposite side: a longer label expands the toggle in that direction, into the empty space, without moving the controls around it. The selector gives up the empty space when there isn't enough room
 
 ```html
-<omakase-audio-selector caret toggle-background></omakase-audio-selector>
+<omakase-audio-selector representation="label" caret toggle-background option-alignment="center"></omakase-audio-selector>
 ```
 
 #### `<omakase-playback-rate-selector>`
@@ -564,7 +575,7 @@ The VU meter is available in the DEFAULT and OMAKASE themes. Both themes share a
 
 | Field             | Description                                                                      | Type             | Default       |
 | ----------------- | -------------------------------------------------------------------------------- | ---------------- | ------------- |
-| `levelColors`     | Array of color thresholds for the level bar - See [VuMeterColor](#vumetertcolor) | `VuMeterColor[]` | See below     |
+| `levelColors`     | Array of color thresholds for the level bar - See [VuMeterColor](#vumetercolor) | `VuMeterColor[]` | See below     |
 | `levelBackground` | Background color of the level bar or LED segments                                | `string`         | `transparent` |
 
 Default `levelColors`:

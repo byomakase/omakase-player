@@ -35,3 +35,20 @@ export async function httpGetArrayBuffer(url: string, requestInit?: RequestInit)
   }
   return res.arrayBuffer();
 }
+
+/**
+ * Adds Range header for byte range [start, end), as in EXT-X-BYTERANGE (hls.js Fragment.byteRange). Empty or missing range
+ * leaves request init as is.
+ */
+export function withByteRange(requestInit: RequestInit, byteRange?: [number, number] | [] | undefined): RequestInit {
+  if (!byteRange || byteRange.length !== 2) {
+    return requestInit;
+  }
+  return {
+    ...requestInit,
+    headers: {
+      ...((requestInit.headers as Record<string, string> | undefined) ?? {}),
+      Range: `bytes=${byteRange[0]}-${byteRange[1] - 1}`,
+    },
+  };
+}

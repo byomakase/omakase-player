@@ -24,7 +24,7 @@ import {TimelineMarkerListComponentModeController} from '../mode-controllers/tim
 import {OmakaseInlineEdit} from './omakase-inline-edit';
 import {markerListDefaultTemplates} from '../marker-list-templates';
 import {CutlistMarkerListComponentModeController} from '../mode-controllers/cutlist-marker-list-component-mode-controller';
-import {MediaTemporalFormat} from '../../common';
+import {MediaTemporalConverter, MediaTemporalFormat} from '../../common';
 import {ObserverBreaker} from '../../common/observer-breaker';
 import type {OmakasePlayerApi} from '../../omakase-player-api';
 import {MarkerType, TimedItemTemporalType, type MarkerState} from '../../media';
@@ -440,8 +440,8 @@ export class MarkerListComponent extends HTMLElement {
     }
     const startSlot = element.querySelector<HTMLElement>('[slot="start"]');
     if (startSlot) {
-      const timecode = item.numStart !== undefined ? this._player!.player.convertTime(item.numStart, MediaTemporalFormat.SECONDS, MediaTemporalFormat.TIMECODE) : '';
-      if (this._timeEditable && !item.track.areTimedItemsLocked) {
+      const timecode = item.numStart !== undefined ? this.formatTimecode(item.numStart) : '';
+      if (this._timeEditable && !item.track.areTimedItemsLocked && (item.numStart === undefined || item.numStart >= 0)) {
         startSlot.innerHTML = `<omakase-inline-edit></omakase-inline-edit>`;
         const inlineEdit = startSlot.querySelector<OmakaseInlineEdit>('omakase-inline-edit');
         inlineEdit!.setTimecode!(timecode, this._player!.player, MediaTemporalFormat.TIMECODE, undefined, item.numEnd);
@@ -454,31 +454,31 @@ export class MarkerListComponent extends HTMLElement {
           }
         });
       } else {
-        startSlot.innerHTML = item.numStart !== undefined ? this._player!.player.convertTime(item.numStart, MediaTemporalFormat.SECONDS, MediaTemporalFormat.TIMECODE) : '';
+        startSlot.innerHTML = timecode;
       }
     }
     const endSlot = element.querySelector<HTMLElement>('[slot="end"]');
     if (endSlot) {
-      const timecode = item.numEnd !== undefined ? this._player!.player.convertTime(item.numEnd, MediaTemporalFormat.SECONDS, MediaTemporalFormat.TIMECODE) : '';
-      if (this._timeEditable && !item.track.areTimedItemsLocked && item.numEnd !== undefined) {
+      const timecode = item.numEnd !== undefined ? this.formatTimecode(item.numEnd) : '';
+      if (this._timeEditable && !item.track.areTimedItemsLocked && item.numEnd !== undefined && item.numEnd >= 0) {
         endSlot.innerHTML = `<omakase-inline-edit></omakase-inline-edit>`;
         const inlineEdit = endSlot.querySelector<OmakaseInlineEdit>('omakase-inline-edit');
 
-        inlineEdit!.setTimecode!(timecode, this._player!.player, MediaTemporalFormat.TIMECODE, item.numStart);
+        inlineEdit!.setTimecode!(timecode, this._player!.player, MediaTemporalFormat.TIMECODE, item.numStart !== undefined && item.numStart >= 0 ? item.numStart : undefined);
         inlineEdit!.onEdit$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe((end) => {
           let endTime = Decimal(this._player!.player.convertTime(end, MediaTemporalFormat.TIMECODE, MediaTemporalFormat.SECONDS)).plus(PLAYER_CONTROLLER_DEFAULTS.frameDurationSpillOverCorrection);
           item.track.updateTimedItem(item.markerId, {temporal: {type: TimedItemTemporalType.SPAN, start: item.start!, end: endTime.toString()}});
         });
       } else {
-        endSlot.innerHTML = item.numEnd !== undefined ? this._player!.player.convertTime(item.numEnd, MediaTemporalFormat.SECONDS, MediaTemporalFormat.TIMECODE) : '';
+        endSlot.innerHTML = timecode;
       }
     }
     const durationSlot = element.querySelector<HTMLElement>('[slot="duration"]');
     if (durationSlot) {
       if (item.numStart !== undefined && item.numEnd !== undefined) {
-        const startFrame = this._player!.player.convertTime(item.numStart, MediaTemporalFormat.SECONDS, MediaTemporalFormat.FRAME_COUNT);
-        const endFrame = this._player!.player.convertTime(item.numEnd, MediaTemporalFormat.SECONDS, MediaTemporalFormat.FRAME_COUNT);
-        const frameDiff = new Decimal(endFrame).minus(new Decimal(startFrame)).toNumber();
+        const startFrame = this.toFrame(item.numStart);
+        const endFrame = this.toFrame(item.numEnd);
+        const frameDiff = Math.max(endFrame - startFrame, 0);
         const timeDiff = Decimal(this._player!.player.convertTime(frameDiff, MediaTemporalFormat.FRAME_COUNT, MediaTemporalFormat.SECONDS)).plus(
           PLAYER_CONTROLLER_DEFAULTS.frameDurationSpillOverCorrection
         );
@@ -502,6 +502,27 @@ export class MarkerListComponent extends HTMLElement {
         customSlot.innerHTML = item.data[attributeName];
       }
     });
+  }
+
+  private formatTimecode(seconds: number): string {
+    const player = this._player!.player;
+    if (seconds >= 0) {
+      return player.convertTime(seconds, MediaTemporalFormat.SECONDS, MediaTemporalFormat.TIMECODE);
+    }
+    const mainMedia = player.mainMedia;
+    const converter = MediaTemporalConverter.create({frameRateModel: mainMedia?.frameRateModel, hasVideo: mainMedia?.hasVideo, hasAudio: mainMedia?.hasAudio});
+    const ffomSeconds = mainMedia?.ffomTimecodeModel ? (converter.convert(mainMedia.ffomTimecodeModel.valueText, MediaTemporalFormat.TIMECODE, MediaTemporalFormat.SECONDS) as number) : 0;
+    const time = new Decimal(ffomSeconds).plus(seconds);
+    if (!time.isNegative()) {
+      return converter.convert(time.toNumber(), MediaTemporalFormat.SECONDS, MediaTemporalFormat.TIMECODE) as string;
+    }
+    const frames = time.mul(mainMedia!.frameRateModel!.value).floor().abs().toNumber();
+    return `-${converter.convert(frames, MediaTemporalFormat.FRAME_COUNT, MediaTemporalFormat.TIMECODE)}`;
+  }
+
+  private toFrame(seconds: number): number {
+    const frame = this._player!.player.convertTime(Math.abs(seconds), MediaTemporalFormat.SECONDS, MediaTemporalFormat.FRAME_COUNT);
+    return seconds < 0 ? -frame : frame;
   }
 
   getMarkerItem(markerId: string): MarkerListItem | undefined {

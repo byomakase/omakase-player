@@ -95,6 +95,25 @@ export class TimedItemTemporalUtil {
     }
   }
 
+  static toTimeRange(temporal: TimedItemTemporal): {start: number; end: number} {
+    switch (temporal.type) {
+      case TimedItemTemporalType.MOMENT:
+        return {start: Number(temporal.time), end: Number(temporal.time)};
+      case TimedItemTemporalType.SPAN:
+        return {start: Number(temporal.start), end: Number(temporal.end)};
+      case TimedItemTemporalType.SPAN_START:
+        return {start: Number(temporal.start), end: Infinity};
+      case TimedItemTemporalType.SPAN_END:
+        return {start: -Infinity, end: Number(temporal.end)};
+    }
+  }
+
+  static overlaps(a: TimedItemTemporal, b: TimedItemTemporal): boolean {
+    const ra = TimedItemTemporalUtil.toTimeRange(a);
+    const rb = TimedItemTemporalUtil.toTimeRange(b);
+    return ra.start <= rb.end && rb.start <= ra.end;
+  }
+
   static extractStartTime(temporal: TimedItemTemporal): number | undefined {
     switch (temporal.type) {
       case TimedItemTemporalType.MOMENT:

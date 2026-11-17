@@ -17,7 +17,7 @@
 import {Observable, Subject} from 'rxjs';
 import type {Destroyable} from '../common/capabilities';
 import {AuthConfig} from '../common';
-import {BlobUtil} from '../util/blob-util';
+import {BlobUtil} from '../util/blob/blob-util';
 import type {FrameImage} from './frame-image-player-controller';
 import type {FrameImageRenderClock, FrameImageRenderRequest, FrameImageRenderResponse, FrameImageRenderSource} from './frame-image-render-protocol';
 import type {FrameImageConfig} from './frame-image-window';

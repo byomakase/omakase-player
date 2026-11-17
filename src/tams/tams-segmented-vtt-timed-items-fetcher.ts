@@ -22,6 +22,8 @@ import {M3u8Parser} from '../m3u8/m3u8-parser';
 import {SourceUtil} from '../source';
 import {TamsManifestRegistry} from './hls-bridge/tams-manifest-registry';
 
+const MPEGTS_WRAP_SECONDS = 2 ** 33 / 90000;
+
 export interface TamsSegmentedVttTimedItemsFetcherArgs extends SegmentedVttTimedItemsFetcherArgs {
   cueTimeShift: (playlistUrl: string) => number | undefined;
 }
@@ -55,6 +57,10 @@ export class TamsSegmentedVttTimedItemsFetcher extends SegmentedVttTimedItemsFet
   }
 
   protected override resolveCueTimeOffset(text: string, playlistUrl: string): number {
-    return super.resolveCueTimeOffset(text, playlistUrl) - (this._cueTimeShift(playlistUrl) ?? 0);
+    const offset = super.resolveCueTimeOffset(text, playlistUrl);
+    const wraps = Math.round(offset / MPEGTS_WRAP_SECONDS);
+    const unwrappedOffset = wraps === 0 ? offset : Math.trunc((offset - wraps * MPEGTS_WRAP_SECONDS) * 1000) / 1000;
+
+    return unwrappedOffset - (this._cueTimeShift(playlistUrl) ?? 0);
   }
 }

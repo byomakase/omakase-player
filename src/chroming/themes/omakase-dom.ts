@@ -281,7 +281,7 @@ export class OmakaseDomController extends ChromingDomController<ChromingTheme.OM
                   <span class="${ChromingDomClasses.mediaChromeVuMeterToggle}"></span>
                 </media-chrome-button>
               <omakase-track-selector class="${this.getControlBarClass(OmakaseThemeControl.TRACK_SELECTOR)}" dropdown="audio-dropdown-${this._config.playerHtmlElementId}" container-right="-1px" toggle-class="${ChromingDomClasses.mediaChromeButton} omakase-player-trackselector">
-                  <span slot="toggle" class="${ChromingDomClasses.mediaChromeTrackselector}"></span>
+                  <span slot="toggle" class="${ChromingDomClasses.mediaChromeTrackSelector}"></span>
                   <media-tooltip slot="toggle">Select track</media-tooltip>
               </omakase-track-selector>
               <omakase-time-toggle class="${this.getControlBarClass(OmakaseThemeControl.TIME_TOGGLE)} ${ChromingDomClasses.mediaChromeButton} omakase-player-bitc">

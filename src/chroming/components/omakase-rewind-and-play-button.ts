@@ -24,6 +24,7 @@ import {ControlBarComponent} from '../../control-bar/control-bar-component';
 
 export const OmakaseRewindAndPlayButtonAttributes = {
   DURATION: 'duration',
+  CUSTOM_DURATION: 'custom-duration',
 };
 
 const DEFAULT_DURATION_SECONDS = 10;
@@ -116,6 +117,7 @@ export class OmakaseRewindAndPlayButton extends ControlBarComponent(MediaChromeB
   }
 
   private render(): void {
+    this.toggleAttribute(OmakaseRewindAndPlayButtonAttributes.CUSTOM_DURATION, this.duration !== DEFAULT_DURATION_SECONDS);
     if (!this._tooltip) {
       return;
     }

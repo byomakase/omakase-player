@@ -27,8 +27,6 @@ import {
   type MainMediaState,
   MainMediaType,
   type MediaRotationValue,
-  Relation,
-  RelationType,
   type TextTrackState,
   type TextTrackUpdateableAttrs,
   type Track,
@@ -72,6 +70,7 @@ import {MediaFactory} from '../media/media-factory';
 import type {MainMediaSessionRemote} from '../remoting/main-media-session-remote';
 import type {AlertsManagerProxy} from '../remoting/impl/alerts-manager-proxy';
 import type {TrackLoadOptions} from '../track';
+import {Relation, RelationType} from '../relation';
 
 export const DETACHED_PLAYER_CONFIG_DEFAULT: PlayerDetachedConfig = {
   ...COMMON_PLAYER_CONFIG_DEFAULT,

@@ -16,17 +16,27 @@
 
 import {map, type Observable, of, Subject, type Subscription, throwError} from 'rxjs';
 import {AuthConfig} from '../common';
-import {type MainMediaLoadOptions, type MainMediaSessionController, type TamsMainMediaLoadOptions} from '../media';
-import type {TrackRepository} from '../repository';
+import {
+  type MainMediaLoadOptions,
+  type MainMediaSessionController,
+  type TamsMainMediaLoadOptions,
+  type ThumbnailTrack,
+  TimedItemTemporalType,
+  TimedItemTemporalUtil,
+  type Track,
+  TrackType,
+} from '../media';
+import {type TrackRepository, TrackRepositoryEventType} from '../repository';
 import type {TextTrackCueReaders} from '../track';
 import {TamsTextTrackCueReaders} from './tams-text-track-cue-readers';
 import {SourceUtil} from '../source';
 import {OmpError} from '../types';
+import {RelationType} from '../relation';
 import {ManifestResourcesFetcher} from './hls-bridge/tams-resource-fetcher';
 import {buildTamsManifest} from './hls-bridge/tams-manifest-builder';
 import {TamsLiveManifestUpdater} from './hls-bridge/tams-live-manifest-updater';
 import {TamsManifestRegistry} from './hls-bridge/tams-manifest-registry';
-import {TamsThumbnailGenerator} from './hls-bridge/tams-thumbnail-generator';
+import {type TamsThumbnailCue, TamsThumbnailGenerator} from './hls-bridge/tams-thumbnail-generator';
 import type {Manifest} from './hls-bridge/tams-adapter';
 import type {TamsMediaData} from './hls-bridge/model/tams-media-data-model';
 import type {TamsMainMedia, TamsMediaMetadata} from './tams-main-media';
@@ -36,6 +46,7 @@ import type {TamsMainMediaSession, TamsMainMediaSessionState, TamsMainMediaSessi
 import {TamsUtil} from './tams-util';
 import {TimeRangeUtil} from './time-range-util';
 import {validateTamsLoadOptions, validateTamsPayload} from './tams-validation';
+import {TAMS_THUMBNAIL_TRACK_LABEL} from './constants';
 import {StringUtil} from '../util/string-util';
 
 /**
@@ -44,6 +55,7 @@ import {StringUtil} from '../util/string-util';
 export class TamsMainMediaSessionController implements MainMediaSessionController, TamsMainMediaSession {
   protected readonly _mainMedia: TamsMainMedia;
   protected readonly _textTrackCueReaders: TextTrackCueReaders;
+  protected readonly _trackRepository: TrackRepository;
 
   protected _liveManifestUpdater: TamsLiveManifestUpdater | undefined;
   protected _liveUpdatesSubscription: Subscription | undefined;
@@ -56,14 +68,25 @@ export class TamsMainMediaSessionController implements MainMediaSessionControlle
   /** Resolved with the manifest, and read by the readers whenever they map a segment. */
   protected _textCueTimeShifts: Record<string, number> = {};
 
+  protected _thumbnailTimeOffset: number | undefined;
+  protected _tamsMediaData: TamsMediaData | undefined;
+  protected _trackRepositorySubscription: Subscription | undefined;
+
   constructor(mainMedia: TamsMainMedia, trackRepository: TrackRepository) {
     this._mainMedia = mainMedia;
+    this._trackRepository = trackRepository;
     this._textTrackCueReaders = new TamsTextTrackCueReaders({
       mainMedia: mainMedia,
       trackRepository: trackRepository,
       cueTimeShift: (playlistUrl) => this._textCueTimeShifts[playlistUrl],
     });
     this._textTrackCueReaders.start();
+
+    this._trackRepositorySubscription = trackRepository.onEvent$.subscribe((event) => {
+      if (event.type === TrackRepositoryEventType.TRACK_ADDED && event.data.trackState.trackType === TrackType.THUMBNAIL_TRACK) {
+        this.syncThumbnailTrack();
+      }
+    });
   }
 
   get onSessionStateUpdated$(): Observable<TamsMainMediaSessionStateUpdate> {
@@ -135,6 +158,8 @@ export class TamsMainMediaSessionController implements MainMediaSessionControlle
 
         this._manifest = manifest;
         this._textCueTimeShifts = this.resolveTextCueTimeShifts(tamsMediaData, manifest, mediaInfo);
+        this._thumbnailTimeOffset = mediaInfo?.mediaStartTime;
+        this._tamsMediaData = tamsMediaData;
         this.publish(
           this.resolveMetadata(tamsMediaData, playback, mediaInfo),
           this.resolveSessionState(tamsMediaData, manifest, playback, mediaInfo, loadOptions, mediaSequences),
@@ -155,6 +180,9 @@ export class TamsMainMediaSessionController implements MainMediaSessionControlle
 
     this._textTrackCueReaders.destroy();
 
+    this._trackRepositorySubscription?.unsubscribe();
+    this._trackRepositorySubscription = undefined;
+
     this._liveUpdatesSubscription?.unsubscribe();
     this._liveUpdatesSubscription = undefined;
 
@@ -172,16 +200,24 @@ export class TamsMainMediaSessionController implements MainMediaSessionControlle
   protected startLiveUpdates(liveManifestUpdater: TamsLiveManifestUpdater): void {
     this._liveManifestUpdater = liveManifestUpdater;
 
-    this._liveUpdatesSubscription = liveManifestUpdater.onPlaylistsUpdated$.subscribe(() => {
+    this._liveUpdatesSubscription = liveManifestUpdater.onUpdated$.subscribe(() => {
       const tamsMetadata = this._mainMedia.tamsMetadata;
       const sessionState = this._sessionState;
 
       if (tamsMetadata && sessionState && !this._destroyed) {
+        const tamsMediaData = liveManifestUpdater.tamsMediaData;
+        const thumbnailCues = this.resolveThumbnailCues(tamsMediaData, resolveTamsMediaInfo(tamsMediaData)?.mediaEndTime, this._thumbnailTimeOffset);
+
         this.setSessionState({
           ...sessionState,
           manifests: this.resolveManifestSnapshot(),
           mediaSequences: Object.fromEntries(liveManifestUpdater.mediaSequences),
+          ...(thumbnailCues ? {thumbnailVtt: TamsThumbnailGenerator.writeThumbnailVtt(thumbnailCues)} : {}),
         });
+
+        if (thumbnailCues) {
+          this.updateThumbnailTrack(thumbnailCues);
+        }
 
         this._mainMedia.updateAttrs({
           tamsMetadata: {...tamsMetadata, timerange: liveManifestUpdater.loadedTimerange ?? tamsMetadata.timerange},
@@ -226,7 +262,7 @@ export class TamsMainMediaSessionController implements MainMediaSessionControlle
     mediaSequences: Map<string, number>
   ): TamsMainMediaSessionState {
     const hlsLoadOptions = this.resolveHlsLoadOptions(playback, mediaInfo, loadOptions);
-    const thumbnailVtt = this.resolveThumbnailVtt(tamsMediaData, mediaInfo);
+    const thumbnailVtt = this.resolveThumbnailVtt(tamsMediaData, mediaInfo, isTamsLivePlayback(playback));
 
     return {
       // videoUrls: mapToRecord(manifest.video ?? new Map<string, string>()),
@@ -343,19 +379,92 @@ export class TamsMainMediaSessionController implements MainMediaSessionControlle
     }, {});
   }
 
-  protected resolveThumbnailVtt(tamsMediaData: TamsMediaData, mediaInfo: TamsMediaInfo | undefined): string | undefined {
-    if (!mediaInfo) {
+  protected resolveThumbnailVtt(tamsMediaData: TamsMediaData, mediaInfo: TamsMediaInfo | undefined, allowEmpty: boolean): string | undefined {
+    const cues = this.resolveThumbnailCues(tamsMediaData, mediaInfo?.mediaEndTime, mediaInfo?.mediaStartTime);
+    return cues && (cues.length > 0 || allowEmpty) ? TamsThumbnailGenerator.writeThumbnailVtt(cues) : undefined;
+  }
+
+  protected resolveThumbnailCues(tamsMediaData: TamsMediaData, mediaEndTime: number | undefined, timeOffset: number | undefined): TamsThumbnailCue[] | undefined {
+    if (mediaEndTime === undefined || timeOffset === undefined) {
       return undefined;
     }
 
     const flows = [tamsMediaData.flow, ...(tamsMediaData.subflows ?? [])];
     const imageFlow = TamsThumbnailGenerator.resolveLowestQualityImageFlow(flows);
-    const segments = imageFlow ? tamsMediaData.flowsSegments.get(imageFlow.id) : undefined;
-    if (!segments?.length) {
+    if (!imageFlow) {
       return undefined;
     }
 
-    return TamsThumbnailGenerator.generateThumbnailVtt(segments, mediaInfo.mediaEndTime, mediaInfo.mediaStartTime);
+    return TamsThumbnailGenerator.generateThumbnailCues(tamsMediaData.flowsSegments.get(imageFlow.id) ?? [], mediaEndTime, timeOffset);
+  }
+
+  protected syncThumbnailTrack(): void {
+    const tamsMediaData = this._tamsMediaData;
+    if (!tamsMediaData || this._destroyed) {
+      return;
+    }
+
+    const cues = this.resolveThumbnailCues(tamsMediaData, resolveTamsMediaInfo(tamsMediaData)?.mediaEndTime, this._thumbnailTimeOffset);
+    if (cues) {
+      this.updateThumbnailTrack(cues);
+    }
+  }
+
+  protected updateThumbnailTrack(cues: TamsThumbnailCue[]): void {
+    const track = this.resolveThumbnailTrack();
+    if (!track || track.areTimedItemsLocked) {
+      return;
+    }
+
+    if (!track.areTimedItemsFetched) {
+      track.loadStart();
+      track.addTimedItems(cues.map((cue) => ({url: cue.url, temporal: this.toThumbnailTemporal(cue)})));
+      track.areTimedItemsFetched = true;
+      track.loadSuccess();
+      return;
+    }
+
+    const toKey = (time: number) => Math.round(time * 1000);
+    const cuesByStart = new Map(cues.map((cue) => [toKey(cue.start), cue]));
+    const staleIds: string[] = [];
+
+    for (const thumbnail of track.timedItems) {
+      const start = TimedItemTemporalUtil.extractStartTime(thumbnail.temporal);
+      const cue = start !== undefined ? cuesByStart.get(toKey(start)) : undefined;
+
+      if (!cue) {
+        staleIds.push(thumbnail.id);
+        continue;
+      }
+
+      cuesByStart.delete(toKey(cue.start));
+
+      const end = TimedItemTemporalUtil.extractEndTime(thumbnail.temporal);
+      if (end === undefined || toKey(end) !== toKey(cue.end)) {
+        track.updateTimedItem(thumbnail.id, {temporal: this.toThumbnailTemporal(cue)});
+      }
+    }
+
+    if (staleIds.length > 0) {
+      track.deleteTimedItems(staleIds);
+    }
+
+    if (cuesByStart.size > 0) {
+      track.addTimedItems([...cuesByStart.values()].map((cue) => ({url: cue.url, temporal: this.toThumbnailTemporal(cue)})));
+    }
+  }
+
+  protected resolveThumbnailTrack(): ThumbnailTrack | undefined {
+    return this._trackRepository.findFirst(
+      (track: Track) =>
+        track.trackType === TrackType.THUMBNAIL_TRACK &&
+        track.label === TAMS_THUMBNAIL_TRACK_LABEL &&
+        track.relations.some((relation) => relation.relationType === RelationType.PART_OF && relation.entityId === this._mainMedia.id)
+    ) as ThumbnailTrack | undefined;
+  }
+
+  protected toThumbnailTemporal(cue: TamsThumbnailCue) {
+    return {type: TimedItemTemporalType.SPAN as const, start: `${Math.round(cue.start * 1000) / 1000}`, end: `${Math.round(cue.end * 1000) / 1000}`};
   }
 
   /**

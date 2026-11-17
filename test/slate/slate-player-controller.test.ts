@@ -113,6 +113,7 @@ describe('SlatePlayerController', () => {
     advance(1);
     expect(controller.getCurrentTime()).toBeCloseTo(1.2, 5);
     expect(eventTypes(events)).toEqual([
+      PlayerControllerEventType.PLAYER_CONTROLLER_BUFFERING,
       PlayerControllerEventType.PLAYER_CONTROLLER_PLAY,
       PlayerControllerEventType.PLAYER_CONTROLLER_PLAYBACK_PROGRESS,
       PlayerControllerEventType.PLAYER_CONTROLLER_PLAYBACK_PROGRESS,

@@ -19,18 +19,14 @@ import {map, Observable, of, switchMap, takeUntil} from 'rxjs';
 import {
   type MarkerTrack,
   type MarkerTrackLoadOptions,
-  MediaEntityType,
   type ObservationTrack,
   type ObservationTrackLoadOptions,
-  Relation,
-  RelationType,
   type TextTrack,
   type TextTrackLoadOptions,
   type ThumbnailTrack,
   type ThumbnailTrackLoadOptions,
   type Track,
   type TrackEvent,
-  TrackType,
 } from '../media';
 import {type Source, SourceType, TrackSource, UrlSource} from '../source';
 import {errorCompleteObserver, nextCompleteObserver, passiveObservable} from '../util/rxjs-util';
@@ -45,6 +41,8 @@ import type {Destroyable} from '../common/capabilities';
 import {ObserverBreaker} from '../common/observer-breaker';
 import type {PlayerInternalApi} from '../player';
 import {PlayerAudioType, PlayerTextType} from '../player';
+import {Relation, RelationType} from '../relation';
+import {MediaEntityType} from '../entity';
 
 export class OmakaseTrackApiImpl implements OmakaseTrackApi, Destroyable {
   protected _trackRepository: TrackRepository;

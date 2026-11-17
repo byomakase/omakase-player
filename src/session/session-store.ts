@@ -21,7 +21,7 @@ import type {DeepPartial} from '../types/ts-types';
 import {deepMerge} from '../util/util-functions';
 import {type WindowPlayback, WindowPlaybackMode} from '../common';
 import {type SessionEvent, SessionEventType} from './session-event';
-import {type MainMedia, type MainMediaState, MainMediaType, type MediaEntityState, type Track} from '../media';
+import {type MainMedia, type MainMediaState, type Track} from '../media';
 import type {LiveTimelineAnchor, PlayerAudioState, PlayerLiveState, PlayerPlayback, PlayerTextState, PlayerVideoState} from '../player';
 import type {ChromingState} from '../chroming';
 import type {Localizations} from '../localization';
@@ -32,6 +32,7 @@ import {SessionFactory} from './session-factory';
 import {AlertsManager} from './alert';
 import type {AlertState} from './alerts-api';
 import {AlertEventType} from './alerts-api';
+import type {MediaEntityState} from '../entity';
 
 function assertWindowPlaybackTransition(current: WindowPlaybackMode, next: WindowPlaybackMode): void {
   const allowedFrom = WINDOW_PLAYBACK_MODE_TRANSITIONS[next];

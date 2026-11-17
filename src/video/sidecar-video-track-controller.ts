@@ -40,6 +40,9 @@ export interface SidecarVideoTrackController extends SidecarTrackController<Side
  *   If inactive, keeps warming up, so it can be activated without seeking
  * - after time window, holds the frame at {@link SidecarTimeWindow.cutEndTime}
  *
+ * Sidecar time is mapped to video element time through {@link SidecarVideoDomController.timeOffset}, so sidecar time 0 is where its first video frame
+ * lands on video element timeline, same as main media time 0 is where main media first video frame lands, see main media init segment time offset.
+ *
  * Sidecar video drifting from main media is corrected by adjusting its playback rate, or by seeking when drift is too large.
  *
  * Video element can't play backwards nor faster than {@link SEEK_STEP_PLAYBACK_DEFAULTS.maxNativePlaybackRate}. At such main media playback rates
@@ -73,6 +76,16 @@ export class SidecarVideoTrackControllerImpl extends BaseSidecarTrackController<
     return this._domController.videoElement;
   }
 
+  /** Current sidecar time, video element time minus {@link SidecarVideoDomController.timeOffset}. */
+  protected get currentTime(): number {
+    return this.videoElement.currentTime - this._domController.timeOffset;
+  }
+
+  /** Maps sidecar time to video element time. */
+  protected toElementTime(time: number): number {
+    return time + this._domController.timeOffset;
+  }
+
   /** Whether video element can't play at main media playback rate, sidecar is paused and seeked in steps then. */
   protected isSeekStepPlayback(): boolean {
     return SeekStepPlaybackUtil.isSeekStepPlaybackRate(this._playerController.playbackRate);
@@ -101,7 +114,7 @@ export class SidecarVideoTrackControllerImpl extends BaseSidecarTrackController<
   }
 
   protected resolveAttachedDuration(): number {
-    return this.videoElement.duration;
+    return this._domController.duration;
   }
 
   protected onSourceAttached() {
@@ -126,7 +139,7 @@ export class SidecarVideoTrackControllerImpl extends BaseSidecarTrackController<
       } else {
         // entering warm-up or time window, sidecar holds the frame it starts at while main media is already a frame or more past it.
         // Seeking would request buffering and stall main media, so small drift is left to drift correction
-        if (Math.abs(targetTime - this.videoElement.currentTime) > SIDECAR_VIDEO_DEFAULTS.driftSeekThreshold) {
+        if (Math.abs(targetTime - this.currentTime) > SIDECAR_VIDEO_DEFAULTS.driftSeekThreshold) {
           this.seekToTime(targetTime);
         }
         this.videoPlay();
@@ -155,7 +168,7 @@ export class SidecarVideoTrackControllerImpl extends BaseSidecarTrackController<
       playbackRate: this._playerController.playbackRate,
       seeking: videoElement.seeking,
       mapTime: (leadTime) => this._timeWindow!.toSidecarTime(leadTime, this._config.warmUpDuration, reverse),
-      isBuffered: (seekTime) => isMediaElementBuffered(videoElement, seekTime),
+      isBuffered: (seekTime) => isMediaElementBuffered(videoElement, this.toElementTime(seekTime)),
     });
     if (seekTime !== void 0) {
       this.seekToTime(seekTime);
@@ -205,7 +218,7 @@ export class SidecarVideoTrackControllerImpl extends BaseSidecarTrackController<
   protected checkDriftAndTrySync(targetTime: number) {
     // positive drift - sidecar is behind main media
     // negative drift - sidecar is in front of main media
-    let drift = targetTime - this.videoElement.currentTime;
+    let drift = targetTime - this.currentTime;
 
     this._driftHistory.push(drift);
     if (this._driftHistory.length > SIDECAR_VIDEO_DEFAULTS.driftHistoryLength) {
@@ -255,8 +268,9 @@ export class SidecarVideoTrackControllerImpl extends BaseSidecarTrackController<
       return false;
     }
     // paused element does not always advance readyState beyond HAVE_CURRENT_DATA, buffered ranges are checked as well
+    // buffered ranges are in video element time
     let time = videoElement.currentTime;
-    let requiredEnd = Math.min(time + SIDECAR_VIDEO_DEFAULTS.bufferingRequiredAhead, this._timeWindow!.cutEndTime);
+    let requiredEnd = Math.min(time + SIDECAR_VIDEO_DEFAULTS.bufferingRequiredAhead, this.toElementTime(this._timeWindow!.cutEndTime));
     let isBuffered = this._domController.bufferedTimeRanges.some((p) => p.start <= time && p.end >= requiredEnd);
     return !isBuffered;
   }
@@ -297,7 +311,7 @@ export class SidecarVideoTrackControllerImpl extends BaseSidecarTrackController<
   }
 
   protected seekToTimeIfNeeded(time: number) {
-    if (Math.abs(this.videoElement.currentTime - time) > SIDECAR_VIDEO_DEFAULTS.seekTolerance) {
+    if (Math.abs(this.currentTime - time) > SIDECAR_VIDEO_DEFAULTS.seekTolerance) {
       this.seekToTime(time);
     }
   }
@@ -305,7 +319,7 @@ export class SidecarVideoTrackControllerImpl extends BaseSidecarTrackController<
   protected seekToTime(time: number) {
     this._driftHistory = [];
     this.videoElement.playbackRate = this.resolveElementPlaybackRate();
-    this.videoElement.currentTime = time;
+    this.videoElement.currentTime = this.toElementTime(time);
   }
 
   protected videoPlay() {

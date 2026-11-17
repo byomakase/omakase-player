@@ -19,7 +19,7 @@ import type {Destroyable} from '../common/capabilities';
 import {ObserverBreaker} from '../common/observer-breaker';
 import type {MainMedia} from '../media/main-media';
 import {TextTrackUtil} from '../text/text-track-util';
-import {RelationType} from '../media/relation';
+import {RelationType} from '../relation/relation';
 import {type Track, TrackType} from '../media/track';
 import {type TrackRepository, TrackRepositoryEventType} from '../repository/track-repository';
 import {LiveTextCueReader} from './live-text-cue-reader';
@@ -99,8 +99,6 @@ export abstract class TextTrackCueReaders implements Destroyable {
       console.debug(`TextTrackCueReaders: not reading ${trackId}, not part of ${this._mainMedia.id}`, track.relations);
       return;
     }
-
-    console.debug(`TextTrackCueReaders: reading cues for ${trackId}`, track.label);
 
     const reader = new LiveTextCueReader({fetcher: this.createFetcher(track as ReadableTextTrack)});
     this._readers.set(trackId, reader);

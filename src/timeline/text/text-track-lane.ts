@@ -21,7 +21,7 @@ import type {TimelineImpl} from '../timeline';
 import {TIMELINE_LANE_CONFIG_DEFAULT, type TimelineLaneStyle} from '../timeline-lane';
 import {BaseTrackLane, type TrackLaneConfig} from '../track-lane';
 import {TextCueVisualization, type TextCueVisualizationStyle} from './text-cue-visualization';
-import {combineLatest, filter, Observable, Subject, takeUntil} from 'rxjs';
+import {asyncScheduler, combineLatest, distinctUntilChanged, filter, map, Observable, observeOn, Subject, takeUntil} from 'rxjs';
 import {WindowPlaybackMode} from '../../common';
 import type {SessionApi} from '../../session';
 import {SessionEventType} from '../../session';
@@ -32,7 +32,6 @@ import {type StyledElementWithId, type UiElementProps, UiEventType} from '../../
 import type {OmpProvider} from '../../omp-provider';
 import type {Position} from '../model';
 import {freeObserver} from '../../util/rxjs-util';
-import {isNullOrUndefined} from '../../util/util-functions';
 
 export interface TextTrackLaneStyle extends TimelineLaneStyle {
   itemOpacity: number;
@@ -61,6 +60,7 @@ export interface TextTrackLaneStyle extends TimelineLaneStyle {
 }
 
 export interface TextTrackLaneElementProps extends UiElementProps {
+  /** Affects only the cues that are in a visible timeline range. */
   inForeground?: boolean | undefined;
 }
 
@@ -107,7 +107,9 @@ export type TextTrackLaneEvent = {
 
 export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackLaneStyle, TextTrack> {
   private readonly _onEvent$: Subject<TextTrackLaneEvent> = new Subject<TextTrackLaneEvent>();
+  private readonly _foregroundChanged$: Subject<void> = new Subject<void>();
 
+  protected readonly _cuesInForeground: Set<TextCue['id']> = new Set<TextCue['id']>();
   protected _textMarkingsGroup?: Konva.Group;
   protected _textCueVisualizations: Map<number, TextCueVisualization> = new Map();
   protected _squashedCueGroups: TextCue[][] = [];
@@ -145,6 +147,30 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
     this._squashedCueClick$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe((position) => {
       this.handleSquashedCueClick(position);
     });
+
+    this._foregroundChanged$
+      .pipe(
+        observeOn(asyncScheduler),
+        map(() => this.getItemsInForeground().map((p) => p.state)),
+        distinctUntilChanged((a, b) => {
+          if (a.length !== b.length) {
+            return false;
+          }
+          const bIds = b.map((p) => p.id);
+          return a.every((p) => bIds.includes(p.id));
+        })
+      )
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe({
+        next: (items) => {
+          this._onEvent$.next({
+            type: TextTrackLaneEventType.TIMELINE_TEXT_TRACK_LANE_ITEM_IN_FOREGROUND_CHANGE,
+            data: {
+              cuesInForeground: items,
+            },
+          });
+        },
+      });
   }
 
   override setTrack(track: TextTrack) {
@@ -153,9 +179,7 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
     if (this._track) {
       this._track.onEvent$.pipe(takeUntil(this._trackUpdateBreaker.observer)).subscribe((event) => {
         switch (event.type) {
-          case TrackEventType.TRACK_UPDATED:
-            this.handleTrackUpdated();
-            break;
+          case TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_ADDED:
           case TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_UPDATED:
           case TimedItemsTrackEventType.TIMED_ITEMS_TRACK_ITEMS_DELETED:
             this.handleTrackUpdated();
@@ -238,10 +262,25 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
       .pipe(takeUntil(this._uiBreaker.observer))
       .pipe(takeUntil(this._destroyBreaker.observer))
       .subscribe((event) => {
-        const element = this._ui!.getElement<TextTrackLaneElementProps>(event.data.element.id);
-        if (element) {
-          this.handleForegroundUpdate(element.id, !!element.props?.inForeground);
+        const id = event.data.element.id;
+        const inForeground = this.isItemInForeground(id);
+        if (inForeground === this._cuesInForeground.has(id)) {
+          return;
         }
+        inForeground ? this._cuesInForeground.add(id) : this._cuesInForeground.delete(id);
+        this.handleForegroundUpdate(id, inForeground);
+      });
+
+    this._ui!.onEvent$.pipe(filter((event) => event.type === UiEventType.UI_ELEMENTS_REMOVED))
+      .pipe(map((event) => event.data.elements.filter((p) => this._cuesInForeground.has(p.id))))
+      .pipe(takeUntil(this._uiBreaker.observer))
+      .pipe(takeUntil(this._destroyBreaker.observer))
+      .subscribe((elements) => {
+        elements.forEach((element) => {
+          if (this._cuesInForeground.delete(element.id)) {
+            this.handleForegroundUpdate(element.id, false);
+          }
+        });
       });
 
     this._prepared.next(true);
@@ -258,8 +297,41 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
     }
     this._renderPending = false;
 
+    const previousSquashedCueGroups = this._squashedCueGroups;
     this._squashedCueGroups = this.squashCues(this._track?.timedItemsSorted ?? []);
+
+    this.adjustGroupsForegrounds(previousSquashedCueGroups);
     this.adjustCueVisualizations();
+  }
+
+  private adjustGroupsForegrounds(previousSquashedCueGroups: TextCue[][]): void {
+    const groupIndexByCueId = new Map<TextCue['id'], number>();
+    this._squashedCueGroups.forEach((group, index) => group.forEach((cue) => groupIndexByCueId.set(cue.id, index)));
+
+    previousSquashedCueGroups.forEach((previousGroup) => {
+      const cues = previousGroup.filter((cue) => groupIndexByCueId.has(cue.id));
+      const cuesInForeground = cues.filter((cue) => this.isItemInForeground(cue.id));
+      if (cuesInForeground.length === 0 || cuesInForeground.length !== cues.length) {
+        return;
+      }
+
+      const groupIndices = cuesInForeground.map((cue) => groupIndexByCueId.get(cue.id)!);
+      if (groupIndices.length < 2) {
+        return;
+      }
+
+      const firstGroupIndex = Math.min(...groupIndices);
+      cuesInForeground
+        .filter((cue) => groupIndexByCueId.get(cue.id) !== firstGroupIndex)
+        .forEach((cue) => {
+          this._ui!.updateElement<TextTrackLaneElementProps>({
+            id: cue.id,
+            props: {
+              inForeground: void 0,
+            },
+          });
+        });
+    });
   }
 
   private isWindowPlaybackSettled(mode: WindowPlaybackMode | undefined = this._session?.state.windowPlayback.mode): boolean {
@@ -274,6 +346,7 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
     });
     this._textMarkingsGroup?.destroyChildren();
     this._textCueVisualizations.clear();
+    this._cuesInForeground.clear();
     this._squashedCueGroups = [];
   }
 
@@ -372,67 +445,96 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
     this.checkIsPrepared();
 
     const cueTextVisualization = this.getCueVisualization(cueId);
-    const itemsInForeground = this.getItemsInForeground();
-
     if (!cueTextVisualization) {
       return;
     }
 
-    const removeCueForeground = (itemId: string) => {
+    if (inForeground) {
+      this._textMarkingsGroup?.moveToTop();
+      cueTextVisualization.konvaNode.moveToTop();
+
+      cueTextVisualization.cues
+        .filter((cue) => cue.id !== cueId && !this.isItemInForeground(cue.id))
+        .forEach((cue) => {
+          this._ui!.updateElement<TextTrackLaneElementProps>({
+            id: cue.id,
+            props: {
+              inForeground: true,
+            },
+          });
+        });
+    } else {
+      if (!this.getOverlappedCues(cueTextVisualization).length) {
+        cueTextVisualization.konvaNode.moveToBottom();
+      }
+
+      cueTextVisualization.cues
+        .filter((cue) => cue.id !== cueId && this.isItemInForeground(cue.id))
+        .forEach((cue) => {
+          this._ui!.updateElement<TextTrackLaneElementProps>({
+            id: cue.id,
+            props: {
+              inForeground: void 0,
+            },
+          });
+        });
+    }
+
+    this._foregroundChanged$.next();
+
+    if (inForeground) {
+      this.handleOverlappedCuesInForeground(cueTextVisualization);
+    }
+  }
+
+  protected handleOverlappedCuesInForeground(cueTextVisualization: TextCueVisualization): void {
+    this.getOverlappedCues(cueTextVisualization).forEach((cue) => {
       this._ui!.updateElement<TextTrackLaneElementProps>({
-        id: itemId,
+        id: cue.id,
         props: {
           inForeground: void 0,
         },
       });
-    };
+    });
+  }
 
-    if (!inForeground) {
-      cueTextVisualization.konvaNode.moveToBottom();
+  private getOverlappedCues(cueTextVisualization: TextCueVisualization): TextCue[] {
+    const groupTemporal = this.getGroupTemporal(cueTextVisualization.cues);
+    const groupCueIds = new Set(cueTextVisualization.cues.map((cue) => cue.id));
 
-      this._onEvent$.next({
-        type: TextTrackLaneEventType.TIMELINE_TEXT_TRACK_LANE_ITEM_IN_FOREGROUND_CHANGE,
-        data: {
-          cuesInForeground: this.getItemsInForeground().map((cv) => cv.state),
-        },
+    return (this._track?.timedItems ?? []).filter((cue) => !groupCueIds.has(cue.id) && this.isItemInForeground(cue.id)).filter((cue) => TimedItemTemporalUtil.overlaps(groupTemporal, cue.temporal));
+  }
+
+  private isItemInForeground(id: TextCue['id']): boolean {
+    return !!this._ui?.getElement<TextTrackLaneElementProps>(id)?.props?.inForeground;
+  }
+
+  private syncCuesInForeground(): void {
+    const previous = new Set(this._cuesInForeground);
+    this._cuesInForeground.clear();
+
+    this._textCueVisualizations.forEach((cueTextVisualization) => {
+      let newInForeground = false;
+
+      cueTextVisualization.cues.forEach((cue) => {
+        if (previous.has(cue.id)) {
+          this._cuesInForeground.add(cue.id);
+        } else if (this.isItemInForeground(cue.id)) {
+          this._cuesInForeground.add(cue.id);
+          newInForeground = true;
+        }
       });
-    } else {
-      this._textMarkingsGroup?.moveToTop();
-      cueTextVisualization.konvaNode.moveToTop();
 
-      this._onEvent$.next({
-        type: TextTrackLaneEventType.TIMELINE_TEXT_TRACK_LANE_ITEM_IN_FOREGROUND_CHANGE,
-        data: {
-          cuesInForeground: this.getItemsInForeground().map((cv) => cv.state),
-        },
-      });
-
-      let foregroundGroupTemporal = this.getGroupTemporal(cueTextVisualization.cues);
-      let foregroundItemStartTime = parseFloat(foregroundGroupTemporal.start);
-      let foregroundItemEndTime = parseFloat(foregroundGroupTemporal.end);
-
-      itemsInForeground
-        .filter((p) => !cueTextVisualization.cues.includes(p))
-        .forEach((cue) => {
-          if (!isNullOrUndefined(foregroundItemStartTime) && !isNullOrUndefined(foregroundItemEndTime)) {
-            if (TimedItemTemporalUtil.touchesTimeRange(cue.temporal, foregroundItemStartTime, foregroundItemEndTime)) {
-              removeCueForeground(cue.id);
-            }
-          } else {
-            let startTime = TimedItemTemporalUtil.extractStartTime(cue.temporal);
-            let endTime = TimedItemTemporalUtil.extractEndTime(cue.temporal);
-
-            if (isNullOrUndefined(startTime) && !isNullOrUndefined(endTime) && TimedItemTemporalUtil.touchesTimeRange(foregroundGroupTemporal, startTime!, endTime!)) {
-              removeCueForeground(cue.id);
-            }
-          }
-        });
-    }
+      if (newInForeground) {
+        cueTextVisualization.konvaNode.moveToTop();
+        this.handleOverlappedCuesInForeground(cueTextVisualization);
+      }
+    });
   }
 
   moveToForeground(itemIndex: number): void {
     const cueTextVisualization = this._textCueVisualizations.get(itemIndex);
-    if (!cueTextVisualization || cueTextVisualization.cues.find((cue) => this.getItemsInForeground().includes(cue))) {
+    if (!cueTextVisualization || cueTextVisualization.cues.some((cue) => this.isItemInForeground(cue.id))) {
       return;
     }
 
@@ -447,10 +549,7 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
   }
 
   private getItemsInForeground(): TextCue[] {
-    if (!this._ui) {
-      return [];
-    }
-    return Array.from(this._textCueVisualizations.values()).flatMap((cv) => cv.cues.filter((cue) => !!this._ui?.getElement<TextTrackLaneElementProps>(cue.id)?.props?.inForeground));
+    return Array.from(this._textCueVisualizations.values()).flatMap((cv) => cv.cues.filter((cue) => this.isItemInForeground(cue.id)));
   }
 
   private squashCues(cues: TextCue[]): TextCue[][] {
@@ -527,6 +626,12 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
         existing.cues = group;
         existing.konvaNode.setAttrs({x: xStart, width: xEnd - xStart, height: cueHeight});
         existing.onMeasurementsChange();
+
+        if (!group.some((cue) => this.isItemInForeground(cue.id))) {
+          existing.konvaNode.moveToBottom();
+        } else {
+          existing.konvaNode.moveToTop();
+        }
       } else {
         const cueVisualization = new TextCueVisualization(
           {
@@ -560,8 +665,7 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
         this._textMarkingsGroup!.add(cueVisualization.konvaNode);
         this.attachCueListeners(cueVisualization);
 
-        const itemsInForeground = this.getItemsInForeground();
-        if (!group.find((cue) => itemsInForeground.includes(cue))) {
+        if (!group.some((cue) => this.isItemInForeground(cue.id))) {
           cueVisualization.konvaNode.moveToBottom();
         }
       }
@@ -575,6 +679,8 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
         this._textCueVisualizations.delete(index);
       }
     }
+
+    this.syncCuesInForeground();
   }
 
   private getGroupTemporal(group: TextCue[]): SpanTemporal {
@@ -696,5 +802,6 @@ export class TextTrackLane extends BaseTrackLane<TextTrackLaneConfig, TextTrackL
     super.destroy();
 
     freeObserver(this._onEvent$);
+    freeObserver(this._foregroundChanged$);
   }
 }

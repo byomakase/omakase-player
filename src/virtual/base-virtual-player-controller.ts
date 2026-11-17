@@ -175,6 +175,18 @@ export abstract class BaseVirtualPlayerController<C extends VirtualPlayerControl
     // audio worklet sync tick keeps ticking while browser tab is in background, unlike requestAnimationFrame
     OmakaseAudioContextProvider.instance.onSyncTick$.pipe(takeUntil(this._mediaEventBreaker.observer), takeUntil(this._destroyBreaker.observer)).subscribe(() => this.tick());
 
+    // virtual media is buffered whole, emitted asynchronously as player subscribes to controller events once controller is wired
+    of(mainMediaState.duration!)
+      .pipe(observeOn(asapScheduler), takeUntil(this._mediaEventBreaker.observer), takeUntil(this._destroyBreaker.observer))
+      .subscribe((duration) => {
+        this._onEvent$.next({
+          type: PlayerControllerEventType.PLAYER_CONTROLLER_BUFFERING,
+          data: {
+            bufferedTimeRanges: [{start: 0, end: duration}],
+          },
+        });
+      });
+
     this._ownedDomController?.refreshMediaState();
   }
 

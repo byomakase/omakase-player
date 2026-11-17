@@ -15,16 +15,12 @@
  */
 
 export class BlobUtil {
-  private static _blobs: Set<string> = new Set();
-
   static createBlob(blobParts: BlobPart[], options?: BlobPropertyBag): Blob {
     return new Blob(blobParts, options);
   }
 
   static createObjectURL(blob: Blob): string {
-    const url = URL.createObjectURL(blob);
-    this._blobs.add(url);
-    return url;
+    return URL.createObjectURL(blob);
   }
 
   static createBlobURL(blobParts: BlobPart[], options?: BlobPropertyBag): string {
@@ -33,12 +29,6 @@ export class BlobUtil {
   }
 
   static revokeObjectURL(url: string): void {
-    this._blobs.delete(url);
     return URL.revokeObjectURL(url);
-  }
-
-  static revokeAll(): void {
-    console.debug(`Revoking all blobs`);
-    this._blobs.forEach((url) => this.revokeObjectURL(url));
   }
 }

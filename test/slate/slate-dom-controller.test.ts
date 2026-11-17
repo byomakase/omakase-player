@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {firstValueFrom, Observable} from 'rxjs';
+import {filter, firstValueFrom, Observable} from 'rxjs';
 
 // see slate-player-controller.test.ts
 vi.mock('../../src/media', () => ({}));
@@ -24,7 +24,7 @@ vi.mock('../../src/omakase-audio-context-provider', async () => {
 
 import {SlateDomControllerImpl} from '../../src/slate/slate-dom-controller';
 import {SlatePlayerController} from '../../src/slate/slate-player-controller';
-import type {PlayerDomController} from '../../src/player/player-controller-api';
+import {type PlayerDomController, PlayerControllerEventType} from '../../src/player/player-controller-api';
 import type {MainMediaState, MainMediaUpdateableAttrs} from '../../src/media';
 
 const createChromingDomController = () => {
@@ -57,7 +57,7 @@ describe('SlateDomControllerImpl', () => {
     let slate = SlateDomControllerImpl.mountOver(domController);
 
     expect(slate.element.parentElement).toBe(themeElement);
-    // first in media slot, so media-chrome observes slate as media
+    // takes video element's place in media slot
     expect(themeElement.firstElementChild).toBe(slate.element);
     expect(slate.element.slot).toBe('media');
     expect(videoElement.style.display).toBe('none');
@@ -72,7 +72,7 @@ describe('SlateDomControllerImpl', () => {
     expect(videoElement.style.display).toBe('');
   });
 
-  it('mounted controller renders timecode, exposes media element api and destroys its dom controller', async () => {
+  it('mounted controller renders timecode, reports virtual media buffered whole and destroys its dom controller', async () => {
     let {themeElement, videoElement, domController} = createChromingDomController();
     let controller = SlatePlayerController.createMounted(domController);
     expect(controller.videoElement).toBeUndefined();
@@ -96,28 +96,19 @@ describe('SlateDomControllerImpl', () => {
           }),
       })
     );
-    let slateElement = themeElement.firstElementChild as HTMLElement & HTMLMediaElement;
-    let mediaEvents: string[] = [];
-    ['durationchange', 'seeking', 'seeked', 'timeupdate'].forEach((type) => slateElement.addEventListener(type, () => mediaEvents.push(type)));
+    let slateElement = themeElement.firstElementChild as HTMLElement;
+    let bufferedEvents: any[] = [];
+    controller.onEvent$.pipe(filter((event) => event.type === PlayerControllerEventType.PLAYER_CONTROLLER_BUFFERING)).subscribe((event) => bufferedEvents.push(event.data));
 
-    expect(Number.isNaN(slateElement.duration)).toBe(true);
     controller.wireEvents({initSegmentTimeOffset: 0, loadOptions, ...attrs} as MainMediaState);
-    expect(mediaEvents).toContain('durationchange');
-    expect(slateElement.duration).toBe(10);
-    expect(slateElement.seekable.length).toBe(1);
-    expect(slateElement.seekable.end(0)).toBe(10);
-    expect(slateElement.paused).toBe(true);
-    expect(slateElement.readyState).toBe(HTMLMediaElement.HAVE_ENOUGH_DATA);
+    expect(slateElement.textContent).toBe('00:00:00:00');
+    // virtual media is buffered whole, emitted asynchronously once wired
+    expect(bufferedEvents).toEqual([]);
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(bufferedEvents).toEqual([{bufferedTimeRanges: [{start: 0, end: 10}]}]);
 
     await firstValueFrom(controller.seekTo(2));
     expect(slateElement.textContent).toBe('00:00:02:00');
-    expect(slateElement.currentTime).toBe(2);
-    expect(mediaEvents).toEqual(expect.arrayContaining(['seeking', 'seeked', 'timeupdate']));
-
-    // media-chrome seek request sets currentTime on media
-    slateElement.currentTime = 4;
-    await new Promise((resolve) => setTimeout(resolve));
-    expect(controller.getCurrentTime()).toBe(4);
 
     controller.destroy();
     expect(slateElement.isConnected).toBe(false);

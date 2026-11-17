@@ -27,6 +27,7 @@ import {TamsManifestRegistry} from './tams-manifest-registry';
 import {TAMS_LIVE} from '../constants';
 import type {ManifestResourcesFetcher} from './tams-resource-fetcher';
 import type {TamsMediaData} from './model/tams-media-data-model';
+import {TamsThumbnailGenerator} from './tams-thumbnail-generator';
 
 /** Playable length of a segment; unbounded or zero length timeranges contribute nothing. */
 function segmentDuration(segment: FlowSegment): number {
@@ -66,6 +67,7 @@ export class TamsLiveManifestUpdater implements Destroyable {
   private readonly _playlistUris: Map<string, string>;
   private readonly _flowsById: Map<string, Flow>;
   private readonly _mediaSequences: Map<string, number>;
+  private readonly _thumbnailFlowId: string | undefined;
 
   private _loadedTimerange: string | undefined;
 
@@ -73,10 +75,10 @@ export class TamsLiveManifestUpdater implements Destroyable {
   private _pollSubscription: Subscription | undefined;
   private _destroyed = false;
 
-  private readonly _onPlaylistsUpdated$: Subject<void> = new Subject<void>();
+  private readonly _onUpdated$: Subject<void> = new Subject<void>();
 
-  get onPlaylistsUpdated$(): Observable<void> {
-    return this._onPlaylistsUpdated$.asObservable();
+  get onUpdated$(): Observable<void> {
+    return this._onUpdated$.asObservable();
   }
 
   get mediaSequences(): Map<string, number> {
@@ -98,6 +100,11 @@ export class TamsLiveManifestUpdater implements Destroyable {
     this._playlistUris = new Map<string, string>([...(args.manifest.video ?? []), ...(args.manifest.audio ?? []), ...(args.manifest.text ?? [])]);
     this._flowsById = new Map<string, Flow>([this._tamsMediaData.flow, ...(this._tamsMediaData.subflows ?? [])].map((flow) => [flow.id, flow]));
     this._mediaSequences = new Map<string, number>(args.mediaSequences ?? []);
+
+    this._thumbnailFlowId = TamsThumbnailGenerator.resolveLowestQualityImageFlow([...this._flowsById.values()])?.id;
+    if (this._thumbnailFlowId && !this._tamsMediaData.flowsSegments.has(this._thumbnailFlowId)) {
+      this._tamsMediaData.flowsSegments.set(this._thumbnailFlowId, []);
+    }
   }
 
   start(): void {
@@ -115,7 +122,7 @@ export class TamsLiveManifestUpdater implements Destroyable {
     }
     this._pollSubscription?.unsubscribe();
     this._pollSubscription = undefined;
-    this._onPlaylistsUpdated$.complete();
+    this._onUpdated$.complete();
   }
 
   private _schedulePoll(): void {
@@ -140,7 +147,9 @@ export class TamsLiveManifestUpdater implements Destroyable {
   private _poll(): void {
     this._timeoutId = undefined;
 
-    const requests: Observable<[string, FlowSegment[]]>[] = [...this._playlistUris.keys()].map((flowId) =>
+    const flowIds = [...this._playlistUris.keys(), ...(this._thumbnailFlowId ? [this._thumbnailFlowId] : [])];
+
+    const requests: Observable<[string, FlowSegment[]]>[] = flowIds.map((flowId) =>
       this._fetcher.fetchFlowSegments(flowId, this._resolveFetchTimerange(flowId)).pipe(map((segments) => [flowId, segments] as [string, FlowSegment[]]))
     );
 
@@ -153,8 +162,9 @@ export class TamsLiveManifestUpdater implements Destroyable {
         if (this._destroyed) {
           return;
         }
-        if (this._appendSegments(results)) {
-          this._rewritePlaylists();
+        const changedFlowIds = this._appendSegments(results);
+        if (changedFlowIds.size > 0) {
+          this._publishUpdate(changedFlowIds);
         }
         this._schedulePoll();
       },
@@ -177,8 +187,8 @@ export class TamsLiveManifestUpdater implements Destroyable {
     return end ? TamsUtil.openEndedTimerangeFrom(end) : this._playback.requestTimerange;
   }
 
-  private _appendSegments(results: [string, FlowSegment[]][]): boolean {
-    let changed = false;
+  private _appendSegments(results: [string, FlowSegment[]][]): Set<string> {
+    const changedFlowIds = new Set<string>();
 
     for (const [flowId, fetchedSegments] of results) {
       const segments = this._tamsMediaData.flowsSegments.get(flowId);
@@ -191,26 +201,27 @@ export class TamsLiveManifestUpdater implements Destroyable {
 
       if (newSegments.length > 0) {
         segments.push(...newSegments);
-        changed = true;
+        changedFlowIds.add(flowId);
       }
 
       if (this._trimToWindow(flowId, segments)) {
-        changed = true;
+        changedFlowIds.add(flowId);
       }
     }
 
-    return changed;
+    return changedFlowIds;
   }
 
   private _trimToWindow(flowId: string, segments: FlowSegment[]): boolean {
     const windowDuration = this._playback.windowDuration;
-    if (this._playback.mode !== TamsPlaybackMode.CONTINUOUS || !windowDuration) {
+    if (this._playback.mode !== TamsPlaybackMode.CONTINUOUS || !windowDuration || segments.length === 0) {
       return false;
     }
 
     const windowEnd = segmentEnd(segments[segments.length - 1]!);
     const flow = this._flowsById.get(flowId);
-    const renderedBefore = flow ? resolveRenderedSegments(flow, segments).length : segments.length;
+    const sequenced = this._playlistUris.has(flowId);
+    const renderedBefore = !sequenced ? 0 : flow ? resolveRenderedSegments(flow, segments).length : segments.length;
     let evicted = 0;
 
     while (segments.length > 1 && windowEnd !== undefined) {
@@ -226,9 +237,23 @@ export class TamsLiveManifestUpdater implements Destroyable {
       return false;
     }
 
+    if (!sequenced) {
+      return true;
+    }
+
     const renderedAfter = flow ? resolveRenderedSegments(flow, segments).length : segments.length;
     this._mediaSequences.set(flowId, (this._mediaSequences.get(flowId) ?? 0) + Math.max(renderedBefore - renderedAfter, 0));
     return true;
+  }
+
+  private _publishUpdate(changedFlowIds: Set<string>): void {
+    if ([...changedFlowIds].some((flowId) => this._playlistUris.has(flowId))) {
+      this._rewritePlaylists();
+    }
+
+    this._loadedTimerange = TamsUtil.resolveSegmentsTimerange(this._tamsMediaData.flowsSegments, [...this._flowsById.values()]) ?? this._loadedTimerange;
+
+    this._onUpdated$.next();
   }
 
   private _rewritePlaylists(): void {
@@ -239,9 +264,5 @@ export class TamsLiveManifestUpdater implements Destroyable {
       }
       TamsManifestRegistry.register(uri, writeMediaPlaylist(source));
     }
-
-    this._loadedTimerange = TamsUtil.resolveSegmentsTimerange(this._tamsMediaData.flowsSegments, [...this._flowsById.values()]) ?? this._loadedTimerange;
-
-    this._onPlaylistsUpdated$.next();
   }
 }

@@ -29,6 +29,7 @@ export class ChromingDetachedMessageChannelBinding extends BaseMessageChannelBin
   private _chromingDetached: ChromingDetachedApi;
 
   private _markerTrackMessageChannels: Map<string, MessageChannel<ChromingMarkerBarHandlerMessageChannelBinding>> = new Map<string, MessageChannel<ChromingMarkerBarHandlerMessageChannelBinding>>();
+  private _markerTrackBoundHandlers: Map<string, ChromingMarkerBarHandlerApi> = new Map<string, ChromingMarkerBarHandlerApi>();
   private _innerBindings: Map<string, MessageChannelBinding> = new Map();
 
   constructor(messageChannel: MessageChannel<ChromingDetachedMessageChannel>, chromingDetached: ChromingDetachedApi, ompProvider: OmpProvider) {
@@ -223,7 +224,12 @@ export class ChromingDetachedMessageChannelBinding extends BaseMessageChannelBin
       if (pair.handler) {
         let topic = pair.topic;
 
+        if (this._markerTrackMessageChannels.has(topic) && this._markerTrackBoundHandlers.get(topic) !== pair.handler) {
+          this.destroyMarkerTrackMessageChannel(topic);
+        }
+
         if (!this._markerTrackMessageChannels.has(topic)) {
+          this._markerTrackBoundHandlers.set(topic, pair.handler);
           let messageChannel = new MessageChannel<ChromingMarkerBarHandlerMessageChannelBinding>(this._chromingDetachedMessageChannel.managedBroadcastChannel, topic);
           this._markerTrackMessageChannels.set(topic, messageChannel);
 
@@ -238,11 +244,16 @@ export class ChromingDetachedMessageChannelBinding extends BaseMessageChannelBin
     const activeTopics = new Set(pairs.filter((p) => p.handler).map((p) => p.topic));
     const staleTopics = [...this._markerTrackMessageChannels.keys()].filter((t) => !activeTopics.has(t));
     for (const topic of staleTopics) {
-      this._innerBindings.get(topic)?.destroy();
-      this._innerBindings.delete(topic);
-      this._markerTrackMessageChannels.get(topic)?.destroy();
-      this._markerTrackMessageChannels.delete(topic);
+      this.destroyMarkerTrackMessageChannel(topic);
     }
+  }
+
+  private destroyMarkerTrackMessageChannel(topic: string) {
+    this._innerBindings.get(topic)?.destroy();
+    this._innerBindings.delete(topic);
+    this._markerTrackMessageChannels.get(topic)?.destroy();
+    this._markerTrackMessageChannels.delete(topic);
+    this._markerTrackBoundHandlers.delete(topic);
   }
 
   destroy(): void {

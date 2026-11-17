@@ -21,7 +21,7 @@ import {DomUtil} from '../dom/dom-util';
 import './components';
 import {PlayerAudioType} from '../player';
 import type {OmakasePlayerApi} from '../omakase-player-api';
-import {AudioFile, TrackType, type Track} from '../media';
+import {type AudioObservationType, type Track} from '../media';
 import {filter, takeUntil} from 'rxjs';
 import {ObserverBreaker} from '../common/observer-breaker';
 import {
@@ -60,6 +60,12 @@ export interface VuMeterArgs {
   tracks?: Track['id'] | Track | Track['id'][] | Track[];
 
   /**
+   * Type of the values held by observation {@link tracks}.
+   * Defaults to `AudioObservationType.WAVEFORM`. Ignored for other sources.
+   */
+  observationType?: AudioObservationType | undefined;
+
+  /**
    * VU Meter configuration, optional
    */
   config?: Partial<VuMeterConfig>;
@@ -84,16 +90,10 @@ export class VuMeter implements Destroyable, VuMeterApi {
         ...args.config?.style,
       },
     };
-    if (this._config.theme === VuMeterTheme.LED) {
-      this._config.rangeMinDb = Math.round(this._config.rangeMinDb / this._config.scaleStepDb) * this._config.scaleStepDb;
-      if (!args.config?.style?.levelBackground) {
-        this._config.style.levelBackground = '#33333366';
-      }
+    if (this._config.theme === VuMeterTheme.LED && !args.config?.style?.levelBackground) {
+      this._config.style.levelBackground = '#33333366';
     }
-    if (this._config.scale === VuMeterScale.NORDIC) {
-      this._config.scaleOffsetDb = 18;
-      this._config.scaleStepDb = 3;
-    }
+    this.normalizeConfig();
     if (isNullOrUndefined(this._config.style.levelColors)) {
       if (this._config.theme === VuMeterTheme.DEFAULT) {
         this._config.style.levelColors = DEFAULT_VU_METER_DEFAULT_THEME_COLORS;
@@ -131,6 +131,7 @@ export class VuMeter implements Destroyable, VuMeterApi {
         ...config.style,
       },
     };
+    this.normalizeConfig();
     this.createDom();
     if (this._source) {
       this._sourceBreaker.break();
@@ -146,6 +147,16 @@ export class VuMeter implements Destroyable, VuMeterApi {
     this._isExternalSource = true;
     this.wireSource(source);
     this._source = source;
+  }
+
+  private normalizeConfig() {
+    if (this._config.scale === VuMeterScale.NORDIC) {
+      this._config.scaleOffsetDb = 18;
+      this._config.scaleStepDb = 3;
+    }
+    if (this._config.theme === VuMeterTheme.LED) {
+      this._config.rangeMinDb = Math.round(this._config.rangeMinDb / this._config.scaleStepDb) * this._config.scaleStepDb;
+    }
   }
 
   private createDom() {

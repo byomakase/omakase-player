@@ -44,6 +44,7 @@ export class SlateMainMedia extends BaseMainMedia<SlateMainMediaState> {
   protected _state(): SlateMainMediaState {
     return {
       id: this._id,
+      entityType: this._entityType,
       mediaType: this._mediaType,
       mainMediaType: this._mainMediaType,
       loadOptions: this._loadOptions,

@@ -16,7 +16,8 @@
 
 import type {Observable} from 'rxjs';
 import type {TimedItem} from '../../media';
-import type {TrackGenerationOptions} from '../track-load-options';
+
+import type {TrackGenerationOptions} from '../track-generation-options';
 
 export interface TrackTimedItems<TI> {
   trackLabel: string;

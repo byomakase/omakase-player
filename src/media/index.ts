@@ -18,8 +18,6 @@ export * from './track';
 export * from './media-container-track';
 export * from './main-media';
 export * from './main-media-session-controller';
-export * from './media-entity';
-export * from './relation';
 export * from './video';
 export * from './audio';
 export * from './text-track';

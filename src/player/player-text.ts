@@ -15,7 +15,7 @@
  */
 
 import {PlayerTrackEventType} from './player-track';
-import {type MainMediaState, RelationType, type TextTrack, type TextTrackState, type TextTrackUpdateableAttrs, type TrackState, TrackType} from '../media';
+import {type MainMediaState, type TextTrack, type TextTrackState, type TextTrackUpdateableAttrs, type TrackState, TrackType} from '../media';
 import {type PlayerTextApi, type PlayerTextEvent, PlayerTextEventType, type PlayerTextInternalApi, PlayerTextMode, type PlayerTextState} from './player-text-api';
 import type {Destroyable} from '../common/capabilities';
 import {concat, filter, forkJoin, Observable, observeOn, queueScheduler, Subject, takeUntil} from 'rxjs';
@@ -31,6 +31,7 @@ import {type PlayerTextTrackHandlerApi, type TextTrackHandlerApi, TextTrackHandl
 import {PlayerMainTextTrack, PlayerSidecarTextTrack, PlayerTextHandlerType, type PlayerTextTrack, type PlayerTextTrackLoadOptions} from './player-text-track';
 import {PlayerAudioType} from './player-audio';
 import type {OmpProvider} from '../omp-provider';
+import {RelationType} from '../relation';
 
 export interface PlayerTextConfig {
   textMode: PlayerTextMode;

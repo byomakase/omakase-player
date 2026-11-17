@@ -201,5 +201,7 @@ export class OmakasePlayerDetached extends BaseOmakasePlayer implements OmakaseP
     this._chroming.destroy();
     this._remoteNode.destroy();
     this._ompProvider.destroy();
+
+    this.releaseAudioContextProvider();
   }
 }

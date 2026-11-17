@@ -18,6 +18,7 @@ import {filter, Subject, takeUntil, type Observable} from 'rxjs';
 import {type MarkerState, MarkerTrack, type MarkerTrackState} from '../media';
 import type {Destroyable} from '../common/capabilities';
 import {ObserverBreaker} from '../common/observer-breaker';
+import {TrackRepositoryEventType} from '../repository/track-repository';
 import {freeObserver} from '../util/rxjs-util';
 import {ChromingMarkerBarElementEventType} from '../chroming/chroming-marker-bar';
 import type {OmakaseMarkerBar} from '../chroming/components/omakase-marker-bar';
@@ -245,6 +246,7 @@ interface ControlBarMarkerBarEntry {
 
 export class ControlBarMarkerBar implements ControlBarMarkerBarApi, Destroyable {
   private _markerBars: ControlBarMarkerBarEntry[] = [];
+  private _destroyBreaker = new ObserverBreaker();
 
   /**
    * @param _controlBarElement The control bar element, holding the `<omakase-marker-bars>` elements
@@ -281,6 +283,49 @@ export class ControlBarMarkerBar implements ControlBarMarkerBarApi, Destroyable 
     }
     markerBar.markerTracks = markerTracks;
 
+    return this.createHandler(markerBar, markerBarsElement);
+  }
+
+  /**
+   * Adds the marker bars declared in the control bar template, as `<omakase-marker-bar>` children of `<omakase-marker-bars>`.
+   * Each one shows the marker track given by its `marker-track-id` attribute, while that track is added to the player
+   */
+  _addDeclaredMarkerBars(): void {
+    const declared: {handler: ControlBarMarkerBarHandler; trackId: MarkerTrack['id']}[] = [];
+    this._controlBarElement.querySelectorAll('omakase-marker-bars').forEach((markerBarsElement) => {
+      if (!(markerBarsElement instanceof OmakaseMarkerBars)) {
+        return;
+      }
+      for (const markerBar of markerBarsElement.adoptMarkerBars()) {
+        const handler = this.createHandler(markerBar, markerBarsElement);
+        const trackId = markerBar.markerTrackId;
+        if (trackId) {
+          declared.push({handler, trackId});
+          if (this.getMarkerTrackState(trackId)) {
+            handler.addTrack(trackId);
+          }
+        }
+      }
+    });
+
+    if (declared.length === 0) {
+      return;
+    }
+    this._track.onEvent$.pipe(takeUntil(this._destroyBreaker.observer)).subscribe((event) => {
+      const trackId = event.data.trackState.id;
+      for (const markerBar of declared.filter((markerBar) => markerBar.trackId === trackId && this._markerBars.some(({handler}) => handler === markerBar.handler))) {
+        if (event.type === TrackRepositoryEventType.TRACK_ADDED) {
+          if (this.getMarkerTrackState(trackId)) {
+            markerBar.handler.addTrack(trackId);
+          }
+        } else if (event.type === TrackRepositoryEventType.TRACK_DELETED) {
+          markerBar.handler.removeTrack(trackId);
+        }
+      }
+    });
+  }
+
+  private createHandler(markerBar: OmakaseMarkerBar, markerBarsElement: OmakaseMarkerBars): ControlBarMarkerBarHandler {
     const handler = new ControlBarMarkerBarHandler(markerBar, (track) => this.getMarkerTrackState(track));
     this._markerBars.push({handler, markerBars: markerBarsElement});
     return handler;
@@ -310,6 +355,7 @@ export class ControlBarMarkerBar implements ControlBarMarkerBarApi, Destroyable 
   }
 
   destroy(): void {
+    this._destroyBreaker.destroy();
     this._markerBars.forEach(({handler}) => handler.destroy());
     this._markerBars = [];
   }

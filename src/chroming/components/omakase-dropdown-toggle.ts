@@ -32,7 +32,8 @@ export class OmakaseDropdownToggle extends HTMLElement {
   }
 
   private _dropdown?: OmakaseDropdown | undefined;
-  private _span?: HTMLSpanElement;
+  private _span?: HTMLSpanElement | undefined;
+  private _titleListener?: () => void;
 
   get span(): HTMLSpanElement | undefined {
     return this._span;
@@ -70,14 +71,27 @@ export class OmakaseDropdownToggle extends HTMLElement {
     super();
   }
 
+  showLabel() {
+    this._span = document.createElement('span');
+    this._span.classList.add('omakase-dropdown-toggle');
+    this.replaceChildren(this._span);
+    this.setLabel(this._dropdown?.displayLabel);
+  }
+
+  showContent(content: HTMLElement[]) {
+    this._span = undefined;
+    this.removeAttribute('title');
+    this.replaceChildren(...content);
+  }
+
   connectedCallback() {
     this._bindDropdown();
     if (!this.children.length) {
-      this._span = document.createElement('span');
-      this._span.classList.add('omakase-dropdown-toggle');
-      this.setLabel(this._dropdown?.displayLabel);
-      this.appendChild(this._span);
-      this.addEventListener('mouseenter', () => this.updateTitle());
+      this.showLabel();
+    }
+    if (!this._titleListener) {
+      this._titleListener = () => this.updateTitle();
+      this.addEventListener('mouseenter', this._titleListener);
     }
     this.onclick = (event) => {
       if (this.isDisabled) {

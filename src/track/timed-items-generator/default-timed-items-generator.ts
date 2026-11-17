@@ -26,7 +26,6 @@ import {
   TimedItemTemporalType,
   type TrackTimedItem,
 } from '../../media';
-import type {TrackGenerationOptions} from '../track-load-options';
 import {BaseTimedItemsGenerator, type TrackTimedItems} from './timed-items-generator';
 import {Observable} from 'rxjs';
 import {AudioSampleExtractor, type AudioTrackSample} from '../../tools/audio-sample-extractor';
@@ -36,6 +35,7 @@ import type {AudioSample} from 'mediabunny';
 import {OmpError} from '../../types';
 import {errorCompleteObserver, nextCompleteObserver} from '../../util/rxjs-util';
 import {AudioUtil} from '../../audio/audio-util';
+import type {TrackGenerationOptions} from '../track-generation-options';
 
 export abstract class DefaultTimedItemsGenerator<TI extends TimedItem, I> extends BaseTimedItemsGenerator<TI> {
   protected constructor(url: string, generationOptions?: TrackGenerationOptions | undefined) {
@@ -222,7 +222,7 @@ export abstract class AudioObservationItemsGenerator extends DefaultTimedItemsGe
           }
         },
         complete: () => {
-          const channelKeys = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+          const channelKeys = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'];
 
           const trackTimedItems = [...stateByTrack.keys()]
             .sort((a, b) => a - b)
@@ -233,7 +233,7 @@ export abstract class AudioObservationItemsGenerator extends DefaultTimedItemsGe
               const channelObservations = channelKeys
                 .filter((key, index) => (allChannelsRequired || (channels instanceof Array && channels.includes(index + 1))) && state.channelObservations.has(key))
                 .map<TrackTimedItems<Observation>>((key) => ({
-                  trackLabel: `${key} ${observationType.toLowerCase()}`,
+                  trackLabel: `${key.toUpperCase()} ${observationType.toLowerCase()}`,
                   timedItems: state.channelObservations.get(key)!,
                 }));
 

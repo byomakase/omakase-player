@@ -17,7 +17,7 @@
 import {map, Observable, of, switchMap, takeUntil, tap} from 'rxjs';
 import {type FrameRateModel, FrameRateResolver} from '../common/frame-rate';
 import {type LoadMainMediaArgsType, PlayerControllerEventType, type PlayerDomController} from '../player/player-controller-api';
-import {type MainMediaState, Relation, RelationType, ThumbnailTrack} from '../media';
+import {type MainMediaState, ThumbnailTrack} from '../media';
 import {FileFormatType} from '../common';
 import {UrlSource} from '../source';
 import {TimedItemsFetcherFactory} from '../track/timed-items-fetcher';
@@ -28,6 +28,7 @@ import {FrameImageManifest} from './frame-image-manifest';
 import {FrameImageLookupFactory} from './frame-image-lookup';
 import type {FrameImageRenderer} from './frame-image-renderer';
 import {FrameImageTrack} from './frame-image-track';
+import {Relation, RelationType} from '../relation';
 import {FRAME_IMAGE_CONFIG_DEFAULT, type FrameImageConfig} from './frame-image-window';
 
 export interface FrameImagePlayerControllerConfig extends VirtualPlayerControllerConfig {

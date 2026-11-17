@@ -84,6 +84,8 @@ const configDefault: TimelineConfig = {
   scrubberClickSeek: true,
   timecodeClickEdit: true,
 
+  alwaysFollowPlayhead: false,
+
   descriptionPaneVisible: true,
 
   liveButtonVisible: false,
@@ -1602,6 +1604,31 @@ export class TimelineImpl implements TimelineApi, Destroyable {
     this._scrollWithPlayhead = isInVisiblePositionRange && !isInBeforeTimecodedView;
   }
 
+  setAlwaysFollowPlayhead(enabled: boolean): void {
+    this._config.alwaysFollowPlayhead = enabled;
+    if (enabled && this._player.isMainMediaLoaded) {
+      this.followPlayheadIfNeeded();
+    }
+  }
+
+  private isTimelineDragging(): boolean {
+    return [this._headerSlot, this._mainSlot, this._footerSlot].some((slot) => slot._timecodedFloatingGroup.isDragging());
+  }
+
+  /**
+   * Scrolls the playhead to the left edge when it's out of view and following is on — always with
+   * {@link TimelineConfig.alwaysFollowPlayhead}, otherwise only while {@link _scrollWithPlayhead} is latched.
+   */
+  private followPlayheadIfNeeded() {
+    let follow = this._config.alwaysFollowPlayhead ? !this.isTimelineDragging() : this._scrollWithPlayhead;
+    if (follow && !this.isPlayheadInTimecodedView() && !this._syncTimelineWithPlayheadInProgress) {
+      this._syncTimelineWithPlayheadInProgress = true;
+      this.syncTimelineWithPlayhead().subscribe((result) => {
+        this._syncTimelineWithPlayheadInProgress = false;
+      });
+    }
+  }
+
   private syncTimelineWithPlayhead(): Observable<number> {
     return new Observable<number>((o$) => {
       this.scrollToPositionEased(-this._playhead.getPlayheadPosition())
@@ -2102,12 +2129,7 @@ export class TimelineImpl implements TimelineApi, Destroyable {
   }
 
   private doPlaybackProgress() {
-    if (this._scrollWithPlayhead && !this.isPlayheadInTimecodedView() && !this._syncTimelineWithPlayheadInProgress) {
-      this._syncTimelineWithPlayheadInProgress = true;
-      this.syncTimelineWithPlayhead().subscribe((result) => {
-        this._syncTimelineWithPlayheadInProgress = false;
-      });
-    }
+    this.followPlayheadIfNeeded();
 
     if (!this._timecodeEdit) {
       this.refreshTimecode();
@@ -2933,7 +2955,8 @@ export class TimelineImpl implements TimelineApi, Destroyable {
       this.hideThumbnailHover();
       let targetWidth = this.style.thumbnailHoverWidth;
       this._thumbnailHoverWrapper.thumbnail = thumbnail;
-      this._thumbnailHoverWrapper.thumbnailImg?.loadImage(ImageUtil.createKonvaImageSizedByWidth(thumbnail.url, targetWidth, AuthConfig.authentication)).subscribe((event) => {
+      const auth = AuthConfig.authentication;
+      this._thumbnailHoverWrapper.thumbnailImg?.loadImage(ImageUtil.createKonvaImageSizedByWidth(thumbnail.url, targetWidth, auth), !!auth).subscribe((event) => {
         let position = resolveThumbnailHoverPosition();
         if (position) {
           this._thumbnailHoverWrapper.setPosition(position);

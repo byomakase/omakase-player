@@ -14,12 +14,15 @@
  * limitations under the License.
  */
 
+import {MainMediaType} from '../media';
 import {BasePlayerPlaybackEngine, type PlayerPlaybackEngine} from '../player/player-playback-engine';
 import type {PlayerController} from '../player';
 
-export interface AudioFilePlayerPlaybackEngine extends PlayerPlaybackEngine {}
+export interface AudioFilePlayerPlaybackEngine extends PlayerPlaybackEngine<MainMediaType.AUDIO_FILE> {}
 
-export class AudioFilePlayerPlaybackEngineImpl extends BasePlayerPlaybackEngine implements AudioFilePlayerPlaybackEngine {
+export class AudioFilePlayerPlaybackEngineImpl extends BasePlayerPlaybackEngine<MainMediaType.AUDIO_FILE> implements AudioFilePlayerPlaybackEngine {
+  readonly mainMediaType = MainMediaType.AUDIO_FILE;
+
   constructor(playerController: PlayerController) {
     super(playerController);
   }

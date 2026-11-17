@@ -39,6 +39,7 @@ import lightPlaceholder from './../../../assets/images/thumbnail-placeholder-lig
 // @ts-ignore
 import darkPlaceholder from './../../../assets/images/thumbnail-placeholder-dark.svg?raw';
 import {BaseTrackLane, type TrackLaneConfig} from '../track-lane';
+import {BlobUtil} from '../../util/blob/blob-util';
 
 export interface ThumbnailTrackLaneStyle extends TimelineLaneStyle {
   thumbnailHeight?: Size;
@@ -88,6 +89,9 @@ class ThumbnailWrapper implements Destroyable {
   private _placeholderImg: ThumbnailImg;
   private _placeholderAnimation: Konva.Animation | undefined;
   private _placeholderRetired = false;
+  private _visible = true;
+  // thumbnail is mutated in place on update, so the loaded url is tracked separately
+  private _loadedUrl?: string;
 
   private _style: ThumbnailTrackLaneStyle;
   private _thumbnailHeight: number;
@@ -111,7 +115,8 @@ class ThumbnailWrapper implements Destroyable {
     // thumbnail still loads and appears via loadThumbnailImage() below, just without a pulsing
     // placeholder in front of it while it does.
     if (placeholderUrl) {
-      this._placeholderImg.loadImage(ImageUtil.createKonvaImageSizedByHeight(placeholderUrl, thumbnailHeight, AuthConfig.authentication)).subscribe((image) => {
+      const auth = AuthConfig.authentication;
+      this._placeholderImg.loadImage(ImageUtil.createKonvaImageSizedByHeight(placeholderUrl, thumbnailHeight, auth), !!auth).subscribe((image) => {
         this._placeholderAnimation = pulseAnimation({node: image});
       });
     }
@@ -139,12 +144,15 @@ class ThumbnailWrapper implements Destroyable {
   }
 
   private loadThumbnailImage() {
-    let thumbnailTrackImageLoader = ImageUtil.createKonvaImageSizedByHeight(this._thumbnail.url, this._thumbnailHeight, AuthConfig.authentication);
+    this._loadedUrl = this._thumbnail.url;
+    const auth = AuthConfig.authentication;
+    let thumbnailTrackImageLoader = ImageUtil.createKonvaImageSizedByHeight(this._thumbnail.url, this._thumbnailHeight, auth);
 
-    this._thumbnailTrackImg.loadImage(thumbnailTrackImageLoader).subscribe({
+    this._thumbnailTrackImg.loadImage(thumbnailTrackImageLoader, !!auth).subscribe({
       next: () => {
         this._stopPlaceholderAnimation();
-        this.updateVisible(true);
+        // respect visibility set by lane culling while image was loading
+        this.updateVisible(this._visible);
         this._retirePlaceholder();
       },
       error: () => {
@@ -152,7 +160,7 @@ class ThumbnailWrapper implements Destroyable {
       },
       complete: () => {
         this._stopPlaceholderAnimation();
-      }
+      },
     });
   }
 
@@ -163,7 +171,9 @@ class ThumbnailWrapper implements Destroyable {
 
   updateThumbnail(thumbnail: Thumbnail) {
     this._thumbnail = thumbnail;
-    this.loadThumbnailImage();
+    if (thumbnail.url !== this._loadedUrl) {
+      this.loadThumbnailImage();
+    }
   }
 
   updateStyle(style: ThumbnailTrackLaneStyle) {
@@ -179,7 +189,8 @@ class ThumbnailWrapper implements Destroyable {
       return;
     }
 
-    this._placeholderImg.loadImage(ImageUtil.createKonvaImageSizedByHeight(placeholderUrl, this._thumbnailHeight, AuthConfig.authentication)).subscribe((image) => {
+    const auth = AuthConfig.authentication;
+    this._placeholderImg.loadImage(ImageUtil.createKonvaImageSizedByHeight(placeholderUrl, this._thumbnailHeight, auth), !!auth).subscribe((image) => {
       if (this._placeholderRetired) {
         return;
       }
@@ -189,11 +200,13 @@ class ThumbnailWrapper implements Destroyable {
   }
 
   updateVisible(visible: boolean) {
+    this._visible = visible;
     this._placeholderImg.setVisible(visible);
     this._thumbnailTrackImg.setVisible(visible);
   }
 
   updateVisibleAndX(visible: boolean, x: number) {
+    this._visible = visible;
     this._placeholderImg.setVisibleAndX(visible, x);
     this._thumbnailTrackImg.setVisibleAndX(visible, x);
   }
@@ -256,6 +269,7 @@ export class ThumbnailTrackLane extends BaseTrackLane<ThumbnailTrackLaneConfig, 
 
   protected _placeholderImageUrl?: string;
   protected _placeholderKonvaImage?: Konva.Image | undefined;
+  protected _placeholderKonvaImageIsBlob: boolean = false;
 
   protected _currentThumbnailWrapper: ThumbnailWrapper | undefined;
   protected _thumbnailHoverWrapper: ThumbnailHoverWrapper;
@@ -350,7 +364,14 @@ export class ThumbnailTrackLane extends BaseTrackLane<ThumbnailTrackLaneConfig, 
     let placeholderImageUrl = this.resolvePlaceholderImageUrl();
     if (placeholderImageUrl !== this._placeholderImageUrl) {
       this._placeholderImageUrl = placeholderImageUrl;
-      this._placeholderKonvaImage = undefined;
+      if (this._placeholderKonvaImage) {
+        if (this._placeholderKonvaImageIsBlob) {
+          this.destroyKonvaImage(this._placeholderKonvaImage);
+        } else {
+          this._placeholderKonvaImage.destroy();
+        }
+        this._placeholderKonvaImage = void 0;
+      }
 
       this._thumbnailWrappers.forEach((wrapper) => wrapper.updatePlaceholderImage(placeholderImageUrl));
     }
@@ -437,10 +458,11 @@ export class ThumbnailTrackLane extends BaseTrackLane<ThumbnailTrackLaneConfig, 
       // Placeholder availability never gates real thumbnail rendering: an unset placeholderImageUrl
       // (no custom URL, no theme default) or a failed load just means thumbnails render without a
       // pulsing placeholder in front of them while they load, not that they don't render at all.
+      const auth = AuthConfig.authentication;
       let placeholderImageLoader$: Observable<Konva.Image | undefined> = this._placeholderKonvaImage
         ? of(this._placeholderKonvaImage)
         : this._placeholderImageUrl
-          ? ImageUtil.createKonvaImageSizedByHeight(this._placeholderImageUrl, this.effectiveThumbnailHeight, AuthConfig.authentication).pipe(
+          ? ImageUtil.createKonvaImageSizedByHeight(this._placeholderImageUrl, this.effectiveThumbnailHeight, auth).pipe(
               catchError((err) => {
                 console.debug(`Could not load thumbnail placeholder image: ${this._placeholderImageUrl}`, err);
                 return of(undefined);
@@ -455,6 +477,7 @@ export class ThumbnailTrackLane extends BaseTrackLane<ThumbnailTrackLaneConfig, 
           next: ([thumbnailDimension, placeholderKonvaImage]) => {
             this._thumbnailDimension = thumbnailDimension;
             this._placeholderKonvaImage = placeholderKonvaImage;
+            this._placeholderKonvaImageIsBlob = !!auth;
 
             this.createMissingThumbnails();
           },
@@ -607,11 +630,17 @@ export class ThumbnailTrackLane extends BaseTrackLane<ThumbnailTrackLaneConfig, 
           // } else {
           //   imageSub$ = ImageUtil.createKonvaImageSizedByHeight(firstCue.url, this.style.thumbnailHeight, AuthConfig.authentication);
           // }
-          imageSub$ = ImageUtil.createKonvaImageSizedByHeight(first.url, this.effectiveThumbnailHeight, AuthConfig.authentication);
+          const auth = AuthConfig.authentication;
+          imageSub$ = ImageUtil.createKonvaImageSizedByHeight(first.url, this.effectiveThumbnailHeight, auth);
           imageSub$.subscribe({
-            next: (image) => {
+            next: (konvaImage) => {
+              const width = konvaImage.getSize().width;
+              if (auth) {
+                this.destroyKonvaImage(konvaImage);
+              }
+
               nextCompleteObserver(observable, {
-                width: image.getSize().width,
+                width,
                 height: this.effectiveThumbnailHeight,
               });
             },
@@ -765,6 +794,10 @@ export class ThumbnailTrackLane extends BaseTrackLane<ThumbnailTrackLaneConfig, 
         thumbnailWrapper.updateThumbnail(updatedThumbnail);
       }
     });
+
+    // temporal changes can move items in or out of the visible range and change overlap culling of neighbours
+    this.createMissingThumbnails();
+    this.adjustThumbnails();
   }
 
   private handleTimedItemsDeleted(timedItemStates: TimedItemState[]) {
@@ -776,6 +809,10 @@ export class ThumbnailTrackLane extends BaseTrackLane<ThumbnailTrackLaneConfig, 
         this._thumbnailWrappers.delete(timedItemState.id);
       }
     });
+
+    // neighbours previously culled by overlap with deleted items may become visible
+    this.createMissingThumbnails();
+    this.adjustThumbnails();
   }
 
   /** See the {@link TimelineEventType.TIMELINE_LIVE_ORIGIN_ADVANCED} subscription in prepareForTimeline(). */
@@ -818,7 +855,8 @@ export class ThumbnailTrackLane extends BaseTrackLane<ThumbnailTrackLaneConfig, 
         let targetWidth = thumbnailWrapper.thumbnailTrackImg.image.width() * this.style.thumbnailHoverScale;
         this._thumbnailHoverWrapper.thumbnail = thumbnailWrapper.thumbnail;
 
-        this._thumbnailHoverWrapper.thumbnailImg?.loadImage(ImageUtil.createKonvaImageSizedByWidth(thumbnailWrapper.thumbnail.url, targetWidth, AuthConfig.authentication)).subscribe((event) => {
+        const auth = AuthConfig.authentication;
+        this._thumbnailHoverWrapper.thumbnailImg?.loadImage(ImageUtil.createKonvaImageSizedByWidth(thumbnailWrapper.thumbnail.url, targetWidth, auth), !!auth).subscribe((event) => {
           let position = resolveThumbnailHoverPosition();
           if (position) {
             this._thumbnailHoverWrapper.setPosition(position);
@@ -835,6 +873,14 @@ export class ThumbnailTrackLane extends BaseTrackLane<ThumbnailTrackLaneConfig, 
     this._currentThumbnailWrapper = void 0;
   }
 
+  private destroyKonvaImage(konvaImage: Konva.Image): void {
+    const image = konvaImage.image();
+    if (image && 'src' in image) {
+      BlobUtil.revokeObjectURL(image.src);
+    }
+    konvaImage.destroy();
+  }
+
   get onEvent$(): Observable<ThumbnailTrackLaneEvent> {
     return this._onEvent$.asObservable();
   }
@@ -846,6 +892,15 @@ export class ThumbnailTrackLane extends BaseTrackLane<ThumbnailTrackLaneConfig, 
 
     this._thumbnailWrappers.forEach((p) => p.destroy());
     this._thumbnailWrappers.clear();
+
+    if (this._placeholderKonvaImage) {
+      if (this._placeholderKonvaImageIsBlob) {
+        this.destroyKonvaImage(this._placeholderKonvaImage);
+      } else {
+        this._placeholderKonvaImage.destroy();
+      }
+      this._placeholderKonvaImage = void 0;
+    }
 
     this._eventsBreaker.destroy();
 

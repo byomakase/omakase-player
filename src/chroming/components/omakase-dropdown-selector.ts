@@ -34,13 +34,19 @@ export const OmakaseDropdownSelectorAttributes = {
   CARET: 'caret',
   TOGGLE_BACKGROUND: 'toggle-background',
   EXPAND_DIRECTION: 'expand-direction',
+  REPRESENTATION: 'representation',
+  OPTION_ALIGNMENT: 'option-alignment',
 };
 
 export type OmakaseDropdownSelectorExpandDirection = 'left' | 'right';
+export type OmakaseDropdownSelectorRepresentation = 'icon' | 'label';
 
 export const OmakaseDropdownSelectorDomClasses = {
   SELECTOR: 'omakase-dropdown-selector',
+  OPTION_ALIGNMENT_PREFIX: 'align',
 };
+
+const optionAlignments: OmakaseDropdownAlignment[] = ['left', 'center', 'right'];
 
 export const OmakaseDropdownSelectorSlots = {
   TOGGLE: 'toggle',
@@ -54,6 +60,8 @@ export abstract class OmakaseDropdownSelector extends ControlBarComponent(HTMLEl
   private _dropdownLists: OmakaseDropdownList[] = [];
   private _toggle: OmakaseDropdownToggle | undefined;
   private _toggleContent: HTMLElement[] = [];
+  private _slottedToggleContent: HTMLElement[] = [];
+  private _defaultToggle: HTMLElement | undefined;
   private _unavailable = false;
   protected _playerBreaker = new ObserverBreaker();
   protected _connectionBreaker = new ObserverBreaker();
@@ -63,6 +71,18 @@ export abstract class OmakaseDropdownSelector extends ControlBarComponent(HTMLEl
 
   /** Class set on the rendered `omakase-dropdown`. */
   protected abstract readonly dropdownClass: string;
+
+  /**
+   * Class of the icon shown by the default toggle in the `icon` representation.
+   */
+  protected readonly toggleIconClass: string | undefined = undefined;
+
+  /** Alignment of the options when the `option-alignment` attribute isn't set. */
+  protected readonly defaultOptionAlignment: OmakaseDropdownAlignment = 'left';
+
+  static get observedAttributes(): string[] {
+    return [...super.observedAttributes, OmakaseDropdownSelectorAttributes.REPRESENTATION, OmakaseDropdownSelectorAttributes.OPTION_ALIGNMENT];
+  }
 
   /** Markup of the `omakase-dropdown-list`s, given the id of the dropdown they're in. */
   protected abstract renderDropdownLists(dropdownId: string): string;
@@ -111,6 +131,10 @@ export abstract class OmakaseDropdownSelector extends ControlBarComponent(HTMLEl
     super.attributeChangedCallback(name, oldValue, newValue);
     if (name === ControlBarComponentAttributes.DISABLED) {
       this.updateDisabled();
+    } else if (name === OmakaseDropdownSelectorAttributes.REPRESENTATION && this._toggle) {
+      this.updateToggleContent();
+    } else if (name === OmakaseDropdownSelectorAttributes.OPTION_ALIGNMENT) {
+      this.updateOptionAlignment();
     }
   }
 
@@ -148,7 +172,7 @@ export abstract class OmakaseDropdownSelector extends ControlBarComponent(HTMLEl
     return this._toggle;
   }
 
-  /** The elements given in the `toggle` slot. */
+  /** The elements shown in the toggle: those given in the `toggle` slot, else the default icon button, if shown. */
   get toggleContent(): HTMLElement[] {
     return this._toggleContent;
   }
@@ -156,6 +180,28 @@ export abstract class OmakaseDropdownSelector extends ControlBarComponent(HTMLEl
   get alignment(): OmakaseDropdownAlignment {
     const alignment = this.getAttribute(OmakaseDropdownSelectorAttributes.ALIGNMENT);
     return alignment === 'left' || alignment === 'right' ? alignment : 'center';
+  }
+
+  /**
+   * `icon` (the default for selectors that have an icon) shows the selector's icon in the toggle, `label` shows the
+   * selected option's label. Ignored when content is given in the `toggle` slot.
+   */
+  get representation(): OmakaseDropdownSelectorRepresentation {
+    return this.toggleIconClass && this.getAttribute(OmakaseDropdownSelectorAttributes.REPRESENTATION) !== 'label' ? 'icon' : 'label';
+  }
+
+  set representation(representation: OmakaseDropdownSelectorRepresentation) {
+    this.setAttribute(OmakaseDropdownSelectorAttributes.REPRESENTATION, representation);
+  }
+
+  /** Horizontal alignment of the options (and the list titles) inside the dropdown. */
+  get optionAlignment(): OmakaseDropdownAlignment {
+    const alignment = this.getAttribute(OmakaseDropdownSelectorAttributes.OPTION_ALIGNMENT) as OmakaseDropdownAlignment | null;
+    return alignment && optionAlignments.includes(alignment) ? alignment : this.defaultOptionAlignment;
+  }
+
+  set optionAlignment(optionAlignment: OmakaseDropdownAlignment) {
+    this.setAttribute(OmakaseDropdownSelectorAttributes.OPTION_ALIGNMENT, optionAlignment);
   }
 
   get caret(): boolean {
@@ -241,9 +287,10 @@ export abstract class OmakaseDropdownSelector extends ControlBarComponent(HTMLEl
     const containerRight = this.getAttribute(OmakaseDropdownSelectorAttributes.CONTAINER_RIGHT);
     const dropdownClass = [this.dropdownClass, this.getAttribute(OmakaseDropdownSelectorAttributes.DROPDOWN_CLASS)].filter(Boolean).join(' ');
     const toggleClass = this.getAttribute(OmakaseDropdownSelectorAttributes.TOGGLE_CLASS);
-    this._toggleContent = Array.from(this.querySelectorAll<HTMLElement>(`:scope > [slot="${OmakaseDropdownSelectorSlots.TOGGLE}"]`));
+    this._slottedToggleContent = Array.from(this.querySelectorAll<HTMLElement>(`:scope > [slot="${OmakaseDropdownSelectorSlots.TOGGLE}"]`));
     // a plain media-chrome-button given as the toggle is styled like the control bar buttons
-    this._toggleContent.filter((element) => element.localName === 'media-chrome-button').forEach((element) => element.classList.add(ControlBarComponentClasses.MEDIA_CHROME_BUTTON));
+    this._slottedToggleContent.filter((element) => element.localName === 'media-chrome-button').forEach((element) => element.classList.add(ControlBarComponentClasses.MEDIA_CHROME_BUTTON));
+    this._toggleContent = this.getToggleContent();
 
     // Built detached, so the slotted content is in the toggle before the toggle connects (it only adds its label span when empty).
     // omakase-dropdown and omakase-dropdown-list read their children on connect, and the toggle looks the dropdown up
@@ -262,6 +309,52 @@ export abstract class OmakaseDropdownSelector extends ControlBarComponent(HTMLEl
     this._toggle = this.querySelector<OmakaseDropdownToggle>('omakase-dropdown-toggle')!;
     // runs after the toggle's own click handler, which positions the dropdown horizontally, and vertically when below
     this._toggle.addEventListener('click', () => this.positionDropdown());
+    this.updateOptionAlignment();
+  }
+
+  /** What the toggle shows: the slotted content, else the default icon button, else nothing (the toggle then shows the label). */
+  private getToggleContent(): HTMLElement[] {
+    if (this._slottedToggleContent.length) {
+      return this._slottedToggleContent;
+    }
+    return this.representation === 'icon' ? [this.getDefaultToggle()] : [];
+  }
+
+  private getDefaultToggle(): HTMLElement {
+    if (!this._defaultToggle) {
+      this._defaultToggle = document.createElement('media-chrome-button');
+      this._defaultToggle.slot = OmakaseDropdownSelectorSlots.TOGGLE;
+      this._defaultToggle.classList.add(ControlBarComponentClasses.MEDIA_CHROME_BUTTON);
+      const icon = document.createElement('span');
+      icon.classList.add(this.toggleIconClass!);
+      this._defaultToggle.appendChild(icon);
+    }
+    return this._defaultToggle;
+  }
+
+  /** Switches the toggle between the default icon and the label when the representation changes after rendering. */
+  private updateToggleContent() {
+    if (!this._toggle || this._slottedToggleContent.length) {
+      return;
+    }
+    const content = this.getToggleContent();
+    if (content.length === this._toggleContent.length && content.every((element, i) => element === this._toggleContent[i])) {
+      return;
+    }
+    this._toggleContent = content;
+    if (content.length) {
+      this._toggle.showContent(content);
+    } else {
+      this._toggle.showLabel();
+    }
+    this.updateDisabled();
+  }
+
+  private updateOptionAlignment() {
+    const alignment = this.optionAlignment;
+    this._dropdownLists.forEach((list) => {
+      optionAlignments.forEach((value) => list.classList.toggle(`${OmakaseDropdownSelectorDomClasses.OPTION_ALIGNMENT_PREFIX}-${value}`, value === alignment));
+    });
   }
 
   /**

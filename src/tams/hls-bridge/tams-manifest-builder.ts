@@ -68,8 +68,6 @@ export function buildTamsSources(tamsMediaData: TamsMediaData, playback: TamsPla
       continue;
     }
 
-    logFlowTimeline(flowObj, segments, playableSegments);
-
     const m3u8Segments = playableSegments.map((playable) => playable.segment);
     const hasInitSegment = m3u8Segments.some((segment) => segment.map !== undefined);
     const metadata = toPlaylistMetadata(playback, mediaSequences?.get(flowId) ?? 0, resolveProgramDateTime(playableSegments[0]!.source), hasInitSegment);
@@ -116,19 +114,6 @@ function toPlaylistMetadata(playback: TamsPlayback, mediaSequence: number, progr
 function resolveProgramDateTime(firstSegment: FlowSegment): string | undefined {
   const start = TimeRangeUtil.parseTimeRange(firstSegment.timerange).start;
   return start ? TimeRangeUtil.timeMomentToDate(start).toISOString() : undefined;
-}
-
-function logFlowTimeline(flow: Flow, segments: FlowSegment[], renderedSegments: PlayableSegment[]): void {
-  const start = segments[0] ? TimeRangeUtil.parseTimeRange(segments[0].timerange).start : undefined;
-  const end = segments[segments.length - 1] ? TimeRangeUtil.parseTimeRange(segments[segments.length - 1]!.timerange).end : undefined;
-
-  console.debug(
-    `[tams] flow ${flow.id} (${flow.format})`,
-    `segments=${segments.length}`,
-    `rendered=${renderedSegments.length}`,
-    `gaps=${renderedSegments.filter((rendered) => rendered.segment.uri === NON_PLAYABLE_GAP_URI).length}`,
-    `span=${start ? TimeRangeUtil.formatTimeMomentExpr(start) : '?'}..${end ? TimeRangeUtil.formatTimeMomentExpr(end) : '?'}`
-  );
 }
 
 function boundOpenSegmentEnds(segments: FlowSegment[]): FlowSegment[] {

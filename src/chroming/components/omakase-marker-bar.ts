@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {filter, isObservable, merge, Observable, of, Subject, takeUntil, zip} from 'rxjs';
+import {filter, isObservable, merge, Observable, of, Subject, switchMap, take, takeUntil, timeout, zip} from 'rxjs';
 import {ObserverBreaker} from '../../common/observer-breaker';
 import {MarkerType, TimedItemTemporalUtil, type Marker, type MarkerState, type MarkerTrackState, type TimedItemTemporal} from '../../media';
 import {CryptoUtil} from '../../util/crypto-util';
@@ -27,16 +27,21 @@ import {
 } from '../chroming-marker-bar';
 import {TimedItemTemporalType, type MomentTemporal, type SpanTemporal} from '../../media';
 import {DomUtil} from '../../dom/dom-util';
-import {affectsStyledElement, Ui, type StyledElement} from '../../ui';
+import {affectsStyledElement, isPresentedAsMomentMarker, Ui, type StyledElement} from '../../ui';
 import type {UiProxy} from '../../remoting/impl/ui-proxy';
 import Decimal from 'decimal.js';
 import {isNullOrUndefined} from '../../util/util-functions';
 import type {UiLiveModel} from '../../live/live-model';
+import type {MarkerSymbolResourceResolver} from '../marker-symbol-resource-resolver';
+import type {ResourceEntity} from '../../entity';
+
+const CUSTOM_MARKER_SYMBOL_TIMEOUT_MS = 5000;
 
 export const OmakaseMarkerTrackAttributes = {
   OMAKASE: 'omakase',
-  MEDIA_DURATION: 'mediaduration',
+  DURATION: 'duration',
   MARKER_ID: 'data-marker-id',
+  MARKER_TRACK_ID: 'marker-track-id',
 };
 
 export const OmakaseMarkerTrackDomClasses = {
@@ -48,6 +53,8 @@ export const OmakaseMarkerTrackDomClasses = {
   MOMENT_MARKER_CIRCLE: 'omakase-moment-marker-circle',
   MOMENT_MARKER_LINE: 'omakase-moment-marker-line',
   MOMENT_MARKER_SELECTED_AREA: 'omakase-moment-marker-selected-area',
+  MOMENT_MARKER_SYMBOL: 'omakase-moment-marker-symbol',
+  CUSTOM_SYMBOL_MARKER: 'custom-symbol-marker',
   PERIOD_MARKER: 'omakase-period-marker',
   PERIOD_MARKER_RECTANGLE: 'omakase-period-marker-rectangle',
   PERIOD_MARKER_START_LINE: 'omakase-period-marker-start-line',
@@ -60,6 +67,8 @@ export interface OmakaseMarkerBarMarker {
   trackId: MarkerTrackState['id'];
   styledElement: StyledElement<MarkerOnChromingStyle>;
   displayElement: HTMLDivElement;
+  /** Custom symbol requested for a moment marker, kept after a failed render so it isn't retried on every style update */
+  customSymbol?: {resourceId: ResourceEntity['id']; breaker: ObserverBreaker} | undefined;
 }
 
 export class OmakaseMarkerBar extends HTMLElement implements ChromingMarkerBarElementApi {
@@ -87,6 +96,7 @@ export class OmakaseMarkerBar extends HTMLElement implements ChromingMarkerBarEl
     }
   });
   private _uiOrUiProxy?: UiProxy | Ui | undefined;
+  private _symbolResourceResolver?: MarkerSymbolResourceResolver | undefined;
 
   private _live = false;
   private _windowStart = 0;
@@ -121,12 +131,16 @@ export class OmakaseMarkerBar extends HTMLElement implements ChromingMarkerBarEl
     this.loadMarkers(markerTracks);
   }
 
-  get mediaDuration(): number {
-    return parseFloat(this.getAttribute(OmakaseMarkerTrackAttributes.MEDIA_DURATION) ?? '0');
+  get markerTrackId(): string | undefined {
+    return this.getAttribute(OmakaseMarkerTrackAttributes.MARKER_TRACK_ID) || undefined;
   }
 
-  set mediaDuration(duration: number) {
-    this.setAttribute(OmakaseMarkerTrackAttributes.MEDIA_DURATION, duration.toString());
+  get duration(): number {
+    return parseFloat(this.getAttribute(OmakaseMarkerTrackAttributes.DURATION) ?? '0');
+  }
+
+  set duration(duration: number) {
+    this.setAttribute(OmakaseMarkerTrackAttributes.DURATION, duration.toString());
     this.updateMarkers(
       this._markers
         .values()
@@ -173,7 +187,7 @@ export class OmakaseMarkerBar extends HTMLElement implements ChromingMarkerBarEl
   }
 
   get mediaSeekableEnd() {
-    return this._live ? this._windowEnd : this.mediaDuration;
+    return this._live ? this._windowEnd : this.duration;
   }
 
   protected get _ui(): Ui | UiProxy {
@@ -185,6 +199,18 @@ export class OmakaseMarkerBar extends HTMLElement implements ChromingMarkerBarEl
 
   setUiOrUiProxy(ui: UiProxy | Ui) {
     this._uiOrUiProxy = ui;
+  }
+
+  setMarkerSymbolResourceResolver(resolver: MarkerSymbolResourceResolver) {
+    this._symbolResourceResolver = resolver;
+    if (!this._uiOrUiProxy) {
+      return;
+    }
+    for (const marker of this._markers.values()) {
+      this.toObservable(this._ui.resolveStyle<MarkerOnChromingStyle>(marker.styledElement))
+        .pipe(takeUntil(this._destroyBreaker.observer))
+        .subscribe((style) => this.updateMarkerStyle(marker.state.id, style as MarkerOnChromingStyle));
+    }
   }
 
   connectedCallback() {
@@ -306,13 +332,11 @@ export class OmakaseMarkerBar extends HTMLElement implements ChromingMarkerBarEl
     this.toObservable(this._ui.resolveStyle<MarkerOnChromingStyle>(styledElement))
       .pipe(takeUntil(this._destroyBreaker.observer))
       .subscribe((style) => {
-        let duration = TimedItemTemporalUtil.extractDuration(marker.temporal);
-        if (
-          marker.temporal.type === TimedItemTemporalType.MOMENT ||
-          (marker.temporal.type === TimedItemTemporalType.SPAN && style.momentToSpanningThreshold && duration !== undefined && new Decimal(style.momentToSpanningThreshold).greaterThan(duration))
-        ) {
+        if (isPresentedAsMomentMarker(marker.temporal, style)) {
           const displayElement = this.addMomentMarker(marker, track, style as MarkerOnChromingStyle);
-          this._markers.set(marker.id, {state: marker, displayElement, styledElement, trackId: track.id});
+          const barMarker: OmakaseMarkerBarMarker = {state: marker, displayElement, styledElement, trackId: track.id};
+          this._markers.set(marker.id, barMarker);
+          this.renderMomentMarkerSymbol(barMarker, style as MarkerOnChromingStyle);
         } else if (marker.temporal.type === TimedItemTemporalType.SPAN || marker.temporal.type === TimedItemTemporalType.SPAN_START || marker.temporal.type === TimedItemTemporalType.SPAN_END) {
           const displayElement = this.addPeriodMarker(marker, track, style as MarkerOnChromingStyle);
           this._markers.set(marker.id, {state: marker, displayElement, styledElement, trackId: track.id});
@@ -641,12 +665,9 @@ export class OmakaseMarkerBar extends HTMLElement implements ChromingMarkerBarEl
     if (marker) {
       const track = this._tracks.get(marker.trackId)!;
       const markerElement = marker.displayElement;
-      const duration = TimedItemTemporalUtil.extractDuration(marker.state.temporal);
       if (markerElement.classList.contains(OmakaseMarkerTrackDomClasses.MOMENT_MARKER)) {
-        if (
-          marker.state.temporal.type === TimedItemTemporalType.SPAN &&
-          (!style.momentToSpanningThreshold || duration === undefined || new Decimal(style.momentToSpanningThreshold).lessThanOrEqualTo(duration))
-        ) {
+        if (marker.state.temporal.type === TimedItemTemporalType.SPAN && !isPresentedAsMomentMarker(marker.state.temporal, style)) {
+          this.clearMomentMarkerSymbol(marker);
           markerElement.remove();
           marker.displayElement = this.addPeriodMarker(marker.state, track, style);
         } else {
@@ -663,16 +684,13 @@ export class OmakaseMarkerBar extends HTMLElement implements ChromingMarkerBarEl
             selectedDiv.style.backgroundColor = style.markerColor;
           }
           this.updateMarkerActive(marker, style);
+          this.renderMomentMarkerSymbol(marker, style);
         }
       } else if (markerElement.classList.contains(OmakaseMarkerTrackDomClasses.PERIOD_MARKER)) {
-        if (
-          marker.state.temporal.type === TimedItemTemporalType.SPAN &&
-          style.momentToSpanningThreshold &&
-          duration !== undefined &&
-          new Decimal(style.momentToSpanningThreshold).greaterThan(duration)
-        ) {
+        if (marker.state.temporal.type === TimedItemTemporalType.SPAN && isPresentedAsMomentMarker(marker.state.temporal, style)) {
           markerElement.remove();
           marker.displayElement = this.addMomentMarker(marker.state, track, style);
+          this.renderMomentMarkerSymbol(marker, style);
         } else {
           const rectangleDiv = markerElement.querySelector(`.${OmakaseMarkerTrackDomClasses.PERIOD_MARKER_RECTANGLE}`) as HTMLDivElement | null;
           const startLine = markerElement.querySelector(`.${OmakaseMarkerTrackDomClasses.PERIOD_MARKER_START_LINE}`) as HTMLDivElement | null;
@@ -783,6 +801,10 @@ export class OmakaseMarkerBar extends HTMLElement implements ChromingMarkerBarEl
       if (lineDiv) {
         lineDiv.style.height = DomUtil.getPixelValue(containerHeight);
       }
+      const symbol = markerElement.querySelector(`.${OmakaseMarkerTrackDomClasses.MOMENT_MARKER_SYMBOL}`) as HTMLImageElement | null;
+      if (symbol) {
+        this.updateMomentMarkerSymbolSize(symbol);
+      }
       if (selectedDiv) {
         selectedDiv.style.height = DomUtil.getPixelValue(containerHeight);
         if (this.isOmakase && circleDiv) {
@@ -816,12 +838,106 @@ export class OmakaseMarkerBar extends HTMLElement implements ChromingMarkerBarEl
     }
   }
 
+  private renderMomentMarkerSymbol(marker: OmakaseMarkerBarMarker, style: MarkerOnChromingStyle) {
+    const resourceId = this.isOmakase || !this._symbolResourceResolver ? undefined : style.customMarkerSymbolResource;
+    if (marker.customSymbol?.resourceId === resourceId) {
+      return;
+    }
+
+    this.clearMomentMarkerSymbol(marker);
+    if (!resourceId) {
+      return;
+    }
+
+    const resolver = this._symbolResourceResolver!;
+    const breaker = new ObserverBreaker();
+    const markerElement = marker.displayElement;
+    marker.customSymbol = {resourceId, breaker};
+
+    resolver
+      .resolveSvgBlobUrl(resourceId)
+      .pipe(
+        switchMap((blobUrl) => this.loadMomentMarkerSymbol(blobUrl)),
+        timeout({first: CUSTOM_MARKER_SYMBOL_TIMEOUT_MS}),
+        takeUntil(breaker.observer),
+        takeUntil(this._destroyBreaker.observer)
+      )
+      .subscribe({
+        next: (symbol) => {
+          if (marker.displayElement === markerElement) {
+            this.showMomentMarkerSymbol(markerElement, symbol);
+          }
+        },
+        error: (error) => {
+          console.warn(`Custom marker symbol resource ${resourceId} couldn't be rendered for marker ${marker.state.id}, falling back to the default shape`, error);
+        },
+      });
+
+    resolver
+      .onResourceDeleted$(resourceId)
+      .pipe(take(1), takeUntil(breaker.observer), takeUntil(this._destroyBreaker.observer))
+      .subscribe(() => {
+        console.warn(`Custom marker symbol resource ${resourceId} was deleted, marker ${marker.state.id} falls back to the default shape`);
+        breaker.break();
+        this.removeMomentMarkerSymbolElement(markerElement);
+      });
+  }
+
+  private clearMomentMarkerSymbol(marker: OmakaseMarkerBarMarker) {
+    marker.customSymbol?.breaker.destroy();
+    marker.customSymbol = void 0;
+    this.removeMomentMarkerSymbolElement(marker.displayElement);
+  }
+
+  private loadMomentMarkerSymbol(blobUrl: string): Observable<HTMLImageElement> {
+    return new Observable<HTMLImageElement>((observer) => {
+      const symbol = document.createElement('img');
+      symbol.onload = () => {
+        observer.next(symbol);
+        observer.complete();
+      };
+      symbol.onerror = () => observer.error(new Error(`Failed to load svg image: ${blobUrl}`));
+      symbol.src = blobUrl;
+      return () => {
+        symbol.onload = symbol.onerror = null;
+      };
+    });
+  }
+
+  private showMomentMarkerSymbol(markerElement: HTMLDivElement, symbol: HTMLImageElement) {
+    this.removeMomentMarkerSymbolElement(markerElement);
+    symbol.classList.add(OmakaseMarkerTrackDomClasses.MOMENT_MARKER_SYMBOL);
+    symbol.alt = '';
+    symbol.draggable = false;
+    this.updateMomentMarkerSymbolSize(symbol);
+    const lineDiv = markerElement.querySelector(`.${OmakaseMarkerTrackDomClasses.MOMENT_MARKER_LINE}`);
+    markerElement.insertBefore(symbol, lineDiv);
+    markerElement.classList.add(OmakaseMarkerTrackDomClasses.CUSTOM_SYMBOL_MARKER);
+  }
+
+  private removeMomentMarkerSymbolElement(markerElement: HTMLDivElement) {
+    markerElement.querySelector(`.${OmakaseMarkerTrackDomClasses.MOMENT_MARKER_SYMBOL}`)?.remove();
+    markerElement.classList.remove(OmakaseMarkerTrackDomClasses.CUSTOM_SYMBOL_MARKER);
+  }
+
+  private updateMomentMarkerSymbolSize(symbol: HTMLImageElement) {
+    const containerHeight = this._container!.offsetHeight;
+    symbol.style.width = DomUtil.getPixelValue(containerHeight / 2);
+    symbol.style.height = DomUtil.getPixelValue(containerHeight / 2);
+    symbol.style.top = DomUtil.getPixelValue(containerHeight / 4);
+    symbol.style.transform = `translateX(${DomUtil.getPixelValue(-containerHeight / 4)})`;
+  }
+
   removeMarker(id: Marker['id']): void {
+    this._markers.get(id)?.customSymbol?.breaker.destroy();
     this.getMarkerElement(id)?.remove();
     this._markers.delete(id);
   }
 
   removeAllMarkers() {
+    for (const marker of this._markers.values()) {
+      marker.customSymbol?.breaker.destroy();
+    }
     this._markers.clear();
     this._container!.innerHTML = '';
   }

@@ -17,3 +17,4 @@
 // export * from './tams-model';
 export * from './tams-main-media';
 export * from './tams-media-info';
+export {TamsPlaybackMode} from './tams-playback';

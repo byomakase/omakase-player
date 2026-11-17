@@ -88,6 +88,7 @@ import {
   type VideoKeyframeOptions,
 } from '../media';
 import {ChromingUtil} from './chroming-util';
+import {ChromingMediaStore} from './chroming-media-store';
 import {UI_LIVE_MODEL_NOT_LIVE, type UiLiveModel} from '../live/live-model';
 import type {AudioHandlerApi} from '../audio';
 import {VideoKeyframeExtractor} from '../tools/keyframe-extractor';
@@ -177,7 +178,7 @@ export const ChromingDomClasses = {
   mediaChromeTextOn: 'media-chrome-text-on',
   mediaChromeTextOff: 'media-chrome-text-off',
   mediaChromeHelp: 'media-chrome-help',
-  mediaChromeTrackselector: 'media-chrome-trackselector',
+  mediaChromeTrackSelector: 'media-chrome-track-selector',
   mediaChromeControlBarToggle: 'media-chrome-control-bar-toggle',
   mediaChromeClose: 'media-chrome-close',
   mediaChromeBack: 'media-chrome-back',
@@ -267,6 +268,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
   protected _htmlElement: HTMLElement;
   protected _mediaControllerElement: MediaController;
   protected _mainMediaVideoElement: HTMLVideoElement;
+  protected _chromingMediaStore: ChromingMediaStore | undefined;
 
   protected _divButtonOverlayPlay: HTMLElement;
   protected _divButtonOverlayPause: HTMLElement;
@@ -891,6 +893,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
     this._vuMeters[ChromingVuMeterPosition.FLOATING]?.destroy();
     this._playerBreaker.destroy();
     this._destroyBreaker.destroy();
+    this._chromingMediaStore?.destroy();
     this._audioLevelSource?.destroy();
     freeObserver(this._alertClosed$);
     freeObserver(this._attachDetachButtonEnabled$);
@@ -971,7 +974,7 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
               this.showLoaded();
               this.updatePiPAvailability();
               if (this._markerBar) {
-                this._markerBar.mediaDuration = playerInternal.getDuration();
+                this._markerBar.duration = playerInternal.getDuration();
               }
               if (!this._autoHidePlaybackButtons) {
                 const playControlToShow = this._playerInternal!.playerSession.playback.playing ? this._divButtonOverlayPause : this._divButtonOverlayPlay;
@@ -1038,6 +1041,31 @@ export abstract class ChromingDomController<T extends ChromingTheme> implements 
               break;
           }
         },
+      });
+
+    if (!this._chromingMediaStore) {
+      if (this._mediaControllerElement.mediaStore) {
+        this._chromingMediaStore = new ChromingMediaStore(this._mediaControllerElement.mediaStore);
+        this._mediaControllerElement.mediaStore = this._chromingMediaStore;
+      } else {
+        console.warn(`media-controller has no media store, playback state is not taken from the player`);
+      }
+    }
+    if (this._chromingMediaStore) {
+      this._chromingMediaStore.player = playerInternal;
+    }
+
+    playerInternal.onEvent$
+      .pipe(
+        filter((event) => event.type === PlayerEventType.PLAYER_MAIN_MEDIA_UPDATED || event.type === PlayerEventType.PLAYER_SESSION_RESTORED),
+        filter(() => playerInternal.isMainMediaLoaded),
+        takeUntil(this._playerBreaker.observer),
+        takeUntil(this._destroyBreaker.observer)
+      )
+      .subscribe(() => {
+        if (this._markerBar) {
+          this._markerBar.duration = playerInternal.getDuration();
+        }
       });
 
     if (this._autoHidePlaybackButtons) {

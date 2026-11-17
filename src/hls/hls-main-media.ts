@@ -33,6 +33,7 @@ export class HlsMainMedia extends BaseMainMedia<HlsMainMediaState> {
   protected getState(): HlsMainMediaState {
     return {
       id: this._id,
+      entityType: this._entityType,
       mediaType: this._mediaType,
       mainMediaType: this._mainMediaType,
       loadOptions: this._loadOptions,

@@ -19,6 +19,7 @@ import {MediaTemporalFormat} from './media-temporal';
 import {MainMediaType, type MediaRotationValue, TrackType, VideoKeyframeType} from '../media';
 import {AUDIO_DEFAULTS} from '../constants';
 import {PlayerTextHandlerType} from '../player/player-text-handler-type';
+import {ResourceEntityType} from '../entity/resource-entity';
 
 export class Validators {
   public static id(): (value: string) => string {
@@ -64,6 +65,12 @@ export class Validators {
   public static trackType(): (value: TrackType) => TrackType {
     return (value: TrackType) => {
       return z.enum(TrackType).parse(value);
+    };
+  }
+
+  public static resourceType(): (value: ResourceEntityType) => ResourceEntityType {
+    return (value: ResourceEntityType) => {
+      return z.enum(ResourceEntityType).parse(value);
     };
   }
 

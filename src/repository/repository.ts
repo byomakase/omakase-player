@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-import type {MediaEntity} from '../media';
+import type {Entity, MediaEntity} from '../entity';
+import type {Destroyable} from '../common/capabilities';
 
-export interface Repository<T extends MediaEntity> {
-  add(mediaEntity: T): T;
+export interface Repository<T extends Entity> {
+  add(entity: T): T;
 
   addAll(entities: T[]): T[];
 
@@ -30,86 +31,69 @@ export interface Repository<T extends MediaEntity> {
   findFirst(predicate?: (value: T, index: number, obj: T[]) => unknown, thisArg?: any): T | undefined;
 
   /**
-   * @returns true if media entity is deleted successfully
+   * @returns true if entity is deleted successfully
    * @param id
    */
   delete(id: T['id']): boolean;
 
   /**
-   * @returns true if all media entities are deleted successfully
+   * @returns true if all entities are deleted successfully
    * @param ids
    */
   deleteAll(ids: T['id'][]): boolean;
 
   /**
-   * @returns true if all media entities are deleted successfully
+   * @returns true if all entities are deleted successfully
    */
   clear(): boolean;
 
   toString(): string;
 }
 
-export abstract class BaseRepository<T extends MediaEntity> implements Repository<T> {
-  protected _mediaEntities: Map<T['id'], T> = new Map();
+export abstract class BaseRepository<T extends Entity> implements Repository<T>, Destroyable {
+  protected _entities: Map<T['id'], T> = new Map();
 
-  add(mediaEntity: T): T {
-    return this._add(mediaEntity);
-  }
-
-  _add(mediaEntity: T): T {
-    if (this._mediaEntities.has(mediaEntity.id)) {
-      throw new Error(`Media entity with id=${mediaEntity.id} already exists`);
-    } else {
-      this._mediaEntities.set(mediaEntity.id, mediaEntity);
-    }
-    return mediaEntity;
-  }
-
-  addAll(mediaEntities: T[]): T[] {
-    let existingEntities = mediaEntities.filter((e) => this._mediaEntities.has(e.id));
-    if (existingEntities.length > 0) {
-      throw new Error(`Entities with ids=${mediaEntities.map((p) => p.id)} already exist`);
-    } else if (mediaEntities.length < 1) {
-      // nop
-    } else {
-      mediaEntities.forEach((p) => this._add(p));
-    }
-    return mediaEntities;
-  }
-
-  get(id: T['id']): T | undefined {
-    return this._mediaEntities.get(id);
-  }
-
-  getOrFail(id: T['id']): T {
-    let mediaEntity = this.get(id);
-    if (!mediaEntity) {
-      throw new Error(`Media entity with id=${id} does not exist`);
-    }
-    return mediaEntity;
+  add(entity: T): T {
+    return this._add(entity);
   }
 
   delete(id: T['id']): boolean {
-    return this._mediaEntities.delete(id);
+    return this._delete(id);
+  }
+
+  addAll(entities: T[]): T[] {
+    let existingEntities = entities.filter((e) => this._entities.has(e.id));
+    if (existingEntities.length > 0) {
+      throw new Error(`Entities with ids=${entities.map((p) => p.id)} already exist`);
+    } else if (entities.length < 1) {
+      // nop
+    } else {
+      entities.forEach((p) => this._add(p));
+    }
+    return entities;
+  }
+
+  get(id: T['id']): T | undefined {
+    return this._entities.get(id);
+  }
+
+  getOrFail(id: T['id']): T {
+    let entity = this.get(id);
+    if (!entity) {
+      throw new Error(`Entity with id=${id} does not exist`);
+    }
+    return entity;
   }
 
   clear(): boolean {
     return this.deleteAll(this.find().map((p) => p.id));
   }
 
-  _delete(id: T['id']): boolean {
-    if (this._mediaEntities.has(id)) {
-      return this._mediaEntities.delete(id);
-    } else {
-      throw new Error(`Entity with id=${id} does not exist`)
-    }
-  }
-
   deleteAll(ids: T['id'][]): boolean {
     if (ids.length > 0) {
       let nonExistingEntitiesIds = ids
         .map((id) => {
-          return !this._mediaEntities.has(id) ? id : void 0;
+          return !this._entities.has(id) ? id : void 0;
         })
         .filter((p) => !!p);
 
@@ -129,10 +113,6 @@ export abstract class BaseRepository<T extends MediaEntity> implements Repositor
     return predicate ? this._find().filter(predicate) : this._find();
   }
 
-  private _find(): T[] {
-    return [...this._mediaEntities.values()];
-  }
-
   findFirst(predicate?: (value: T, index: number, obj: T[]) => unknown, thisArg?: any): T | undefined {
     return this.find(predicate)[0];
   }
@@ -144,4 +124,31 @@ export abstract class BaseRepository<T extends MediaEntity> implements Repositor
       2
     );
   }
+
+  _add(entity: T): T {
+    if (this._entities.has(entity.id)) {
+      throw new Error(`Entity with id=${entity.id} already exists`);
+    } else {
+      this._entities.set(entity.id, entity);
+    }
+    return entity;
+  }
+
+  _delete(id: T['id']): boolean {
+    if (this._entities.has(id)) {
+      return this._entities.delete(id);
+    } else {
+      throw new Error(`Entity with id=${id} does not exist`);
+    }
+  }
+
+  _find(): T[] {
+    return [...this._entities.values()];
+  }
+
+  destroy() {
+    this.clear();
+  }
 }
+
+export abstract class BaseMediaRepository<T extends MediaEntity> extends BaseRepository<T> {}

@@ -304,7 +304,10 @@ export abstract class BasePlayerController<C extends PlayerControllerConfig> imp
         this._onEvent$.next({
           type: PlayerControllerEventType.PLAYER_CONTROLLER_BUFFERING,
           data: {
-            bufferedTimeRanges: HtmlMediaElementUtil.resolveBufferedTimeRanges(this._playerDomController.mainMediaVideoElement),
+            bufferedTimeRanges: HtmlMediaElementUtil.resolveBufferedTimeRanges(this._playerDomController.mainMediaVideoElement).map((bufferedTimeRange) => ({
+              start: this.toPlayerTime(bufferedTimeRange.start),
+              end: this.toPlayerTime(bufferedTimeRange.end),
+            })),
           },
         });
       });

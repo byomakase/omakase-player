@@ -24,6 +24,7 @@ import {Observable, Subject, takeUntil} from 'rxjs';
 import {freeObserver, nextCompleteObserver} from '../../util/rxjs-util';
 import type {Thumbnail, ThumbnailState} from '../../media';
 import {ObserverBreaker} from '../../common/observer-breaker';
+import {BlobUtil} from '../../util/blob/blob-util';
 
 export interface ThumbnailImgStyle {
   x: number;
@@ -86,7 +87,9 @@ export class ThumbnailImg extends BaseKonvaComponent<ThumbnailImgConfig, Thumbna
 
   private _group: Konva.Group;
   private _bgRect: Konva.Rect;
-  private _image?: Konva.Image;
+  private _image?: Konva.Image | undefined;
+
+  private _imageIsBlob: boolean = false;
 
   protected _imageLoadBreaker = new ObserverBreaker();
 
@@ -137,7 +140,7 @@ export class ThumbnailImg extends BaseKonvaComponent<ThumbnailImgConfig, Thumbna
           state: this.state,
         },
       });
-    }
+    };
 
     let doMouseLeave = () => {
       isMouseOver = false;
@@ -147,7 +150,7 @@ export class ThumbnailImg extends BaseKonvaComponent<ThumbnailImgConfig, Thumbna
           state: this.state,
         },
       });
-    }
+    };
 
     this._group.on('mouseover mouseenter touchstart', (event) => {
       if (!isMouseOver) {
@@ -192,7 +195,7 @@ export class ThumbnailImg extends BaseKonvaComponent<ThumbnailImgConfig, Thumbna
     this._bgRect.size(this._group.getSize());
   }
 
-  loadImage(image: Konva.Image | Observable<Konva.Image>): Observable<Konva.Image> {
+  loadImage(image: Konva.Image | Observable<Konva.Image>, imageIsBlob: boolean): Observable<Konva.Image> {
     return new Observable<Konva.Image>((subscriber) => {
       this._imageLoadBreaker.break();
 
@@ -203,10 +206,11 @@ export class ThumbnailImg extends BaseKonvaComponent<ThumbnailImgConfig, Thumbna
         },
       });
 
-      this._image?.destroy();
+      this.destroyImage();
 
       let onImageLoaded = (image: Konva.Image) => {
         this._image = image;
+        this._imageIsBlob = imageIsBlob;
 
         let dimension: Dimension = this._image.getSize();
 
@@ -290,6 +294,20 @@ export class ThumbnailImg extends BaseKonvaComponent<ThumbnailImgConfig, Thumbna
     return this.image && o && o.image ? (JSON.stringify(this.image.getAttrs()) === JSON.stringify(o.image.getAttrs()) ? 0 : -1) : -1;
   }
 
+  private destroyImage(): void {
+    if (this._image) {
+      if (this._imageIsBlob) {
+        const image = this._image.image();
+        if (image && 'src' in image) {
+          BlobUtil.revokeObjectURL(image.src);
+        }
+        this._imageIsBlob = false;
+      }
+      this._image.destroy();
+      this._image = void 0;
+    }
+  }
+
   get image(): Konva.Image | undefined {
     return this._image;
   }
@@ -310,6 +328,7 @@ export class ThumbnailImg extends BaseKonvaComponent<ThumbnailImgConfig, Thumbna
     freeObserver(this._onEvent$);
 
     this._imageLoadBreaker.destroy();
+    this.destroyImage();
 
     super.destroy();
   }

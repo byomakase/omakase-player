@@ -33,6 +33,7 @@ import {OmakasePlayButton} from './omakase-play-button';
 import {OmakaseLiveButton} from './omakase-live-button';
 import {OmakasePreviewThumbnail} from './omakase-preview-thumbnail';
 import {OmakaseRouterVisualization} from './omakase-router-visualization';
+import {OmakaseAudioRouterSelector} from './omakase-audio-router-selector';
 import {OmakaseTimeDisplay} from './omakase-time-display';
 import {OmakaseTimeRange} from './omakase-time-range';
 import {OmakaseTimeSkipButton} from './omakase-time-skip-button';
@@ -69,6 +70,10 @@ if (!globalThis.customElements.get('omakase-playback-rate-selector')) {
 
 if (!globalThis.customElements.get('omakase-audio-selector')) {
   globalThis.customElements.define('omakase-audio-selector', OmakaseAudioSelector);
+}
+
+if (!globalThis.customElements.get('omakase-audio-router-selector')) {
+  globalThis.customElements.define('omakase-audio-router-selector', OmakaseAudioRouterSelector);
 }
 
 if (!globalThis.customElements.get('omakase-text-selector')) {
@@ -182,6 +187,7 @@ export {
   OmakaseCaptionsToggle,
   OmakasePlaybackRateSelector,
   OmakaseAudioSelector,
+  OmakaseAudioRouterSelector,
   OmakaseTextSelector,
   OmakaseTrackSelector,
   OmakaseMenu,
@@ -214,3 +220,20 @@ export {OmakaseLiveButtonAttributes} from './omakase-live-button';
 export {OmakaseDetachToggleAttributes, type OmakaseDetachToggleHandler} from './omakase-detach-toggle';
 export {OmakaseKeyframeButtonAttributes, type OmakaseKeyframeConfig} from './omakase-keyframe-button';
 export {OmakaseSafeZoneToggleAttributes, type OmakaseSafeZoneToggleConfig, type OmakaseSafeZoneToggleZone} from './omakase-safe-zone-toggle';
+export {OmakaseDropdownSelectorAttributes, type OmakaseDropdownSelectorExpandDirection} from './omakase-dropdown-selector';
+export {OmakaseDropdownAttributes} from './omakase-dropdown';
+export {OmakaseDropdownListAttributes} from './omakase-dropdown-list';
+export {OmakaseDropdownOptionAttributes} from './omakase-dropdown-option';
+export {OmakaseDropdownToggleAttributes} from './omakase-dropdown-toggle';
+export {OmakaseMenuAttributes} from './omakase-menu';
+export {OmakasePlaybackRateSelectorAttributes} from './omakase-playback-rate-selector';
+export {OmakaseTextSelectorAttributes} from './omakase-text-selector';
+export {OmakaseTrackSelectorAttributes} from './omakase-track-selector';
+export {OmakaseMuteButtonAttributes, type OmakaseVolumeFlyoutDirection} from './omakase-mute-button';
+export {OmakaseTimeDisplayAttributes, type OmakaseTimeDisplayFormat} from './omakase-time-display';
+export {OmakaseTimeRangeAttributes} from './omakase-time-range';
+export {OmakaseTimeSkipButtonAttributes, type OmakaseTimeSkipUnit} from './omakase-time-skip-button';
+export {OmakaseRewindAndPlayButtonAttributes} from './omakase-rewind-and-play-button';
+export {OmakasePlayAndRewindButtonAttributes} from './omakase-play-and-rewind-button';
+export {OmakaseMarkerTrackAttributes} from './omakase-marker-bar';
+export {OmakaseAudioVisualizationAttributes} from './omakase-audio-visualization';

@@ -269,12 +269,17 @@ It could be that one-time-only user interaction (such as clicking on play button
 
 ### Playback engine
 
-We can get the playback engines used for the main media. If HLS media is loaded, then hls.js instance can be fetched.
+We can get the playback engine of the loaded main media. It returns `undefined` if no main media is loaded. If HLS media is loaded, then hls.js instance can be fetched.
 
 ```javascript
-// Get hls.js instance and hook onto hls.js events
-let hlsPlaybackEngine = omakasePlayer.player.getPlaybackEngine(MainMediaType.HLS);
-hlsPlaybackEngine.hls.on('hlsManifestParsed', (event, data) => {
+// Playback engine of the loaded main media, narrow it by its mainMediaType
+let playbackEngine = omakasePlayer.player.getPlaybackEngine();
+if (playbackEngine?.mainMediaType === MainMediaType.HLS) {
+  console.log(`hls.js version`, playbackEngine.hls?.constructor.version);
+}
+
+// Or pass the expected main media type, returns undefined if loaded main media is of a different type
+omakasePlayer.player.getPlaybackEngine(MainMediaType.HLS)?.hls?.on('hlsManifestParsed', (event, data) => {
   console.log(`HLS manifest parsed`, data);
 });
 ```
@@ -941,6 +946,7 @@ Destroying a timeline with `timeline.destroy()` removes its DOM from the host el
 | `scrollEasingDuration`              | `number`  | `200`                | Default easing duration in milliseconds for `scrollToEased`/`scrollToPlayheadEased`.                                         |
 | `scrubberClickSeek`                 | `boolean` | `true`               | Clicking the timecode axis seeks playback to that position.                                                                  |
 | `timecodeClickEdit`                 | `boolean` | `true`               | Double-clicking the CTI timecode display toggles it into an editable state (see `toggleTimecodeEdit()`).                     |
+| `alwaysFollowPlayhead`              | `boolean` | `false`              | Always keep the playhead in view: when it moves out of view, scroll it to the left edge. Toggle later with `setAlwaysFollowPlayhead()`. |
 | `descriptionPaneVisible`            | `boolean` | `true`               | Initial visibility of the description (left) pane. Toggle later with `setDescriptionPaneVisible()`.                          |
 
 ```ts

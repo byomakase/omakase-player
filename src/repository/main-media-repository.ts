@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {type MainMedia, type MainMediaEvent, type MainMediaState} from '../media/main-media';
-import {BaseRepository} from './repository';
+import {type MainMedia, type MainMediaEvent, type MainMediaState} from '../media';
+import {BaseMediaRepository} from './repository';
 import {filter, map, type Observable, Subject, take, takeUntil} from 'rxjs';
-import type {Destroyable, Serializable} from '../common/capabilities';
+import type {Serializable} from '../common/capabilities';
 import {TrackRepository} from './track-repository';
 import {freeObserver} from '../util/rxjs-util';
 
@@ -40,11 +40,11 @@ export interface MainMediaRepositoryEvent<T extends MainMediaRepositoryEventType
   data: MainMediaRepositoryEventTypeDataMap[T];
 }
 
-export class MainMediaRepository extends BaseRepository<MainMedia> implements Destroyable {
-  private readonly _trackRepository: TrackRepository;
-
-  private readonly _onEvent$: Subject<MainMediaRepositoryEvent> = new Subject<MainMediaRepositoryEvent>();
+export class MainMediaRepository extends BaseMediaRepository<MainMedia> {
+  protected readonly _onEvent$: Subject<MainMediaRepositoryEvent> = new Subject<MainMediaRepositoryEvent>();
   private readonly _onMainMediaEvent$: Subject<MainMediaEvent> = new Subject<MainMediaEvent>();
+
+  private readonly _trackRepository: TrackRepository;
 
   constructor(trackRepository: TrackRepository) {
     super();
@@ -156,7 +156,7 @@ export class MainMediaRepository extends BaseRepository<MainMedia> implements De
   }
 
   destroy() {
-    this.clear();
+    super.destroy();
     freeObserver(this._onEvent$);
     freeObserver(this._onMainMediaEvent$);
   }

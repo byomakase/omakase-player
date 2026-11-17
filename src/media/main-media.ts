@@ -17,7 +17,7 @@
 import {type Track, type TrackState} from './track';
 import {Observable, Subject} from 'rxjs';
 import type {Source, SourceState} from '../source';
-import {BaseMediaEntity, type BaseMediaEntityArgs, type MediaEntity, type MediaEntityState, MediaEntityType} from './media-entity';
+import {BaseMediaEntity, type BaseMediaEntityArgs, type MediaEntity, type MediaEntityState, MediaEntityType} from '../entity';
 import {OpStage, type OpStageState} from '../common/op-stage';
 import type {Serializable} from '../common/capabilities';
 import type {FrameRateModel} from '../common/frame-rate';
@@ -314,7 +314,7 @@ export interface AudioFileMainMediaLoadOptions extends BaseMainMediaLoadOptions 
  * {@link timerange} and {@link BaseMainMediaLoadOptions.duration} select the playback mode:
  *
  * - `timerange` with start and end — VOD over that range.
- * - `timerange` with start only (ie. `"[3600:0_"`) — start-over live ({@link LiveMode.EVENT}): a fixed
+ * - `timerange` with start only (i.e. `"[3600:0_"`) — start-over live ({@link LiveMode.EVENT}): a fixed
  *   start that grows towards the flow head, which is polled for new segments.
  * - `duration` only — sliding-window live ({@link LiveMode.CONTINUOUS}): a `duration` seconds long window
  *   that follows the flow head, with back buffer eviction.
@@ -324,7 +324,7 @@ export interface AudioFileMainMediaLoadOptions extends BaseMainMediaLoadOptions 
  */
 export interface TamsMainMediaLoadOptions extends BaseMainMediaLoadOptions {
   /**
-   * TAMS timerange to load, in TAMS timerange notation (ie. `"[0:0_600:0)"`, `"[3600:0_"`).
+   * TAMS timerange to load, in TAMS timerange notation (i.e. `"[0:0_600:0)"`, `"[3600:0_"`).
    * Open bounds are resolved from the flow timerange. Takes precedence over
    * {@link BaseMainMediaLoadOptions.duration}.
    */

@@ -174,6 +174,8 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
   protected _providedStyle?: Partial<S> | undefined;
   protected _style?: S;
   protected _initialStyle?: S;
+  /** Whether minimized height and margins are written to this lane's style rule, they are reverted to {@link _initialStyle} once lane is destroyed. */
+  protected _minimizedStyleApplied = false;
 
   protected _timeline?: TimelineImpl;
   protected _player?: PlayerApi;
@@ -226,6 +228,16 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
     this._initialStyle = {
       ...this._style,
     };
+
+    if (this._config.minimized) {
+      // same style as minimize() leaves, so that lane and its content which follow style height (ie. spanning markers) start minimized as well
+      this._ui.updateStyleRule({
+        id: this._styledElement.id,
+        style: this.resolveMinimizedStyle(),
+      });
+      this._style = this._ui.resolveStyle(this._styledElement) as S;
+      this._minimizedStyleApplied = true;
+    }
 
     this._mainLeftFlexGroup = this.createMainLeftFlexGroup();
     this._mainRightFlexGroup = this.createMainRightFlexGroup();
@@ -582,12 +594,26 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
    * @internal
    */
   _minimize(refreshLayout: boolean = true) {
-    this.applyStyle({
+    this._minimizedStyleApplied = true;
+    this.applyStyle(this.resolveMinimizedStyle());
+    this.updateLayoutDimensions(refreshLayout);
+  }
+
+  protected resolveMinimizedStyle(): Partial<S> {
+    return {
       height: 0,
       marginTop: 0,
       marginBottom: 0,
-    } as Partial<S>);
-    this.updateLayoutDimensions(refreshLayout);
+    } as Partial<S>;
+  }
+
+  /** Height and margins of {@link _initialStyle}, lane style before it was minimized. */
+  protected resolveMaximizedStyle(): Partial<S> {
+    return {
+      height: this._initialStyle!.height,
+      marginTop: this._initialStyle!.marginTop ? this._initialStyle!.marginTop : 0,
+      marginBottom: this._initialStyle!.marginBottom ? this._initialStyle!.marginBottom : 0,
+    } as Partial<S>;
   }
 
   /**
@@ -597,11 +623,8 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
     this.checkIsPrepared();
 
     if (this._initialStyle) {
-      this.applyStyle({
-        height: this._initialStyle.height,
-        marginTop: this._initialStyle.marginTop ? this._initialStyle.marginTop : 0,
-        marginBottom: this._initialStyle.marginBottom ? this._initialStyle.marginBottom : 0,
-      } as Partial<S>);
+      this.applyStyle(this.resolveMaximizedStyle());
+      this._minimizedStyleApplied = false;
       this.updateLayoutDimensions(refreshLayout);
     }
   }
@@ -654,22 +677,20 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
     this.checkIsPrepared();
 
     return passiveObservable((observer) => {
-      let layout = this.mainLeftFlexGroup.getLayout();
+      let startHeight = this.mainLeftFlexGroup.getLayout().height;
       let marginTop = this.style.marginTop ? this.style.marginTop : 0;
       let marginBottom = this.style.marginBottom ? this.style.marginBottom : 0;
+      this._minimizedStyleApplied = true;
       animate({
         duration: args.duration ? args.duration : TIMELINE.easingDuration,
-        startValue: layout.height,
+        startValue: startHeight,
         endValue: 0,
         onUpdateHandler: (frame, value) => {
           let newHeight = Math.round(value);
-          let newMarginTop = new Decimal(marginTop).mul(newHeight).div(this.style.height).toDecimalPlaces(0).toNumber();
-          let newMargin = new Decimal(marginBottom).mul(newHeight).div(this.style.height).toDecimalPlaces(0).toNumber();
-
           this.applyStyle({
             height: newHeight,
-            marginTop: newMarginTop,
-            marginBottom: newMargin,
+            marginTop: BaseTimelineLane.scaleMargin(marginTop, newHeight, startHeight),
+            marginBottom: BaseTimelineLane.scaleMargin(marginBottom, newHeight, startHeight),
           } as Partial<S>);
           this.updateLayoutDimensions();
         },
@@ -686,21 +707,19 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
 
     return passiveObservable((observer) => {
       if (this._initialStyle) {
-        let marginTop = this.style.marginTop ? this.style.marginTop : 0;
-        let marginBottom = this.style.marginBottom ? this.style.marginBottom : 0;
+        // revert to initial style from config, margins grow with height towards initial margins
+        let maximizedStyle = this.resolveMaximizedStyle();
+        let endHeight = maximizedStyle.height ?? 0;
         animate({
           duration: args.duration ? args.duration : TIMELINE.easingDuration,
           startValue: this.style.height,
-          endValue: this._initialStyle.height, // revert to inital style from config
+          endValue: endHeight,
           onUpdateHandler: (frame, value) => {
             let newHeight = Math.round(value);
-            let newMarginTop = new Decimal(marginTop).mul(newHeight).div(this.style.height).toDecimalPlaces(0).toNumber();
-            let newMargin = new Decimal(marginBottom).mul(newHeight).div(this.style.height).toDecimalPlaces(0).toNumber();
-
             this.applyStyle({
               height: newHeight,
-              marginTop: newMarginTop,
-              marginBottom: newMargin,
+              marginTop: BaseTimelineLane.scaleMargin(maximizedStyle.marginTop ?? 0, newHeight, endHeight),
+              marginBottom: BaseTimelineLane.scaleMargin(maximizedStyle.marginBottom ?? 0, newHeight, endHeight),
             } as Partial<S>);
             this.updateLayoutDimensions();
           },
@@ -713,6 +732,14 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
         nextCompleteObserver(observer);
       }
     });
+  }
+
+  /** Margin at given height, proportional to margin at full height. Full height of 0 has no margin, instead of dividing by 0. */
+  private static scaleMargin(fullMargin: number, height: number, fullHeight: number): number {
+    if (fullHeight <= 0) {
+      return 0;
+    }
+    return new Decimal(fullMargin).mul(height).div(fullHeight).toDecimalPlaces(0).toNumber();
   }
 
   toggleMinimizeMaximize(args?: TimelineLaneMinimizeMaximizeArgs) {
@@ -756,6 +783,20 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
     }
   }
 
+  /**
+   * Lane style rule outlives the lane, and lane added later with the same id would resolve minimized height as its initial height,
+   * so it couldn't be maximized. Minimized height and margins are reverted to initial ones.
+   */
+  protected revertMinimizedStyle() {
+    if (this._minimizedStyleApplied && this._ui && this._styledElement && this._initialStyle) {
+      this._ui.updateStyleRule({
+        id: this._styledElement.id,
+        style: this.resolveMaximizedStyle(),
+      });
+      this._minimizedStyleApplied = false;
+    }
+  }
+
   protected updateDescriptionTextLabel(description: string | undefined) {
     this.createDescriptionTextLabel();
     if (this._descriptionTextLabel) {
@@ -765,6 +806,7 @@ export abstract class BaseTimelineLane<C extends TimelineLaneConfig, S extends T
 
   destroy() {
     this.clearContent();
+    this.revertMinimizedStyle();
 
     this._timecodedGroup?.destroy();
     this._loadingAnimation?.stop();

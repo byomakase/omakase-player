@@ -17,3 +17,4 @@
 export * from './main-media-repository';
 export * from './repository';
 export * from './track-repository';
+export * from './resource-repository';

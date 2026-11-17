@@ -1,7 +1,13 @@
 import type {Flow, ImageFlow, FlowSegment} from '../tams-model';
 import {TimeRangeUtil} from '../time-range-util';
-import {BlobUtil} from '../../util/blob-util';
+import {BlobUtil} from '../../util/blob/blob-util';
 import {TAMS_CONTAINER, TAMS_MANIFEST} from '../constants';
+
+export interface TamsThumbnailCue {
+  start: number;
+  end: number;
+  url: string;
+}
 
 export class TamsThumbnailGenerator {
   public static resolveLowestQualityImageFlow(flows: Flow[]) {
@@ -29,13 +35,13 @@ export class TamsThumbnailGenerator {
     return lowestQualityImageFlow;
   }
 
-  public static generateThumbnailVtt(segments: FlowSegment[], videoEnd: number, timeOffset: number): string {
-    let vttLines: string[] = ['WEBVTT', ''];
+  public static generateThumbnailCues(segments: FlowSegment[], videoEnd: number, timeOffset: number): TamsThumbnailCue[] {
+    const cues: TamsThumbnailCue[] = [];
 
     segments.forEach((segment, index) => {
-      const getUrls = segment.get_urls || [];
+      const url = segment.get_urls?.at(-1)?.url;
 
-      if (getUrls.length === 0) return;
+      if (!url) return;
 
       const start = TimeRangeUtil.timeMomentToSeconds(TimeRangeUtil.parseTimeRange(segment.timerange).start!);
       let end;
@@ -51,21 +57,37 @@ export class TamsThumbnailGenerator {
         return;
       }
 
-      const startTime = this.toTimestamp(start - timeOffset);
-      const endTime = this.toTimestamp(end - timeOffset);
+      cues.push({start: start - timeOffset, end: end - timeOffset, url: url});
+    });
 
-      vttLines.push(`${startTime} --> ${endTime}`);
-      vttLines.push(segment.get_urls!.at(-1)!.url!);
+    return cues;
+  }
+
+  public static writeThumbnailVtt(cues: TamsThumbnailCue[]): string {
+    let vttLines: string[] = ['WEBVTT', ''];
+
+    cues.forEach((cue) => {
+      vttLines.push(`${this.toTimestamp(cue.start)} --> ${this.toTimestamp(cue.end)}`);
+      vttLines.push(cue.url);
       vttLines.push('');
     });
 
     return vttLines.join('\n');
   }
 
+  public static generateThumbnailVtt(segments: FlowSegment[], videoEnd: number, timeOffset: number): string {
+    return this.writeThumbnailVtt(this.generateThumbnailCues(segments, videoEnd, timeOffset));
+  }
+
   public static generateThumbnailVttBlob(segments: FlowSegment[], videoEnd: number, timeOffset: number) {
     const vttFile = this.generateThumbnailVtt(segments, videoEnd, timeOffset);
 
-    // tracked by BlobUtil, so it is released along with the player's other blobs on destroy
+    /**
+     * Currently not tracked because it is not used anywhere.
+     *
+     * Should be tracked in a future via ({@link BlobManager._blobs} or {@link BlobManager._ownerBlobs})
+     * if used anywhere in the player (e.g. {@link generateThumbnailTrackUrl}).
+     */
     return BlobUtil.createBlobURL([vttFile], {type: TAMS_CONTAINER.vtt});
   }
 
